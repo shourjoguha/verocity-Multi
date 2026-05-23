@@ -3,17 +3,12 @@ import { supabase, supabasePublic } from '@/lib/supabase';
 import { getActivePlan, getCurrentProfile, getRecentLogs } from '@/lib/queries';
 import { signOut } from '@/lib/auth';
 import type { Plan, Profile, WorkoutLog } from '@/lib/types';
-import { ACTIVITY_TAGS, type ActivityTagKey } from '@/app.config';
 import { bestE1rm } from '@/lib/e1rm';
 import { weekFromDate } from '@/lib/week';
 import { formatDate, formatDuration, formatRound } from '@/lib/format';
+import { tagColor } from '@/lib/tags';
 import { Button, Card, EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
-
-function tagColor(tag: string): string {
-  const known = ACTIVITY_TAGS[tag as ActivityTagKey];
-  return known ? known.color : 'hsl(0 0% 42%)';
-}
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;

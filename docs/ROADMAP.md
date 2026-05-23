@@ -37,20 +37,21 @@ while building. Update as work lands.
 - verify: ✓ build + check pass. NOTE: SQL migrations are written but not yet
   applied/verified against a live Postgres (no DB available in this env).
 
-### Phase 1 — Read paths + showcase  `[in progress]`
+### Phase 1 — Read paths + showcase  `[done]`
 - [x] Base + App layouts, design-system primitives, nav, landing
 - [x] Data-access layer (`src/lib/queries.ts`) relying on RLS scoping
-- [x] Domain utils: e1RM (Brzycki), week-from-date, formatters
-- [x] Auth: login page + session handling; client-side `/app` guard
+- [x] Domain utils: e1RM (Brzycki), week-from-date, formatters, stats, tags
+- [x] Auth: login page + session handling; client-side `/app` guard (`useAuthedQuery`)
 - [x] Home dashboard (read): inline stats, active plan, recent sessions + set-shape strips
 - [x] Public showcase route (`/showcase`) via session-less anon client
-- [ ] Calendar (month grid + per-session bars + set-shape strips)
-- [ ] Stats (summary, weekly table, heatmap, RPE fingerprint, e1RM sparklines)
-- [ ] Library (browse/search/filter movements)
-- [ ] Plan view (week-by-week progression table)
-- [ ] Session detail page
-- verify: ✓ build + check clean; routes serve SSR'd shells (curl 200). Live data
-  needs Supabase env. Remaining pages pending.
+- [x] Calendar (month grid + per-session bars, click → session detail)
+- [x] Stats (summary, consistency heatmap, weekly table, RPE-by-family, top movements e1RM)
+- [x] Library (browse/search/filter movements)
+- [x] Plan view (week-by-week progression table with block markers)
+- [x] Session detail page (`/app/session?id=`)
+- verify: ✓ build (9 pages) + check clean (0/0/0); all routes serve SSR'd shells
+  (curl 200). NOTE: e1RM sparkline trend deferred to polish; live data needs
+  Supabase env.
 
 ### Phase 2 — Logger (core write path)  `[ ]`
 - [ ] Logger island: sections/groups/sets, completion, autosave (15s)
