@@ -54,7 +54,15 @@ export default function PlanView() {
 
       {parsed.days.map((day) => (
         <section key={day.dayKey} className="mb-8">
-          <SectionHeader>{day.label}</SectionHeader>
+          <div className="mb-3 flex items-center justify-between">
+            <SectionHeader>{day.label}</SectionHeader>
+            <a
+              href={`/app/log?day=${encodeURIComponent(day.dayKey)}`}
+              className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+            >
+              Start →
+            </a>
+          </div>
           <div className="overflow-x-auto border border-border">
             <table className="w-full text-sm">
               <thead>

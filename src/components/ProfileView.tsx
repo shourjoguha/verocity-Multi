@@ -7,7 +7,7 @@ import { bestE1rm } from '@/lib/e1rm';
 import { weekFromDate } from '@/lib/week';
 import { formatDate, formatDuration, formatRound } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
-import { Button, Card, EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
+import { Card, EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
@@ -109,9 +109,12 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                 {week ? <div className="text-sm text-muted">Week {week}</div> : null}
               </div>
               {mode === 'app' ? (
-                <Button variant="ghost" disabled>
+                <a
+                  href="/app/log"
+                  className="inline-flex min-h-11 items-center border border-border px-4 text-sm uppercase tracking-wider text-fg hover:border-subtle"
+                >
                   Start workout
-                </Button>
+                </a>
               ) : null}
             </div>
           </Card>

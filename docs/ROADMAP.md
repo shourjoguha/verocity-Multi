@@ -53,12 +53,17 @@ while building. Update as work lands.
   (curl 200). NOTE: e1RM sparkline trend deferred to polish; live data needs
   Supabase env.
 
-### Phase 2 — Logger (core write path)  `[ ]`
-- [ ] Logger island: sections/groups/sets, completion, autosave (15s)
-- [ ] WeightWheel, RepsStepper, voice input, rest timers, stopwatch
-- [ ] Grouping, metric swap, movement swap/add/remove, substitution memory
-- [ ] VibeCheck, custom (plan-less) workouts, ActivityLogger
-- verify: full session can be created/edited/finished against DB
+### Phase 2 — Logger (core write path)  `[in progress]`
+- [x] Logger island: sections/items/sets, completion, autosave (15s)
+- [x] WeightWheel (drag-scrub), RepsStepper, inline RPE, rest countdown, session stopwatch
+- [x] Build from plan day (`logBuilder`) + last-performance prefill; custom (blank) session
+- [x] Create/resume/finish/cancel session; write mutations (`createLog`/`updateLog`)
+- [x] Entry points: dashboard "Start workout" + per-day "Start" in Plan view
+- [ ] Voice input, multi-select grouping (superset/circuit), metric swap
+- [ ] Movement swap/add/remove via library, substitution suggestions (`bump_movement_sub`)
+- [ ] VibeCheck on start, ActivityLogger (lightweight non-strength)
+- verify: ✓ build (10 pages) + check clean; `/app/log` serves. Live write path
+  unverified (no DB reachable from sandbox).
 
 ### Phase 3 — Plan authoring  `[ ]`
 - [ ] PlanUpload strict markdown parser + preview + save/activate

@@ -54,3 +54,26 @@ export async function getLogById(
   const { data } = await client.from('workout_logs').select('*').eq('id', id).maybeSingle();
   return (data as WorkoutLog) ?? null;
 }
+
+// ---- write paths (authenticated only; owner_user_id is set from the session) ----
+
+export async function createLog(
+  row: Partial<WorkoutLog> & { log_date: string },
+): Promise<WorkoutLog | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .insert({ ...row, owner_user_id: user.id })
+    .select('*')
+    .single();
+  if (error) return null;
+  return data as WorkoutLog;
+}
+
+export async function updateLog(id: string, patch: Partial<WorkoutLog>): Promise<boolean> {
+  const { error } = await supabase.from('workout_logs').update(patch).eq('id', id);
+  return !error;
+}
