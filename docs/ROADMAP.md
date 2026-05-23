@@ -65,11 +65,14 @@ while building. Update as work lands.
 - verify: ✓ build (10 pages) + check clean; `/app/log` serves. Live write path
   unverified (no DB reachable from sandbox).
 
-### Phase 3 — Plan authoring  `[ ]`
-- [ ] PlanUpload strict markdown parser + preview + save/activate
-- [ ] Plan edit mode (reorder, inline edit, add via library, delete, autosave)
-- [ ] Adopt a shared/public plan (copy into own account)
-- verify: paste markdown → parsed plan → saved → visible in Plan view
+### Phase 3 — Plan authoring  `[in progress]`
+- [x] Strict markdown plan parser (`planParser.ts`) → ParsedPlan
+- [x] **Unit tests for the parser (6 passing — vitest)** ← genuinely verified
+- [x] PlanUpload: paste markdown → Parse → preview → Save & activate
+- [x] Adopt a shared/public plan (`adoptPlan` + `?adopt=<id>`) and `createPlan`
+- [ ] Plan edit mode (drag-reorder days, inline-edit cells, add via library, delete, autosave)
+- verify: ✓ parser unit-tested; build (11 pages) + check clean. Save path needs
+  live DB to confirm end-to-end.
 
 ### Phase 4 — Polish  `[ ]`
 - [ ] Astro View Transitions, micro-interactions

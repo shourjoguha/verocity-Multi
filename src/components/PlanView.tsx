@@ -12,7 +12,13 @@ export default function PlanView() {
     return (
       <div className="mx-auto max-w-3xl px-6 py-8">
         <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight text-fg">Plan</h1>
-        <EmptyState>No active plan.</EmptyState>
+        <EmptyState>
+          No active plan.{' '}
+          <a href="/app/plan/upload" className="text-fg underline hover:text-subtle">
+            Create one
+          </a>
+          .
+        </EmptyState>
       </div>
     );
   }
@@ -33,7 +39,17 @@ export default function PlanView() {
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <header className="mb-6">
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">{parsed.title}</h1>
+        <div className="flex items-baseline justify-between">
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">
+            {parsed.title}
+          </h1>
+          <a
+            href="/app/plan/upload"
+            className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+          >
+            New plan
+          </a>
+        </div>
         {parsed.blocks.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {parsed.blocks.map((b, i) => (

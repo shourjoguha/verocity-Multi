@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import type { Movement, Plan, Profile, WorkoutLog } from '@/lib/types';
+import type { Movement, ParsedPlan, Plan, Profile, WorkoutLog } from '@/lib/types';
 
 // All queries rely on RLS for scoping: the authenticated client returns the
 // user's own rows; the session-less public client returns the showcase
@@ -76,4 +76,44 @@ export async function createLog(
 export async function updateLog(id: string, patch: Partial<WorkoutLog>): Promise<boolean> {
   const { error } = await supabase.from('workout_logs').update(patch).eq('id', id);
   return !error;
+}
+
+// Insert a plan and make it the active one (the partial unique index allows a
+// single active plan per owner, so deactivate any existing active first).
+export async function createPlan(
+  parsed: ParsedPlan,
+  sourceMarkdown: string,
+): Promise<Plan | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  await supabase
+    .from('plans')
+    .update({ is_active: false })
+    .eq('owner_user_id', user.id)
+    .eq('is_active', true);
+  const { data, error } = await supabase
+    .from('plans')
+    .insert({
+      owner_user_id: user.id,
+      name: parsed.title,
+      start_date: parsed.startDate,
+      end_date: parsed.endDate,
+      source_markdown: sourceMarkdown,
+      parsed,
+      is_active: true,
+    })
+    .select('*')
+    .single();
+  if (error) return null;
+  return data as Plan;
+}
+
+// Adopt a shared/public plan: copy its parsed content into a new owned plan.
+export async function adoptPlan(planId: string): Promise<Plan | null> {
+  const { data } = await supabase.from('plans').select('*').eq('id', planId).maybeSingle();
+  if (!data) return null;
+  const src = data as Plan;
+  return createPlan(src.parsed, src.source_markdown ?? '');
 }
