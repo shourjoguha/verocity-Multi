@@ -1,0 +1,152 @@
+import type { BlockKey, MetricKey, SectionKey } from '@/app.config';
+
+// ---- DB row types (mirror supabase/migrations) ----
+
+export type LogStatus = 'planned' | 'in_progress' | 'paused' | 'done' | 'cancelled';
+export type ShareScope = 'profile' | 'plan' | 'log';
+
+export interface Profile {
+  id: string;
+  display_name: string;
+  is_showcase: boolean;
+  created_at: string;
+}
+
+export interface Movement {
+  id: string;
+  name: string;
+  category: string | null;
+  tags: string[];
+  default_metrics: MetricKey[];
+  primary_metric: MetricKey;
+  default_rest_seconds: number;
+  notes: string | null;
+  owner_user_id: string | null; // null = shared library
+}
+
+export interface Plan {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  source_markdown: string | null;
+  parsed: ParsedPlan;
+  is_active: boolean;
+  is_public: boolean;
+  created_at: string;
+}
+
+export interface WorkoutLog {
+  id: string;
+  owner_user_id: string;
+  plan_id: string | null;
+  log_date: string;
+  day_key: string | null;
+  week_number: number | null;
+  status: LogStatus;
+  started_at: string | null;
+  ended_at: string | null;
+  total_seconds: number | null;
+  notes: string | null;
+  activity_type: string | null;
+  tags: string[];
+  data: LogDocument;
+  created_at: string;
+}
+
+export interface Share {
+  id: string;
+  token_hash: string;
+  owner_user_id: string;
+  scope: ShareScope;
+  resource_id: string | null;
+  label: string | null;
+  created_at: string;
+  expires_at: string | null;
+  revoked: boolean;
+}
+
+// ---- plans.parsed JSONB contract: ParsedPlan (SPEC §8) ----
+
+export interface ParsedPlan {
+  title: string;
+  startDate: string | null;
+  endDate: string | null;
+  blocks: PlanBlock[];
+  weeklyTemplate: string[]; // ordered day keys, e.g. ["mon","wed","fri"]
+  days: PlanDay[];
+}
+
+export interface PlanBlock {
+  type: BlockKey;
+  startWeek: number;
+  endWeek: number;
+}
+
+export interface PlanDay {
+  dayKey: string;
+  label: string;
+  exercises: PlanExercise[];
+}
+
+export interface PlanExercise {
+  movement: string;
+  section: SectionKey;
+  primaryMetric: MetricKey;
+  // per-week planned-set strings, keyed by 1-based week number
+  plannedByWeek: Record<number, string>;
+  notes?: string;
+}
+
+// ---- workout_logs.data JSONB contract: LogDocument (SPEC §8) ----
+
+export interface LogDocument {
+  sections: LogSection[];
+  session?: { vibe?: VibeCheck };
+}
+
+export interface VibeCheck {
+  sleep: number;
+  energy: number;
+  soreness: number;
+}
+
+export interface LogSection {
+  key: SectionKey;
+  groups: LogGroup[];
+}
+
+export type GroupKind = 'single' | 'superset' | 'circuit';
+
+export interface LogGroup {
+  id: string;
+  kind: GroupKind;
+  items: LogItem[];
+  restSeconds?: number;
+}
+
+export interface LogItem {
+  id: string;
+  movement: string;
+  primaryMetric: MetricKey;
+  sets: LogSet[];
+  restSeconds?: number;
+  notes?: string;
+}
+
+export interface LogSet {
+  planned: string | null;
+  actual: SetActual;
+  notations: string[];
+}
+
+export interface SetActual {
+  weight?: number;
+  reps?: number;
+  rpe?: number;
+  distance?: number;
+  time?: number;
+  completed: boolean;
+  prefilled: boolean;
+}

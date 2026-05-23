@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/* Design tokens — HSL only (CLAUDE.md: design tokens only, no raw colors).
+   Swiss-minimalist dark identity: monochrome base, hairlines, sharp corners,
+   tabular numbers. Activity-tag accent colors live in app.config.ts. */
+@theme {
+  /* Monochrome neutral scale */
+  --color-bg: hsl(0 0% 4%);
+  --color-surface: hsl(0 0% 7%);
+  --color-elevated: hsl(0 0% 10%);
+  --color-border: hsl(0 0% 16%);
+  --color-muted: hsl(0 0% 42%);
+  --color-subtle: hsl(0 0% 64%);
+  --color-fg: hsl(0 0% 96%);
+
+  /* Single signal accent, used sparingly */
+  --color-accent: hsl(8 90% 58%);
+  --color-accent-fg: hsl(0 0% 100%);
+
+  /* Type — Clash Display (headlines) + Satoshi (body) */
+  --font-display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+
+  /* Sharp corners */
+  --radius-none: 0px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular numbers by default — this is a data-heavy app */
+body {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hairline utility */
+.hairline {
+  border: 1px solid var(--color-border);
+}
