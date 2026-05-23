@@ -35,7 +35,7 @@ function log(sets: { weight?: number; reps?: number; rpe?: number; completed?: b
         },
       ],
     },
-  } as WorkoutLog;
+  } as unknown as WorkoutLog;
 }
 
 describe('flattenSets', () => {

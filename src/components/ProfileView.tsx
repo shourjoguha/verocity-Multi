@@ -99,6 +99,23 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         <StatCard label="Top e1RM" value={top != null ? formatRound(top) : '—'} unit={top != null ? 'kg' : undefined} />
       </section>
 
+      {mode === 'app' ? (
+        <section className="mb-8 flex gap-3">
+          <a
+            href="/app/log"
+            className="inline-flex min-h-11 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg hover:bg-subtle"
+          >
+            Start workout
+          </a>
+          <a
+            href="/app/activity"
+            className="inline-flex min-h-11 flex-1 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg hover:border-subtle"
+          >
+            Log activity
+          </a>
+        </section>
+      ) : null}
+
       <section className="mb-8">
         <SectionHeader>Active plan</SectionHeader>
         {plan ? (
@@ -109,11 +126,8 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                 {week ? <div className="text-sm text-muted">Week {week}</div> : null}
               </div>
               {mode === 'app' ? (
-                <a
-                  href="/app/log"
-                  className="inline-flex min-h-11 items-center border border-border px-4 text-sm uppercase tracking-wider text-fg hover:border-subtle"
-                >
-                  Start workout
+                <a href="/app/plan" className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg">
+                  View →
                 </a>
               ) : null}
             </div>

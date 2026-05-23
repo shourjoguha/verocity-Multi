@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import type { Movement, ParsedPlan, Plan, Profile, WorkoutLog } from '@/lib/types';
+import type { Movement, MovementSub, ParsedPlan, Plan, Profile, WorkoutLog } from '@/lib/types';
 
 // All queries rely on RLS for scoping: the authenticated client returns the
 // user's own rows; the session-less public client returns the showcase
@@ -108,6 +108,36 @@ export async function createPlan(
     .single();
   if (error) return null;
   return data as Plan;
+}
+
+// Overwrite a plan's parsed content (plan edit mode autosave). Owner-scoped by RLS.
+export async function updatePlan(id: string, parsed: ParsedPlan): Promise<boolean> {
+  const { error } = await supabase.from('plans').update({ parsed }).eq('id', id);
+  return !error;
+}
+
+// Substitution memory for the current plan (newest/most-used first), used to
+// surface "you usually swap X → Y" suggestions in the Logger.
+export async function getMovementSubs(planId: string | null): Promise<MovementSub[]> {
+  const base = supabase.from('movement_subs').select('*').is('dismissed_at', null);
+  const scoped = planId ? base.eq('plan_id', planId) : base.is('plan_id', null);
+  const { data } = await scoped.order('count', { ascending: false });
+  return (data as MovementSub[]) ?? [];
+}
+
+// Record a substitution (insert or bump count) via the security-invoker RPC.
+export async function bumpMovementSub(
+  planId: string | null,
+  dayKey: string | null,
+  original: string,
+  replacement: string,
+): Promise<void> {
+  await supabase.rpc('bump_movement_sub', {
+    p_plan_id: planId,
+    p_day_key: dayKey,
+    p_original: original,
+    p_replacement: replacement,
+  });
 }
 
 // Adopt a shared/public plan: copy its parsed content into a new owned plan.

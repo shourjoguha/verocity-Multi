@@ -68,6 +68,9 @@ export const ACTIVITY_TAGS = {
   recovery: { label: 'Recovery', color: 'hsl(210 9% 64%)' },
 } as const;
 
+// Quick-pick activity types for the lightweight non-strength ActivityLogger.
+export const ACTIVITY_TYPES = ['Run', 'Walk', 'Cycle', 'Row', 'Swim', 'Hike', 'Yoga', 'Mobility'] as const;
+
 // Movement families for stats roll-up.
 export const MOVEMENT_FAMILIES = {
   squat: ['back squat', 'front squat', 'goblet squat', 'box squat'],
@@ -108,6 +111,7 @@ export const appConfig = {
   rpe: RPE,
   timers: TIMERS,
   activityTags: ACTIVITY_TAGS,
+  activityTypes: ACTIVITY_TYPES,
   movementFamilies: MOVEMENT_FAMILIES,
   touch: TOUCH,
   notations: NOTATIONS,

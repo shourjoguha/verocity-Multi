@@ -55,6 +55,18 @@ export interface WorkoutLog {
   created_at: string;
 }
 
+export interface MovementSub {
+  id: string;
+  owner_user_id: string;
+  plan_id: string | null;
+  day_key: string | null;
+  original: string;
+  replacement: string;
+  count: number;
+  last_used_at: string;
+  dismissed_at: string | null;
+}
+
 export interface Share {
   id: string;
   token_hash: string;
