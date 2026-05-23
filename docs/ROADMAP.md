@@ -18,10 +18,13 @@ while building. Update as work lands.
 
 ## External blockers (need the user)
 
-- [ ] Supabase project provisioned; `PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` supplied.
-- [ ] Migrations applied to the Supabase project (`supabase db push` or SQL editor).
+- [x] Supabase project provisioned (`zwuaieavvmjacqtbzowm`); `PUBLIC_*` keys supplied. Service-role key is auto-injected into Edge Functions.
+- [x] Migrations applied to the Supabase project — `0001`–`0004` applied via MCP; RLS boundary verified; edge functions deployed; shared library seeded; authed data paths verified with a (since-deleted) test user.
 - [ ] `SHOWCASE_PROFILE_ID` chosen and set once a showcase profile exists.
-- [ ] Vercel project linked for deploy.
+- [ ] Invite code(s) inserted (sha-256 `code_hash`) so signup is usable.
+- [ ] Original Lovable data imported (waiting on a dump from the source DB; egress to it is blocked from the build sandbox).
+- [ ] Vercel project linked for deploy (`PUBLIC_SUPABASE_URL` + `PUBLIC_SUPABASE_ANON_KEY` as build env).
+
 
 ## Phases
 
@@ -53,32 +56,33 @@ while building. Update as work lands.
   (curl 200). NOTE: e1RM sparkline trend deferred to polish; live data needs
   Supabase env.
 
-### Phase 2 — Logger (core write path)  `[in progress]`
+### Phase 2 — Logger (core write path)  `[done]`
 - [x] Logger island: sections/items/sets, completion, autosave (15s)
 - [x] WeightWheel (drag-scrub), RepsStepper, inline RPE, rest countdown, session stopwatch
 - [x] Build from plan day (`logBuilder`) + last-performance prefill; custom (blank) session
 - [x] Create/resume/finish/cancel session; write mutations (`createLog`/`updateLog`)
 - [x] Entry points: dashboard "Start workout" + per-day "Start" in Plan view
-- [ ] Voice input, multi-select grouping (superset/circuit), metric swap
-- [ ] Movement swap/add/remove via library, substitution suggestions (`bump_movement_sub`)
-- [ ] VibeCheck on start, ActivityLogger (lightweight non-strength)
-- verify: ✓ build (10 pages) + check clean; `/app/log` serves. Live write path
-  unverified (no DB reachable from sandbox).
+- [x] Voice input (Web Speech, feature-detected; parser unit-tested), grouping (superset/circuit merge/ungroup + kind toggle), metric swap
+- [x] Movement swap/add/remove via library picker, substitution suggestions (`bump_movement_sub` RPC + getMovementSubs)
+- [x] VibeCheck on start, ActivityLogger (`/app/activity`, lightweight non-strength)
+- verify: ✓ check/build clean; pure edit logic in `lib/logEdits.ts`. Authed write
+  path (create/update log, RPC) verified against the live DB via role simulation.
 
-### Phase 3 — Plan authoring  `[in progress]`
+### Phase 3 — Plan authoring  `[done]`
 - [x] Strict markdown plan parser (`planParser.ts`) → ParsedPlan
 - [x] **Unit tests for the parser (6 passing — vitest)** ← genuinely verified
 - [x] PlanUpload: paste markdown → Parse → preview → Save & activate
 - [x] Adopt a shared/public plan (`adoptPlan` + `?adopt=<id>`) and `createPlan`
-- [ ] Plan edit mode (drag-reorder days, inline-edit cells, add via library, delete, autosave)
-- verify: ✓ parser unit-tested; build (11 pages) + check clean. Save path needs
-  live DB to confirm end-to-end.
+- [x] Plan edit mode (`/app/plan/edit`): inline-edit title/labels/movements/sections + per-week cells, drag handles + up/down reorder for days & exercises, add/delete, "+ Week", debounced autosave. Pure helpers in `lib/planEdits.ts` (unit-tested); `dayKey` stays stable across renames. (Block-phase editing not yet exposed.)
+- verify: ✓ parser + planEdits unit-tested; check/build clean. updatePlan save path
+  verified against the live DB.
 
-### Phase 4 — Polish  `[ ]`
-- [ ] Astro View Transitions, micro-interactions
-- [ ] PWA install shell, perf pass, accessibility
-- [ ] Enhancements from SPEC §10 (export, etc. as scoped)
-- verify: lighthouse/a11y pass; transitions smooth
+### Phase 4 — Polish  `[in progress]`
+- [x] Astro View Transitions (ClientRouter)
+- [x] PWA install shell (manifest, SVG icons, network-first app-shell service worker) + a11y/perf pass (skip link, `<main>`, nav `aria-current`, focus-visible, `prefers-reduced-motion`, font preconnects)
+- [ ] Enhancements from SPEC §10 (export, etc. as scoped); self-host fonts; client realtime subscription on `workout_logs` (DB is realtime-enabled, client not yet subscribing)
+- verify: ✓ check/build clean; dev server serves all routes 200. Lighthouse/a11y +
+  install + offline shell need a real browser/deploy to confirm.
 
 ### Phase 5 — AI  `[DEFERRED — do not build without explicit go-ahead]`
 - parse-plan Edge Function; recommendations coach (Railway). See SPEC §12.
