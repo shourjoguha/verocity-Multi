@@ -15,8 +15,16 @@ import Base from '@/layouts/Base.astro';
       showcase. Built on Astro islands and Supabase.
     </p>
     <div class="mt-10 flex items-center gap-3 text-sm">
-      <span class="hairline px-3 py-1 uppercase tracking-wider text-subtle">Phase 0</span>
-      <span class="text-muted">Foundations</span>
+      <a
+        href="/app"
+        class="inline-flex min-h-11 items-center bg-fg px-5 uppercase tracking-wider text-bg hover:bg-subtle"
+        >Open app</a
+      >
+      <a
+        href="/showcase"
+        class="inline-flex min-h-11 items-center border border-border px-5 uppercase tracking-wider text-fg hover:border-subtle"
+        >View showcase</a
+      >
     </div>
   </main>
 </Base>

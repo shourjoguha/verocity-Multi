@@ -1,0 +1,13 @@
+---
+import Base from '@/layouts/Base.astro';
+import LoginForm from '@/components/LoginForm';
+---
+
+<Base title="Sign in · Verocity">
+  <main class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6">
+    <p class="mb-2 text-[0.7rem] uppercase tracking-[0.3em] text-muted">Verocity</p>
+    <h1 class="mb-8 font-display text-3xl font-semibold tracking-tight text-fg">Sign in</h1>
+    <LoginForm client:load />
+    <p class="mt-6 text-xs text-muted">Invite-only — accounts are created server-side.</p>
+  </main>
+</Base>
