@@ -47,26 +47,39 @@ Deno.serve(async (req) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  // Validate invite: exists, unused, unexpired.
+  // Atomically CLAIM the invite before doing anything else. A conditional
+  // UPDATE (used_at IS NULL AND not expired → set used_at) lets Postgres row
+  // locking serialize concurrent redemptions, so a single code can never mint
+  // two accounts. If creation fails downstream we release the claim.
   const codeHash = await sha256Hex(inviteCode.trim());
-  const { data: invite, error: inviteErr } = await admin
+  const nowIso = new Date().toISOString();
+  const { data: invite, error: claimErr } = await admin
     .from('invites')
-    .select('id, used_at, expires_at')
+    .update({ used_at: nowIso })
     .eq('code_hash', codeHash)
+    .is('used_at', null)
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+    .select('id')
     .maybeSingle();
 
-  if (inviteErr) return json({ error: 'lookup_failed' }, 500);
-  if (!invite || invite.used_at) return json({ error: 'invalid_invite' }, 403);
-  if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
-    return json({ error: 'expired_invite' }, 403);
-  }
+  if (claimErr) return json({ error: 'lookup_failed' }, 500);
+  if (!invite) return json({ error: 'invalid_invite' }, 403); // missing, used, or expired
+
+  const releaseInvite = () =>
+    admin.from('invites').update({ used_at: null }).eq('id', invite.id);
 
   // Enforce profile cap.
   const { count, error: countErr } = await admin
     .from('profiles')
     .select('id', { count: 'exact', head: true });
-  if (countErr) return json({ error: 'count_failed' }, 500);
-  if ((count ?? 0) >= PROFILE_CAP) return json({ error: 'cap_reached' }, 403);
+  if (countErr) {
+    await releaseInvite();
+    return json({ error: 'count_failed' }, 500);
+  }
+  if ((count ?? 0) >= PROFILE_CAP) {
+    await releaseInvite();
+    return json({ error: 'cap_reached' }, 403);
+  }
 
   // Create the auth user (email pre-confirmed for invite flow).
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
@@ -75,7 +88,10 @@ Deno.serve(async (req) => {
     email_confirm: true,
     user_metadata: { display_name: displayName },
   });
-  if (createErr || !created.user) return json({ error: 'create_user_failed' }, 400);
+  if (createErr || !created.user) {
+    await releaseInvite();
+    return json({ error: 'create_user_failed' }, 400);
+  }
 
   const userId = created.user.id;
 
@@ -85,14 +101,12 @@ Deno.serve(async (req) => {
     .insert({ id: userId, display_name: displayName });
   if (profileErr) {
     await admin.auth.admin.deleteUser(userId); // roll back the orphaned auth user
+    await releaseInvite();
     return json({ error: 'profile_failed' }, 500);
   }
 
-  // Mark the invite consumed.
-  await admin
-    .from('invites')
-    .update({ used_by: userId, used_at: new Date().toISOString() })
-    .eq('id', invite.id);
+  // Record who consumed the (already-claimed) invite.
+  await admin.from('invites').update({ used_by: userId }).eq('id', invite.id);
 
   return json({ ok: true, userId });
 });
