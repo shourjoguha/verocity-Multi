@@ -3,18 +3,18 @@
 A strength/training logger rebuilt on **Astro + React islands** and **Supabase**
 (Postgres · Auth · RLS · Realtime · Edge Functions), deployed static-first on
 **Vercel**, with **Railway** reserved for future heavy/scheduled jobs.
-Full spec: `.claude/docs/SPEC.md`.
+Full spec: `docs/SPEC.md`.
 
 ## Routing
 
 | About to...                                       | Read first                           |
 |---------------------------------------------------|--------------------------------------|
-| Touch the data model, RLS, or sharing             | `.claude/docs/SPEC.md` §6 (auth), §8 (data)  |
-| Build the public showcase or share links          | `.claude/docs/SPEC.md` §7                    |
-| Edit plan/log JSONB or domain types               | `.claude/docs/SPEC.md` §8, `lib/types.ts`    |
-| Change visuals, tokens, or layout                 | `.claude/docs/SPEC.md` §11, `app.config.ts`  |
-| Scaffold, sequence work, or deploy                | `.claude/docs/SPEC.md` §4–5, §13 (roadmap)   |
-| Add anything AI / plan-parsing / "coach"          | `.claude/docs/SPEC.md` §12 — DEFERRED, ask   |
+| Touch the data model, RLS, or sharing             | `docs/SPEC.md` §6 (auth), §8 (data)  |
+| Build the public showcase or share links          | `docs/SPEC.md` §7                    |
+| Edit plan/log JSONB or domain types               | `docs/SPEC.md` §8, `lib/types.ts`    |
+| Change visuals, tokens, or layout                 | `docs/SPEC.md` §11, `app.config.ts`  |
+| Scaffold, sequence work, or deploy                | `docs/SPEC.md` §4–5, §13 (roadmap)   |
+| Add anything AI / plan-parsing / "coach"          | `docs/SPEC.md` §12 — DEFERRED, ask   |
 
 ## Hard rules
 
