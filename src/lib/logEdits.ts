@@ -64,6 +64,10 @@ export function setItemMetric(doc: LogDocument, si: number, gi: number, ii: numb
   return mapItem(doc, si, gi, ii, (it) => ({ ...it, primaryMetric: metric }));
 }
 
+export function setItemRest(doc: LogDocument, si: number, gi: number, ii: number, seconds: number): LogDocument {
+  return mapItem(doc, si, gi, ii, (it) => ({ ...it, restSeconds: seconds }));
+}
+
 // Swap the movement on an item, resetting actuals but keeping the set count and
 // planned targets (the prescription survives a substitution).
 export function swapItemMovement(

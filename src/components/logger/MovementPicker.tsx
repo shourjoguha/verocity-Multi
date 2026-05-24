@@ -4,6 +4,7 @@ import type { Movement } from '@/lib/types';
 import { EASE } from '@/components/anim';
 
 export interface Suggestion {
+  id: string;
   replacement: string;
   count: number;
 }
@@ -15,12 +16,14 @@ export function MovementPicker({
   title,
   suggestions = [],
   onPick,
+  onDismiss,
   onClose,
 }: {
   movements: Movement[];
   title: string;
   suggestions?: Suggestion[];
   onPick: (movement: Movement | { name: string }) => void;
+  onDismiss?: (id: string) => void;
   onClose: () => void;
 }) {
   const [q, setQ] = useState('');
@@ -70,15 +73,29 @@ export function MovementPicker({
             </div>
             <div className="flex flex-wrap gap-2">
               {suggestions.map((s) => (
-                <button
-                  key={s.replacement}
-                  type="button"
-                  onClick={() => onPick({ name: s.replacement })}
-                  className="border border-accent px-2 py-1 text-xs capitalize text-accent"
+                <span
+                  key={s.id}
+                  className="inline-flex items-center border border-accent text-accent"
                 >
-                  {s.replacement}
-                  <span className="ml-1 text-muted">×{s.count}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => onPick({ name: s.replacement })}
+                    className="px-2 py-1 text-xs capitalize"
+                  >
+                    {s.replacement}
+                    <span className="ml-1 text-muted">×{s.count}</span>
+                  </button>
+                  {onDismiss ? (
+                    <button
+                      type="button"
+                      onClick={() => onDismiss(s.id)}
+                      className="border-l border-accent px-1.5 py-1 text-xs text-muted hover:text-fg"
+                      aria-label={`Dismiss ${s.replacement} suggestion`}
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </span>
               ))}
             </div>
           </div>
