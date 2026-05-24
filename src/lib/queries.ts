@@ -206,6 +206,11 @@ export async function bumpMovementSub(
   });
 }
 
+// Dismiss a substitution suggestion so it stops surfacing in the picker.
+export async function dismissMovementSub(id: string): Promise<void> {
+  await supabase.from('movement_subs').update({ dismissed_at: new Date().toISOString() }).eq('id', id);
+}
+
 // Adopt a shared/public plan: copy its parsed content into a new owned plan.
 export async function adoptPlan(planId: string): Promise<Plan | null> {
   const { data } = await supabase.from('plans').select('*').eq('id', planId).maybeSingle();

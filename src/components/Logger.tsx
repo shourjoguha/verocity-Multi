@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import {
   bumpMovementSub,
   createLog,
+  dismissMovementSub,
   getActivePlan,
   getLogById,
   getMovementSubs,
@@ -24,6 +25,7 @@ import {
   removeSet,
   setGroupKind,
   setItemMetric,
+  setItemRest,
   swapItemMovement,
   toggleItemNotation,
   ungroup,
@@ -278,7 +280,7 @@ export default function Logger() {
   const swapSuggestions = (movement: string) =>
     subs
       .filter((s) => s.original.toLowerCase() === movement.toLowerCase())
-      .map((s) => ({ replacement: s.replacement, count: s.count }));
+      .map((s) => ({ id: s.id, replacement: s.replacement, count: s.count }));
 
   function toggleItemComplete(si: number, gi: number, ii: number) {
     setDoc((d) => {
@@ -561,6 +563,11 @@ export default function Logger() {
                 : []
             }
             onPick={handlePick}
+            onDismiss={(id) => {
+              dismissMovementSub(id).then(() => {
+                if (planId) getMovementSubs(planId).then(setSubs);
+              });
+            }}
             onClose={() => setPicker(null)}
           />
         ) : null}
@@ -673,6 +680,28 @@ export default function Logger() {
                           </button>
                         );
                       })}
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">
+                      Rest between sets
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {TIMERS.restPresets.map((sec) => (
+                        <button
+                          key={sec}
+                          type="button"
+                          onClick={() => setDoc((d) => setItemRest(d, si, gi, ii, sec))}
+                          className={`border px-2 py-1 text-xs tabular-nums transition-colors ${
+                            item.restSeconds === sec
+                              ? 'border-fg text-fg'
+                              : 'border-border text-muted hover:text-fg'
+                          }`}
+                        >
+                          {sec}s
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
