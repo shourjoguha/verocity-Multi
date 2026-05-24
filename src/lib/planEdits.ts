@@ -1,8 +1,8 @@
 // Pure, immutable edits on a ParsedPlan, used by the plan editor. dayKey stays
 // stable across label edits (workout_logs.day_key references it); weeklyTemplate
 // is kept in sync with day order.
-import type { MetricKey, SectionKey } from '@/app.config';
-import type { ParsedPlan, PlanDay, PlanExercise } from '@/lib/types';
+import type { BlockKey, MetricKey, SectionKey } from '@/app.config';
+import type { ParsedPlan, PlanBlock, PlanDay, PlanExercise } from '@/lib/types';
 
 export function reorder<T>(arr: T[], from: number, to: number): T[] {
   if (from === to || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return arr;
@@ -84,6 +84,44 @@ export function setPlanned(plan: ParsedPlan, di: number, ei: number, week: numbe
     else delete plannedByWeek[week];
     return { ...e, plannedByWeek };
   });
+}
+
+// ---- block (mesocycle phase) edits ----
+
+function withBlocks(plan: ParsedPlan, blocks: PlanBlock[]): ParsedPlan {
+  return { ...plan, blocks };
+}
+
+function mapBlock(plan: ParsedPlan, bi: number, fn: (b: PlanBlock) => PlanBlock): ParsedPlan {
+  return withBlocks(plan, plan.blocks.map((b, i) => (i === bi ? fn(b) : b)));
+}
+
+// Append a one-week phase starting the week after the last existing block.
+export function addBlock(plan: ParsedPlan, type: BlockKey = 'accumulation'): ParsedPlan {
+  const start = plan.blocks.length ? Math.max(...plan.blocks.map((b) => b.endWeek)) + 1 : 1;
+  return withBlocks(plan, [...plan.blocks, { type, startWeek: start, endWeek: start }]);
+}
+
+export function removeBlock(plan: ParsedPlan, bi: number): ParsedPlan {
+  return withBlocks(plan, plan.blocks.filter((_, i) => i !== bi));
+}
+
+export function setBlockType(plan: ParsedPlan, bi: number, type: BlockKey): ParsedPlan {
+  return mapBlock(plan, bi, (b) => ({ ...b, type }));
+}
+
+// Set the first week; never below 1, and keep endWeek ≥ startWeek.
+export function setBlockStart(plan: ParsedPlan, bi: number, startWeek: number): ParsedPlan {
+  const w = Math.max(1, Math.floor(startWeek) || 1);
+  return mapBlock(plan, bi, (b) => ({ ...b, startWeek: w, endWeek: Math.max(w, b.endWeek) }));
+}
+
+// Set the last week; never below the block's startWeek.
+export function setBlockEnd(plan: ParsedPlan, bi: number, endWeek: number): ParsedPlan {
+  return mapBlock(plan, bi, (b) => ({
+    ...b,
+    endWeek: Math.max(b.startWeek, Math.floor(endWeek) || b.startWeek),
+  }));
 }
 
 // Highest week referenced by blocks or any planned cell (min 1).

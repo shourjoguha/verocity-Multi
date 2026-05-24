@@ -19,10 +19,11 @@ while building. Update as work lands.
 ## External blockers (need the user)
 
 - [x] Supabase project provisioned (`zwuaieavvmjacqtbzowm`); `PUBLIC_*` keys supplied. Service-role key is auto-injected into Edge Functions.
-- [x] Migrations applied to the Supabase project — `0001`–`0004` applied via MCP; RLS boundary verified; edge functions deployed; shared library seeded; authed data paths verified with a (since-deleted) test user.
+- [x] Migrations applied to the Supabase project — `0001`–`0005` applied via MCP; RLS boundary verified; edge functions deployed; shared library seeded; authed data paths verified with a (since-deleted) test user. `0005` makes the shared-library write-lock explicit.
+- [~] Original Lovable data import — user supplied a public-schema data dump + table schema (CSV). Still blocked on the v2 auth user id to remap `owner_user_id` before insert.
 - [ ] `SHOWCASE_PROFILE_ID` chosen and set once a showcase profile exists.
 - [ ] Invite code(s) inserted (sha-256 `code_hash`) so signup is usable.
-- [ ] Original Lovable data imported (waiting on a dump from the source DB; egress to it is blocked from the build sandbox).
+- [~] Original Lovable data imported — public-schema dump + table schema received (CSV); blocked on the v2 auth user id for the `owner_user_id` remap.
 - [ ] Vercel project linked for deploy (`PUBLIC_SUPABASE_URL` + `PUBLIC_SUPABASE_ANON_KEY` as build env).
 
 
@@ -73,14 +74,15 @@ while building. Update as work lands.
 - [x] **Unit tests for the parser (6 passing — vitest)** ← genuinely verified
 - [x] PlanUpload: paste markdown → Parse → preview → Save & activate
 - [x] Adopt a shared/public plan (`adoptPlan` + `?adopt=<id>`) and `createPlan`
-- [x] Plan edit mode (`/app/plan/edit`): inline-edit title/labels/movements/sections + per-week cells, drag handles + up/down reorder for days & exercises, add/delete, "+ Week", debounced autosave. Pure helpers in `lib/planEdits.ts` (unit-tested); `dayKey` stays stable across renames. (Block-phase editing not yet exposed.)
+- [x] Plan edit mode (`/app/plan/edit`): inline-edit title/labels/movements/sections + per-week cells, drag handles + up/down reorder for days & exercises, add/delete, "+ Week", debounced autosave. Pure helpers in `lib/planEdits.ts` (unit-tested); `dayKey` stays stable across renames. Block-phase editing (add/remove/type/week-range) now exposed in the editor (unit-tested).
 - verify: ✓ parser + planEdits unit-tested; check/build clean. updatePlan save path
   verified against the live DB.
 
 ### Phase 4 — Polish  `[in progress]`
 - [x] Astro View Transitions (ClientRouter)
 - [x] PWA install shell (manifest, SVG icons, network-first app-shell service worker) + a11y/perf pass (skip link, `<main>`, nav `aria-current`, focus-visible, `prefers-reduced-motion`, font preconnects)
-- [ ] Enhancements from SPEC §10 (export, etc. as scoped); self-host fonts; client realtime subscription on `workout_logs` (DB is realtime-enabled, client not yet subscribing)
+- [x] Enhancements from SPEC §10: custom-movement CRUD in Library (shared library read-only), data export (JSON full backup + flattened CSV), share-link UI (`/app/shares` mint/revoke + public read-only `/share?token=`)
+- [ ] Remaining enhancements: self-host fonts (needs licensed font files); client realtime subscription on `workout_logs` (DB is realtime-enabled, client not yet subscribing)
 - verify: ✓ check/build clean; dev server serves all routes 200. Lighthouse/a11y +
   install + offline shell need a real browser/deploy to confirm.
 

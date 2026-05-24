@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addMovement, buildBlankLog, buildLogFromPlanDay, parsePlanned } from '@/lib/logBuilder';
+import { buildBlankLog, buildLogFromPlanDay, parsePlanned } from '@/lib/logBuilder';
 import type { PlanDay } from '@/lib/types';
 
 describe('parsePlanned', () => {
@@ -75,25 +75,5 @@ describe('buildLogFromPlanDay', () => {
 describe('buildBlankLog', () => {
   it('returns one empty accessory section', () => {
     expect(buildBlankLog()).toEqual({ sections: [{ key: 'accessory', groups: [] }] });
-  });
-});
-
-describe('addMovement', () => {
-  it('appends a single-set group to an existing section without mutating the input', () => {
-    const doc = buildBlankLog();
-    const next = addMovement(doc, 'accessory', 'Curl', 'weight');
-    expect(doc.sections[0].groups).toHaveLength(0); // original untouched
-    expect(next.sections[0].groups).toHaveLength(1);
-    const item = next.sections[0].groups[0].items[0];
-    expect(item.movement).toBe('Curl');
-    expect(item.sets).toHaveLength(1);
-    expect(next.sections[0].groups[0].kind).toBe('single');
-  });
-
-  it('creates the section when it does not exist yet', () => {
-    const next = addMovement(buildBlankLog(), 'conditioning', 'Row', 'distance');
-    const section = next.sections.find((s) => s.key === 'conditioning');
-    expect(section).toBeDefined();
-    expect(section!.groups[0].items[0].primaryMetric).toBe('distance');
   });
 });

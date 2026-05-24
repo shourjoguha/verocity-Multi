@@ -2,26 +2,34 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getActivePlan, updatePlan } from '@/lib/queries';
 import {
+  addBlock,
   addDay,
   addExercise,
   moveDay,
   moveExercise,
   planWeeks,
+  removeBlock,
   removeDay,
   removeExercise,
+  setBlockEnd,
+  setBlockStart,
+  setBlockType,
   setDayLabel,
   setExerciseMovement,
   setExerciseSection,
   setPlanned,
   setTitle,
 } from '@/lib/planEdits';
-import { SECTIONS, type SectionKey } from '@/app.config';
+import { BLOCKS, SECTIONS, type BlockKey, type SectionKey } from '@/app.config';
 import type { ParsedPlan } from '@/lib/types';
 import { Button, EmptyState } from '@/components/ui/primitives';
 
 const SAVE_DEBOUNCE_MS = 1200;
 const cellClass =
   'min-h-9 w-full border border-border bg-bg px-2 text-sm text-fg outline-none focus:border-subtle';
+const weekCell =
+  'min-h-9 w-14 border border-border bg-bg px-2 text-center text-sm tabular-nums text-fg outline-none focus:border-subtle';
+const BLOCK_KEYS = Object.keys(BLOCKS) as BlockKey[];
 
 export default function PlanEditor() {
   const [ready, setReady] = useState(false);
@@ -105,6 +113,70 @@ export default function PlanEditor() {
           </a>
         </div>
       </header>
+
+      <section className="mb-8">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[0.7rem] uppercase tracking-[0.25em] text-muted">Phases</span>
+          <button
+            onClick={() => edit((p) => addBlock(p))}
+            className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+          >
+            + Phase
+          </button>
+        </div>
+        {plan.blocks.length === 0 ? (
+          <p className="text-sm text-muted">No phases yet. Add one to color the week columns.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {plan.blocks.map((b, bi) => (
+              <li key={bi} className="flex flex-wrap items-center gap-2">
+                <span
+                  className="inline-block h-3 w-3 shrink-0"
+                  style={{ backgroundColor: BLOCKS[b.type]?.color }}
+                  aria-hidden="true"
+                />
+                <select
+                  value={b.type}
+                  onChange={(e) => edit((p) => setBlockType(p, bi, e.target.value as BlockKey))}
+                  className={`${cellClass} w-40`}
+                  aria-label={`Phase ${bi + 1} type`}
+                >
+                  {BLOCK_KEYS.map((k) => (
+                    <option key={k} value={k}>
+                      {BLOCKS[k].label}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[0.7rem] uppercase tracking-wider text-muted">W</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={b.startWeek}
+                  onChange={(e) => edit((p) => setBlockStart(p, bi, Number(e.target.value)))}
+                  className={weekCell}
+                  aria-label={`Phase ${bi + 1} start week`}
+                />
+                <span className="text-muted">–</span>
+                <input
+                  type="number"
+                  min={b.startWeek}
+                  value={b.endWeek}
+                  onChange={(e) => edit((p) => setBlockEnd(p, bi, Number(e.target.value)))}
+                  className={weekCell}
+                  aria-label={`Phase ${bi + 1} end week`}
+                />
+                <button
+                  onClick={() => edit((p) => removeBlock(p, bi))}
+                  className="px-2 text-muted hover:text-accent"
+                  aria-label={`Delete phase ${bi + 1}`}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {plan.days.map((day, di) => (
         <section
