@@ -110,13 +110,15 @@ export default function Logger() {
       }
 
       const dk = params.get('day');
+      const dateParam = params.get('date');
+      const logDate = dateParam ?? today();
       const [plan, recent] = await Promise.all([getActivePlan(), getRecentLogs(50)]);
       let built: LogDocument;
       let weekNumber: number | null = null;
       const planLinked = plan && dk;
       if (planLinked) {
         const planDay = plan.parsed.days.find((d) => d.dayKey === dk);
-        weekNumber = weekFromDate(plan.start_date, new Date());
+        weekNumber = weekFromDate(plan.start_date, new Date(logDate));
         built = planDay ? buildLogFromPlanDay(planDay, weekNumber) : buildBlankLog();
       } else {
         built = buildBlankLog();
@@ -137,7 +139,7 @@ export default function Logger() {
 
       const linkedPlanId = planLinked ? plan.id : null;
       const created = await createLog({
-        log_date: today(),
+        log_date: logDate,
         plan_id: linkedPlanId,
         day_key: dk,
         week_number: weekNumber,
