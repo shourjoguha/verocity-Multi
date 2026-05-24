@@ -41,7 +41,11 @@ export type TimelinePoint = {
 // day (or today − 30d) through the plan's end date (or today + 30d). Days with a
 // log are "done"; future days whose weekday matches a scheduled plan day are
 // "planned"; the rest are "blank" (rest). Mirrors the v1 PLAN PROGRESS ribbon.
-export function buildTimeline(plan: Plan, logs: WorkoutLog[], now: Date = new Date()): TimelinePoint[] {
+export function buildTimeline(
+  plan: Plan | null,
+  logs: WorkoutLog[],
+  now: Date = new Date(),
+): TimelinePoint[] {
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const todayStr = ymd(today);
@@ -58,13 +62,13 @@ export function buildTimeline(plan: Plan, logs: WorkoutLog[], now: Date = new Da
     doneDates.length > 0
       ? new Date(doneDates[Math.min(doneDates.length - 1, 29)] + 'T00:00:00')
       : new Date(today.getTime() - 30 * 86_400_000);
-  const end = plan.end_date
+  const end = plan?.end_date
     ? new Date(plan.end_date + 'T00:00:00')
     : new Date(today.getTime() + 30 * 86_400_000);
 
   const planByWeekday = new Map<string, PlanDay>();
   const planByDayKey = new Map<string, PlanDay>();
-  for (const d of plan.parsed.days) {
+  for (const d of plan?.parsed.days ?? []) {
     planByDayKey.set(d.dayKey, d);
     const wd = dayNameFromLabel(d.label).toLowerCase();
     if (wd && !planByWeekday.has(wd)) planByWeekday.set(wd, d);

@@ -49,7 +49,7 @@ const VISIBLE_BARS = 24;
 const BAR_GAP = 3;
 const BAR_HEIGHT = 40;
 
-function ProgressTimeline({ plan, logs }: { plan: Plan; logs: WorkoutLog[] }) {
+function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const points = useMemo(() => buildTimeline(plan, logs), [plan, logs]);
@@ -305,14 +305,22 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </Item>
       ) : null}
 
-      {mode === 'app' && plan && plan.parsed.days.length > 0 ? (
+      {mode === 'app' ? (
         <Item>
           <section className="mb-10">
             <div className="mb-4 text-[0.7rem] uppercase tracking-[0.18em] text-muted">
-              {new Date().toDateString()} · Week {week ?? 1}
+              {new Date().toDateString()}
+              {week ? ` · Week ${week}` : ''}
             </div>
             <ProgressTimeline plan={plan} logs={allLogs} />
-            <div className="mb-3 mt-6 flex items-baseline justify-between">
+          </section>
+        </Item>
+      ) : null}
+
+      {mode === 'app' && plan && plan.parsed.days.length > 0 ? (
+        <Item>
+          <section className="mb-10">
+            <div className="mb-3 flex items-baseline justify-between">
               <div className="text-[0.65rem] uppercase tracking-[0.16em] text-muted">Pick a day</div>
               <a
                 href="/app/plan"

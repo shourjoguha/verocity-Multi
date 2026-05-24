@@ -138,6 +138,13 @@ describe('buildTimeline', () => {
     expect(points.find((p) => p.date === ymd(addDays(NOW, -35)))).toBeUndefined();
   });
 
+  it('works with no plan: today ±30 days, all blank', () => {
+    const points = buildTimeline(null, [], NOW);
+    expect(points).toHaveLength(61);
+    expect(points.every((p) => p.state === 'blank')).toBe(true);
+    expect(points.filter((p) => p.isToday)).toHaveLength(1);
+  });
+
   it('uses plan.end_date as the window end when present', () => {
     const end = ymd(addDays(NOW, 5));
     const points = buildTimeline(makePlan({ end_date: end, days: [] }), [], NOW);
