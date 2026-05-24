@@ -1,16 +1,119 @@
-import { useMemo, useState } from 'react';
-import { getMovements } from '@/lib/queries';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  createMovement,
+  deleteMovement,
+  getMovements,
+  updateMovement,
+  type MovementInput,
+} from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import type { Movement } from '@/lib/types';
 import { METRICS, type MetricKey } from '@/app.config';
-import { EmptyState } from '@/components/ui/primitives';
+import { Button, EmptyState } from '@/components/ui/primitives';
+
+const METRIC_KEYS = Object.keys(METRICS) as MetricKey[];
+const inputClass =
+  'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle';
+
+type Draft = MovementInput;
+
+function emptyDraft(): Draft {
+  return { name: '', category: '', primary_metric: 'weight', default_rest_seconds: 120 };
+}
+
+function MovementForm({
+  draft,
+  setDraft,
+  onSubmit,
+  onCancel,
+  submitLabel,
+  busy,
+}: {
+  draft: Draft;
+  setDraft: (d: Draft) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+  submitLabel: string;
+  busy: boolean;
+}) {
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit();
+      }}
+      className="flex flex-col gap-3 border border-border bg-surface p-4"
+    >
+      <input
+        value={draft.name}
+        onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+        placeholder="Movement name"
+        className={inputClass}
+        aria-label="Movement name"
+        autoFocus
+      />
+      <div className="flex flex-wrap gap-3">
+        <input
+          value={draft.category ?? ''}
+          onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+          placeholder="Category (optional)"
+          className={`${inputClass} min-w-40 flex-1`}
+          aria-label="Category"
+        />
+        <select
+          value={draft.primary_metric}
+          onChange={(e) => setDraft({ ...draft, primary_metric: e.target.value as MetricKey })}
+          className={`${inputClass} w-36`}
+          aria-label="Primary metric"
+        >
+          {METRIC_KEYS.map((k) => (
+            <option key={k} value={k}>
+              {METRICS[k].label}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-sm text-muted">
+          <input
+            type="number"
+            min={0}
+            step={5}
+            value={draft.default_rest_seconds}
+            onChange={(e) => setDraft({ ...draft, default_rest_seconds: Number(e.target.value) })}
+            className={`${inputClass} w-24 tabular-nums`}
+            aria-label="Default rest seconds"
+          />
+          s rest
+        </label>
+      </div>
+      <div className="flex gap-3">
+        <Button type="submit" disabled={busy || !draft.name.trim()}>
+          {submitLabel}
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+const byName = (a: Movement, b: Movement) => a.name.localeCompare(b.name);
 
 export default function LibraryView() {
   const { data, loading } = useAuthedQuery(() => getMovements());
+  const [items, setItems] = useState<Movement[] | null>(null);
   const [q, setQ] = useState('');
   const [category, setCategory] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Draft>(emptyDraft());
+  const [busy, setBusy] = useState(false);
 
-  const movements = useMemo<Movement[]>(() => data ?? [], [data]);
+  useEffect(() => {
+    if (data) setItems(data);
+  }, [data]);
+
+  const movements = items ?? [];
   const categories = useMemo(
     () => [...new Set(movements.map((m) => m.category).filter((c): c is string => !!c))].sort(),
     [movements],
@@ -22,11 +125,98 @@ export default function LibraryView() {
     return true;
   });
 
-  if (loading) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  const trimmed = (d: Draft): Draft => ({
+    name: d.name.trim(),
+    category: d.category && d.category.trim() ? d.category.trim() : null,
+    primary_metric: d.primary_metric,
+    default_rest_seconds: d.default_rest_seconds,
+  });
+
+  function startAdd() {
+    setEditingId(null);
+    setDraft(emptyDraft());
+    setAdding(true);
+  }
+
+  function startEdit(m: Movement) {
+    setAdding(false);
+    setEditingId(m.id);
+    setDraft({
+      name: m.name,
+      category: m.category,
+      primary_metric: m.primary_metric,
+      default_rest_seconds: m.default_rest_seconds,
+    });
+  }
+
+  function cancel() {
+    setAdding(false);
+    setEditingId(null);
+    setDraft(emptyDraft());
+  }
+
+  async function handleCreate() {
+    if (busy || !draft.name.trim()) return;
+    setBusy(true);
+    const created = await createMovement(trimmed(draft));
+    setBusy(false);
+    if (created) {
+      setItems((prev) => [...(prev ?? []), created].sort(byName));
+      cancel();
+    }
+  }
+
+  async function handleUpdate(id: string) {
+    if (busy || !draft.name.trim()) return;
+    const patch = trimmed(draft);
+    setBusy(true);
+    const ok = await updateMovement(id, patch);
+    setBusy(false);
+    if (ok) {
+      setItems((prev) => (prev ?? []).map((m) => (m.id === id ? { ...m, ...patch } : m)).sort(byName));
+      cancel();
+    }
+  }
+
+  async function handleDelete(m: Movement) {
+    if (busy) return;
+    if (!confirm(`Delete "${m.name}"? This can't be undone.`)) return;
+    setBusy(true);
+    const ok = await deleteMovement(m.id);
+    setBusy(false);
+    if (ok) setItems((prev) => (prev ?? []).filter((x) => x.id !== m.id));
+  }
+
+  if (loading || items === null) {
+    return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
-      <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight text-fg">Library</h1>
+      <div className="mb-6 flex items-baseline justify-between gap-4">
+        <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">Library</h1>
+        {!adding ? (
+          <button
+            onClick={startAdd}
+            className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+          >
+            + Movement
+          </button>
+        ) : null}
+      </div>
+
+      {adding ? (
+        <div className="mb-6">
+          <MovementForm
+            draft={draft}
+            setDraft={setDraft}
+            onSubmit={handleCreate}
+            onCancel={cancel}
+            submitLabel="Add"
+            busy={busy}
+          />
+        </div>
+      ) : null}
 
       <input
         value={q}
@@ -63,21 +253,56 @@ export default function LibraryView() {
         <EmptyState>No movements match.</EmptyState>
       ) : (
         <ul className="divide-y divide-border border border-border">
-          {filtered.map((m) => (
-            <li key={m.id} className="flex items-center gap-3 px-4 py-3">
-              <div className="flex-1">
-                <div className="capitalize text-fg">{m.name}</div>
-                <div className="text-[0.7rem] uppercase tracking-wider text-muted">
-                  {m.category ?? 'uncategorized'}
-                  {m.owner_user_id == null ? ' · shared' : ' · custom'}
+          {filtered.map((m) => {
+            const custom = m.owner_user_id != null;
+            if (editingId === m.id) {
+              return (
+                <li key={m.id} className="p-4">
+                  <MovementForm
+                    draft={draft}
+                    setDraft={setDraft}
+                    onSubmit={() => handleUpdate(m.id)}
+                    onCancel={cancel}
+                    submitLabel="Save"
+                    busy={busy}
+                  />
+                </li>
+              );
+            }
+            return (
+              <li key={m.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="flex-1">
+                  <div className="capitalize text-fg">{m.name}</div>
+                  <div className="text-[0.7rem] uppercase tracking-wider text-muted">
+                    {m.category ?? 'uncategorized'}
+                    {custom ? ' · custom' : ' · shared'}
+                  </div>
                 </div>
-              </div>
-              <div className="text-right text-sm text-subtle">
-                {METRICS[m.primary_metric as MetricKey]?.label ?? m.primary_metric}
-                <div className="text-[0.7rem] text-muted">{m.default_rest_seconds}s rest</div>
-              </div>
-            </li>
-          ))}
+                <div className="text-right text-sm text-subtle">
+                  {METRICS[m.primary_metric]?.label ?? m.primary_metric}
+                  <div className="text-[0.7rem] text-muted">{m.default_rest_seconds}s rest</div>
+                </div>
+                {custom ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={() => startEdit(m)}
+                      className="px-2 text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+                      aria-label={`Edit ${m.name}`}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(m)}
+                      className="px-2 text-muted hover:text-accent"
+                      aria-label={`Delete ${m.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

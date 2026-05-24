@@ -1,6 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import type { Movement, ParsedPlan, Plan, Profile, WorkoutLog } from '@/lib/types';
+import type { MetricKey } from '@/app.config';
+import type {
+  Movement,
+  MovementSub,
+  ParsedPlan,
+  Plan,
+  Profile,
+  Share,
+  ShareScope,
+  WorkoutLog,
+} from '@/lib/types';
 
 // All queries rely on RLS for scoping: the authenticated client returns the
 // user's own rows; the session-less public client returns the showcase
@@ -47,12 +57,68 @@ export async function getMovements(client: SupabaseClient = supabase): Promise<M
   return (data as Movement[]) ?? [];
 }
 
+// Full owned sets (no limit), used by the data export.
+export async function getAllPlans(client: SupabaseClient = supabase): Promise<Plan[]> {
+  const { data } = await client.from('plans').select('*').order('created_at', { ascending: true });
+  return (data as Plan[]) ?? [];
+}
+
+export async function getAllLogs(client: SupabaseClient = supabase): Promise<WorkoutLog[]> {
+  const { data } = await client
+    .from('workout_logs')
+    .select('*')
+    .order('log_date', { ascending: true });
+  return (data as WorkoutLog[]) ?? [];
+}
+
 export async function getLogById(
   id: string,
   client: SupabaseClient = supabase,
 ): Promise<WorkoutLog | null> {
   const { data } = await client.from('workout_logs').select('*').eq('id', id).maybeSingle();
   return (data as WorkoutLog) ?? null;
+}
+
+// ---- movement library writes (custom movements only; RLS forbids touching the
+// shared library, where owner_user_id IS NULL — see migration 0005) ----
+
+export type MovementInput = {
+  name: string;
+  category: string | null;
+  primary_metric: MetricKey;
+  default_rest_seconds: number;
+};
+
+export async function createMovement(input: MovementInput): Promise<Movement | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from('movements')
+    .insert({
+      ...input,
+      tags: [],
+      default_metrics: [input.primary_metric],
+      owner_user_id: user.id,
+    })
+    .select('*')
+    .single();
+  if (error) return null;
+  return data as Movement;
+}
+
+export async function updateMovement(id: string, patch: MovementInput): Promise<boolean> {
+  const { error } = await supabase
+    .from('movements')
+    .update({ ...patch, default_metrics: [patch.primary_metric] })
+    .eq('id', id);
+  return !error;
+}
+
+export async function deleteMovement(id: string): Promise<boolean> {
+  const { error } = await supabase.from('movements').delete().eq('id', id);
+  return !error;
 }
 
 // ---- write paths (authenticated only; owner_user_id is set from the session) ----
@@ -110,10 +176,78 @@ export async function createPlan(
   return data as Plan;
 }
 
+// Overwrite a plan's parsed content (plan edit mode autosave). Owner-scoped by RLS.
+export async function updatePlan(id: string, parsed: ParsedPlan): Promise<boolean> {
+  const { error } = await supabase.from('plans').update({ parsed }).eq('id', id);
+  return !error;
+}
+
+// Substitution memory for the current plan (newest/most-used first), used to
+// surface "you usually swap X → Y" suggestions in the Logger.
+export async function getMovementSubs(planId: string | null): Promise<MovementSub[]> {
+  const base = supabase.from('movement_subs').select('*').is('dismissed_at', null);
+  const scoped = planId ? base.eq('plan_id', planId) : base.is('plan_id', null);
+  const { data } = await scoped.order('count', { ascending: false });
+  return (data as MovementSub[]) ?? [];
+}
+
+// Record a substitution (insert or bump count) via the security-invoker RPC.
+export async function bumpMovementSub(
+  planId: string | null,
+  dayKey: string | null,
+  original: string,
+  replacement: string,
+): Promise<void> {
+  await supabase.rpc('bump_movement_sub', {
+    p_plan_id: planId,
+    p_day_key: dayKey,
+    p_original: original,
+    p_replacement: replacement,
+  });
+}
+
 // Adopt a shared/public plan: copy its parsed content into a new owned plan.
 export async function adoptPlan(planId: string): Promise<Plan | null> {
   const { data } = await supabase.from('plans').select('*').eq('id', planId).maybeSingle();
   if (!data) return null;
   const src = data as Plan;
   return createPlan(src.parsed, src.source_markdown ?? '');
+}
+
+// ---- share tokens (SPEC §7B). The client stores only the token_hash; the raw
+// token is shown once and resolved later by the share-read edge function. ----
+
+export type ShareInput = {
+  token_hash: string;
+  scope: ShareScope;
+  resource_id: string | null;
+  label: string | null;
+  expires_at: string | null;
+};
+
+export async function createShare(input: ShareInput): Promise<Share | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from('shares')
+    .insert({ ...input, owner_user_id: user.id })
+    .select('*')
+    .single();
+  if (error) return null;
+  return data as Share;
+}
+
+export async function getShares(): Promise<Share[]> {
+  const { data } = await supabase
+    .from('shares')
+    .select('*')
+    .order('created_at', { ascending: false });
+  return (data as Share[]) ?? [];
+}
+
+export async function revokeShare(id: string): Promise<boolean> {
+  const { error } = await supabase.from('shares').update({ revoked: true }).eq('id', id);
+  return !error;
 }

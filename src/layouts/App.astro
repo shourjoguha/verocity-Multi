@@ -6,20 +6,37 @@ interface Props {
 }
 
 const { title = 'Verocity' } = Astro.props;
+const path = Astro.url.pathname.replace(/\/+$/, '') || '/';
+const links = [
+  { href: '/app', label: 'Home' },
+  { href: '/app/calendar', label: 'Calendar' },
+  { href: '/app/stats', label: 'Stats' },
+  { href: '/app/plan', label: 'Plan' },
+  { href: '/app/library', label: 'Library' },
+  { href: '/app/shares', label: 'Share' },
+];
+const isActive = (href: string) => (href === '/app' ? path === '/app' : path.startsWith(href));
 ---
 
 <Base title={title}>
+  <a href="#main" class="skip-link">Skip to content</a>
   <header class="border-b border-border">
     <div class="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
       <a href="/app" class="font-display text-lg uppercase tracking-[0.2em] text-fg">Verocity</a>
-      <nav class="flex gap-5 text-[0.7rem] uppercase tracking-wider text-muted">
-        <a href="/app" class="hover:text-fg">Home</a>
-        <a href="/app/calendar" class="hover:text-fg">Calendar</a>
-        <a href="/app/stats" class="hover:text-fg">Stats</a>
-        <a href="/app/plan" class="hover:text-fg">Plan</a>
-        <a href="/app/library" class="hover:text-fg">Library</a>
+      <nav class="flex gap-5 text-[0.7rem] uppercase tracking-wider text-muted" aria-label="Primary">
+        {
+          links.map((l) => (
+            <a
+              href={l.href}
+              aria-current={isActive(l.href) ? 'page' : undefined}
+              class:list={['hover:text-fg', { 'text-fg': isActive(l.href) }]}
+            >
+              {l.label}
+            </a>
+          ))
+        }
       </nav>
     </div>
   </header>
-  <slot />
+  <main id="main"><slot /></main>
 </Base>

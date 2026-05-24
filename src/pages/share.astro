@@ -1,0 +1,16 @@
+---
+import Base from '@/layouts/Base.astro';
+import ShareView from '@/components/ShareView';
+---
+
+<Base title="Shared · Verocity">
+  <header class="border-b border-border">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="/" class="font-display text-lg uppercase tracking-[0.2em] text-fg">Verocity</a>
+      <span class="text-[0.7rem] uppercase tracking-wider text-muted">Read-only</span>
+    </div>
+  </header>
+  <main>
+    <ShareView client:load />
+  </main>
+</Base>

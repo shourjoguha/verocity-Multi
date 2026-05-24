@@ -43,12 +43,20 @@ export default function PlanView() {
           <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">
             {parsed.title}
           </h1>
-          <a
-            href="/app/plan/upload"
-            className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
-          >
-            New plan
-          </a>
+          <div className="flex gap-4">
+            <a
+              href="/app/plan/edit"
+              className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+            >
+              Edit
+            </a>
+            <a
+              href="/app/plan/upload"
+              className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+            >
+              New plan
+            </a>
+          </div>
         </div>
         {parsed.blocks.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2">

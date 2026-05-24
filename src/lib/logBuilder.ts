@@ -56,27 +56,3 @@ export function buildLogFromPlanDay(day: PlanDay, week: number): LogDocument {
 export function buildBlankLog(): LogDocument {
   return { sections: [{ key: 'accessory', groups: [] }] };
 }
-
-// Add a movement as a new single-item group to a section (mutates a copy).
-export function addMovement(
-  doc: LogDocument,
-  sectionKey: SectionKey,
-  movement: string,
-  primaryMetric: LogItem['primaryMetric'],
-): LogDocument {
-  const item: LogItem = {
-    id: newId(),
-    movement,
-    primaryMetric,
-    sets: [{ planned: null, actual: emptyActual(), notations: [] }],
-  };
-  const sections = [...doc.sections];
-  const idx = sections.findIndex((s) => s.key === sectionKey);
-  const group: LogGroup = { id: newId(), kind: 'single', items: [item] };
-  if (idx >= 0) {
-    sections[idx] = { ...sections[idx], groups: [...sections[idx].groups, group] };
-  } else {
-    sections.push({ key: sectionKey, groups: [group] });
-  }
-  return { ...doc, sections };
-}

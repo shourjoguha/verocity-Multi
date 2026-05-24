@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
-import { getActivePlan, getCurrentProfile, getRecentLogs } from '@/lib/queries';
+import { getActivePlan, getAllLogs, getAllPlans, getCurrentProfile, getRecentLogs } from '@/lib/queries';
 import { signOut } from '@/lib/auth';
 import type { Plan, Profile, WorkoutLog } from '@/lib/types';
 import { bestE1rm } from '@/lib/e1rm';
 import { weekFromDate } from '@/lib/week';
 import { formatDate, formatDuration, formatRound } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
-import { Card, EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
+import {
+  bundleToJson,
+  buildExportBundle,
+  downloadFile,
+  exportFilename,
+  logsToCsv,
+} from '@/lib/exportData';
+import { Button, Card, EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
@@ -28,6 +35,27 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
+  const [exporting, setExporting] = useState<'json' | 'csv' | null>(null);
+
+  async function handleExport(format: 'json' | 'csv') {
+    if (exporting) return;
+    setExporting(format);
+    try {
+      const [prof, plans, allLogs] = await Promise.all([
+        getCurrentProfile(),
+        getAllPlans(),
+        getAllLogs(),
+      ]);
+      if (format === 'json') {
+        const json = bundleToJson(buildExportBundle(prof, plans, allLogs));
+        downloadFile(exportFilename('json'), json, 'application/json');
+      } else {
+        downloadFile(exportFilename('csv'), logsToCsv(allLogs), 'text/csv');
+      }
+    } finally {
+      setExporting(null);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -99,6 +127,23 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         <StatCard label="Top e1RM" value={top != null ? formatRound(top) : '—'} unit={top != null ? 'kg' : undefined} />
       </section>
 
+      {mode === 'app' ? (
+        <section className="mb-8 flex gap-3">
+          <a
+            href="/app/log"
+            className="inline-flex min-h-11 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg hover:bg-subtle"
+          >
+            Start workout
+          </a>
+          <a
+            href="/app/activity"
+            className="inline-flex min-h-11 flex-1 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg hover:border-subtle"
+          >
+            Log activity
+          </a>
+        </section>
+      ) : null}
+
       <section className="mb-8">
         <SectionHeader>Active plan</SectionHeader>
         {plan ? (
@@ -109,11 +154,8 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                 {week ? <div className="text-sm text-muted">Week {week}</div> : null}
               </div>
               {mode === 'app' ? (
-                <a
-                  href="/app/log"
-                  className="inline-flex min-h-11 items-center border border-border px-4 text-sm uppercase tracking-wider text-fg hover:border-subtle"
-                >
-                  Start workout
+                <a href="/app/plan" className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg">
+                  View →
                 </a>
               ) : null}
             </div>
@@ -150,6 +192,29 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           </ul>
         )}
       </section>
+
+      {mode === 'app' ? (
+        <section className="mt-8">
+          <SectionHeader>Your data</SectionHeader>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="ghost" onClick={() => handleExport('json')} disabled={!!exporting}>
+              {exporting === 'json' ? 'Exporting…' : 'Export JSON'}
+            </Button>
+            <Button variant="ghost" onClick={() => handleExport('csv')} disabled={!!exporting}>
+              {exporting === 'csv' ? 'Exporting…' : 'Export CSV'}
+            </Button>
+            <a
+              href="/app/shares"
+              className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+            >
+              Share links →
+            </a>
+          </div>
+          <p className="mt-2 text-[0.7rem] text-muted">
+            JSON is the complete backup. CSV is a flattened per-set view for spreadsheets.
+          </p>
+        </section>
+      ) : null}
     </div>
   );
 }
