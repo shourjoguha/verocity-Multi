@@ -12,3 +12,37 @@ export function signIn(email: string, password: string) {
 export function signOut() {
   return supabase.auth.signOut();
 }
+
+export type SignupInput = {
+  email: string;
+  password: string;
+  displayName: string;
+  inviteCode: string;
+};
+
+// Invite-gated signup via the server-side edge function (service-role only; the
+// client never holds it). Raw fetch so we can read the JSON error code on a
+// non-2xx and map a friendly message in the UI.
+export async function signUpWithInvite(
+  input: SignupInput,
+): Promise<{ ok: boolean; error?: string }> {
+  const url = import.meta.env.PUBLIC_SUPABASE_URL as string | undefined;
+  const anonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string | undefined;
+  if (!url || !anonKey) return { ok: false, error: 'not_configured' };
+  try {
+    const res = await fetch(`${url}/functions/v1/signup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+      },
+      body: JSON.stringify(input),
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (res.ok && data.ok) return { ok: true };
+    return { ok: false, error: data.error ?? 'signup_failed' };
+  } catch {
+    return { ok: false, error: 'network_error' };
+  }
+}

@@ -1,21 +1,21 @@
 ---
 import Base from '@/layouts/Base.astro';
-import LoginForm from '@/components/LoginForm';
+import SignupForm from '@/components/SignupForm';
 import { EchoText } from '@/components/EchoText';
 ---
 
-<Base title="Sign in · Verocity">
+<Base title="Sign up · Verocity">
   <main class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6">
     <p class="mb-2 text-[0.7rem] uppercase tracking-[0.3em] text-muted">Verocity</p>
     <EchoText
-      text="LOG IN"
+      text="SIGN UP"
       as="h1"
       className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-6xl"
     />
-    <LoginForm client:load />
+    <SignupForm client:load />
     <p class="mt-6 text-xs text-muted">
-      Invite-only. Have a code?{' '}
-      <a href="/signup" class="text-fg underline hover:text-subtle">Sign up</a>.
+      Invite-only. Already have an account?{' '}
+      <a href="/login" class="text-fg underline hover:text-subtle">Sign in</a>.
     </p>
   </main>
 </Base>
