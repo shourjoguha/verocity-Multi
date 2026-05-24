@@ -15,7 +15,9 @@ import { buildBlankLog, buildLogFromPlanDay } from '@/lib/logBuilder';
 import {
   addItem,
   addSet,
+  groupWith,
   mergeWithNext,
+  moveGroup,
   patchSetActual,
   removeGroup,
   removeItem,
@@ -23,13 +25,14 @@ import {
   setGroupKind,
   setItemMetric,
   swapItemMovement,
+  toggleItemNotation,
   ungroup,
 } from '@/lib/logEdits';
 import { lastPerformance } from '@/lib/lastPerformance';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
 import { weekFromDate } from '@/lib/week';
-import { ACTIVITY_TAGS, SECTIONS, TIMERS, type MetricKey, type SectionKey } from '@/app.config';
+import { ACTIVITY_TAGS, NOTATIONS, SECTIONS, TIMERS, type MetricKey, type SectionKey } from '@/app.config';
 import type {
   GroupKind,
   LogDocument,
@@ -40,6 +43,7 @@ import type {
   VibeCheck,
 } from '@/lib/types';
 import { Button, SectionHeader } from '@/components/ui/primitives';
+import { Modal } from '@/components/ui/Modal';
 import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
 import { MovementPicker } from '@/components/logger/MovementPicker';
@@ -74,6 +78,7 @@ export default function Logger() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [subs, setSubs] = useState<MovementSub[]>([]);
   const [picker, setPicker] = useState<Picker | null>(null);
+  const [optionsFor, setOptionsFor] = useState<{ si: number; gi: number; ii: number } | null>(null);
   const [showVibe, setShowVibe] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
   const [logDate, setLogDate] = useState<string>(today());
@@ -345,9 +350,6 @@ export default function Logger() {
                 {voiceTarget === item.id ? 'Listening…' : 'Voice'}
               </button>
             ) : null}
-            <button onClick={() => setPicker({ mode: 'swap', si, gi, ii })} className="hover:text-fg">
-              Swap
-            </button>
             <button
               onClick={() => rest.start(item.restSeconds ?? TIMERS.defaultRestSeconds)}
               className="hover:text-fg"
@@ -355,11 +357,11 @@ export default function Logger() {
               Rest
             </button>
             <button
-              onClick={() => setDoc((d) => removeItem(d, si, gi, ii))}
-              className="hover:text-fg"
-              aria-label="Remove movement"
+              onClick={() => setOptionsFor({ si, gi, ii })}
+              className="border border-border px-2 py-1 hover:text-fg"
+              aria-label="Movement options"
             >
-              ×
+              ⋯
             </button>
           </div>
         </div>
@@ -563,6 +565,121 @@ export default function Logger() {
           />
         ) : null}
       </AnimatePresence>
+
+      <Modal open={optionsFor !== null} onClose={() => setOptionsFor(null)} title="Movement">
+        {optionsFor
+          ? (() => {
+              const { si, gi, ii } = optionsFor;
+              const item = doc.sections[si]?.groups[gi]?.items[ii];
+              if (!item) return null;
+              const groups = doc.sections[si].groups;
+              const close = () => setOptionsFor(null);
+              const rowClass =
+                'inline-flex min-h-11 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg disabled:opacity-40';
+              return (
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <div className="mb-4 text-sm capitalize text-fg">{item.movement}</div>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPicker({ mode: 'swap', si, gi, ii });
+                        close();
+                      }}
+                      className={rowClass}
+                    >
+                      Swap movement
+                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={gi === 0}
+                        onClick={() => {
+                          setDoc((d) => moveGroup(d, si, gi, -1));
+                          close();
+                        }}
+                        className={`flex-1 ${rowClass}`}
+                      >
+                        ↑ Up
+                      </button>
+                      <button
+                        type="button"
+                        disabled={gi >= groups.length - 1}
+                        onClick={() => {
+                          setDoc((d) => moveGroup(d, si, gi, 1));
+                          close();
+                        }}
+                        className={`flex-1 ${rowClass}`}
+                      >
+                        ↓ Down
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDoc((d) => removeItem(d, si, gi, ii));
+                        close();
+                      }}
+                      className={rowClass}
+                    >
+                      Remove movement
+                    </button>
+                  </div>
+
+                  {groups.length > 1 ? (
+                    <div className="mt-5">
+                      <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">
+                        Superset with
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {groups.map((g, idx) =>
+                          idx === gi ? null : (
+                            <button
+                              key={g.id}
+                              type="button"
+                              onClick={() => {
+                                setDoc((d) => groupWith(d, si, gi, idx, 'superset'));
+                                close();
+                              }}
+                              className="border border-border px-2 py-1 text-xs capitalize text-fg transition-colors hover:border-fg"
+                            >
+                              {g.items.map((it) => it.movement).join(' + ')}
+                            </button>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-5">
+                    <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">
+                      Notations
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(NOTATIONS).map(([sym, desc]) => {
+                        const on =
+                          item.sets.length > 0 && item.sets.every((s) => s.notations.includes(sym));
+                        return (
+                          <button
+                            key={sym}
+                            type="button"
+                            title={desc}
+                            onClick={() => setDoc((d) => toggleItemNotation(d, si, gi, ii, sym))}
+                            className={`border px-2 py-1 text-xs transition-colors ${
+                              on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                            }`}
+                          >
+                            {sym}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()
+          : null}
+      </Modal>
 
       <div className="fixed inset-x-0 bottom-0 border-t border-border bg-bg/95 px-6 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-2xl gap-3">
