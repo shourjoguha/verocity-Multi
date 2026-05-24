@@ -23,6 +23,8 @@ import {
 import { BLOCKS, SECTIONS, type BlockKey, type SectionKey } from '@/app.config';
 import type { ParsedPlan } from '@/lib/types';
 import { Button, EmptyState } from '@/components/ui/primitives';
+import { EchoText } from '@/components/EchoText';
+import { Item, PageStagger } from '@/components/anim';
 
 const SAVE_DEBOUNCE_MS = 1200;
 const cellClass =
@@ -78,8 +80,12 @@ export default function PlanEditor() {
 
   if (!plan) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-8">
-        <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight text-fg">Edit plan</h1>
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <EchoText
+          text="EDIT PLAN"
+          as="h1"
+          className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+        />
         <EmptyState>
           No active plan.{' '}
           <a href="/app/plan/upload" className="text-fg underline hover:text-subtle">
@@ -96,25 +102,34 @@ export default function PlanEditor() {
   const edit = (fn: (p: ParsedPlan) => ParsedPlan) => setPlan((p) => (p ? fn(p) : p));
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <input
-          value={plan.title}
-          onChange={(e) => edit((p) => setTitle(p, e.target.value))}
-          className="min-w-0 flex-1 border-b border-border bg-transparent pb-1 font-display text-3xl font-semibold tracking-tight text-fg outline-none focus:border-subtle"
-          aria-label="Plan title"
-        />
-        <div className="flex shrink-0 items-center gap-4">
-          <span className="text-[0.7rem] uppercase tracking-wider text-muted">
-            {save === 'saving' ? 'Saving…' : save === 'pending' ? 'Editing…' : save === 'saved' ? 'Saved' : ''}
-          </span>
-          <a href="/app/plan" className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg">
-            Done →
-          </a>
-        </div>
-      </header>
+    <PageStagger className="mx-auto max-w-5xl px-6 py-10">
+      <Item>
+        <header className="mb-8">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">Edit plan</p>
+            <div className="flex shrink-0 items-center gap-4">
+              <span className="text-[0.7rem] uppercase tracking-wider text-muted">
+                {save === 'saving' ? 'Saving…' : save === 'pending' ? 'Editing…' : save === 'saved' ? 'Saved' : ''}
+              </span>
+              <a
+                href="/app/plan"
+                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              >
+                Done →
+              </a>
+            </div>
+          </div>
+          <input
+            value={plan.title}
+            onChange={(e) => edit((p) => setTitle(p, e.target.value))}
+            className="mt-2 w-full border-b border-border bg-transparent pb-1 font-display text-4xl font-bold tracking-[-0.03em] text-fg outline-none focus:border-subtle"
+            aria-label="Plan title"
+          />
+        </header>
+      </Item>
 
-      <section className="mb-8">
+      <Item>
+        <section className="mb-8">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-[0.7rem] uppercase tracking-[0.25em] text-muted">Phases</span>
           <button
@@ -167,7 +182,7 @@ export default function PlanEditor() {
                 />
                 <button
                   onClick={() => edit((p) => removeBlock(p, bi))}
-                  className="px-2 text-muted hover:text-accent"
+                  className="px-2 text-muted transition-colors hover:text-accent"
                   aria-label={`Delete phase ${bi + 1}`}
                 >
                   ×
@@ -176,11 +191,12 @@ export default function PlanEditor() {
             ))}
           </ul>
         )}
-      </section>
+        </section>
+      </Item>
 
       {plan.days.map((day, di) => (
+        <Item key={day.dayKey}>
         <section
-          key={day.dayKey}
           className="mb-8"
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => {
@@ -332,21 +348,24 @@ export default function PlanEditor() {
           </div>
           <button
             onClick={() => edit((p) => addExercise(p, di))}
-            className="mt-2 text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+            className="mt-2 text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
           >
             + Exercise
           </button>
         </section>
+        </Item>
       ))}
 
-      <div className="flex gap-3">
-        <Button variant="ghost" onClick={() => edit((p) => addDay(p))}>
-          + Day
-        </Button>
-        <Button variant="ghost" onClick={() => setExtraWeeks(cols + 1)}>
-          + Week
-        </Button>
-      </div>
-    </div>
+      <Item>
+        <div className="flex gap-3">
+          <Button variant="ghost" onClick={() => edit((p) => addDay(p))}>
+            + Day
+          </Button>
+          <Button variant="ghost" onClick={() => setExtraWeeks(cols + 1)}>
+            + Week
+          </Button>
+        </div>
+      </Item>
+    </PageStagger>
   );
 }

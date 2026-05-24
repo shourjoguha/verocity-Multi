@@ -6,6 +6,8 @@ import { tagColor } from '@/lib/tags';
 import { formatDate, formatDuration } from '@/lib/format';
 import { SECTIONS, type SectionKey } from '@/app.config';
 import { EmptyState, SectionHeader, Tag } from '@/components/ui/primitives';
+import { EchoText } from '@/components/EchoText';
+import { Item, PageStagger } from '@/components/anim';
 
 function formatActual(a: SetActual): string {
   const parts: string[] = [];
@@ -56,70 +58,78 @@ export default function SessionDetail() {
     .sort((a, b) => SECTIONS.indexOf(a.key) - SECTIONS.indexOf(b.key));
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
-      <header className="mb-6">
-        <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">
-          {formatDate(log.log_date)} · {log.status}
-        </p>
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">
-          {log.activity_type ?? 'Session'}
-        </h1>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {log.tags.map((t) => (
-            <Tag key={t} label={t} color={tagColor(t)} />
-          ))}
-          <span className="text-sm text-muted">{formatDuration(log.total_seconds)}</span>
-        </div>
-        {vibe ? (
-          <div className="mt-3 flex gap-4 text-[0.7rem] uppercase tracking-wider text-muted">
-            <span>Sleep {vibe.sleep}</span>
-            <span>Energy {vibe.energy}</span>
-            <span>Soreness {vibe.soreness}</span>
+    <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+      <Item>
+        <header className="mb-8">
+          <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">
+            {formatDate(log.log_date)} · {log.status}
+          </p>
+          <EchoText
+            text={log.activity_type ?? 'Session'}
+            as="h1"
+            className="mt-2 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+          />
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {log.tags.map((t) => (
+              <Tag key={t} label={t} color={tagColor(t)} />
+            ))}
+            <span className="text-sm text-muted">{formatDuration(log.total_seconds)}</span>
           </div>
-        ) : null}
-      </header>
+          {vibe ? (
+            <div className="mt-3 flex gap-4 text-[0.7rem] uppercase tracking-wider text-muted">
+              <span>Sleep {vibe.sleep}</span>
+              <span>Energy {vibe.energy}</span>
+              <span>Soreness {vibe.soreness}</span>
+            </div>
+          ) : null}
+        </header>
+      </Item>
 
       {orderedSections.length === 0 ? (
-        <EmptyState>No logged sets.</EmptyState>
+        <Item>
+          <EmptyState>No logged sets.</EmptyState>
+        </Item>
       ) : (
         orderedSections.map((section) => (
-          <section key={section.key} className="mb-6">
-            <SectionHeader>{sectionLabel(section.key)}</SectionHeader>
-            <div className="flex flex-col gap-3">
-              {section.groups.map((group) => (
-                <div key={group.id} className="border border-border">
-                  {group.kind !== 'single' ? (
-                    <div className="border-b border-border px-3 py-1 text-[0.65rem] uppercase tracking-wider text-muted">
-                      {group.kind}
-                    </div>
-                  ) : null}
-                  {group.items.map((item) => (
-                    <div key={item.id} className="px-3 py-2">
-                      <div className="mb-1 capitalize text-fg">{item.movement}</div>
-                      <ul className="flex flex-col gap-1">
-                        {item.sets.map((set, i) => (
-                          <li
-                            key={i}
-                            className="flex items-center justify-between text-sm tabular-nums"
-                          >
-                            <span className={set.actual.completed ? 'text-fg' : 'text-muted'}>
-                              {formatActual(set.actual)}
-                            </span>
-                            <span className="text-[0.7rem] text-muted">
-                              {set.notations.join(' ')}
-                              {set.actual.completed ? ' ✓' : ''}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </section>
+          <Item key={section.key}>
+            <section className="mb-6">
+              <SectionHeader>{sectionLabel(section.key)}</SectionHeader>
+              <div className="flex flex-col gap-3">
+                {section.groups.map((group) => (
+                  <div key={group.id} className="border border-border">
+                    {group.kind !== 'single' ? (
+                      <div className="border-b border-border px-3 py-1 text-[0.65rem] uppercase tracking-wider text-muted">
+                        {group.kind}
+                      </div>
+                    ) : null}
+                    {group.items.map((item) => (
+                      <div key={item.id} className="px-3 py-2">
+                        <div className="mb-1 capitalize text-fg">{item.movement}</div>
+                        <ul className="flex flex-col gap-1">
+                          {item.sets.map((set, i) => (
+                            <li
+                              key={i}
+                              className="flex items-center justify-between text-sm tabular-nums"
+                            >
+                              <span className={set.actual.completed ? 'text-fg' : 'text-muted'}>
+                                {formatActual(set.actual)}
+                              </span>
+                              <span className="text-[0.7rem] text-muted">
+                                {set.notations.join(' ')}
+                                {set.actual.completed ? ' ✓' : ''}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </section>
+          </Item>
         ))
       )}
-    </div>
+    </PageStagger>
   );
 }

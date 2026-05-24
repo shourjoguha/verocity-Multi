@@ -10,6 +10,8 @@ import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import type { Movement } from '@/lib/types';
 import { METRICS, type MetricKey } from '@/app.config';
 import { Button, EmptyState } from '@/components/ui/primitives';
+import { EchoText } from '@/components/EchoText';
+import { Item, PageStagger } from '@/components/anim';
 
 const METRIC_KEYS = Object.keys(METRICS) as MetricKey[];
 const inputClass =
@@ -192,67 +194,80 @@ export default function LibraryView() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
-      <div className="mb-6 flex items-baseline justify-between gap-4">
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">Library</h1>
-        {!adding ? (
-          <button
-            onClick={startAdd}
-            className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
-          >
-            + Movement
-          </button>
-        ) : null}
-      </div>
+    <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+      <Item>
+        <div className="mb-8 flex items-end justify-between gap-4">
+          <EchoText
+            text="LIBRARY"
+            as="h1"
+            className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+          />
+          {!adding ? (
+            <button
+              onClick={startAdd}
+              className="shrink-0 pb-1 text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+            >
+              + Movement
+            </button>
+          ) : null}
+        </div>
+      </Item>
 
       {adding ? (
-        <div className="mb-6">
-          <MovementForm
-            draft={draft}
-            setDraft={setDraft}
-            onSubmit={handleCreate}
-            onCancel={cancel}
-            submitLabel="Add"
-            busy={busy}
-          />
-        </div>
+        <Item>
+          <div className="mb-6">
+            <MovementForm
+              draft={draft}
+              setDraft={setDraft}
+              onSubmit={handleCreate}
+              onCancel={cancel}
+              submitLabel="Add"
+              busy={busy}
+            />
+          </div>
+        </Item>
       ) : null}
 
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search movements"
-        className="mb-4 min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
-      />
+      <Item>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search movements"
+          className="mb-4 min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
+        />
 
-      {categories.length > 0 ? (
-        <div className="mb-5 flex flex-wrap gap-2">
-          <button
-            onClick={() => setCategory(null)}
-            className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider ${
-              category === null ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-            }`}
-          >
-            All
-          </button>
-          {categories.map((c) => (
+        {categories.length > 0 ? (
+          <div className="mb-5 flex flex-wrap gap-2">
             <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider ${
-                category === c ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+              onClick={() => setCategory(null)}
+              className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
+                category === null ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
               }`}
             >
-              {c}
+              All
             </button>
-          ))}
-        </div>
-      ) : null}
+            {categories.map((c) => (
+              <button
+                key={c}
+                onClick={() => setCategory(c)}
+                className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
+                  category === c ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </Item>
 
       {filtered.length === 0 ? (
-        <EmptyState>No movements match.</EmptyState>
+        <Item>
+          <EmptyState>No movements match.</EmptyState>
+        </Item>
       ) : (
-        <ul className="divide-y divide-border border border-border">
+        <Item>
+          <ul className="divide-y divide-border border border-border">
           {filtered.map((m) => {
             const custom = m.owner_user_id != null;
             if (editingId === m.id) {
@@ -303,8 +318,9 @@ export default function LibraryView() {
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </Item>
       )}
-    </div>
+    </PageStagger>
   );
 }

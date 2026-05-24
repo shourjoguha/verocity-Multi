@@ -2,6 +2,8 @@ import { getActivePlan } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { BLOCKS, type BlockKey } from '@/app.config';
 import { EmptyState, SectionHeader } from '@/components/ui/primitives';
+import { EchoText } from '@/components/EchoText';
+import { Item, PageStagger } from '@/components/anim';
 
 export default function PlanView() {
   const { data: plan, loading } = useAuthedQuery(() => getActivePlan());
@@ -10,8 +12,12 @@ export default function PlanView() {
 
   if (!plan) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-8">
-        <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight text-fg">Plan</h1>
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <EchoText
+          text="PLAN"
+          as="h1"
+          className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+        />
         <EmptyState>
           No active plan.{' '}
           <a href="/app/plan/upload" className="text-fg underline hover:text-subtle">
@@ -37,102 +43,109 @@ export default function PlanView() {
     parsed.blocks.find((b) => w >= b.startWeek && w <= b.endWeek)?.type ?? null;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <header className="mb-6">
-        <div className="flex items-baseline justify-between">
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">
-            {parsed.title}
-          </h1>
-          <div className="flex gap-4">
-            <a
-              href="/app/plan/edit"
-              className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
-            >
-              Edit
-            </a>
-            <a
-              href="/app/plan/upload"
-              className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
-            >
-              New plan
-            </a>
-          </div>
-        </div>
-        {parsed.blocks.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {parsed.blocks.map((b, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-2 text-[0.7rem] uppercase tracking-wider text-muted"
+    <PageStagger className="mx-auto max-w-5xl px-6 py-10">
+      <Item>
+        <header className="mb-8">
+          <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">Plan</p>
+          <div className="mt-2 flex items-end justify-between gap-4">
+            <EchoText
+              text={parsed.title}
+              as="h1"
+              className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+            />
+            <div className="flex shrink-0 gap-4 pb-1">
+              <a
+                href="/app/plan/edit"
+                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
               >
-                <span
-                  className="inline-block h-2 w-2"
-                  style={{ backgroundColor: BLOCKS[b.type]?.color }}
-                />
-                {BLOCKS[b.type]?.label ?? b.type} · W{b.startWeek}–{b.endWeek}
-              </span>
-            ))}
+                Edit
+              </a>
+              <a
+                href="/app/plan/upload"
+                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              >
+                New plan
+              </a>
+            </div>
           </div>
-        ) : null}
-      </header>
+          {parsed.blocks.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {parsed.blocks.map((b, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-2 text-[0.7rem] uppercase tracking-wider text-muted"
+                >
+                  <span
+                    className="inline-block h-2 w-2"
+                    style={{ backgroundColor: BLOCKS[b.type]?.color }}
+                  />
+                  {BLOCKS[b.type]?.label ?? b.type} · W{b.startWeek}–{b.endWeek}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </header>
+      </Item>
 
       {parsed.days.map((day) => (
-        <section key={day.dayKey} className="mb-8">
-          <div className="mb-3 flex items-center justify-between">
-            <SectionHeader>{day.label}</SectionHeader>
-            <a
-              href={`/app/log?day=${encodeURIComponent(day.dayKey)}`}
-              className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
-            >
-              Start →
-            </a>
-          </div>
-          <div className="overflow-x-auto border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[0.65rem] uppercase tracking-wider text-muted">
-                  <th className="sticky left-0 z-10 border-b border-border bg-surface px-3 py-2 text-left font-medium">
-                    Movement
-                  </th>
-                  {weeks.map((w) => (
-                    <th
-                      key={w}
-                      className="border-b border-l border-border px-3 py-2 text-center font-medium"
-                    >
-                      <span
-                        className="mx-auto mb-1 block h-1 w-4"
-                        style={{
-                          backgroundColor: blockForWeek(w)
-                            ? BLOCKS[blockForWeek(w)!].color
-                            : 'transparent',
-                        }}
-                      />
-                      W{w}
+        <Item key={day.dayKey}>
+          <section className="mb-8">
+            <div className="mb-3 flex items-center justify-between">
+              <SectionHeader>{day.label}</SectionHeader>
+              <a
+                href={`/app/log?day=${encodeURIComponent(day.dayKey)}`}
+                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              >
+                Start →
+              </a>
+            </div>
+            <div className="overflow-x-auto border border-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-[0.65rem] uppercase tracking-wider text-muted">
+                    <th className="sticky left-0 z-10 border-b border-border bg-surface px-3 py-2 text-left font-medium">
+                      Movement
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {day.exercises.map((ex, i) => (
-                  <tr key={i} className="border-b border-border last:border-0">
-                    <td className="sticky left-0 z-10 bg-surface px-3 py-2 capitalize text-fg">
-                      {ex.movement}
-                    </td>
                     {weeks.map((w) => (
-                      <td
+                      <th
                         key={w}
-                        className="border-l border-border px-3 py-2 text-center tabular-nums text-subtle"
+                        className="border-b border-l border-border px-3 py-2 text-center font-medium"
                       >
-                        {ex.plannedByWeek[w] ?? '·'}
-                      </td>
+                        <span
+                          className="mx-auto mb-1 block h-1 w-4"
+                          style={{
+                            backgroundColor: blockForWeek(w)
+                              ? BLOCKS[blockForWeek(w)!].color
+                              : 'transparent',
+                          }}
+                        />
+                        W{w}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody>
+                  {day.exercises.map((ex, i) => (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="sticky left-0 z-10 bg-surface px-3 py-2 capitalize text-fg">
+                        {ex.movement}
+                      </td>
+                      {weeks.map((w) => (
+                        <td
+                          key={w}
+                          className="border-l border-border px-3 py-2 text-center tabular-nums text-subtle"
+                        >
+                          {ex.plannedByWeek[w] ?? '·'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </Item>
       ))}
-    </div>
+    </PageStagger>
   );
 }
