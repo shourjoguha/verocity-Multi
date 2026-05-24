@@ -29,8 +29,16 @@ import { lastPerformance } from '@/lib/lastPerformance';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
 import { weekFromDate } from '@/lib/week';
-import { SECTIONS, TIMERS, type MetricKey, type SectionKey } from '@/app.config';
-import type { GroupKind, LogDocument, LogStatus, Movement, MovementSub, VibeCheck } from '@/lib/types';
+import { ACTIVITY_TAGS, SECTIONS, TIMERS, type MetricKey, type SectionKey } from '@/app.config';
+import type {
+  GroupKind,
+  LogDocument,
+  LogStatus,
+  Movement,
+  MovementSub,
+  SetActual,
+  VibeCheck,
+} from '@/lib/types';
 import { Button, SectionHeader } from '@/components/ui/primitives';
 import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
@@ -68,6 +76,8 @@ export default function Logger() {
   const [picker, setPicker] = useState<Picker | null>(null);
   const [showVibe, setShowVibe] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
+  const [logDate, setLogDate] = useState<string>(today());
+  const [tags, setTags] = useState<string[]>([]);
 
   const stopwatch = useStopwatch(0, false);
   const rest = useCountdown();
@@ -77,10 +87,14 @@ export default function Logger() {
   const secondsRef = useRef(stopwatch.seconds);
   const statusRef = useRef(status);
   const idRef = useRef(logId);
+  const logDateRef = useRef(logDate);
+  const tagsRef = useRef(tags);
   docRef.current = doc;
   secondsRef.current = stopwatch.seconds;
   statusRef.current = status;
   idRef.current = logId;
+  logDateRef.current = logDate;
+  tagsRef.current = tags;
 
   useEffect(() => {
     (async () => {
@@ -102,6 +116,8 @@ export default function Logger() {
           setDayKey(log.day_key);
           setDoc(log.data ?? { sections: [] });
           setStatus(log.status);
+          setLogDate(log.log_date);
+          setTags(log.tags ?? []);
           if (log.plan_id) setSubs(await getMovementSubs(log.plan_id));
           if (log.total_seconds) stopwatch.start();
         }
@@ -149,6 +165,7 @@ export default function Logger() {
         tags: [],
       });
       setDoc(built);
+      setLogDate(logDate);
       setPlanId(linkedPlanId);
       setDayKey(dk);
       if (created) setLogId(created.id);
@@ -168,6 +185,8 @@ export default function Logger() {
         data: docRef.current,
         total_seconds: secondsRef.current,
         status: statusRef.current,
+        log_date: logDateRef.current,
+        tags: tagsRef.current,
       });
       setSaving(false);
     }, TIMERS.autosaveSeconds * 1000);
@@ -177,6 +196,19 @@ export default function Logger() {
   function saveVibe(vibe: VibeCheck) {
     setDoc((d) => ({ ...d, session: { ...d.session, vibe } }));
     setShowVibe(false);
+  }
+
+  function changeDate(value: string) {
+    setLogDate(value);
+    if (idRef.current) updateLog(idRef.current, { log_date: value });
+  }
+
+  function toggleTag(tag: string) {
+    setTags((prev) => {
+      const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
+      if (idRef.current) updateLog(idRef.current, { tags: next });
+      return next;
+    });
   }
 
   function listen(itemId: string, si: number, gi: number, ii: number) {
@@ -225,6 +257,8 @@ export default function Logger() {
         total_seconds: secondsRef.current,
         status: next,
         ended_at: new Date().toISOString(),
+        log_date: logDateRef.current,
+        tags: tagsRef.current,
       });
     }
     window.location.href =
@@ -241,12 +275,55 @@ export default function Logger() {
       .filter((s) => s.original.toLowerCase() === movement.toLowerCase())
       .map((s) => ({ replacement: s.replacement, count: s.count }));
 
+  function toggleItemComplete(si: number, gi: number, ii: number) {
+    setDoc((d) => {
+      const it = d.sections[si].groups[gi].items[ii];
+      const everyDone = it.sets.length > 0 && it.sets.every((s) => s.actual.completed);
+      let next = d;
+      it.sets.forEach((_, ki) => {
+        next = patchSetActual(next, si, gi, ii, ki, { completed: !everyDone });
+      });
+      return next;
+    });
+  }
+
+  function cloneForward(si: number, gi: number, ii: number, ki: number) {
+    const item = doc.sections[si].groups[gi].items[ii];
+    setDoc((d) => {
+      const it = d.sections[si].groups[gi].items[ii];
+      const src = it.sets[ki].actual;
+      let next = d;
+      if (ki + 1 >= it.sets.length) next = addSet(next, si, gi, ii);
+      const patch: Partial<SetActual> = { prefilled: true };
+      if (src.weight != null) patch.weight = src.weight;
+      if (src.reps != null) patch.reps = src.reps;
+      if (src.time != null) patch.time = src.time;
+      if (src.distance != null) patch.distance = src.distance;
+      return patchSetActual(next, si, gi, ii, ki + 1, patch);
+    });
+    rest.start(item.restSeconds ?? TIMERS.defaultRestSeconds);
+  }
+
   function renderItem(si: number, gi: number, ii: number, grouped: boolean) {
     const item = doc.sections[si].groups[gi].items[ii];
+    const allDone = item.sets.length > 0 && item.sets.every((s) => s.actual.completed);
     return (
       <div key={item.id} className={grouped ? 'border-t border-border pt-3 first:border-0 first:pt-0' : ''}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <span className="capitalize text-fg">{item.movement}</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => toggleItemComplete(si, gi, ii)}
+              className={`flex h-5 w-5 items-center justify-center border text-[0.6rem] ${
+                allDone ? 'border-accent bg-accent text-accent-fg' : 'border-border text-muted hover:text-fg'
+              }`}
+              aria-label="Complete movement"
+              aria-pressed={allDone}
+            >
+              ✓
+            </button>
+            <span className="capitalize text-fg">{item.movement}</span>
+          </div>
           <div className="flex items-center gap-2 text-[0.7rem] uppercase tracking-wider text-muted">
             <button
               onClick={() => {
@@ -287,18 +364,38 @@ export default function Logger() {
           </div>
         </div>
         <div className="flex flex-col gap-3">
-          {item.sets.map((set, ki) => (
-            <SetRow
-              key={ki}
-              metric={item.primaryMetric}
-              set={set}
-              onPatch={(patch) => setDoc((d) => patchSetActual(d, si, gi, ii, ki, patch))}
-              onToggle={() =>
-                setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: !set.actual.completed }))
-              }
-              onRemove={() => setDoc((d) => removeSet(d, si, gi, ii, ki))}
-            />
-          ))}
+          {item.sets.map((set, ki) => {
+            const prev = ki > 0 ? item.sets[ki - 1] : null;
+            const cliff =
+              !!prev &&
+              prev.actual.completed &&
+              set.actual.completed &&
+              prev.actual.weight != null &&
+              set.actual.weight != null &&
+              prev.actual.weight === set.actual.weight &&
+              prev.actual.reps != null &&
+              set.actual.reps != null &&
+              prev.actual.reps - set.actual.reps > 2;
+            return (
+              <div key={ki} className="flex flex-col gap-2">
+                <SetRow
+                  metric={item.primaryMetric}
+                  set={set}
+                  onPatch={(patch) => setDoc((d) => patchSetActual(d, si, gi, ii, ki, patch))}
+                  onToggle={() =>
+                    setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: !set.actual.completed }))
+                  }
+                  onRemove={() => setDoc((d) => removeSet(d, si, gi, ii, ki))}
+                  onCloneForward={() => cloneForward(si, gi, ii, ki)}
+                />
+                {cliff ? (
+                  <div className="pl-3 text-[0.65rem] uppercase tracking-wider text-accent">
+                    Rep drop {prev!.actual.reps! - set.actual.reps!} — extend rest or stop
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
         <button
           onClick={() => setDoc((d) => addSet(d, si, gi, ii))}
@@ -330,6 +427,33 @@ export default function Logger() {
           {stopwatch.running ? 'Pause' : 'Resume'}
         </Button>
       </header>
+
+      <div className="mb-8 flex flex-wrap items-center gap-2">
+        <input
+          type="date"
+          value={logDate}
+          onChange={(e) => changeDate(e.target.value)}
+          className="min-h-9 border border-border bg-surface px-2 text-sm tabular-nums text-fg outline-none focus:border-subtle"
+          aria-label="Session date"
+        />
+        {Object.entries(ACTIVITY_TAGS).map(([key, v]) => {
+          const on = tags.includes(key);
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => toggleTag(key)}
+              className={`border px-2 py-1 text-[0.65rem] uppercase tracking-wider transition-colors ${
+                on ? '' : 'border-border text-muted hover:text-fg'
+              }`}
+              style={on ? { borderColor: v.color, color: v.color } : undefined}
+              aria-pressed={on}
+            >
+              {v.label}
+            </button>
+          );
+        })}
+      </div>
 
       {showVibe ? <VibeCheckCard onSave={saveVibe} onSkip={() => setShowVibe(false)} /> : null}
 
