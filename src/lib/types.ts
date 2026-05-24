@@ -162,3 +162,24 @@ export interface SetActual {
   completed: boolean;
   prefilled: boolean;
 }
+
+// ---- recommendations (Coach, SPEC §12) ----
+
+export type RecStatus = 'open' | 'snoozed' | 'acted' | 'dismissed';
+export type RecDisposition = 'acted_as_prescribed' | 'acted_modified' | 'skipped';
+
+export interface Recommendation {
+  id: string;
+  owner_user_id: string;
+  status: RecStatus;
+  drift_score: number | null;
+  confidence: number | null;
+  tldr: string | null;
+  action: string | null;
+  body_md: string | null;
+  disposition: RecDisposition | null;
+  disposition_note: string | null;
+  linked_log_id: string | null;
+  snooze_until: string | null;
+  created_at: string;
+}

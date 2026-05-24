@@ -7,6 +7,7 @@ import type {
   ParsedPlan,
   Plan,
   Profile,
+  Recommendation,
   Share,
   ShareScope,
   WorkoutLog,
@@ -254,5 +255,45 @@ export async function getShares(): Promise<Share[]> {
 
 export async function revokeShare(id: string): Promise<boolean> {
   const { error } = await supabase.from('shares').update({ revoked: true }).eq('id', id);
+  return !error;
+}
+
+// ---- recommendations (Coach). Reads are owner-scoped by RLS; owner insert/
+// update enabled in migration 0007 for on-demand generation + dispositions. ----
+
+export type RecInput = {
+  tldr: string;
+  action: string;
+  body_md: string;
+  drift_score: number | null;
+  confidence: number | null;
+};
+
+export async function getRecommendations(
+  client: SupabaseClient = supabase,
+): Promise<Recommendation[]> {
+  const { data } = await client
+    .from('recommendations')
+    .select('*')
+    .order('created_at', { ascending: false });
+  return (data as Recommendation[]) ?? [];
+}
+
+export async function insertRecommendations(rows: RecInput[]): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { error } = await supabase
+    .from('recommendations')
+    .insert(rows.map((r) => ({ ...r, owner_user_id: user.id, status: 'open' })));
+  return !error;
+}
+
+export async function updateRecommendation(
+  id: string,
+  patch: Partial<Recommendation>,
+): Promise<boolean> {
+  const { error } = await supabase.from('recommendations').update(patch).eq('id', id);
   return !error;
 }
