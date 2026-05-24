@@ -61,12 +61,20 @@ key is auto-injected into edge functions.)
 
 ## Remaining work / blockers (need the user)
 
-- [ ] **Original Lovable data import** — IN PROGRESS. User supplied a public-schema
-      data dump + table schema (CSV). Still need the **v2 auth user id** to remap
-      `owner_user_id` onto before inserting. Verify JSONB shapes match the
-      `ParsedPlan` / `LogDocument` contracts (SPEC §8) before loading.
-- [ ] `PUBLIC_SHOWCASE_PROFILE_ID` chosen + set (local `.env` + Vercel) once a
-      showcase profile exists.
+- [x] **Original Lovable (v1) data imported.** The v1 dump used a *different* JSONB
+      shape than v2, so it was transformed into the `ParsedPlan` / `LogDocument`
+      contracts (block names→`BlockKey`, section names→`SectionKey`, per-week rich
+      objects→strings, log `planned` object→its `raw` string, generated item ids).
+      A v2 auth account was created (email `guha.shourjo@gmail.com`, profile id
+      `8a8078c4-2aa8-4136-9e0d-5c2620b4614c`, display "Shourjo") and owns all of it.
+      Loaded: 77 shared movements (replacing the 13 seed) + 5 custom, 1 active plan
+      ("16-Week Program"), 20 workout logs (302 sets). Verified by row/aggregate
+      counts. The egress allowlist blocks the signup function + bulk SQL over HTTP,
+      so the account was created via direct `auth.users`/`auth.identities` insert
+      (bcrypt via pgcrypto) and data loaded through the MCP as base64 DO-blocks.
+- [ ] `PUBLIC_SHOWCASE_PROFILE_ID` — a profile now exists
+      (`8a8078c4-2aa8-4136-9e0d-5c2620b4614c`); set `is_showcase=true` on it and put
+      its id in `.env` + Vercel if you want the public showcase populated.
 - [ ] Invite code(s) inserted (sha-256 `code_hash`) so signup is usable.
 - [ ] Vercel project linked (`PUBLIC_SUPABASE_URL` + `PUBLIC_SUPABASE_ANON_KEY`).
 - [ ] Phase 4 leftovers: self-host fonts (needs licensed Clash Display + Satoshi

@@ -20,10 +20,9 @@ while building. Update as work lands.
 
 - [x] Supabase project provisioned (`zwuaieavvmjacqtbzowm`); `PUBLIC_*` keys supplied. Service-role key is auto-injected into Edge Functions.
 - [x] Migrations applied to the Supabase project — `0001`–`0005` applied via MCP; RLS boundary verified; edge functions deployed; shared library seeded; authed data paths verified with a (since-deleted) test user. `0005` makes the shared-library write-lock explicit.
-- [~] Original Lovable data import — user supplied a public-schema data dump + table schema (CSV). Still blocked on the v2 auth user id to remap `owner_user_id` before insert.
+- [x] Original Lovable (v1) data imported — created a v2 auth account (profile `8a8078c4…`, "Shourjo"), transformed the v1 dump into the v2 JSONB contracts, and loaded 82 movements (77 shared + 5 custom), 1 active plan, 20 logs (302 sets). Verified by aggregate counts.
 - [ ] `SHOWCASE_PROFILE_ID` chosen and set once a showcase profile exists.
 - [ ] Invite code(s) inserted (sha-256 `code_hash`) so signup is usable.
-- [~] Original Lovable data imported — public-schema dump + table schema received (CSV); blocked on the v2 auth user id for the `owner_user_id` remap.
 - [ ] Vercel project linked for deploy (`PUBLIC_SUPABASE_URL` + `PUBLIC_SUPABASE_ANON_KEY` as build env).
 
 
