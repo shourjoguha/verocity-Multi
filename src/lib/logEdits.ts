@@ -135,3 +135,63 @@ export function ungroup(doc: LogDocument, si: number, gi: number): LogDocument {
     ),
   }));
 }
+
+// Move a group up (dir -1) or down (dir +1) within its section.
+export function moveGroup(doc: LogDocument, si: number, gi: number, dir: -1 | 1): LogDocument {
+  return mapSection(doc, si, (s) => {
+    const j = gi + dir;
+    if (j < 0 || j >= s.groups.length) return s;
+    const groups = [...s.groups];
+    [groups[gi], groups[j]] = [groups[j], groups[gi]];
+    return { ...s, groups };
+  });
+}
+
+// Merge two arbitrary groups in a section into one superset/circuit, placed at
+// the earlier position, items in positional order.
+export function groupWith(
+  doc: LogDocument,
+  si: number,
+  gi: number,
+  targetGi: number,
+  kind: GroupKind = 'superset',
+): LogDocument {
+  return mapSection(doc, si, (s) => {
+    if (gi === targetGi || gi >= s.groups.length || targetGi >= s.groups.length) return s;
+    const lo = Math.min(gi, targetGi);
+    const hi = Math.max(gi, targetGi);
+    const merged: LogGroup = {
+      id: s.groups[lo].id,
+      kind,
+      items: [...s.groups[lo].items, ...s.groups[hi].items],
+    };
+    const groups: LogGroup[] = [];
+    s.groups.forEach((g, i) => {
+      if (i === lo) groups.push(merged);
+      else if (i !== hi) groups.push(g);
+    });
+    return { ...s, groups };
+  });
+}
+
+// Toggle a notation across all of an item's sets (on if any set lacks it).
+export function toggleItemNotation(
+  doc: LogDocument,
+  si: number,
+  gi: number,
+  ii: number,
+  note: string,
+): LogDocument {
+  return mapItem(doc, si, gi, ii, (it) => {
+    const allHave = it.sets.length > 0 && it.sets.every((set) => set.notations.includes(note));
+    return {
+      ...it,
+      sets: it.sets.map((set) => ({
+        ...set,
+        notations: allHave
+          ? set.notations.filter((n) => n !== note)
+          : Array.from(new Set([...set.notations, note])),
+      })),
+    };
+  });
+}
