@@ -98,6 +98,7 @@ export default function StatsView() {
   const { data: logs, loading } = useAuthedQuery(() => getLogsInRange(ymd(from), ymd(today)));
 
   const [tip, setTip] = useState<{ x: number; y: number; label: string } | null>(null);
+  const [groupBy, setGroupBy] = useState<'movement' | 'family'>('movement');
   const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   function showTip(e: { clientX: number; clientY: number }, label: string) {
     setTip({ x: e.clientX, y: e.clientY, label });
@@ -184,6 +185,28 @@ export default function StatsView() {
     }
   }
   const topMoves = [...best.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+  // Family-grouped e1RM series (max across the family's movements per date).
+  const famDateMax = new Map<string, Map<string, number>>();
+  const famBest = new Map<string, number>();
+  for (const [movement, pts] of series) {
+    const f = familyOf(movement) ?? movement;
+    const dm = famDateMax.get(f) ?? new Map<string, number>();
+    for (const p of pts) dm.set(p.date, Math.max(dm.get(p.date) ?? 0, p.value));
+    famDateMax.set(f, dm);
+    famBest.set(f, Math.max(famBest.get(f) ?? 0, best.get(movement) ?? 0));
+  }
+  const famSeries = new Map<string, Point[]>(
+    [...famDateMax].map(([f, dm]) => [
+      f,
+      [...dm.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, value]) => ({ date, value })),
+    ]),
+  );
+  const topFams = [...famBest.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const cards = groupBy === 'family' ? topFams : topMoves;
+  const seriesFor = groupBy === 'family' ? famSeries : series;
 
   // Adherence: completed sets / total sets across the window.
   let totalSets = 0;
@@ -362,9 +385,27 @@ export default function StatsView() {
         {topMoves.length > 0 ? (
           <Item>
             <section>
-              <SectionHeader>Top movements (e1RM)</SectionHeader>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="font-display text-sm font-semibold uppercase tracking-[0.04em] text-fg">
+                  Top {groupBy === 'family' ? 'families' : 'movements'} (e1RM)
+                </h2>
+                <div className="flex gap-1 text-[0.65rem] uppercase tracking-wider">
+                  {(['movement', 'family'] as const).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setGroupBy(g)}
+                      className={`border px-2 py-1 transition-colors ${
+                        groupBy === g ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                      }`}
+                    >
+                      {g === 'movement' ? 'Movement' : 'Family'}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                {topMoves.map(([name, value]) => (
+                {cards.map(([name, value]) => (
                   <div key={name} className="border border-border bg-surface p-4">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate capitalize text-fg">{name}</span>
@@ -374,7 +415,7 @@ export default function StatsView() {
                       </span>
                     </div>
                     <div className="mt-3">
-                      <Sparkline points={series.get(name) ?? []} onHover={showTip} />
+                      <Sparkline points={seriesFor.get(name) ?? []} onHover={showTip} />
                     </div>
                   </div>
                 ))}
