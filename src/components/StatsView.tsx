@@ -1,3 +1,4 @@
+import { motion } from 'motion/react';
 import { getLogsInRange } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import type { WorkoutLog } from '@/lib/types';
@@ -5,6 +6,8 @@ import { e1rm } from '@/lib/e1rm';
 import { flattenSets, familyOf, sessionVolume } from '@/lib/stats';
 import { formatDuration, formatRound } from '@/lib/format';
 import { EmptyState, SectionHeader, StatCard } from '@/components/ui/primitives';
+import { EchoText } from '@/components/EchoText';
+import { EASE, Item, PageStagger } from '@/components/anim';
 
 const WEEKS = 8;
 
@@ -17,6 +20,23 @@ function ymd(d: Date): string {
 function mondayOf(d: Date): Date {
   const idx = (d.getUTCDay() + 6) % 7;
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - idx));
+}
+
+// Data-viz bar whose fill grows from the left on scroll-in. scaleX is a
+// transform, so prefers-reduced-motion snaps it straight to full.
+function Bar({ pct }: { pct: number }) {
+  return (
+    <div className="h-2 flex-1 bg-elevated">
+      <motion.div
+        className="h-full bg-fg"
+        style={{ width: `${pct}%`, transformOrigin: 'left' }}
+        initial={{ scaleX: 0 }}
+        whileInView={{ scaleX: 1 }}
+        viewport={{ once: true, margin: '-5% 0px' }}
+        transition={{ duration: 0.7, ease: EASE }}
+      />
+    </div>
+  );
 }
 
 export default function StatsView() {
@@ -98,101 +118,117 @@ export default function StatsView() {
 
   if (all.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-8">
-        <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight text-fg">Stats</h1>
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <EchoText
+          text="STATS"
+          as="h1"
+          className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+        />
         <EmptyState>No sessions in the last {WEEKS} weeks.</EmptyState>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
-      <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight text-fg">Stats</h1>
+    <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+      <Item>
+        <EchoText
+          text="STATS"
+          as="h1"
+          className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+        />
+      </Item>
 
-      <section className="mb-8 grid grid-cols-3 gap-px bg-border">
-        <StatCard label="Sessions" value={all.length} />
-        <StatCard label="Time" value={formatDuration(totalSeconds)} />
-        <StatCard label="Volume" value={formatRound(totalVolume)} unit="kg" />
-      </section>
+      <Item>
+        <section className="mb-10 grid grid-cols-3 gap-px bg-border">
+          <StatCard label="Sessions" value={all.length} />
+          <StatCard label="Time" value={formatDuration(totalSeconds)} />
+          <StatCard label="Volume" value={formatRound(totalVolume)} unit="kg" />
+        </section>
+      </Item>
 
-      <section className="mb-8">
-        <SectionHeader>Consistency</SectionHeader>
-        <div className="flex gap-1">
-          {Array.from({ length: WEEKS }).map((_, col) => (
-            <div key={col} className="flex flex-1 flex-col gap-1">
-              {Array.from({ length: 7 }).map((__, row) => (
-                <div
-                  key={row}
-                  className="aspect-square bg-fg"
-                  style={{ opacity: 0.08 + (heat[row][col] / heatMax) * 0.92 }}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="mb-8">
-        <SectionHeader>Weekly</SectionHeader>
-        <table className="w-full border border-border text-sm">
-          <thead>
-            <tr className="text-[0.65rem] uppercase tracking-wider text-muted">
-              <th className="border-b border-border px-3 py-2 text-left font-medium">Week</th>
-              <th className="border-b border-border px-3 py-2 text-right font-medium">Sessions</th>
-              <th className="border-b border-border px-3 py-2 text-right font-medium">Time</th>
-              <th className="border-b border-border px-3 py-2 text-right font-medium">Volume</th>
-            </tr>
-          </thead>
-          <tbody className="tabular-nums">
-            {weekRows.map((w) => (
-              <tr key={w.label} className="border-b border-border last:border-0">
-                <td className="px-3 py-2 text-subtle">{w.label}</td>
-                <td className="px-3 py-2 text-right text-fg">{w.count}</td>
-                <td className="px-3 py-2 text-right text-fg">{formatDuration(w.seconds)}</td>
-                <td className="px-3 py-2 text-right text-fg">{formatRound(w.volume)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {rpeRows.length > 0 ? (
-        <section className="mb-8">
-          <SectionHeader>RPE by family</SectionHeader>
-          <div className="flex flex-col gap-2">
-            {rpeRows.map((r) => (
-              <div key={r.family} className="flex items-center gap-3 text-sm">
-                <div className="w-20 shrink-0 capitalize text-subtle">{r.family}</div>
-                <div className="h-2 flex-1 bg-elevated">
-                  <div className="h-full bg-fg" style={{ width: `${(r.avg / 10) * 100}%` }} />
-                </div>
-                <div className="w-8 shrink-0 text-right tabular-nums text-muted">
-                  {formatRound(r.avg, 1)}
-                </div>
+      <Item>
+        <section className="mb-10">
+          <SectionHeader>Consistency</SectionHeader>
+          <div className="flex gap-1">
+            {Array.from({ length: WEEKS }).map((_, col) => (
+              <div key={col} className="flex flex-1 flex-col gap-1">
+                {Array.from({ length: 7 }).map((__, row) => (
+                  <div
+                    key={row}
+                    className="aspect-square bg-fg"
+                    style={{ opacity: 0.06 + (heat[row][col] / heatMax) * 0.94 }}
+                  />
+                ))}
               </div>
             ))}
           </div>
         </section>
+      </Item>
+
+      <Item>
+        <section className="mb-10">
+          <SectionHeader>Weekly</SectionHeader>
+          <table className="w-full border border-border bg-surface text-sm">
+            <thead>
+              <tr className="text-[0.65rem] uppercase tracking-wider text-muted">
+                <th className="border-b border-border px-3 py-2 text-left font-medium">Week</th>
+                <th className="border-b border-border px-3 py-2 text-right font-medium">Sessions</th>
+                <th className="border-b border-border px-3 py-2 text-right font-medium">Time</th>
+                <th className="border-b border-border px-3 py-2 text-right font-medium">Volume</th>
+              </tr>
+            </thead>
+            <tbody className="tabular-nums">
+              {weekRows.map((w) => (
+                <tr key={w.label} className="border-b border-border last:border-0">
+                  <td className="px-3 py-2 text-subtle">{w.label}</td>
+                  <td className="px-3 py-2 text-right text-fg">{w.count}</td>
+                  <td className="px-3 py-2 text-right text-fg">{formatDuration(w.seconds)}</td>
+                  <td className="px-3 py-2 text-right text-fg">{formatRound(w.volume)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </Item>
+
+      {rpeRows.length > 0 ? (
+        <Item>
+          <section className="mb-10">
+            <SectionHeader>RPE by family</SectionHeader>
+            <div className="flex flex-col gap-2">
+              {rpeRows.map((r) => (
+                <div key={r.family} className="flex items-center gap-3 text-sm">
+                  <div className="w-20 shrink-0 capitalize text-subtle">{r.family}</div>
+                  <Bar pct={(r.avg / 10) * 100} />
+                  <div className="w-8 shrink-0 text-right tabular-nums text-muted">
+                    {formatRound(r.avg, 1)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </Item>
       ) : null}
 
       {topMoves.length > 0 ? (
-        <section>
-          <SectionHeader>Top movements (e1RM)</SectionHeader>
-          <div className="flex flex-col gap-2">
-            {topMoves.map(([name, value]) => (
-              <div key={name} className="flex items-center gap-3 text-sm">
-                <div className="w-32 shrink-0 truncate capitalize text-subtle">{name}</div>
-                <div className="h-2 flex-1 bg-elevated">
-                  <div className="h-full bg-fg" style={{ width: `${(value / topMax) * 100}%` }} />
+        <Item>
+          <section>
+            <SectionHeader>Top movements (e1RM)</SectionHeader>
+            <div className="flex flex-col gap-2">
+              {topMoves.map(([name, value]) => (
+                <div key={name} className="flex items-center gap-3 text-sm">
+                  <div className="w-32 shrink-0 truncate capitalize text-subtle">{name}</div>
+                  <Bar pct={(value / topMax) * 100} />
+                  <div className="w-14 shrink-0 text-right tabular-nums text-muted">
+                    {formatRound(value)} kg
+                  </div>
                 </div>
-                <div className="w-14 shrink-0 text-right tabular-nums text-muted">
-                  {formatRound(value)} kg
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        </Item>
       ) : null}
-    </div>
+    </PageStagger>
   );
 }
