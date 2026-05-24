@@ -7,6 +7,15 @@ const fadeUp: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: EASE } },
 };
 
+// Above-the-fold hero: transform-only (no opacity), so the content is painted
+// at first byte — no blank-until-hydration flash, visible with JS disabled, and
+// reduced-motion snaps it straight into place. Below-the-fold blocks keep the
+// opacity fade (they're hidden behind the scroll until revealed).
+const heroItem: Variants = {
+  hidden: { y: 16 },
+  show: { y: 0, transition: { duration: 0.7, ease: EASE } },
+};
+
 const heroContainer: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.12, delayChildren: 0.08 } },
@@ -39,12 +48,12 @@ export default function Landing() {
           animate="show"
         >
           <motion.p
-            variants={fadeUp}
+            variants={heroItem}
             className="mb-7 text-xs uppercase tracking-[0.45em] text-subtle"
           >
             Strength · Training · Log
           </motion.p>
-          <motion.div variants={fadeUp}>
+          <motion.div variants={heroItem}>
             <EchoText
               text="VEROCITY"
               as="h1"
@@ -52,14 +61,14 @@ export default function Landing() {
             />
           </motion.div>
           <motion.p
-            variants={fadeUp}
+            variants={heroItem}
             className="mt-8 max-w-xl text-balance text-base text-subtle md:text-lg"
           >
             A faster, multi-profile training logger. Private by default, with a read-only public
             showcase. Built on Astro islands and Supabase.
           </motion.p>
           <motion.div
-            variants={fadeUp}
+            variants={heroItem}
             className="mt-10 flex flex-wrap items-center justify-center gap-3"
           >
             <a
