@@ -3,9 +3,10 @@ import { supabase } from '@/lib/supabase';
 import { getActivePlan, getLogsInRange } from '@/lib/queries';
 import type { Plan, WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
-import { formatDuration } from '@/lib/format';
-import { EmptyState } from '@/components/ui/primitives';
+import { formatDate, formatDuration } from '@/lib/format';
+import { EmptyState, SectionHeader, Tag } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
+import { SetShapeStrip } from '@/components/SetShapeStrip';
 import { Item, PageStagger } from '@/components/anim';
 import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
@@ -69,6 +70,7 @@ export default function CalendarView() {
     const key = log.log_date.slice(0, 10);
     byDay.set(key, [...(byDay.get(key) ?? []), log]);
   }
+  const monthSessions = [...logs].sort((a, b) => b.log_date.localeCompare(a.log_date));
 
   const daysInMonth = new Date(
     Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0),
@@ -168,6 +170,46 @@ export default function CalendarView() {
           })}
         </div>
       </Item>
+
+      {monthSessions.length > 0 ? (
+        <Item>
+          <section className="mt-8">
+            <SectionHeader>This month</SectionHeader>
+            <ul className="border border-border bg-surface">
+              {monthSessions.map((log) => {
+                const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
+                return (
+                  <li key={log.id} className="border-b border-border last:border-b-0">
+                    <button
+                      type="button"
+                      onClick={() => setQuickLog(log)}
+                      className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-elevated"
+                      style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
+                    >
+                      <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">
+                        {formatDate(log.log_date)}
+                      </div>
+                      <div className="flex flex-1 flex-wrap gap-1">
+                        {log.tags.length > 0 ? (
+                          log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
+                        ) : (
+                          <span className="text-sm text-muted">
+                            {log.day_key ?? log.activity_type ?? 'Session'}
+                          </span>
+                        )}
+                      </div>
+                      <SetShapeStrip data={log.data} className="shrink-0" />
+                      <div className="w-12 shrink-0 text-right text-sm tabular-nums text-muted">
+                        {formatDuration(log.total_seconds)}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        </Item>
+      ) : null}
 
       {!loading && logs.length === 0 ? (
         <Item>
