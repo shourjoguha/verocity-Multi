@@ -3,6 +3,7 @@ import type { LogSet, SetActual } from '@/lib/types';
 import { WeightWheel } from '@/components/logger/WeightWheel';
 import { RepsStepper } from '@/components/logger/RepsStepper';
 import { MetricStepper } from '@/components/logger/MetricStepper';
+import { haptic } from '@/lib/haptics';
 
 // One set row. The numeric inputs shown follow the item's primary metric
 // (metric swap), with RPE available as a secondary except when RPE is primary.
@@ -97,7 +98,10 @@ export function SetRow({
         {a.completed && onCloneForward ? (
           <button
             type="button"
-            onClick={onCloneForward}
+            onClick={() => {
+              haptic(15);
+              onCloneForward?.();
+            }}
             className="flex h-11 w-9 items-center justify-center border border-border text-muted hover:text-fg"
             aria-label="Copy to next set"
             title="Copy to next set"
@@ -115,7 +119,10 @@ export function SetRow({
         </button>
         <button
           type="button"
-          onClick={onToggle}
+          onClick={() => {
+            haptic();
+            onToggle();
+          }}
           className={`flex h-11 w-11 items-center justify-center border ${
             a.completed ? 'border-accent bg-accent text-accent-fg' : 'border-border text-muted'
           }`}

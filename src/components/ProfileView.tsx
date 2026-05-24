@@ -95,6 +95,30 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
     };
   }, [mode]);
 
+  // Live-refresh recents when this user's logs change (e.g. finishing a session
+  // on another device/tab). App mode only; the showcase is read-only.
+  useEffect(() => {
+    if (mode !== 'app' || !profile) return;
+    const channel = supabase
+      .channel(`home-logs-${profile.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'workout_logs',
+          filter: `owner_user_id=eq.${profile.id}`,
+        },
+        () => {
+          getRecentLogs(30).then(setLogs);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [mode, profile]);
+
   if (loading) {
     return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
   }
