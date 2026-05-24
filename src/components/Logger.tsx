@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 import {
   bumpMovementSub,
@@ -31,6 +32,7 @@ import { weekFromDate } from '@/lib/week';
 import { SECTIONS, TIMERS, type MetricKey, type SectionKey } from '@/app.config';
 import type { GroupKind, LogDocument, LogStatus, Movement, MovementSub, VibeCheck } from '@/lib/types';
 import { Button, SectionHeader } from '@/components/ui/primitives';
+import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
 import { MovementPicker } from '@/components/logger/MovementPicker';
 import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
@@ -307,7 +309,13 @@ export default function Logger() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-8 pb-32">
+    <MotionConfig reducedMotion="user">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4, ease: EASE }}
+        className="mx-auto max-w-2xl px-6 py-8 pb-32"
+      >
       <header className="mb-8 flex items-center justify-between">
         <div>
           <div className="font-display text-5xl tabular-nums text-fg">{clock(stopwatch.seconds)}</div>
@@ -323,15 +331,24 @@ export default function Logger() {
 
       {showVibe ? <VibeCheckCard onSave={saveVibe} onSkip={() => setShowVibe(false)} /> : null}
 
-      {rest.running ? (
-        <div className="mb-6 flex items-center justify-between border border-accent px-4 py-2">
-          <span className="text-[0.7rem] uppercase tracking-wider text-accent">Rest</span>
-          <span className="font-display text-2xl tabular-nums text-fg">{clock(rest.secondsLeft)}</span>
-          <button onClick={rest.stop} className="text-[0.7rem] uppercase tracking-wider text-muted">
-            Skip
-          </button>
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {rest.running ? (
+          <motion.div
+            key="rest"
+            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="flex items-center justify-between overflow-hidden border border-accent px-4 py-2"
+          >
+            <span className="text-[0.7rem] uppercase tracking-wider text-accent">Rest</span>
+            <span className="font-display text-2xl tabular-nums text-fg">{clock(rest.secondsLeft)}</span>
+            <button onClick={rest.stop} className="text-[0.7rem] uppercase tracking-wider text-muted">
+              Skip
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {ordered.map((section) => {
         const si = doc.sections.findIndex((s) => s.key === section.key);
@@ -405,19 +422,21 @@ export default function Logger() {
         );
       })}
 
-      {picker ? (
-        <MovementPicker
-          movements={movements}
-          title={picker.mode === 'add' ? 'Add movement' : 'Swap movement'}
-          suggestions={
-            picker.mode === 'swap'
-              ? swapSuggestions(doc.sections[picker.si]?.groups[picker.gi]?.items[picker.ii]?.movement ?? '')
-              : []
-          }
-          onPick={handlePick}
-          onClose={() => setPicker(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {picker ? (
+          <MovementPicker
+            movements={movements}
+            title={picker.mode === 'add' ? 'Add movement' : 'Swap movement'}
+            suggestions={
+              picker.mode === 'swap'
+                ? swapSuggestions(doc.sections[picker.si]?.groups[picker.gi]?.items[picker.ii]?.movement ?? '')
+                : []
+            }
+            onPick={handlePick}
+            onClose={() => setPicker(null)}
+          />
+        ) : null}
+      </AnimatePresence>
 
       <div className="fixed inset-x-0 bottom-0 border-t border-border bg-bg/95 px-6 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-2xl gap-3">
@@ -429,6 +448,7 @@ export default function Logger() {
           </Button>
         </div>
       </div>
-    </div>
+    </motion.div>
+    </MotionConfig>
   );
 }

@@ -5,6 +5,8 @@ import type { WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
 import { formatDuration } from '@/lib/format';
 import { EmptyState } from '@/components/ui/primitives';
+import { EchoText } from '@/components/EchoText';
+import { Item, PageStagger } from '@/components/anim';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -80,64 +82,77 @@ export default function CalendarView() {
     setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + delta, 1)));
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
-      <header className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">{monthLabel}</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => shift(-1)}
-            className="min-h-11 border border-border px-3 text-fg hover:border-subtle"
-            aria-label="Previous month"
-          >
-            ←
-          </button>
-          <button
-            onClick={() => shift(1)}
-            className="min-h-11 border border-border px-3 text-fg hover:border-subtle"
-            aria-label="Next month"
-          >
-            →
-          </button>
-        </div>
-      </header>
-
-      <div className="mb-2 grid grid-cols-7 gap-px">
-        {WEEKDAYS.map((d) => (
-          <div key={d} className="text-center text-[0.6rem] uppercase tracking-wider text-muted">
-            {d}
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-px bg-border">
-        {cells.map((day, i) => {
-          if (day == null) return <div key={`b${i}`} className="aspect-square bg-bg" />;
-          const key = ymd(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), day)));
-          const sessions = byDay.get(key) ?? [];
-          return (
-            <div key={key} className="aspect-square bg-surface p-1">
-              <div className="text-[0.65rem] tabular-nums text-muted">{day}</div>
-              <div className="mt-1 flex flex-col gap-[2px]">
-                {sessions.map((s) => (
-                  <a
-                    key={s.id}
-                    href={`/app/session?id=${s.id}`}
-                    title={`${formatDuration(s.total_seconds)}`}
-                    className="h-1.5 w-full"
-                    style={{ backgroundColor: tagColor(s.tags[0] ?? '') }}
-                  />
-                ))}
-              </div>
+    <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+      <Item>
+        <header className="mb-8">
+          <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">{monthLabel}</p>
+          <div className="mt-2 flex items-end justify-between gap-4">
+            <EchoText
+              text="CALENDAR"
+              as="h1"
+              className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+            />
+            <div className="flex shrink-0 gap-2 pb-1">
+              <button
+                onClick={() => shift(-1)}
+                className="min-h-11 border border-border px-3 text-fg transition-colors hover:border-fg"
+                aria-label="Previous month"
+              >
+                ←
+              </button>
+              <button
+                onClick={() => shift(1)}
+                className="min-h-11 border border-border px-3 text-fg transition-colors hover:border-fg"
+                aria-label="Next month"
+              >
+                →
+              </button>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        </header>
+      </Item>
+
+      <Item>
+        <div className="mb-2 grid grid-cols-7 gap-px">
+          {WEEKDAYS.map((d) => (
+            <div key={d} className="text-center text-[0.6rem] uppercase tracking-wider text-muted">
+              {d}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-px bg-border">
+          {cells.map((day, i) => {
+            if (day == null) return <div key={`b${i}`} className="aspect-square bg-bg" />;
+            const key = ymd(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), day)));
+            const sessions = byDay.get(key) ?? [];
+            return (
+              <div key={key} className="aspect-square bg-surface p-1">
+                <div className="text-[0.65rem] tabular-nums text-muted">{day}</div>
+                <div className="mt-1 flex flex-col gap-[2px]">
+                  {sessions.map((s) => (
+                    <a
+                      key={s.id}
+                      href={`/app/session?id=${s.id}`}
+                      title={`${formatDuration(s.total_seconds)}`}
+                      className="h-1.5 w-full"
+                      style={{ backgroundColor: tagColor(s.tags[0] ?? '') }}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Item>
 
       {!loading && logs.length === 0 ? (
-        <div className="mt-6">
-          <EmptyState>No sessions this month.</EmptyState>
-        </div>
+        <Item>
+          <div className="mt-6">
+            <EmptyState>No sessions this month.</EmptyState>
+          </div>
+        </Item>
       ) : null}
-    </div>
+    </PageStagger>
   );
 }

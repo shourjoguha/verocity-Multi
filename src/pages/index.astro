@@ -1,30 +1,35 @@
 ---
 import Base from '@/layouts/Base.astro';
+import Landing from '@/components/Landing';
+
+const navLinks = [
+  { href: '/showcase', label: 'Showcase' },
+  { href: '/login', label: 'Log in' },
+];
 ---
 
 <Base title="Verocity">
-  <main class="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center px-6">
-    <p class="mb-4 text-xs uppercase tracking-[0.3em] text-muted">Strength · Training · Log</p>
-    <h1
-      class="font-display text-6xl font-semibold uppercase leading-[0.95] tracking-tight text-fg md:text-8xl"
-    >
-      Verocity
-    </h1>
-    <p class="mt-6 max-w-md text-subtle">
-      A faster, multi-profile training logger. Private by default, with a read-only public
-      showcase. Built on Astro islands and Supabase.
-    </p>
-    <div class="mt-10 flex items-center gap-3 text-sm">
-      <a
-        href="/app"
-        class="inline-flex min-h-11 items-center bg-fg px-5 uppercase tracking-wider text-bg hover:bg-subtle"
-        >Open app</a
-      >
-      <a
-        href="/showcase"
-        class="inline-flex min-h-11 items-center border border-border px-5 uppercase tracking-wider text-fg hover:border-subtle"
-        >View showcase</a
-      >
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="sticky top-0 z-50 h-20 border-b border-border bg-bg/90 backdrop-blur-md">
+    <div class="mx-auto flex h-full max-w-6xl items-center justify-between px-6">
+      <a href="/" class="font-display text-lg font-semibold uppercase tracking-tight text-fg">Verocity</a>
+      <nav class="flex items-center gap-7 text-sm uppercase tracking-wider" aria-label="Primary">
+        {
+          navLinks.map((l) => (
+            <a href={l.href} class="hidden text-fg transition-colors duration-150 hover:text-muted sm:inline">
+              {l.label}
+            </a>
+          ))
+        }
+        <a
+          href="/app"
+          class="inline-flex h-10 items-center rounded-full border border-fg px-5 text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
+          >Open app</a
+        >
+      </nav>
     </div>
-  </main>
+  </header>
+
+  <Landing client:load />
 </Base>

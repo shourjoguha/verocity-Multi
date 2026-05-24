@@ -4,6 +4,8 @@ import { createLog } from '@/lib/queries';
 import { ACTIVITY_TAGS, ACTIVITY_TYPES, METRICS } from '@/app.config';
 import type { LogDocument } from '@/lib/types';
 import { Button } from '@/components/ui/primitives';
+import { EchoText } from '@/components/EchoText';
+import { Item, PageStagger } from '@/components/anim';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -102,9 +104,16 @@ export default function ActivityLogger() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-6 py-8">
-      <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight text-fg">Log activity</h1>
+    <PageStagger className="mx-auto max-w-md px-6 py-10">
+      <Item>
+        <EchoText
+          text="LOG ACTIVITY"
+          as="h1"
+          className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+        />
+      </Item>
 
+      <Item>
       <label className="mb-2 block text-[0.7rem] uppercase tracking-wider text-muted">Type</label>
       <div className="mb-5 flex flex-wrap gap-2">
         {ACTIVITY_TYPES.map((t) => (
@@ -112,7 +121,7 @@ export default function ActivityLogger() {
             key={t}
             type="button"
             onClick={() => setType(t)}
-            className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider ${
+            className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
               type === t ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
             }`}
           >
@@ -163,7 +172,7 @@ export default function ActivityLogger() {
             key={key}
             type="button"
             onClick={() => toggleTag(key)}
-            className="min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider"
+            className="min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors"
             style={
               tags.includes(key)
                 ? { borderColor: color, color }
@@ -193,6 +202,7 @@ export default function ActivityLogger() {
           Cancel
         </Button>
       </div>
-    </div>
+      </Item>
+    </PageStagger>
   );
 }

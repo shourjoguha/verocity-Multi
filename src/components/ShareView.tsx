@@ -5,6 +5,11 @@ import { BLOCKS, type BlockKey } from '@/app.config';
 import { formatDate, formatDuration } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
 import { EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
+import { EchoText } from '@/components/EchoText';
+import { Item, PageStagger } from '@/components/anim';
+
+const echoTitle =
+  'font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl';
 
 const ERRORS: Record<string, string> = {
   missing_token: 'This link is missing its token.',
@@ -31,24 +36,30 @@ function PlanReadView({ parsed }: { parsed: ParsedPlan }) {
     parsed.blocks.find((b) => w >= b.startWeek && w <= b.endWeek)?.type ?? null;
 
   return (
-    <div>
-      <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">{parsed.title}</h1>
-      {parsed.blocks.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {parsed.blocks.map((b, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-2 text-[0.7rem] uppercase tracking-wider text-muted"
-            >
-              <span className="inline-block h-2 w-2" style={{ backgroundColor: BLOCKS[b.type]?.color }} />
-              {BLOCKS[b.type]?.label ?? b.type} · W{b.startWeek}–{b.endWeek}
-            </span>
-          ))}
-        </div>
-      ) : null}
+    <PageStagger>
+      <Item>
+        <header className="mb-2">
+          <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">Plan</p>
+          <EchoText text={parsed.title} as="h1" className={`mt-2 ${echoTitle}`} />
+          {parsed.blocks.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {parsed.blocks.map((b, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-2 text-[0.7rem] uppercase tracking-wider text-muted"
+                >
+                  <span className="inline-block h-2 w-2" style={{ backgroundColor: BLOCKS[b.type]?.color }} />
+                  {BLOCKS[b.type]?.label ?? b.type} · W{b.startWeek}–{b.endWeek}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </header>
+      </Item>
 
       {parsed.days.map((day) => (
-        <section key={day.dayKey} className="mt-8">
+        <Item key={day.dayKey}>
+          <section className="mt-8">
           <SectionHeader>{day.label}</SectionHeader>
           <div className="overflow-x-auto border border-border">
             <table className="w-full text-sm">
@@ -87,32 +98,38 @@ function PlanReadView({ parsed }: { parsed: ParsedPlan }) {
               </tbody>
             </table>
           </div>
-        </section>
+          </section>
+        </Item>
       ))}
-    </div>
+    </PageStagger>
   );
 }
 
 function LogReadView({ log }: { log: WorkoutLog }) {
   const sections = log.data?.sections ?? [];
   return (
-    <div>
-      <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">{formatDate(log.log_date)}</p>
-      <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">
-        {log.activity_type ?? 'Session'}
-      </h1>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
-        <span>{formatDuration(log.total_seconds)}</span>
-        {log.tags.map((t) => (
-          <Tag key={t} label={t} color={tagColor(t)} />
-        ))}
-      </div>
+    <PageStagger>
+      <Item>
+        <header className="mb-2">
+          <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">{formatDate(log.log_date)}</p>
+          <EchoText text={log.activity_type ?? 'Session'} as="h1" className={`mt-2 ${echoTitle}`} />
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted">
+            <span>{formatDuration(log.total_seconds)}</span>
+            {log.tags.map((t) => (
+              <Tag key={t} label={t} color={tagColor(t)} />
+            ))}
+          </div>
+        </header>
+      </Item>
 
       {sections.length === 0 ? (
-        <EmptyState>No sets recorded.</EmptyState>
+        <Item>
+          <EmptyState>No sets recorded.</EmptyState>
+        </Item>
       ) : (
         sections.map((section) => (
-          <section key={section.key} className="mt-6">
+          <Item key={section.key}>
+            <section className="mt-6">
             <SectionHeader>{section.key}</SectionHeader>
             <ul className="divide-y divide-border border border-border">
               {section.groups.flatMap((g) =>
@@ -132,10 +149,11 @@ function LogReadView({ log }: { log: WorkoutLog }) {
                 )),
               )}
             </ul>
-          </section>
+            </section>
+          </Item>
         ))
       )}
-    </div>
+    </PageStagger>
   );
 }
 
@@ -152,53 +170,61 @@ function ProfileReadView({
   const activePlan = plans.find((p) => p.is_active) ?? plans[0] ?? null;
 
   return (
-    <div>
-      <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">Shared profile</p>
-      <h1 className="font-display text-4xl font-semibold tracking-tight text-fg">
-        {profile?.display_name ?? 'Athlete'}
-      </h1>
+    <PageStagger>
+      <Item>
+        <header className="mb-2">
+          <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">Shared profile</p>
+          <EchoText text={profile?.display_name ?? 'Athlete'} as="h1" className={`mt-2 ${echoTitle}`} />
+        </header>
+      </Item>
 
-      <section className="mt-6 grid grid-cols-2 gap-px bg-border">
-        <StatCard label="Sessions" value={logs.length} />
-        <StatCard label="Total time" value={formatDuration(totalSeconds)} />
-      </section>
+      <Item>
+        <section className="mt-6 grid grid-cols-2 gap-px bg-border">
+          <StatCard label="Sessions" value={logs.length} />
+          <StatCard label="Total time" value={formatDuration(totalSeconds)} />
+        </section>
+      </Item>
 
       {activePlan ? (
-        <section className="mt-8">
-          <SectionHeader>Active plan</SectionHeader>
-          <div className="border border-border bg-surface p-4 font-display text-xl text-fg">
-            {activePlan.name}
-          </div>
-        </section>
+        <Item>
+          <section className="mt-8">
+            <SectionHeader>Active plan</SectionHeader>
+            <div className="border border-border bg-surface p-4 font-display text-xl text-fg">
+              {activePlan.name}
+            </div>
+          </section>
+        </Item>
       ) : null}
 
-      <section className="mt-8">
-        <SectionHeader>Recent sessions</SectionHeader>
-        {logs.length === 0 ? (
-          <EmptyState>No sessions logged yet.</EmptyState>
-        ) : (
-          <ul className="divide-y divide-border border border-border">
-            {logs.slice(0, 20).map((log) => (
-              <li key={log.id} className="flex items-center gap-4 px-4 py-3">
-                <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">
-                  {formatDate(log.log_date)}
-                </div>
-                <div className="flex flex-1 flex-wrap gap-1">
-                  {log.tags.length > 0 ? (
-                    log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
-                  ) : (
-                    <span className="text-sm text-muted">{log.activity_type ?? 'Session'}</span>
-                  )}
-                </div>
-                <div className="w-12 shrink-0 text-right text-sm tabular-nums text-muted">
-                  {formatDuration(log.total_seconds)}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
+      <Item>
+        <section className="mt-8">
+          <SectionHeader>Recent sessions</SectionHeader>
+          {logs.length === 0 ? (
+            <EmptyState>No sessions logged yet.</EmptyState>
+          ) : (
+            <ul className="divide-y divide-border border border-border">
+              {logs.slice(0, 20).map((log) => (
+                <li key={log.id} className="flex items-center gap-4 px-4 py-3">
+                  <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">
+                    {formatDate(log.log_date)}
+                  </div>
+                  <div className="flex flex-1 flex-wrap gap-1">
+                    {log.tags.length > 0 ? (
+                      log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
+                    ) : (
+                      <span className="text-sm text-muted">{log.activity_type ?? 'Session'}</span>
+                    )}
+                  </div>
+                  <div className="w-12 shrink-0 text-right text-sm tabular-nums text-muted">
+                    {formatDuration(log.total_seconds)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </Item>
+    </PageStagger>
   );
 }
 
