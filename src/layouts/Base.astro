@@ -1,5 +1,6 @@
 ---
 import { ClientRouter } from 'astro:transitions';
+import Toaster from '@/components/Toaster';
 import '../styles/global.css';
 
 interface Props {
@@ -35,6 +36,7 @@ const { title = 'Verocity', description = 'Strength & training logger.' } = Astr
   </head>
   <body class="min-h-dvh">
     <slot />
+    <Toaster client:load />
     <script is:inline>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {

@@ -7,6 +7,7 @@ import { bestE1rm } from '@/lib/e1rm';
 import { weekFromDate } from '@/lib/week';
 import { formatDate, formatDuration, formatRound } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
+import { toast } from '@/lib/toast';
 import {
   bundleToJson,
   buildExportBundle,
@@ -60,6 +61,9 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
       } else {
         downloadFile(exportFilename('csv'), logsToCsv(allLogs), 'text/csv');
       }
+      toast(`${format.toUpperCase()} export ready`, 'success');
+    } catch {
+      toast('Export failed — try again', 'error');
     } finally {
       setExporting(null);
     }

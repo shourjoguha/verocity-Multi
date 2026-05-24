@@ -50,6 +50,8 @@ import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
 import { MovementPicker } from '@/components/logger/MovementPicker';
 import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { toast } from '@/lib/toast';
 
 const METRIC_CYCLE: MetricKey[] = ['weight', 'reps', 'time', 'distance', 'rpe'];
 
@@ -259,7 +261,7 @@ export default function Logger() {
     setStatus(next);
     stopwatch.pause();
     if (idRef.current) {
-      await updateLog(idRef.current, {
+      const ok = await updateLog(idRef.current, {
         data: docRef.current,
         total_seconds: secondsRef.current,
         status: next,
@@ -267,6 +269,10 @@ export default function Logger() {
         log_date: logDateRef.current,
         tags: tagsRef.current,
       });
+      if (!ok) {
+        toast('Save failed — check your connection and try again', 'error');
+        return;
+      }
     }
     window.location.href =
       next === 'done' && idRef.current ? `/app/session?id=${idRef.current}` : '/app';
@@ -412,6 +418,7 @@ export default function Logger() {
   }
 
   return (
+    <ErrorBoundary>
     <MotionConfig reducedMotion="user">
       <motion.div
         initial={{ opacity: 0 }}
@@ -722,5 +729,6 @@ export default function Logger() {
       </div>
     </motion.div>
     </MotionConfig>
+    </ErrorBoundary>
   );
 }
