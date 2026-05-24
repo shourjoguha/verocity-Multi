@@ -16,6 +16,8 @@ import {
 } from '@/lib/exportData';
 import { Button, Card, EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
+import { EchoText } from '@/components/EchoText';
+import { Item, PageStagger } from '@/components/anim';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;
@@ -101,120 +103,148 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const week = plan ? weekFromDate(plan.start_date, new Date()) : null;
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
-      <header className="mb-8 flex items-baseline justify-between">
-        <div>
-          <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">
+    <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+      <Item>
+        <header className="mb-10">
+          <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">
             {mode === 'showcase' ? 'Showcase' : 'Dashboard'}
           </p>
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-fg">
-            {profile?.display_name ?? 'Athlete'}
-          </h1>
-        </div>
-        {mode === 'app' ? (
-          <button
-            onClick={() => signOut().then(() => (window.location.href = '/login'))}
-            className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
-          >
-            Sign out
-          </button>
-        ) : null}
-      </header>
-
-      <section className="mb-8 grid grid-cols-3 gap-px bg-border">
-        <StatCard label="Sessions" value={sessionCount} />
-        <StatCard label="Total time" value={formatDuration(totalSeconds)} />
-        <StatCard label="Top e1RM" value={top != null ? formatRound(top) : '—'} unit={top != null ? 'kg' : undefined} />
-      </section>
-
-      {mode === 'app' ? (
-        <section className="mb-8 flex gap-3">
-          <a
-            href="/app/log"
-            className="inline-flex min-h-11 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg hover:bg-subtle"
-          >
-            Start workout
-          </a>
-          <a
-            href="/app/activity"
-            className="inline-flex min-h-11 flex-1 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg hover:border-subtle"
-          >
-            Log activity
-          </a>
-        </section>
-      ) : null}
-
-      <section className="mb-8">
-        <SectionHeader>Active plan</SectionHeader>
-        {plan ? (
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-display text-xl text-fg">{plan.name}</div>
-                {week ? <div className="text-sm text-muted">Week {week}</div> : null}
-              </div>
-              {mode === 'app' ? (
-                <a href="/app/plan" className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg">
-                  View →
-                </a>
-              ) : null}
-            </div>
-          </Card>
-        ) : (
-          <EmptyState>No active plan.</EmptyState>
-        )}
-      </section>
-
-      <section>
-        <SectionHeader>Recent sessions</SectionHeader>
-        {logs.length === 0 ? (
-          <EmptyState>No sessions logged yet.</EmptyState>
-        ) : (
-          <ul className="divide-y divide-border border border-border">
-            {logs.slice(0, 12).map((log) => (
-              <li key={log.id} className="flex items-center gap-4 px-4 py-3">
-                <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">
-                  {formatDate(log.log_date)}
-                </div>
-                <div className="flex flex-1 flex-wrap gap-1">
-                  {log.tags.length > 0 ? (
-                    log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
-                  ) : (
-                    <span className="text-sm text-muted">{log.activity_type ?? 'Session'}</span>
-                  )}
-                </div>
-                <SetShapeStrip data={log.data} className="shrink-0" />
-                <div className="w-12 shrink-0 text-right text-sm tabular-nums text-muted">
-                  {formatDuration(log.total_seconds)}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {mode === 'app' ? (
-        <section className="mt-8">
-          <SectionHeader>Your data</SectionHeader>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="ghost" onClick={() => handleExport('json')} disabled={!!exporting}>
-              {exporting === 'json' ? 'Exporting…' : 'Export JSON'}
-            </Button>
-            <Button variant="ghost" onClick={() => handleExport('csv')} disabled={!!exporting}>
-              {exporting === 'csv' ? 'Exporting…' : 'Export CSV'}
-            </Button>
-            <a
-              href="/app/shares"
-              className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
-            >
-              Share links →
-            </a>
+          <div className="mt-2 flex items-end justify-between gap-4">
+            <EchoText
+              text={profile?.display_name ?? 'Athlete'}
+              as="h1"
+              className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+            />
+            {mode === 'app' ? (
+              <button
+                onClick={() => signOut().then(() => (window.location.href = '/login'))}
+                className="shrink-0 pb-1 text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              >
+                Sign out
+              </button>
+            ) : null}
           </div>
-          <p className="mt-2 text-[0.7rem] text-muted">
-            JSON is the complete backup. CSV is a flattened per-set view for spreadsheets.
-          </p>
+        </header>
+      </Item>
+
+      <Item>
+        <section className="mb-10 grid grid-cols-3 gap-px bg-border">
+          <StatCard label="Sessions" value={sessionCount} />
+          <StatCard label="Total time" value={formatDuration(totalSeconds)} />
+          <StatCard
+            label="Top e1RM"
+            value={top != null ? formatRound(top) : '—'}
+            unit={top != null ? 'kg' : undefined}
+          />
         </section>
+      </Item>
+
+      {mode === 'app' ? (
+        <Item>
+          <section className="mb-10 flex gap-3">
+            <a
+              href="/app/log"
+              className="inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+            >
+              Start workout
+            </a>
+            <a
+              href="/app/activity"
+              className="inline-flex min-h-12 flex-1 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+            >
+              Log activity
+            </a>
+          </section>
+        </Item>
       ) : null}
-    </div>
+
+      <Item>
+        <section className="mb-10">
+          <SectionHeader>Active plan</SectionHeader>
+          {plan ? (
+            <Card>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-display text-xl font-semibold tracking-tight text-fg">{plan.name}</div>
+                  {week ? <div className="mt-0.5 text-sm text-muted">Week {week}</div> : null}
+                </div>
+                {mode === 'app' ? (
+                  <a
+                    href="/app/plan"
+                    className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                  >
+                    View →
+                  </a>
+                ) : null}
+              </div>
+            </Card>
+          ) : (
+            <EmptyState>No active plan.</EmptyState>
+          )}
+        </section>
+      </Item>
+
+      <Item>
+        <section>
+          <SectionHeader>Recent sessions</SectionHeader>
+          {logs.length === 0 ? (
+            <EmptyState>No sessions logged yet.</EmptyState>
+          ) : (
+            <ul className="border border-border bg-surface">
+              {logs.slice(0, 12).map((log) => {
+                const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
+                return (
+                  <li
+                    key={log.id}
+                    className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-b-0"
+                    style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
+                  >
+                    <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">
+                      {formatDate(log.log_date)}
+                    </div>
+                    <div className="flex flex-1 flex-wrap gap-1">
+                      {log.tags.length > 0 ? (
+                        log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
+                      ) : (
+                        <span className="text-sm text-muted">{log.activity_type ?? 'Session'}</span>
+                      )}
+                    </div>
+                    <SetShapeStrip data={log.data} className="shrink-0" />
+                    <div className="w-12 shrink-0 text-right text-sm tabular-nums text-muted">
+                      {formatDuration(log.total_seconds)}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </Item>
+
+      {mode === 'app' ? (
+        <Item>
+          <section className="mt-10">
+            <SectionHeader>Your data</SectionHeader>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="ghost" onClick={() => handleExport('json')} disabled={!!exporting}>
+                {exporting === 'json' ? 'Exporting…' : 'Export JSON'}
+              </Button>
+              <Button variant="ghost" onClick={() => handleExport('csv')} disabled={!!exporting}>
+                {exporting === 'csv' ? 'Exporting…' : 'Export CSV'}
+              </Button>
+              <a
+                href="/app/shares"
+                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              >
+                Share links →
+              </a>
+            </div>
+            <p className="mt-2 text-[0.7rem] text-muted">
+              JSON is the complete backup. CSV is a flattened per-set view for spreadsheets.
+            </p>
+          </section>
+        </Item>
+      ) : null}
+    </PageStagger>
   );
 }
