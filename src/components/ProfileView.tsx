@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getActivePlan, getAllLogs, getAllPlans, getCurrentProfile, getRecentLogs } from '@/lib/queries';
 import { signOut } from '@/lib/auth';
@@ -7,6 +7,7 @@ import { bestE1rm } from '@/lib/e1rm';
 import { weekFromDate } from '@/lib/week';
 import { formatDate, formatDuration, formatRound } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
+import { buildTimeline, DAY_NAMES, dayNameFromLabel, typeFromLabel } from '@/lib/timeline';
 import { toast } from '@/lib/toast';
 import {
   bundleToJson,
@@ -35,12 +36,103 @@ function topE1rm(logs: WorkoutLog[]): number | null {
   return best;
 }
 
+// Edge-fade mask for the horizontal scrollers (ribbon + day rail).
+const edgeFade: CSSProperties = {
+  WebkitMaskImage:
+    'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
+  maskImage:
+    'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
+};
+
+function ProgressTimeline({ plan, logs }: { plan: Plan; logs: WorkoutLog[] }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const points = useMemo(() => buildTimeline(plan, logs), [plan, logs]);
+  const todayIndex = points.findIndex((p) => p.isToday);
+  const anchorIndex = useMemo(() => {
+    for (let i = points.length - 1; i >= 0; i--) if (points[i].state === 'done') return i;
+    return todayIndex;
+  }, [points, todayIndex]);
+  const [peekIndex, setPeekIndex] = useState<number | null>(null);
+
+  // Right-align the scroll on the most recent logged day (or today) so upcoming peeks in.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || anchorIndex < 0) return;
+    const bw = 8; // 6px bar + 2px gap
+    el.scrollTo({ left: Math.max(0, anchorIndex * bw - el.clientWidth * 0.8), behavior: 'auto' });
+  }, [anchorIndex]);
+
+  // Outside-tap dismiss for the peek popover.
+  useEffect(() => {
+    if (peekIndex === null) return;
+    function onPointerDown(e: PointerEvent) {
+      const root = containerRef.current;
+      if (root && !root.contains(e.target as Node)) setPeekIndex(null);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [peekIndex]);
+
+  return (
+    <div ref={containerRef} className="relative border-b border-border pb-3">
+      <div className="mb-2 text-[0.6rem] uppercase tracking-[0.16em] text-muted">Plan progress</div>
+      <div ref={scrollRef} className="-mx-6 overflow-x-auto px-6" style={edgeFade}>
+        <div className="relative flex min-h-[44px] items-stretch gap-0.5">
+          {points.map((p, i) => {
+            const barStyle: CSSProperties = {};
+            if (p.state === 'done') {
+              barStyle.backgroundColor = p.color;
+            } else if (p.state === 'planned') {
+              barStyle.border = `1px solid color-mix(in srgb, ${p.color} 50%, transparent)`;
+              barStyle.backgroundColor = 'transparent';
+            } else {
+              barStyle.backgroundImage =
+                'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-muted) 35%, transparent) 0, color-mix(in srgb, var(--color-muted) 35%, transparent) 1px, transparent 1px, transparent 3px)';
+              barStyle.backgroundColor = 'color-mix(in srgb, var(--color-muted) 25%, transparent)';
+              barStyle.opacity = 0.55;
+            }
+            if (p.isToday) {
+              barStyle.outline = '1px solid var(--color-fg)';
+              barStyle.outlineOffset = '1px';
+            }
+            return (
+              <button
+                key={p.date + i}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPeekIndex((cur) => (cur === i ? null : i));
+                }}
+                onMouseEnter={() => setPeekIndex(i)}
+                onMouseLeave={() => setPeekIndex((cur) => (cur === i ? null : cur))}
+                className="relative flex h-11 shrink-0 cursor-pointer items-center justify-center"
+                aria-label={`${p.date} ${p.fullLabel}`}
+                title={`${p.fullLabel} · ${p.date}`}
+              >
+                <span className="block h-6 w-1.5" style={barStyle} aria-hidden />
+                {peekIndex === i && (
+                  <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 flex -translate-x-1/2 flex-col items-center gap-0.5 whitespace-nowrap bg-fg px-2 py-1 text-[0.6rem] uppercase tracking-[0.12em] text-bg">
+                    <span>{p.fullLabel}</span>
+                    <span className="text-[0.55rem] normal-case tracking-normal text-bg/60">{p.date}</span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const client = mode === 'showcase' ? supabasePublic : supabase;
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
+  const [allLogs, setAllLogs] = useState<WorkoutLog[]>([]);
   const [exporting, setExporting] = useState<'json' | 'csv' | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [previewDay, setPreviewDay] = useState<PlanDay | null>(null);
@@ -79,15 +171,17 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           return;
         }
       }
-      const [p, pl, lg] = await Promise.all([
+      const [p, pl, lg, all] = await Promise.all([
         getCurrentProfile(client),
         getActivePlan(client),
         getRecentLogs(30, client),
+        getAllLogs(client),
       ]);
       if (!active) return;
       setProfile(p);
       setPlan(pl);
       setLogs(lg);
+      setAllLogs(all);
       setLoading(false);
     })();
     return () => {
@@ -111,6 +205,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         },
         () => {
           getRecentLogs(30).then(setLogs);
+          getAllLogs().then(setAllLogs);
         },
       )
       .subscribe();
@@ -135,11 +230,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const totalSeconds = logs.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0);
   const top = topE1rm(logs);
   const week = plan ? weekFromDate(plan.start_date, new Date()) : null;
-  const doneThisWeek = new Set(
-    logs
-      .filter((l) => l.status === 'done' && l.week_number === week && l.day_key)
-      .map((l) => l.day_key as string),
-  );
+  const todayDayName = DAY_NAMES[new Date().getDay()];
 
   return (
     <>
@@ -202,25 +293,47 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
       {mode === 'app' && plan && plan.parsed.days.length > 0 ? (
         <Item>
           <section className="mb-10">
-            <SectionHeader>This week{week ? ` · Week ${week}` : ''}</SectionHeader>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {plan.parsed.days.map((d) => {
-                const done = doneThisWeek.has(d.dayKey);
-                return (
-                  <button
-                    key={d.dayKey}
-                    type="button"
-                    onClick={() => setPreviewDay(d)}
-                    className="flex min-w-[8.5rem] shrink-0 flex-col gap-2 border border-border bg-surface p-3 text-left transition-colors hover:border-fg"
-                    style={done ? { boxShadow: 'inset 3px 0 0 var(--color-fg)' } : undefined}
-                  >
-                    <span className="text-sm text-fg">{d.label}</span>
-                    <span className="text-[0.65rem] uppercase tracking-wider text-muted">
-                      {done ? 'Done' : `${d.exercises.length} moves`}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="mb-4 text-[0.7rem] uppercase tracking-[0.18em] text-muted">
+              {new Date().toDateString()} · Week {week ?? 1}
+            </div>
+            <ProgressTimeline plan={plan} logs={allLogs} />
+            <div className="mb-3 mt-6 flex items-baseline justify-between">
+              <div className="text-[0.65rem] uppercase tracking-[0.16em] text-muted">Pick a day</div>
+              <a
+                href="/app/plan"
+                className="text-[0.65rem] uppercase tracking-[0.14em] text-muted transition-colors hover:text-fg"
+              >
+                Plan overview →
+              </a>
+            </div>
+            <div className="-mx-6 overflow-x-auto px-6" style={edgeFade}>
+              <div className="flex gap-2 pb-2">
+                {plan.parsed.days.map((d) => {
+                  const isToday = dayNameFromLabel(d.label).toLowerCase() === todayDayName.toLowerCase();
+                  return (
+                    <button
+                      key={d.dayKey}
+                      type="button"
+                      onClick={() => setPreviewDay(d)}
+                      className={`min-w-[140px] shrink-0 border p-3 text-left transition-colors ${
+                        isToday ? 'border-fg bg-fg text-bg' : 'border-border hover:bg-elevated'
+                      }`}
+                    >
+                      <div className="truncate font-display text-base tracking-[-0.04em]">
+                        {typeFromLabel(d.label)}
+                      </div>
+                      <div
+                        className={`mt-1 text-[0.6rem] uppercase tracking-[0.14em] ${
+                          isToday ? 'text-bg/70' : 'text-muted'
+                        }`}
+                        aria-hidden
+                      >
+                        {isToday ? 'today' : ' '}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </section>
         </Item>
