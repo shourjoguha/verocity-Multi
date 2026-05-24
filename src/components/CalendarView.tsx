@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { getLogsInRange } from '@/lib/queries';
-import type { WorkoutLog } from '@/lib/types';
+import { getActivePlan, getLogsInRange } from '@/lib/queries';
+import type { Plan, WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
 import { formatDuration } from '@/lib/format';
 import { EmptyState } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
+import { AddSessionMenu } from '@/components/AddSessionMenu';
+import { LogQuickView } from '@/components/LogQuickView';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -29,6 +31,9 @@ export default function CalendarView() {
   });
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [addDate, setAddDate] = useState<string | null>(null);
+  const [quickLog, setQuickLog] = useState<WorkoutLog | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -37,6 +42,7 @@ export default function CalendarView() {
         return;
       }
       setReady(true);
+      getActivePlan().then(setPlan);
     });
   }, []);
 
@@ -82,6 +88,7 @@ export default function CalendarView() {
     setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + delta, 1)));
 
   return (
+    <>
     <PageStagger className="mx-auto max-w-3xl px-6 py-10">
       <Item>
         <header className="mb-8">
@@ -127,14 +134,30 @@ export default function CalendarView() {
             const key = ymd(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), day)));
             const sessions = byDay.get(key) ?? [];
             return (
-              <div key={key} className="aspect-square bg-surface p-1">
+              <div
+                key={key}
+                role="button"
+                tabIndex={0}
+                onClick={() => setAddDate(key)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setAddDate(key);
+                  }
+                }}
+                className="aspect-square cursor-pointer bg-surface p-1 transition-colors hover:bg-elevated focus:outline-none focus-visible:ring-1 focus-visible:ring-fg"
+              >
                 <div className="text-[0.65rem] tabular-nums text-muted">{day}</div>
                 <div className="mt-1 flex flex-col gap-[2px]">
                   {sessions.map((s) => (
-                    <a
+                    <button
                       key={s.id}
-                      href={`/app/session?id=${s.id}`}
-                      title={`${formatDuration(s.total_seconds)}`}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setQuickLog(s);
+                      }}
+                      title={formatDuration(s.total_seconds)}
                       className="h-1.5 w-full"
                       style={{ backgroundColor: tagColor(s.tags[0] ?? '') }}
                     />
@@ -154,5 +177,14 @@ export default function CalendarView() {
         </Item>
       ) : null}
     </PageStagger>
+
+      <AddSessionMenu
+        plan={plan}
+        date={addDate ?? undefined}
+        open={addDate !== null}
+        onClose={() => setAddDate(null)}
+      />
+      <LogQuickView log={quickLog} open={quickLog !== null} onClose={() => setQuickLog(null)} />
+    </>
   );
 }

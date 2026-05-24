@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getActivePlan, getAllLogs, getAllPlans, getCurrentProfile, getRecentLogs } from '@/lib/queries';
 import { signOut } from '@/lib/auth';
-import type { Plan, Profile, WorkoutLog } from '@/lib/types';
+import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
 import { bestE1rm } from '@/lib/e1rm';
 import { weekFromDate } from '@/lib/week';
 import { formatDate, formatDuration, formatRound } from '@/lib/format';
@@ -18,6 +18,9 @@ import { Button, Card, EmptyState, SectionHeader, StatCard, Tag } from '@/compon
 import { SetShapeStrip } from '@/components/SetShapeStrip';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
+import { DayPreviewDialog } from '@/components/DayPreviewDialog';
+import { AddSessionMenu } from '@/components/AddSessionMenu';
+import { LogQuickView } from '@/components/LogQuickView';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;
@@ -38,6 +41,9 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [exporting, setExporting] = useState<'json' | 'csv' | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [previewDay, setPreviewDay] = useState<PlanDay | null>(null);
+  const [quickLog, setQuickLog] = useState<WorkoutLog | null>(null);
 
   async function handleExport(format: 'json' | 'csv') {
     if (exporting) return;
@@ -101,8 +107,14 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const totalSeconds = logs.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0);
   const top = topE1rm(logs);
   const week = plan ? weekFromDate(plan.start_date, new Date()) : null;
+  const doneThisWeek = new Set(
+    logs
+      .filter((l) => l.status === 'done' && l.week_number === week && l.day_key)
+      .map((l) => l.day_key as string),
+  );
 
   return (
+    <>
     <PageStagger className="mx-auto max-w-3xl px-6 py-10">
       <Item>
         <header className="mb-10">
@@ -142,18 +154,46 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
       {mode === 'app' ? (
         <Item>
           <section className="mb-10 flex gap-3">
-            <a
-              href="/app/log"
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
               className="inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
             >
               Start workout
-            </a>
+            </button>
             <a
               href="/app/activity"
               className="inline-flex min-h-12 flex-1 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
             >
               Log activity
             </a>
+          </section>
+        </Item>
+      ) : null}
+
+      {mode === 'app' && plan && plan.parsed.days.length > 0 ? (
+        <Item>
+          <section className="mb-10">
+            <SectionHeader>This week{week ? ` · Week ${week}` : ''}</SectionHeader>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {plan.parsed.days.map((d) => {
+                const done = doneThisWeek.has(d.dayKey);
+                return (
+                  <button
+                    key={d.dayKey}
+                    type="button"
+                    onClick={() => setPreviewDay(d)}
+                    className="flex min-w-[8.5rem] shrink-0 flex-col gap-2 border border-border bg-surface p-3 text-left transition-colors hover:border-fg"
+                    style={done ? { boxShadow: 'inset 3px 0 0 var(--color-fg)' } : undefined}
+                  >
+                    <span className="text-sm text-fg">{d.label}</span>
+                    <span className="text-[0.65rem] uppercase tracking-wider text-muted">
+                      {done ? 'Done' : `${d.exercises.length} moves`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </section>
         </Item>
       ) : null}
@@ -193,12 +233,8 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             <ul className="border border-border bg-surface">
               {logs.slice(0, 12).map((log) => {
                 const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
-                return (
-                  <li
-                    key={log.id}
-                    className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-b-0"
-                    style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
-                  >
+                const inner = (
+                  <>
                     <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">
                       {formatDate(log.log_date)}
                     </div>
@@ -213,6 +249,27 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                     <div className="w-12 shrink-0 text-right text-sm tabular-nums text-muted">
                       {formatDuration(log.total_seconds)}
                     </div>
+                  </>
+                );
+                return (
+                  <li key={log.id} className="border-b border-border last:border-b-0">
+                    {mode === 'app' ? (
+                      <button
+                        type="button"
+                        onClick={() => setQuickLog(log)}
+                        className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-elevated"
+                        style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
+                      >
+                        {inner}
+                      </button>
+                    ) : (
+                      <div
+                        className="flex items-center gap-4 px-4 py-3"
+                        style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
+                      >
+                        {inner}
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -246,5 +303,19 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </Item>
       ) : null}
     </PageStagger>
+
+      {mode === 'app' ? (
+        <>
+          <AddSessionMenu plan={plan} open={addOpen} onClose={() => setAddOpen(false)} />
+          <DayPreviewDialog
+            day={previewDay}
+            week={week ?? 1}
+            open={previewDay !== null}
+            onClose={() => setPreviewDay(null)}
+          />
+          <LogQuickView log={quickLog} open={quickLog !== null} onClose={() => setQuickLog(null)} />
+        </>
+      ) : null}
+    </>
   );
 }
