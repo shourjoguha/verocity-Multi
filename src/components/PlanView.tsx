@@ -1,14 +1,24 @@
-import { getActivePlan } from '@/lib/queries';
+import { getActivePlan, getAllLogs } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
+import { flattenSets } from '@/lib/stats';
+import { e1rm } from '@/lib/e1rm';
+import { formatRound } from '@/lib/format';
 import { BLOCKS, type BlockKey } from '@/app.config';
 import { EmptyState, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
 export default function PlanView() {
-  const { data: plan, loading } = useAuthedQuery(() => getActivePlan());
+  const { data, loading } = useAuthedQuery(async () => {
+    const plan = await getActivePlan();
+    const logs = plan ? await getAllLogs() : [];
+    return { plan, logs };
+  });
 
   if (loading) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+
+  const plan = data?.plan ?? null;
+  const logs = data?.logs ?? [];
 
   if (!plan) {
     return (
@@ -41,6 +51,27 @@ export default function PlanView() {
 
   const blockForWeek = (w: number): BlockKey | null =>
     parsed.blocks.find((b) => w >= b.startWeek && w <= b.endWeek)?.type ?? null;
+
+  // Best actual set per (movement, week) from this plan's done logs, plus the
+  // most recent completed week — to overlay real performance onto the plan grid.
+  const doneLogs = logs.filter(
+    (l) => l.plan_id === plan.id && l.status === 'done' && l.week_number != null,
+  );
+  const lastCompletedWeek = doneLogs.reduce((m, l) => Math.max(m, l.week_number ?? 0), 0) || null;
+  const actualBest = new Map<string, { e1rm: number; label: string }>();
+  for (const log of doneLogs) {
+    const wk = log.week_number as number;
+    for (const s of flattenSets(log)) {
+      if (s.weight == null || s.reps == null) continue;
+      const est = e1rm(s.weight, s.reps);
+      if (est == null) continue;
+      const key = `${s.movement.toLowerCase()}|${wk}`;
+      const cur = actualBest.get(key);
+      if (!cur || est > cur.e1rm) {
+        actualBest.set(key, { e1rm: est, label: `${formatRound(s.weight)}×${s.reps}` });
+      }
+    }
+  }
 
   return (
     <PageStagger className="mx-auto max-w-5xl px-6 py-10">
@@ -109,7 +140,9 @@ export default function PlanView() {
                     {weeks.map((w) => (
                       <th
                         key={w}
-                        className="border-b border-l border-border px-3 py-2 text-center font-medium"
+                        className={`border-b border-l border-border px-3 py-2 text-center font-medium ${
+                          w === lastCompletedWeek ? 'bg-elevated text-fg' : ''
+                        }`}
                       >
                         <span
                           className="mx-auto mb-1 block h-1 w-4"
@@ -130,14 +163,20 @@ export default function PlanView() {
                       <td className="sticky left-0 z-10 bg-surface px-3 py-2 capitalize text-fg">
                         {ex.movement}
                       </td>
-                      {weeks.map((w) => (
-                        <td
-                          key={w}
-                          className="border-l border-border px-3 py-2 text-center tabular-nums text-subtle"
-                        >
-                          {ex.plannedByWeek[w] ?? '·'}
-                        </td>
-                      ))}
+                      {weeks.map((w) => {
+                        const actual = actualBest.get(`${ex.movement.toLowerCase()}|${w}`);
+                        return (
+                          <td
+                            key={w}
+                            title={actual ? `Best actual · W${w}` : undefined}
+                            className={`border-l border-border px-3 py-2 text-center tabular-nums ${
+                              w === lastCompletedWeek ? 'bg-elevated' : ''
+                            } ${actual ? 'font-medium text-fg' : 'text-subtle'}`}
+                          >
+                            {actual ? actual.label : (ex.plannedByWeek[w] ?? '·')}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
