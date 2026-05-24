@@ -36,8 +36,10 @@ Full spec: `docs/SPEC.md`.
   island — avoid many tiny islands.
 - **Preserve the JSONB contracts** (`plans.parsed` = ParsedPlan, `workout_logs.data`
   = LogDocument) so the original's logic ports cleanly.
-- **Design tokens only** (HSL); no raw colors in components. Swiss-minimalist
-  identity: Clash Display + Satoshi, hairlines, tabular numbers, sharp corners, dark.
+- **Design tokens only** (HSL); no raw colors in components. **Light editorial**
+  identity per the design spec + reference screenshots (these take precedence on
+  aesthetics): Clash Display + Satoshi, monochrome `#f2f2f2`/`#111111`, hairlines,
+  tabular numbers, the typographic Echo Stack, bold CSS-first motion.
 - **Signup is invite-gated** (caps < 100), redeemed server-side. **AI is deferred** —
   don't build it without an explicit go-ahead.
 - **TypeScript strict.** Domain config in `app.config.ts`; types in `lib/types.ts`.

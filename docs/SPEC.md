@@ -308,7 +308,9 @@ Single source of truth for blocks/sections, metrics, RPE, timers, activity tags
 
 Keep the **Swiss-minimalist typographic identity** (it's distinctive and ages
 well): Clash Display + Satoshi, monochrome HSL tokens, hairline borders, sharp
-corners, tabular numbers, uppercase tracking, the "echo" headline, dark mode.
+corners, tabular numbers, uppercase tracking, the typographic **Echo Stack**, and
+bold CSS-first motion. **Light** editorial palette (`#f2f2f2` bg / `#111111` fg);
+the provided design spec + reference screenshots take precedence on aesthetics.
 
 Elevate via:
 - **Astro View Transitions** for cheap, native page-to-page motion.

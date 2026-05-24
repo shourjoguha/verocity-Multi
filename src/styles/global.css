@@ -1,32 +1,45 @@
 @import "tailwindcss";
 
-/* Design tokens — HSL only (CLAUDE.md: design tokens only, no raw colors).
-   Swiss-minimalist dark identity: monochrome base, hairlines, sharp corners,
-   tabular numbers. Activity-tag accent colors live in app.config.ts. */
+/* Design tokens — light editorial system. Per the provided design spec +
+   reference screenshots (which take precedence on aesthetics), this supersedes
+   the prior dark identity. Swiss luxury-brutalist: heavy Clash Display + Satoshi,
+   a strictly monochrome palette, hairlines, sharp corners, tabular numbers, the
+   typographic Echo Stack. Data-viz accents (activity tags / training blocks)
+   still come from app.config.ts as HSL. */
 @theme {
-  /* Monochrome neutral scale */
-  --color-bg: hsl(0 0% 4%);
-  --color-surface: hsl(0 0% 7%);
-  --color-elevated: hsl(0 0% 10%);
-  --color-border: hsl(0 0% 16%);
-  --color-muted: hsl(0 0% 42%);
-  --color-subtle: hsl(0 0% 64%);
-  --color-fg: hsl(0 0% 96%);
+  /* Monochrome light scale */
+  --color-bg: hsl(0 0% 95%);            /* #f2f2f2 */
+  --color-surface: hsl(0 0% 100%);      /* #ffffff */
+  --color-elevated: hsl(0 0% 90%);      /* tracks / hover fills */
+  --color-border: hsl(0 0% 12% / 0.1);  /* #1e1e1e @ 10% — hairline */
+  --color-muted: hsl(0 0% 71%);         /* #b6b5b5 */
+  --color-subtle: hsl(0 0% 51%);        /* #838282 */
+  --color-fg: hsl(0 0% 7%);             /* #111111 */
 
-  /* Single signal accent, used sparingly */
-  --color-accent: hsl(8 90% 58%);
+  /* Monochrome signal (neutral per spec): selected/active = ink */
+  --color-accent: hsl(0 0% 7%);
   --color-accent-fg: hsl(0 0% 100%);
 
-  /* Type — Clash Display (headlines) + Satoshi (body) */
+  /* Echo-stack background layers (#bfbfbf → #d9d9d9) */
+  --color-echo-1: hsl(0 0% 75%);
+  --color-echo-2: hsl(0 0% 79%);
+  --color-echo-3: hsl(0 0% 82%);
+  --color-echo-4: hsl(0 0% 85%);
+
+  /* Type — Clash Display (headlines) + Satoshi (body) + serif for editorial flair */
   --font-display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: ui-serif, Georgia, "Times New Roman", serif;
 
-  /* Sharp corners */
+  /* Motion */
+  --ease-editorial: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Sharp corners by default (pills opt in per-component) */
   --radius-none: 0px;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -34,6 +47,7 @@ body {
   background-color: var(--color-bg);
   color: var(--color-fg);
   font-family: var(--font-sans);
+  font-weight: 500; /* Satoshi medium (spec) */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -50,7 +64,7 @@ body {
 
 /* Visible focus for keyboard users (a11y) */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-fg);
   outline-offset: 2px;
 }
 
@@ -68,6 +82,88 @@ body {
   left: 0;
 }
 
+/* ---- Typographic Echo Stack (see EchoText.tsx) ---- */
+.echo {
+  position: relative;
+  display: inline-block;
+}
+.echo > .echo-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform: translate(var(--echo-dx), var(--echo-dx));
+}
+.echo > .echo-top {
+  position: relative;
+  color: var(--color-fg);
+}
+@keyframes echo-fan {
+  from {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate(var(--echo-dx), var(--echo-dx));
+  }
+}
+@keyframes clip-in-x {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.echo[data-animate="true"] > .echo-layer {
+  animation: echo-fan 0.7s var(--ease-editorial) both;
+}
+.echo[data-animate="true"] > .echo-layer:nth-child(1) {
+  animation-delay: 0.04s;
+}
+.echo[data-animate="true"] > .echo-layer:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.echo[data-animate="true"] > .echo-layer:nth-child(3) {
+  animation-delay: 0.12s;
+}
+.echo[data-animate="true"] > .echo-layer:nth-child(4) {
+  animation-delay: 0.16s;
+}
+.echo[data-animate="true"] > .echo-top {
+  animation: clip-in-x 0.7s var(--ease-editorial) both;
+}
+
+/* ---- Motion primitives ---- */
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(1.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.reveal {
+  animation: reveal-up 0.7s var(--ease-editorial) both;
+}
+.reveal-2 {
+  animation: reveal-up 0.7s var(--ease-editorial) 0.12s both;
+}
+.reveal-3 {
+  animation: reveal-up 0.7s var(--ease-editorial) 0.24s both;
+}
+
+/* Scroll-driven reveal (progressive enhancement; zero JS) */
+@supports (animation-timeline: view()) {
+  [data-reveal] {
+    animation: reveal-up 0.7s var(--ease-editorial) both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 25%;
+  }
+}
+
 /* Honor reduced-motion: neutralize view transitions and animations */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
@@ -79,6 +175,10 @@ body {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+  }
+  [data-reveal] {
+    animation-timeline: auto;
   }
 }

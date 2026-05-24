@@ -1,30 +1,100 @@
 ---
 import Base from '@/layouts/Base.astro';
+import { EchoText } from '@/components/EchoText';
+
+const navLinks = [
+  { href: '/showcase', label: 'Showcase' },
+  { href: '/login', label: 'Log in' },
+];
 ---
 
 <Base title="Verocity">
-  <main class="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center px-6">
-    <p class="mb-4 text-xs uppercase tracking-[0.3em] text-muted">Strength · Training · Log</p>
-    <h1
-      class="font-display text-6xl font-semibold uppercase leading-[0.95] tracking-tight text-fg md:text-8xl"
-    >
-      Verocity
-    </h1>
-    <p class="mt-6 max-w-md text-subtle">
-      A faster, multi-profile training logger. Private by default, with a read-only public
-      showcase. Built on Astro islands and Supabase.
-    </p>
-    <div class="mt-10 flex items-center gap-3 text-sm">
-      <a
-        href="/app"
-        class="inline-flex min-h-11 items-center bg-fg px-5 uppercase tracking-wider text-bg hover:bg-subtle"
-        >Open app</a
-      >
-      <a
-        href="/showcase"
-        class="inline-flex min-h-11 items-center border border-border px-5 uppercase tracking-wider text-fg hover:border-subtle"
-        >View showcase</a
-      >
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="sticky top-0 z-50 h-20 border-b border-border bg-bg/90 backdrop-blur-md">
+    <div class="mx-auto flex h-full max-w-6xl items-center justify-between px-6">
+      <a href="/" class="font-display text-lg font-semibold uppercase tracking-tight text-fg">Verocity</a>
+      <nav class="flex items-center gap-7 text-sm uppercase tracking-wider" aria-label="Primary">
+        {
+          navLinks.map((l) => (
+            <a href={l.href} class="hidden text-fg transition-colors duration-150 hover:text-muted sm:inline">
+              {l.label}
+            </a>
+          ))
+        }
+        <a
+          href="/app"
+          class="inline-flex h-10 items-center rounded-full border border-fg px-5 text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
+          >Open app</a
+        >
+      </nav>
     </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero: typographic Echo Stack -->
+    <section
+      class="flex min-h-[86vh] flex-col items-center justify-center overflow-x-hidden px-6 text-center"
+    >
+      <p class="reveal mb-7 text-xs uppercase tracking-[0.45em] text-subtle">Strength · Training · Log</p>
+      <EchoText
+        text="VEROCITY"
+        as="h1"
+        animate={true}
+        className="whitespace-nowrap font-display text-[13vw] font-bold leading-[0.9] tracking-[-0.05em] text-fg md:text-[10rem]"
+      />
+      <p class="reveal-2 mt-8 max-w-xl text-balance text-base text-subtle md:text-lg">
+        A faster, multi-profile training logger. Private by default, with a read-only public
+        showcase. Built on Astro islands and Supabase.
+      </p>
+      <div class="reveal-3 mt-10 flex flex-wrap items-center justify-center gap-3">
+        <a
+          href="/app"
+          class="inline-flex h-12 items-center rounded-full bg-fg px-7 text-sm uppercase tracking-wider text-bg transition-transform duration-200 hover:scale-[1.03]"
+          >Open app</a
+        >
+        <a
+          href="/showcase"
+          class="inline-flex h-12 items-center rounded-full border border-fg px-7 text-sm uppercase tracking-wider text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
+          >View showcase</a
+        >
+      </div>
+    </section>
+
+    <!-- Philosophy / narrative -->
+    <section class="mx-auto max-w-5xl px-6 pb-32">
+      <div class="mx-auto mb-14 h-16 w-px bg-fg/15" aria-hidden="true"></div>
+      <blockquote
+        data-reveal
+        class="mx-auto max-w-3xl text-center font-display text-3xl font-semibold leading-[1.05] tracking-tight text-fg md:text-5xl"
+      >
+        Log the <span class="font-serif font-normal italic">work</span>. Watch the
+        <span class="font-serif font-normal italic">trend</span>.
+      </blockquote>
+
+      <div class="mt-20 grid gap-10 md:grid-cols-3 md:gap-8">
+        <div data-reveal>
+          <h3 class="font-display text-xl font-semibold uppercase tracking-tight text-fg">Private by default</h3>
+          <p class="mt-3 text-subtle">
+            Every profile reads and writes only its own rows. The database — not the UI — is the
+            security boundary.
+          </p>
+        </div>
+        <div data-reveal>
+          <h3 class="font-display text-xl font-semibold uppercase tracking-tight text-fg">Public showcase</h3>
+          <p class="mt-3 text-subtle">
+            One read-only profile, served over an anon key with select-only access. A portfolio of
+            the work, nothing more.
+          </p>
+        </div>
+        <div data-reveal>
+          <h3 class="font-display text-xl font-semibold uppercase tracking-tight text-fg">Islands, not a SPA</h3>
+          <p class="mt-3 text-subtle">
+            Static pages with React hydrated only where you interact. Fast, light, and direct to
+            Supabase.
+          </p>
+        </div>
+      </div>
+    </section>
   </main>
 </Base>
