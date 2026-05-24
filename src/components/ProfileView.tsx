@@ -44,6 +44,11 @@ const edgeFade: CSSProperties = {
     'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
 };
 
+// Ribbon sizing: aim for ~24 day-bars visible at once; the rest scroll.
+const VISIBLE_BARS = 24;
+const BAR_GAP = 3;
+const BAR_HEIGHT = 40;
+
 function ProgressTimeline({ plan, logs }: { plan: Plan; logs: WorkoutLog[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -54,14 +59,26 @@ function ProgressTimeline({ plan, logs }: { plan: Plan; logs: WorkoutLog[] }) {
     return todayIndex;
   }, [points, todayIndex]);
   const [peekIndex, setPeekIndex] = useState<number | null>(null);
+  const [barW, setBarW] = useState(16);
+
+  // Size each bar so ~VISIBLE_BARS fit the visible width, recomputing on resize.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setBarW(Math.max(8, Math.round(el.clientWidth / VISIBLE_BARS) - BAR_GAP));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Right-align the scroll on the most recent logged day (or today) so upcoming peeks in.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || anchorIndex < 0) return;
-    const bw = 8; // 6px bar + 2px gap
-    el.scrollTo({ left: Math.max(0, anchorIndex * bw - el.clientWidth * 0.8), behavior: 'auto' });
-  }, [anchorIndex]);
+    const pitch = barW + BAR_GAP;
+    el.scrollTo({ left: Math.max(0, anchorIndex * pitch - el.clientWidth * 0.8), behavior: 'auto' });
+  }, [anchorIndex, barW]);
 
   // Outside-tap dismiss for the peek popover.
   useEffect(() => {
@@ -78,23 +95,21 @@ function ProgressTimeline({ plan, logs }: { plan: Plan; logs: WorkoutLog[] }) {
     <div ref={containerRef} className="relative border-b border-border pb-3">
       <div className="mb-2 text-[0.6rem] uppercase tracking-[0.16em] text-muted">Plan progress</div>
       <div ref={scrollRef} className="-mx-6 overflow-x-auto px-6" style={edgeFade}>
-        <div className="relative flex min-h-[44px] items-stretch gap-0.5">
+        <div className="relative flex items-end" style={{ gap: `${BAR_GAP}px`, minHeight: BAR_HEIGHT }}>
           {points.map((p, i) => {
-            const barStyle: CSSProperties = {};
+            const barStyle: CSSProperties = { width: barW, height: BAR_HEIGHT };
             if (p.state === 'done') {
               barStyle.backgroundColor = p.color;
             } else if (p.state === 'planned') {
-              barStyle.border = `1px solid color-mix(in srgb, ${p.color} 50%, transparent)`;
-              barStyle.backgroundColor = 'transparent';
+              barStyle.border = `1px solid color-mix(in srgb, ${p.color} 55%, transparent)`;
+              barStyle.backgroundColor = `color-mix(in srgb, ${p.color} 12%, transparent)`;
             } else {
               barStyle.backgroundImage =
-                'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-muted) 35%, transparent) 0, color-mix(in srgb, var(--color-muted) 35%, transparent) 1px, transparent 1px, transparent 3px)';
-              barStyle.backgroundColor = 'color-mix(in srgb, var(--color-muted) 25%, transparent)';
-              barStyle.opacity = 0.55;
+                'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-muted) 40%, transparent) 0, color-mix(in srgb, var(--color-muted) 40%, transparent) 1.5px, transparent 1.5px, transparent 4px)';
+              barStyle.backgroundColor = 'color-mix(in srgb, var(--color-muted) 22%, transparent)';
             }
             if (p.isToday) {
-              barStyle.outline = '1px solid var(--color-fg)';
-              barStyle.outlineOffset = '1px';
+              barStyle.boxShadow = 'inset 0 0 0 2px var(--color-fg)';
             }
             return (
               <button
@@ -106,11 +121,11 @@ function ProgressTimeline({ plan, logs }: { plan: Plan; logs: WorkoutLog[] }) {
                 }}
                 onMouseEnter={() => setPeekIndex(i)}
                 onMouseLeave={() => setPeekIndex((cur) => (cur === i ? null : cur))}
-                className="relative flex h-11 shrink-0 cursor-pointer items-center justify-center"
+                className="relative flex shrink-0 cursor-pointer items-end justify-center"
                 aria-label={`${p.date} ${p.fullLabel}`}
                 title={`${p.fullLabel} · ${p.date}`}
               >
-                <span className="block h-6 w-1.5" style={barStyle} aria-hidden />
+                <span className="block" style={barStyle} aria-hidden />
                 {peekIndex === i && (
                   <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 flex -translate-x-1/2 flex-col items-center gap-0.5 whitespace-nowrap bg-fg px-2 py-1 text-[0.6rem] uppercase tracking-[0.12em] text-bg">
                     <span>{p.fullLabel}</span>
