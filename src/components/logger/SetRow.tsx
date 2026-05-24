@@ -12,12 +12,14 @@ export function SetRow({
   onPatch,
   onToggle,
   onRemove,
+  onCloneForward,
 }: {
   metric: MetricKey;
   set: LogSet;
   onPatch: (patch: Partial<SetActual>) => void;
   onToggle: () => void;
   onRemove: () => void;
+  onCloneForward?: () => void;
 }) {
   const a = set.actual;
 
@@ -92,6 +94,17 @@ export function SetRow({
       </div>
 
       <div className="ml-auto flex items-center gap-1">
+        {a.completed && onCloneForward ? (
+          <button
+            type="button"
+            onClick={onCloneForward}
+            className="flex h-11 w-9 items-center justify-center border border-border text-muted hover:text-fg"
+            aria-label="Copy to next set"
+            title="Copy to next set"
+          >
+            ↓
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onRemove}
