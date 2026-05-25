@@ -16,13 +16,29 @@ import {
   exportFilename,
   logsToCsv,
 } from '@/lib/exportData';
-import { Button, Card, EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
+import { Card, EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { DayPreviewDialog } from '@/components/DayPreviewDialog';
 import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
+import { Modal } from '@/components/ui/Modal';
+
+const DownloadIcon = () => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="square"
+    aria-hidden
+  >
+    <path d="M12 3v12M7 10l5 5 5-5M4 20h16" />
+  </svg>
+);
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;
@@ -44,9 +60,9 @@ const edgeFade: CSSProperties = {
     'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
 };
 
-// Ribbon sizing: aim for ~24 day-bars visible at once; the rest scroll.
-const VISIBLE_BARS = 24;
-const BAR_GAP = 3;
+// Ribbon sizing: thin day-bars, ~36 visible at once; the rest scroll.
+const VISIBLE_BARS = 36;
+const BAR_GAP = 2;
 const BAR_HEIGHT = 40;
 
 function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }) {
@@ -65,7 +81,7 @@ function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const measure = () => setBarW(Math.max(8, Math.round(el.clientWidth / VISIBLE_BARS) - BAR_GAP));
+    const measure = () => setBarW(Math.max(6, Math.round(el.clientWidth / VISIBLE_BARS) - BAR_GAP));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -149,6 +165,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [allLogs, setAllLogs] = useState<WorkoutLog[]>([]);
   const [exporting, setExporting] = useState<'json' | 'csv' | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [previewDay, setPreviewDay] = useState<PlanDay | null>(null);
   const [quickLog, setQuickLog] = useState<WorkoutLog | null>(null);
@@ -447,12 +464,15 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           <section className="mt-10">
             <SectionHeader>Your data</SectionHeader>
             <div className="flex flex-wrap items-center gap-3">
-              <Button variant="ghost" onClick={() => handleExport('json')} disabled={!!exporting}>
-                {exporting === 'json' ? 'Exporting…' : 'Export JSON'}
-              </Button>
-              <Button variant="ghost" onClick={() => handleExport('csv')} disabled={!!exporting}>
-                {exporting === 'csv' ? 'Exporting…' : 'Export CSV'}
-              </Button>
+              <button
+                type="button"
+                onClick={() => setExportMenuOpen(true)}
+                aria-label="Export data"
+                title="Export data"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center border border-border text-fg transition-colors hover:border-fg"
+              >
+                <DownloadIcon />
+              </button>
               <a
                 href="/app/shares"
                 className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
@@ -478,6 +498,34 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             onClose={() => setPreviewDay(null)}
           />
           <LogQuickView log={quickLog} open={quickLog !== null} onClose={() => setQuickLog(null)} />
+          <Modal open={exportMenuOpen} onClose={() => setExportMenuOpen(false)} title="Export data">
+            <div className="flex flex-col">
+              <button
+                type="button"
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  handleExport('json');
+                }}
+                disabled={!!exporting}
+                className="flex items-center justify-between border-b border-border px-4 py-4 text-left transition-colors hover:bg-elevated disabled:opacity-40"
+              >
+                <span className="text-fg">Download JSON</span>
+                <span className="text-[0.65rem] uppercase tracking-wider text-muted">complete backup</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  handleExport('csv');
+                }}
+                disabled={!!exporting}
+                className="flex items-center justify-between px-4 py-4 text-left transition-colors hover:bg-elevated disabled:opacity-40"
+              >
+                <span className="text-fg">Download CSV</span>
+                <span className="text-[0.65rem] uppercase tracking-wider text-muted">per-set rows</span>
+              </button>
+            </div>
+          </Modal>
         </>
       ) : null}
     </>
