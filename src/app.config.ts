@@ -58,14 +58,16 @@ export const TIMERS = {
   restPresets: [60, 90, 120, 180, 300],
 } as const;
 
-// Activity tags with accent colors (HSL) — used sparingly as accent (SPEC §11).
+// Activity tags with accent colors (HSL) — matte blue/green/purple/pink palette
+// (no red/orange); "strength" leads with a matte cyber-pink. Used sparingly as
+// accent (SPEC §11) on the progress ribbon and stats heatmap.
 export const ACTIVITY_TAGS = {
-  strength: { label: 'Strength', color: 'hsl(8 90% 60%)' },
-  hypertrophy: { label: 'Hypertrophy', color: 'hsl(280 60% 65%)' },
-  conditioning: { label: 'Conditioning', color: 'hsl(38 92% 60%)' },
-  endurance: { label: 'Endurance', color: 'hsl(150 50% 55%)' },
-  skill: { label: 'Skill', color: 'hsl(200 70% 60%)' },
-  recovery: { label: 'Recovery', color: 'hsl(210 9% 64%)' },
+  strength: { label: 'Strength', color: 'hsl(330 70% 62%)' },
+  hypertrophy: { label: 'Hypertrophy', color: 'hsl(272 48% 62%)' },
+  conditioning: { label: 'Conditioning', color: 'hsl(208 62% 56%)' },
+  endurance: { label: 'Endurance', color: 'hsl(152 44% 48%)' },
+  skill: { label: 'Skill', color: 'hsl(188 56% 48%)' },
+  recovery: { label: 'Recovery', color: 'hsl(250 32% 66%)' },
 } as const;
 
 // Quick-pick activity types for the lightweight non-strength ActivityLogger.
