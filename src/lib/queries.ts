@@ -34,6 +34,7 @@ export async function getRecentLogs(
   const { data } = await client
     .from('workout_logs')
     .select('*')
+    .neq('status', 'cancelled')
     .order('log_date', { ascending: false })
     .limit(limit);
   return (data as WorkoutLog[]) ?? [];
@@ -47,6 +48,7 @@ export async function getLogsInRange(
   const { data } = await client
     .from('workout_logs')
     .select('*')
+    .neq('status', 'cancelled')
     .gte('log_date', from)
     .lte('log_date', to)
     .order('log_date', { ascending: true });
