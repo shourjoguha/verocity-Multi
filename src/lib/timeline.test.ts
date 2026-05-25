@@ -108,14 +108,14 @@ describe('buildTimeline', () => {
     const log = makeLog({
       log_date: logDate,
       status: 'done',
-      tags: ['conditioning'],
+      tags: ['sport'],
       day_key: 'monday-lower-a-squat-dominant',
     });
 
     const points = buildTimeline(plan, [log], NOW);
     const p = points.find((x) => x.date === logDate)!;
     expect(p.state).toBe('done');
-    expect(p.color).toBe(tagColor('conditioning'));
+    expect(p.color).toBe(tagColor('sport'));
     expect(p.fullLabel).toBe('Lower A (Squat-Dominant)');
   });
 

@@ -10,7 +10,9 @@ export function tagColor(tag: string): string {
 // ("planned") days on the plan-progress ribbon, where there is no log to color by.
 export function dayTagFromLabel(label: string): ActivityTagKey {
   const t = label.toLowerCase();
-  if (/recover|rest|mobility|deload/.test(t)) return 'recovery';
-  if (/condition|cardio|zone|metcon|endurance|run|row|bike|swim/.test(t)) return 'conditioning';
+  if (/recover|rest|deload/.test(t)) return 'recovery';
+  if (/mobility|stretch|yoga|cooldown|cool-down/.test(t)) return 'mobility';
+  if (/sport|game|match|skill|play/.test(t)) return 'sport';
+  if (/endurance|condition|cardio|zone|metcon|run|row|bike|swim|jog/.test(t)) return 'endurance';
   return 'strength';
 }

@@ -38,46 +38,60 @@ const isActive = (href: string) => (href === '/app' ? path === '/app' : path.sta
         <span class="font-display text-lg font-semibold uppercase tracking-tight">Verocity</span>
       </button>
     </div>
-    <nav id="nav-menu" hidden class="border-t border-border bg-bg" aria-label="Primary">
-      <div class="mx-auto max-w-3xl px-6 py-2">
-        {
-          links.map((l) => (
-            <a
-              href={l.href}
-              aria-current={isActive(l.href) ? 'page' : undefined}
-              class:list={[
-                'block py-2 text-sm uppercase tracking-wider transition-colors duration-150 hover:text-fg',
-                isActive(l.href) ? 'text-fg' : 'text-muted',
-              ]}
-            >
-              {l.label}
-            </a>
-          ))
-        }
-      </div>
-    </nav>
   </header>
+
+  <div id="nav-backdrop" class="fixed inset-0 z-[60] hidden"></div>
+
+  <nav
+    id="nav-menu"
+    aria-label="Primary"
+    class="fixed left-0 top-0 z-[70] h-dvh w-64 -translate-x-full border-r border-border bg-bg/90 shadow-2xl backdrop-blur-xl transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)]"
+  >
+    <div class="flex h-16 items-center px-6">
+      <span class="font-display text-lg font-semibold uppercase tracking-tight text-fg">Verocity</span>
+    </div>
+    <div class="px-3 py-2">
+      {
+        links.map((l) => (
+          <a
+            href={l.href}
+            data-nav-link
+            aria-current={isActive(l.href) ? 'page' : undefined}
+            class:list={[
+              'block px-3 py-2.5 text-sm uppercase tracking-wider transition-colors duration-150 hover:text-fg',
+              isActive(l.href) ? 'text-fg' : 'text-muted',
+            ]}
+          >
+            {l.label}
+          </a>
+        ))
+      }
+    </div>
+  </nav>
+
   <main id="main"><slot /></main>
 </Base>
 
 <script>
   const toggle = document.getElementById('nav-toggle');
   const menu = document.getElementById('nav-menu');
-  if (toggle && menu) {
+  const backdrop = document.getElementById('nav-backdrop');
+  if (toggle && menu && backdrop) {
     let open = false;
     const setOpen = (next: boolean) => {
       open = next;
       toggle.setAttribute('aria-expanded', String(next));
-      menu.hidden = !next;
+      menu.classList.toggle('-translate-x-full', !next);
+      backdrop.classList.toggle('hidden', !next);
     };
     toggle.addEventListener('click', (e) => {
       e.stopPropagation();
       setOpen(!open);
     });
-    document.addEventListener('click', (e) => {
-      const target = e.target as Node;
-      if (open && !menu.contains(target) && !toggle.contains(target)) setOpen(false);
-    });
+    backdrop.addEventListener('click', () => setOpen(false));
+    menu.querySelectorAll('[data-nav-link]').forEach((link) =>
+      link.addEventListener('click', () => setOpen(false)),
+    );
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') setOpen(false);
     });
