@@ -1,4 +1,6 @@
-// Integer stepper for reps (and other count metrics).
+import { EditableNumber } from '@/components/logger/EditableNumber';
+
+// Integer stepper for reps (and other count metrics). Tap −/+ or the number to type.
 export function RepsStepper({
   value,
   onChange,
@@ -20,7 +22,13 @@ export function RepsStepper({
         −
       </button>
       <div className="min-w-14 text-center">
-        <span className="font-display text-3xl tabular-nums text-fg">{value || 0}</span>
+        <EditableNumber
+          value={value}
+          onCommit={(v) => onChange(clamp(v))}
+          clampParse={clamp}
+          ariaLabel={label}
+          className="font-display text-3xl tabular-nums text-fg"
+        />
         <div className="text-[0.6rem] uppercase tracking-wider text-muted">{label}</div>
       </div>
       <button

@@ -3,6 +3,7 @@ import type { LogSet, SetActual } from '@/lib/types';
 import { WeightWheel } from '@/components/logger/WeightWheel';
 import { RepsStepper } from '@/components/logger/RepsStepper';
 import { MetricStepper } from '@/components/logger/MetricStepper';
+import { EditableNumber } from '@/components/logger/EditableNumber';
 import { haptic } from '@/lib/haptics';
 
 // One set row. The numeric inputs shown follow the item's primary metric
@@ -62,39 +63,49 @@ export function SetRow({
 
   return (
     <div
-      className={`flex flex-wrap items-center gap-3 border-l-2 pl-3 ${
+      className={`flex flex-wrap items-stretch gap-2 border-l-2 pl-3 ${
         a.completed ? 'border-accent' : 'border-border'
       }`}
     >
       {set.planned ? (
-        <span className="w-12 shrink-0 text-[0.7rem] uppercase tracking-wider text-muted">
+        <span className="flex w-12 shrink-0 items-center text-[0.7rem] uppercase tracking-wider text-muted">
           {set.planned}
         </span>
       ) : null}
 
       {inputs()}
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-stretch gap-1">
         <button
           type="button"
           onClick={() => onPatch({ rpe: Math.max(RPE.min, (a.rpe ?? RPE.min) - RPE.step) })}
-          className="flex h-9 w-9 items-center justify-center border border-border text-fg"
+          className="flex min-h-11 w-11 items-center justify-center border border-border text-fg"
           aria-label="Lower RPE"
         >
           −
         </button>
-        <span className="w-12 text-center text-sm tabular-nums text-subtle">@{a.rpe ?? '—'}</span>
+        <div className="flex w-12 items-center justify-center">
+          <EditableNumber
+            value={a.rpe ?? RPE.min}
+            onCommit={(v) => onPatch({ rpe: v })}
+            clampParse={(n) => Math.min(RPE.max, Math.max(RPE.min, Math.round(n / RPE.step) * RPE.step))}
+            ariaLabel="RPE"
+            className="text-sm tabular-nums text-subtle"
+          >
+            {() => <>@{a.rpe ?? '—'}</>}
+          </EditableNumber>
+        </div>
         <button
           type="button"
           onClick={() => onPatch({ rpe: Math.min(RPE.max, (a.rpe ?? RPE.min) + RPE.step) })}
-          className="flex h-9 w-9 items-center justify-center border border-border text-fg"
+          className="flex min-h-11 w-11 items-center justify-center border border-border text-fg"
           aria-label="Raise RPE"
         >
           +
         </button>
       </div>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-stretch gap-1">
         {a.completed && onCloneForward ? (
           <button
             type="button"
@@ -102,7 +113,7 @@ export function SetRow({
               haptic(15);
               onCloneForward?.();
             }}
-            className="flex h-11 w-9 items-center justify-center border border-border text-muted hover:text-fg"
+            className="flex min-h-11 w-11 items-center justify-center border border-border text-muted hover:text-fg"
             aria-label="Copy to next set"
             title="Copy to next set"
           >
@@ -112,7 +123,7 @@ export function SetRow({
         <button
           type="button"
           onClick={onRemove}
-          className="flex h-11 w-9 items-center justify-center border border-border text-muted hover:text-fg"
+          className="flex min-h-11 w-11 items-center justify-center border border-border text-muted hover:text-fg"
           aria-label="Remove set"
         >
           ×
@@ -123,7 +134,7 @@ export function SetRow({
             haptic();
             onToggle();
           }}
-          className={`flex h-11 w-11 items-center justify-center border ${
+          className={`flex min-h-11 w-12 items-center justify-center border ${
             a.completed ? 'border-accent bg-accent text-accent-fg' : 'border-border text-muted'
           }`}
           aria-label="Toggle completed"

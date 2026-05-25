@@ -83,6 +83,13 @@ export default function Logger() {
   const [subs, setSubs] = useState<MovementSub[]>([]);
   const [picker, setPicker] = useState<Picker | null>(null);
   const [optionsFor, setOptionsFor] = useState<{ si: number; gi: number; ii: number } | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleCollapse = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   const [showVibe, setShowVibe] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
   const [logDate, setLogDate] = useState<string>(today());
@@ -320,6 +327,7 @@ export default function Logger() {
   function renderItem(si: number, gi: number, ii: number, grouped: boolean) {
     const item = doc.sections[si].groups[gi].items[ii];
     const allDone = item.sets.length > 0 && item.sets.every((s) => s.actual.completed);
+    const isCollapsed = collapsed.has(item.id);
     return (
       <div key={item.id} className={grouped ? 'border-t border-border pt-3 first:border-0 first:pt-0' : ''}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -334,6 +342,17 @@ export default function Logger() {
               aria-pressed={allDone}
             >
               ✓
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleCollapse(item.id)}
+              className="flex h-6 w-6 items-center justify-center text-muted hover:text-fg"
+              aria-label={isCollapsed ? 'Expand movement' : 'Collapse movement'}
+              aria-expanded={!isCollapsed}
+            >
+              <span className={`inline-block text-[0.7rem] transition-transform ${isCollapsed ? '' : 'rotate-90'}`}>
+                ▸
+              </span>
             </button>
             <span className="capitalize text-fg">{item.movement}</span>
           </div>
@@ -373,6 +392,13 @@ export default function Logger() {
             </button>
           </div>
         </div>
+        {isCollapsed ? (
+          <div className="text-[0.7rem] uppercase tracking-wider text-muted">
+            {item.sets.length} {item.sets.length === 1 ? 'set' : 'sets'}
+            {allDone ? ' · done' : ''}
+          </div>
+        ) : (
+        <>
         <div className="flex flex-col gap-3">
           {item.sets.map((set, ki) => {
             const prev = ki > 0 ? item.sets[ki - 1] : null;
@@ -413,6 +439,8 @@ export default function Logger() {
         >
           + Add set
         </button>
+        </>
+        )}
       </div>
     );
   }
