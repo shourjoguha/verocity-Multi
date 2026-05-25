@@ -58,16 +58,14 @@ export const TIMERS = {
   restPresets: [60, 90, 120, 180, 300],
 } as const;
 
-// Activity tags with accent colors (HSL) — matte blue/green/purple/pink palette
-// (no red/orange); "strength" leads with a matte cyber-pink. Used sparingly as
-// accent (SPEC §11) on the progress ribbon and stats heatmap.
+// Activity tags with accent colors — used to shade activities across the app
+// (progress ribbon, stats heatmap). Five categories, fixed brand hexes.
 export const ACTIVITY_TAGS = {
-  strength: { label: 'Strength', color: 'hsl(330 70% 62%)' },
-  hypertrophy: { label: 'Hypertrophy', color: 'hsl(272 48% 62%)' },
-  conditioning: { label: 'Conditioning', color: 'hsl(208 62% 56%)' },
-  endurance: { label: 'Endurance', color: 'hsl(152 44% 48%)' },
-  skill: { label: 'Skill', color: 'hsl(188 56% 48%)' },
-  recovery: { label: 'Recovery', color: 'hsl(250 32% 66%)' },
+  strength: { label: 'Strength', color: '#084A24' },
+  recovery: { label: 'Recovery', color: '#FF8F5C' },
+  endurance: { label: 'Endurance', color: '#77612A' },
+  mobility: { label: 'Mobility', color: '#1DBD8E' },
+  sport: { label: 'Sport', color: '#004C94' },
 } as const;
 
 // Quick-pick activity types for the lightweight non-strength ActivityLogger.
