@@ -3,6 +3,7 @@ import type { LogSet, SetActual } from '@/lib/types';
 import { WeightWheel } from '@/components/logger/WeightWheel';
 import { RepsStepper } from '@/components/logger/RepsStepper';
 import { MetricStepper } from '@/components/logger/MetricStepper';
+import { EditableNumber } from '@/components/logger/EditableNumber';
 import { haptic } from '@/lib/haptics';
 
 // One set row. The numeric inputs shown follow the item's primary metric
@@ -83,9 +84,17 @@ export function SetRow({
         >
           −
         </button>
-        <span className="flex w-12 items-center justify-center text-sm tabular-nums text-subtle">
-          @{a.rpe ?? '—'}
-        </span>
+        <div className="flex w-12 items-center justify-center">
+          <EditableNumber
+            value={a.rpe ?? RPE.min}
+            onCommit={(v) => onPatch({ rpe: v })}
+            clampParse={(n) => Math.min(RPE.max, Math.max(RPE.min, Math.round(n / RPE.step) * RPE.step))}
+            ariaLabel="RPE"
+            className="text-sm tabular-nums text-subtle"
+          >
+            {() => <>@{a.rpe ?? '—'}</>}
+          </EditableNumber>
+        </div>
         <button
           type="button"
           onClick={() => onPatch({ rpe: Math.min(RPE.max, (a.rpe ?? RPE.min) + RPE.step) })}

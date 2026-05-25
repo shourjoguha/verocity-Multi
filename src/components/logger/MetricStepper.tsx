@@ -1,5 +1,7 @@
-// Generic +/- stepper for count-like metrics (time, distance). Weight uses the
-// drag WeightWheel and reps uses RepsStepper; this covers the rest.
+import { EditableNumber } from '@/components/logger/EditableNumber';
+
+// Generic +/- stepper for count-like metrics (time, distance). Tap −/+ or the
+// number to type. Weight and reps have their own components.
 export function MetricStepper({
   value,
   onChange,
@@ -25,8 +27,20 @@ export function MetricStepper({
         −
       </button>
       <div className="min-w-16 text-center">
-        <span className="font-display text-3xl tabular-nums text-fg">{value || 0}</span>
-        {unit ? <span className="ml-1 text-sm text-muted">{unit}</span> : null}
+        <EditableNumber
+          value={value}
+          onCommit={(v) => onChange(clamp(v))}
+          clampParse={clamp}
+          ariaLabel={label}
+          className="font-display text-3xl tabular-nums text-fg"
+        >
+          {(v) => (
+            <>
+              {v || 0}
+              {unit ? <span className="ml-1 text-sm text-muted">{unit}</span> : null}
+            </>
+          )}
+        </EditableNumber>
         <div className="text-[0.6rem] uppercase tracking-wider text-muted">{label}</div>
       </div>
       <button
