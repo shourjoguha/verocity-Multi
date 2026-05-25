@@ -81,15 +81,25 @@ export default function CoachView() {
     if (analyzing) return;
     setAnalyzing(true);
     try {
-      const [plan, logs] = await Promise.all([getActivePlan(), getRecentLogs(50)]);
-      const generated = generateRecommendations(logs, plan);
-      const ok = await insertRecommendations(generated);
-      if (!ok) {
-        toast('Analysis failed — try again', 'error');
-        return;
+      // Phase 2: try the AI coach edge function first; fall back to the
+      // rule-based generator when it's unavailable (no key / not deployed / error).
+      let aiHandled = false;
+      try {
+        const { data, error } = await supabase.functions.invoke('coach');
+        if (!error && (data as { ok?: boolean } | null)?.ok) aiHandled = true;
+      } catch {
+        /* fall through to rule-based */
+      }
+      if (!aiHandled) {
+        const [plan, logs] = await Promise.all([getActivePlan(), getRecentLogs(50)]);
+        const ok = await insertRecommendations(generateRecommendations(logs, plan));
+        if (!ok) {
+          toast('Analysis failed — try again', 'error');
+          return;
+        }
       }
       setRecs(await getRecommendations());
-      toast(`${generated.length} new ${generated.length === 1 ? 'insight' : 'insights'}`, 'success');
+      toast('Analysis complete', 'success');
     } finally {
       setAnalyzing(false);
     }
