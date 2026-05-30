@@ -1,13 +1,15 @@
 import { METRICS, RPE, type MetricKey } from '@/app.config';
 import type { LogSet, SetActual } from '@/lib/types';
-import { WeightWheel } from '@/components/logger/WeightWheel';
-import { RepsStepper } from '@/components/logger/RepsStepper';
-import { MetricStepper } from '@/components/logger/MetricStepper';
-import { EditableNumber } from '@/components/logger/EditableNumber';
+import { StepperField } from '@/components/logger/StepperField';
 import { haptic } from '@/lib/haptics';
 
-// One set row. The numeric inputs shown follow the item's primary metric
-// (metric swap), with RPE available as a secondary except when RPE is primary.
+const snap = (step: number) => (n: number) => Math.max(0, Math.round(n / step) * step);
+const whole = (n: number) => Math.max(0, Math.round(n));
+const snapRpe = (n: number) => Math.min(RPE.max, Math.max(RPE.min, Math.round(n / RPE.step) * RPE.step));
+
+// One condensed set row: every metric is a tap-to-magnify field (see StepperField),
+// followed by delete + complete. The fields shown follow the item's primary metric,
+// with RPE always available as a secondary (and primary when the metric is RPE).
 export function SetRow({
   metric,
   set,
@@ -25,35 +27,60 @@ export function SetRow({
 }) {
   const a = set.actual;
 
-  const inputs = () => {
+  const fields = () => {
     switch (metric) {
       case 'weight':
         return (
           <>
-            <WeightWheel value={a.weight ?? 0} onChange={(v) => onPatch({ weight: v })} />
-            <RepsStepper value={a.reps ?? 0} onChange={(v) => onPatch({ reps: v })} />
+            <StepperField
+              value={a.weight ?? 0}
+              onChange={(v) => onPatch({ weight: v })}
+              step={METRICS.weight.step}
+              clamp={snap(METRICS.weight.step)}
+              label={METRICS.weight.unit}
+              ariaLabel="weight"
+            />
+            <StepperField
+              value={a.reps ?? 0}
+              onChange={(v) => onPatch({ reps: v })}
+              step={METRICS.reps.step}
+              clamp={whole}
+              label="reps"
+              ariaLabel="reps"
+            />
           </>
         );
       case 'reps':
-        return <RepsStepper value={a.reps ?? 0} onChange={(v) => onPatch({ reps: v })} />;
+        return (
+          <StepperField
+            value={a.reps ?? 0}
+            onChange={(v) => onPatch({ reps: v })}
+            step={METRICS.reps.step}
+            clamp={whole}
+            label="reps"
+            ariaLabel="reps"
+          />
+        );
       case 'time':
         return (
-          <MetricStepper
+          <StepperField
             value={a.time ?? 0}
             onChange={(v) => onPatch({ time: v })}
             step={METRICS.time.step}
-            label="time"
-            unit={METRICS.time.unit}
+            clamp={snap(METRICS.time.step)}
+            label={METRICS.time.unit}
+            ariaLabel="time"
           />
         );
       case 'distance':
         return (
-          <MetricStepper
+          <StepperField
             value={a.distance ?? 0}
             onChange={(v) => onPatch({ distance: v })}
             step={METRICS.distance.step}
-            label="dist"
-            unit={METRICS.distance.unit}
+            clamp={snap(METRICS.distance.step)}
+            label={METRICS.distance.unit}
+            ariaLabel="distance"
           />
         );
       case 'rpe':
@@ -63,49 +90,30 @@ export function SetRow({
 
   return (
     <div
-      className={`flex flex-wrap items-stretch gap-2 border-l-2 pl-3 ${
+      className={`flex items-center gap-1 border-l-2 pl-2 ${
         a.completed ? 'border-accent' : 'border-border'
       }`}
     >
       {set.planned ? (
-        <span className="flex w-12 shrink-0 items-center text-[0.7rem] uppercase tracking-wider text-muted">
+        <span className="flex w-9 shrink-0 items-center text-[0.6rem] uppercase leading-tight tracking-wider text-muted">
           {set.planned}
         </span>
       ) : null}
 
-      {inputs()}
-
-      <div className="flex items-stretch gap-1">
-        <button
-          type="button"
-          onClick={() => onPatch({ rpe: Math.max(RPE.min, (a.rpe ?? RPE.min) - RPE.step) })}
-          className="flex min-h-11 w-11 items-center justify-center border border-border text-fg"
-          aria-label="Lower RPE"
-        >
-          −
-        </button>
-        <div className="flex w-12 items-center justify-center">
-          <EditableNumber
-            value={a.rpe ?? RPE.min}
-            onCommit={(v) => onPatch({ rpe: v })}
-            clampParse={(n) => Math.min(RPE.max, Math.max(RPE.min, Math.round(n / RPE.step) * RPE.step))}
-            ariaLabel="RPE"
-            className="text-sm tabular-nums text-subtle"
-          >
-            {() => <>@{a.rpe ?? '—'}</>}
-          </EditableNumber>
-        </div>
-        <button
-          type="button"
-          onClick={() => onPatch({ rpe: Math.min(RPE.max, (a.rpe ?? RPE.min) + RPE.step) })}
-          className="flex min-h-11 w-11 items-center justify-center border border-border text-fg"
-          aria-label="Raise RPE"
-        >
-          +
-        </button>
+      <div className="flex min-w-0 items-center gap-0.5">
+        {fields()}
+        <StepperField
+          value={a.rpe ?? RPE.min}
+          onChange={(v) => onPatch({ rpe: v })}
+          step={RPE.step}
+          clamp={snapRpe}
+          display={() => a.rpe ?? '—'}
+          label="rpe"
+          ariaLabel="RPE"
+        />
       </div>
 
-      <div className="ml-auto flex items-stretch gap-1">
+      <div className="ml-auto flex shrink-0 items-center gap-0.5">
         {a.completed && onCloneForward ? (
           <button
             type="button"
@@ -113,7 +121,7 @@ export function SetRow({
               haptic(15);
               onCloneForward?.();
             }}
-            className="flex min-h-11 w-11 items-center justify-center border border-border text-muted hover:text-fg"
+            className="flex min-h-11 w-8 items-center justify-center text-lg text-muted hover:text-fg"
             aria-label="Copy to next set"
             title="Copy to next set"
           >
@@ -122,9 +130,13 @@ export function SetRow({
         ) : null}
         <button
           type="button"
-          onClick={onRemove}
-          className="flex min-h-11 w-11 items-center justify-center border border-border text-muted hover:text-fg"
-          aria-label="Remove set"
+          onClick={() => {
+            haptic(15);
+            onRemove();
+          }}
+          className="flex min-h-11 w-8 items-center justify-center text-lg text-muted hover:text-fg"
+          aria-label="Delete set"
+          title="Delete set"
         >
           ×
         </button>
@@ -134,8 +146,8 @@ export function SetRow({
             haptic();
             onToggle();
           }}
-          className={`flex min-h-11 w-12 items-center justify-center border ${
-            a.completed ? 'border-accent bg-accent text-accent-fg' : 'border-border text-muted'
+          className={`flex min-h-11 w-10 shrink-0 items-center justify-center border text-lg ${
+            a.completed ? 'border-accent bg-accent text-accent-fg' : 'border-border text-muted hover:text-fg'
           }`}
           aria-label="Toggle completed"
           aria-pressed={a.completed}
