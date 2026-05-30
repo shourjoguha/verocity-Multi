@@ -226,7 +226,16 @@ export default function CalendarView() {
         open={addDate !== null}
         onClose={() => setAddDate(null)}
       />
-      <LogQuickView log={quickLog} open={quickLog !== null} onClose={() => setQuickLog(null)} />
+      <LogQuickView
+        log={quickLog}
+        open={quickLog !== null}
+        onClose={() => setQuickLog(null)}
+        onUpdated={(updated) => {
+          setLogs((ls) => ls.map((l) => (l.id === updated.id ? updated : l)));
+          setQuickLog(updated);
+        }}
+        onDeleted={(id) => setLogs((ls) => ls.filter((l) => l.id !== id))}
+      />
     </>
   );
 }

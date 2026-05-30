@@ -497,7 +497,16 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             open={previewDay !== null}
             onClose={() => setPreviewDay(null)}
           />
-          <LogQuickView log={quickLog} open={quickLog !== null} onClose={() => setQuickLog(null)} />
+          <LogQuickView
+            log={quickLog}
+            open={quickLog !== null}
+            onClose={() => setQuickLog(null)}
+            onUpdated={(updated) => {
+              setLogs((ls) => ls.map((l) => (l.id === updated.id ? updated : l)));
+              setQuickLog(updated);
+            }}
+            onDeleted={(id) => setLogs((ls) => ls.filter((l) => l.id !== id))}
+          />
           <Modal open={exportMenuOpen} onClose={() => setExportMenuOpen(false)} title="Export data">
             <div className="flex flex-col">
               <button
