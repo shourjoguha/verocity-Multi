@@ -24,6 +24,7 @@ import { DayPreviewDialog } from '@/components/DayPreviewDialog';
 import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
 import { Modal } from '@/components/ui/Modal';
+import { BackgroundPicker } from '@/components/BackgroundPicker';
 
 const DownloadIcon = () => (
   <svg
@@ -458,6 +459,15 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           )}
         </section>
       </Item>
+
+      {mode === 'app' ? (
+        <Item>
+          <section className="mt-10">
+            <SectionHeader>Backdrop</SectionHeader>
+            <BackgroundPicker />
+          </section>
+        </Item>
+      ) : null}
 
       {mode === 'app' ? (
         <Item>

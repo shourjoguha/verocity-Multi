@@ -36,10 +36,27 @@ Full spec: `docs/SPEC.md`.
   island — avoid many tiny islands.
 - **Preserve the JSONB contracts** (`plans.parsed` = ParsedPlan, `workout_logs.data`
   = LogDocument) so the original's logic ports cleanly.
+- **Plan-import surface stays in sync with the domain.** The CSV/TSV wireframe
+  and the AI authoring prompt live in `src/lib/planTemplate.ts` and are derived
+  from `app.config.ts` + `ParsedPlan` in `lib/types.ts`. Any change to the plan
+  structure, blocks, sections, metrics, or units MUST update that module (and
+  its tests) so the downloadable template, the copyable prompt, and the
+  compatibility checker in `PlanUpload` move together. `validateParsedPlan` is
+  the gate before save — never bypass it.
 - **Design tokens only** (HSL); no raw colors in components. **Light editorial**
   identity per the design spec + reference screenshots (these take precedence on
   aesthetics): Clash Display + Satoshi, monochrome `#f2f2f2`/`#111111`, hairlines,
   tabular numbers, the typographic Echo Stack, bold CSS-first motion.
+- **Backdrop & depth.** The full-viewport backdrop is `BackgroundLayer.astro`
+  mounted once in `Base.astro`. CSS presets paint via
+  `html[data-bg="<key>"] .bg-backdrop::before` rules in `global.css`; the
+  `aurora` 3D preset mounts `BackgroundScene3DCanvas` (lazy-loaded — pays the
+  three.js cost only when selected). New backdrops MUST stay monochrome and
+  derived from the existing `--color-*` tokens. The user toggle lives in
+  `ProfileView` and goes through `lib/background.ts` (single source of truth).
+  Card depth is the `.lift` / `.lift-interactive` utility built from
+  `--shadow-lift-rest`/`--shadow-lift-hover` — never inline a `box-shadow` in
+  a component.
 - **Signup is invite-gated** (caps < 100), redeemed server-side. **AI is deferred** —
   don't build it without an explicit go-ahead.
 - **TypeScript strict.** Domain config in `app.config.ts`; types in `lib/types.ts`.

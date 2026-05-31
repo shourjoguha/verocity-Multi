@@ -1,0 +1,9 @@
+---
+// Always-on backdrop. Sits behind every page at -z-10. CSS presets paint via
+// `html[data-bg="<key>"]` rules in global.css. The "aurora" preset mounts a
+// React island (BackgroundScene3D) into the inner div instead of painting CSS.
+import BackgroundScene3D from '@/components/BackgroundScene3D';
+---
+<div class="bg-backdrop" aria-hidden="true">
+  <BackgroundScene3D client:idle />
+</div>

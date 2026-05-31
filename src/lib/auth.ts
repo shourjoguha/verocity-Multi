@@ -13,6 +13,20 @@ export function signOut() {
   return supabase.auth.signOut();
 }
 
+// Sends a Supabase recovery email. The link lands on /reset-password, where
+// detectSessionInUrl picks up the recovery token and lets the user set a new
+// password via updatePassword.
+export function requestPasswordReset(email: string) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  return supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/reset-password`,
+  });
+}
+
+export function updatePassword(newPassword: string) {
+  return supabase.auth.updateUser({ password: newPassword });
+}
+
 export type SignupInput = {
   email: string;
   password: string;

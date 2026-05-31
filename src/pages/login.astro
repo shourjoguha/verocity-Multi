@@ -1,11 +1,15 @@
 ---
 import Base from '@/layouts/Base.astro';
 import LoginForm from '@/components/LoginForm';
+import LoginHero from '@/components/LoginHero';
 import { EchoText } from '@/components/EchoText';
 ---
 
-<Base title="Sign in · Verocity">
-  <main class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6">
+<Base title="Sign in · Verocity" noBackdrop>
+  <div class="login-hero" aria-hidden="true">
+    <LoginHero client:idle />
+  </div>
+  <main class="relative z-10 mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6">
     <p class="mb-2 text-[0.7rem] uppercase tracking-[0.3em] text-muted">Verocity</p>
     <EchoText
       text="LOG IN"
@@ -19,3 +23,13 @@ import { EchoText } from '@/components/EchoText';
     </p>
   </main>
 </Base>
+
+<style>
+  .login-hero {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: var(--color-bg);
+  }
+</style>

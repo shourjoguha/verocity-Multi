@@ -1,14 +1,18 @@
 ---
 import { ClientRouter } from 'astro:transitions';
 import Toaster from '@/components/Toaster';
+import BackgroundLayer from '@/components/BackgroundLayer.astro';
 import '../styles/global.css';
 
 interface Props {
   title?: string;
   description?: string;
+  // Pages with their own bespoke backdrop (e.g. /login) can opt out of the
+  // shared toggleable BackgroundLayer to avoid stacking two WebGL contexts.
+  noBackdrop?: boolean;
 }
 
-const { title = 'Verocity', description = 'Strength & training logger.' } = Astro.props;
+const { title = 'Verocity', description = 'Strength & training logger.', noBackdrop = false } = Astro.props;
 ---
 
 <!doctype html>
@@ -33,8 +37,22 @@ const { title = 'Verocity', description = 'Strength & training logger.' } = Astr
     />
     <title>{title}</title>
     <ClientRouter />
+    <script is:inline>
+      // Apply the saved backdrop before first paint to avoid FOUC.
+      (function () {
+        try {
+          var v = localStorage.getItem('verocity:bg');
+          var allowed = ['off', 'grain', 'hairlines', 'topography', 'aurora'];
+          if (allowed.indexOf(v) === -1) v = 'off';
+          document.documentElement.setAttribute('data-bg', v);
+        } catch (_) {
+          document.documentElement.setAttribute('data-bg', 'off');
+        }
+      })();
+    </script>
   </head>
   <body class="min-h-dvh">
+    {!noBackdrop && <BackgroundLayer />}
     <slot />
     <Toaster client:load />
     <script is:inline>

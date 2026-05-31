@@ -9,15 +9,17 @@ export function Card({
   children,
   className = '',
   interactive = false,
+  flat = false,
 }: {
   children: ReactNode;
   className?: string;
   interactive?: boolean;
+  flat?: boolean;
 }) {
-  const hover = interactive
-    ? 'transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] hover:-translate-y-0.5'
-    : '';
-  return <div className={`border border-border bg-surface p-4 ${hover} ${className}`}>{children}</div>;
+  const depth = flat ? '' : `lift${interactive ? ' lift-interactive' : ''}`;
+  return (
+    <div className={`border border-border bg-surface p-4 ${depth} ${className}`}>{children}</div>
+  );
 }
 
 export function SectionHeader({ children }: { children: ReactNode }) {
