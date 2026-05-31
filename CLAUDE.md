@@ -36,6 +36,13 @@ Full spec: `docs/SPEC.md`.
   island — avoid many tiny islands.
 - **Preserve the JSONB contracts** (`plans.parsed` = ParsedPlan, `workout_logs.data`
   = LogDocument) so the original's logic ports cleanly.
+- **Plan-import surface stays in sync with the domain.** The CSV/TSV wireframe
+  and the AI authoring prompt live in `src/lib/planTemplate.ts` and are derived
+  from `app.config.ts` + `ParsedPlan` in `lib/types.ts`. Any change to the plan
+  structure, blocks, sections, metrics, or units MUST update that module (and
+  its tests) so the downloadable template, the copyable prompt, and the
+  compatibility checker in `PlanUpload` move together. `validateParsedPlan` is
+  the gate before save — never bypass it.
 - **Design tokens only** (HSL); no raw colors in components. **Light editorial**
   identity per the design spec + reference screenshots (these take precedence on
   aesthetics): Clash Display + Satoshi, monochrome `#f2f2f2`/`#111111`, hairlines,
