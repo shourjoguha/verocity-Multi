@@ -7,9 +7,12 @@ import '../styles/global.css';
 interface Props {
   title?: string;
   description?: string;
+  // Pages with their own bespoke backdrop (e.g. /login) can opt out of the
+  // shared toggleable BackgroundLayer to avoid stacking two WebGL contexts.
+  noBackdrop?: boolean;
 }
 
-const { title = 'Verocity', description = 'Strength & training logger.' } = Astro.props;
+const { title = 'Verocity', description = 'Strength & training logger.', noBackdrop = false } = Astro.props;
 ---
 
 <!doctype html>
@@ -49,7 +52,7 @@ const { title = 'Verocity', description = 'Strength & training logger.' } = Astr
     </script>
   </head>
   <body class="min-h-dvh">
-    <BackgroundLayer />
+    {!noBackdrop && <BackgroundLayer />}
     <slot />
     <Toaster client:load />
     <script is:inline>
