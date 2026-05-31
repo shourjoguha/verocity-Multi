@@ -147,6 +147,11 @@ export async function updateLog(id: string, patch: Partial<WorkoutLog>): Promise
   return !error;
 }
 
+export async function deleteLog(id: string): Promise<boolean> {
+  const { error } = await supabase.from('workout_logs').delete().eq('id', id);
+  return !error;
+}
+
 // Insert a plan and make it the active one (the partial unique index allows a
 // single active plan per owner, so deactivate any existing active first).
 export async function createPlan(
