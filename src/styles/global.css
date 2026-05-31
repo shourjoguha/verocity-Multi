@@ -38,9 +38,11 @@
   --radius-none: 0px;
 
   /* Depth — "thick cardboard sitting on the ground" at rest; interaction lifts.
-     Soft, monochrome, derived from the ink color so it stays in-token. */
-  --shadow-lift-rest: 0 1px 0 hsl(0 0% 7% / 0.04), 0 4px 10px hsl(0 0% 7% / 0.06);
-  --shadow-lift-hover: 0 2px 0 hsl(0 0% 7% / 0.05), 0 10px 24px hsl(0 0% 7% / 0.10);
+     Soft, monochrome, derived from the ink color so it stays in-token.
+     Doubled from initial pass — earlier values were buried by the editorial
+     surface tones; this lands as actual elevation without color leaking. */
+  --shadow-lift-rest: 0 1px 0 hsl(0 0% 7% / 0.08), 0 6px 14px hsl(0 0% 7% / 0.10);
+  --shadow-lift-hover: 0 3px 0 hsl(0 0% 7% / 0.10), 0 14px 30px hsl(0 0% 7% / 0.18);
 }
 
 :root {
@@ -68,21 +70,32 @@ body {
 }
 
 /* Lift utility — resting depth + hover bump. Cards and stat tiles opt in via
-   the Card primitive. Stays inside the existing CSS-first motion budget. */
+   the Card primitive. Stays inside the existing CSS-first motion budget.
+   Interactive variant gets a real 3D perspective tilt on hover — perspective
+   on the element itself (not parent) so neighbours don't all share one
+   vanishing point. Wrapped in prefers-reduced-motion guard. */
 .lift {
   box-shadow: var(--shadow-lift-rest);
   transition:
     box-shadow 0.3s var(--ease-editorial),
     transform 0.3s var(--ease-editorial);
-  transform: translateZ(0); /* promote layer for cheap shadow animation */
+  transform: perspective(900px) translateZ(0);
 }
 .lift-interactive {
   cursor: pointer;
 }
-.lift-interactive:hover,
-.lift-interactive:focus-visible {
-  box-shadow: var(--shadow-lift-hover);
-  transform: translateY(-2px);
+@media (prefers-reduced-motion: no-preference) {
+  .lift-interactive:hover,
+  .lift-interactive:focus-visible {
+    box-shadow: var(--shadow-lift-hover);
+    transform: perspective(900px) rotateX(1.4deg) rotateY(-2.2deg) translateZ(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lift-interactive:hover,
+  .lift-interactive:focus-visible {
+    box-shadow: var(--shadow-lift-hover);
+  }
 }
 
 /* ---- Toggleable background backdrop (BackgroundLayer + ProfileView toggle).
@@ -147,16 +160,22 @@ html[data-bg='topography'] .bg-backdrop::before {
   left: 0;
 }
 
-/* ---- Typographic Echo Stack (see EchoText.tsx) ---- */
+/* ---- Typographic Echo Stack (see EchoText.tsx) ----
+   Each shadow layer now sits at a real Z offset behind the foreground so
+   the stack reads as a physical stack of cards receding into space. The
+   parent supplies the perspective so the depth doesn't depend on a global
+   transform context. */
 .echo {
   position: relative;
   display: inline-block;
+  perspective: 800px;
+  transform-style: preserve-3d;
 }
 .echo > .echo-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  transform: translate(var(--echo-dx), var(--echo-dx));
+  transform: translate3d(var(--echo-dx), var(--echo-dx), var(--echo-tz, 0));
 }
 .echo > .echo-top {
   position: relative;
@@ -165,11 +184,11 @@ html[data-bg='topography'] .bg-backdrop::before {
 @keyframes echo-fan {
   from {
     opacity: 0;
-    transform: translate(0, 0);
+    transform: translate3d(0, 0, 0);
   }
   to {
     opacity: 1;
-    transform: translate(var(--echo-dx), var(--echo-dx));
+    transform: translate3d(var(--echo-dx), var(--echo-dx), var(--echo-tz, 0));
   }
 }
 @keyframes clip-in-x {
