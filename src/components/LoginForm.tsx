@@ -27,8 +27,7 @@ export default function LoginForm() {
     setSent(false);
   }
 
-  async function onSignIn(e: React.FormEvent) {
-    e.preventDefault();
+  async function onSignIn() {
     setBusy(true);
     setError(null);
     const { error } = await signIn(email, password);
@@ -40,8 +39,7 @@ export default function LoginForm() {
     window.location.href = '/app';
   }
 
-  async function onForgot(e: React.FormEvent) {
-    e.preventDefault();
+  async function onForgot() {
     setBusy(true);
     setError(null);
     const { error } = await resetPasswordForEmail(email);
@@ -68,7 +66,13 @@ export default function LoginForm() {
               </button>
             </div>
           ) : (
-            <form onSubmit={onForgot} className="flex flex-col gap-3">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                onForgot();
+              }}
+              className="flex flex-col gap-3"
+            >
               <p className="text-sm text-muted">
                 Enter your email and we’ll send you a link to reset your password.
               </p>
@@ -98,7 +102,13 @@ export default function LoginForm() {
   return (
     <PageStagger>
       <Item>
-        <form onSubmit={onSignIn} className="flex flex-col gap-3">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSignIn();
+          }}
+          className="flex flex-col gap-3"
+        >
           <label className="text-[0.7rem] uppercase tracking-[0.2em] text-muted">Email</label>
           <input
             type="email"

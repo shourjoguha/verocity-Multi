@@ -27,8 +27,7 @@ export default function ResetPasswordForm() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onSubmit() {
     setError(null);
     if (password.length < MIN_LENGTH) {
       setError(`Password must be at least ${MIN_LENGTH} characters.`);
