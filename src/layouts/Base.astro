@@ -1,6 +1,7 @@
 ---
 import { ClientRouter } from 'astro:transitions';
 import Toaster from '@/components/Toaster';
+import BackgroundLayer from '@/components/BackgroundLayer.astro';
 import '../styles/global.css';
 
 interface Props {
@@ -33,8 +34,22 @@ const { title = 'Verocity', description = 'Strength & training logger.' } = Astr
     />
     <title>{title}</title>
     <ClientRouter />
+    <script is:inline>
+      // Apply the saved backdrop before first paint to avoid FOUC.
+      (function () {
+        try {
+          var v = localStorage.getItem('verocity:bg');
+          var allowed = ['off', 'grain', 'hairlines', 'topography', 'aurora'];
+          if (allowed.indexOf(v) === -1) v = 'off';
+          document.documentElement.setAttribute('data-bg', v);
+        } catch (_) {
+          document.documentElement.setAttribute('data-bg', 'off');
+        }
+      })();
+    </script>
   </head>
   <body class="min-h-dvh">
+    <BackgroundLayer />
     <slot />
     <Toaster client:load />
     <script is:inline>

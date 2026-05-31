@@ -347,6 +347,23 @@ Elevate via:
   portfolio piece).
 - Considered, sparing use of activity-tag color as accent against the neutral base.
 
+### Depth & backdrop
+
+A `BackgroundLayer` Astro component sits behind every page at `z-index: -10` and
+swaps presets via the `html[data-bg]` attribute. CSS presets (`grain`,
+`hairlines`, `topography`) paint with token-derived SVG/gradient fills; the
+`aurora` preset mounts `BackgroundScene3DCanvas` — a `@react-three/fiber`
+scene of drifting monochrome rectangles — which is **lazy-loaded** so the
+three.js cost is only paid when a user picks it. Default is `off`. The
+preference is stored in `localStorage` and applied pre-paint by an inline
+script in `Base.astro` (no FOUC) and mirrored to `<html data-bg>`.
+
+Cards ship a slight resting elevation via the `.lift` utility (CSS-only,
+token-derived shadow) so the UI reads as paper resting on the canvas;
+interactive cards get `.lift-interactive` and rise a few pixels on
+hover/focus. Never inline `box-shadow` in components — extend the lift utility
+or add a new shadow token.
+
 > Open Q: keep the existing identity (recommended) vs. a fresh visual language.
 
 ---

@@ -1,4 +1,4 @@
-import type { CSSProperties, ElementType } from 'react';
+import { createElement, type CSSProperties, type ElementType } from 'react';
 
 // Typographic Echo Stack (design spec §"Special Components"). Renders the same
 // word N times: 4 background layers shifted up-left by -0.04em increments and
@@ -22,22 +22,24 @@ type EchoTextProps = {
 };
 
 export function EchoText({ text, as, className = '', animate = false, layers = 4 }: EchoTextProps) {
-  const Tag = (as ?? 'span') as ElementType;
+  const Tag: ElementType = as ?? 'span';
   const used = LAYERS.slice(0, Math.max(0, Math.min(layers, LAYERS.length)));
-  return (
-    <Tag className={`echo ${className}`} data-animate={animate ? 'true' : undefined}>
-      {used.map((l) => (
-        <span
-          key={l.dx}
-          aria-hidden="true"
-          className="echo-layer"
-          style={{ '--echo-dx': l.dx, color: l.color } as CSSProperties}
-        >
-          {text}
-        </span>
-      ))}
-      <span className="echo-top">{text}</span>
-    </Tag>
+  return createElement(
+    Tag,
+    { className: `echo ${className}`, 'data-animate': animate ? 'true' : undefined },
+    ...used.map((l) =>
+      createElement(
+        'span',
+        {
+          key: l.dx,
+          'aria-hidden': 'true',
+          className: 'echo-layer',
+          style: { '--echo-dx': l.dx, color: l.color } as CSSProperties,
+        },
+        text,
+      ),
+    ),
+    createElement('span', { key: 'top', className: 'echo-top' }, text),
   );
 }
 

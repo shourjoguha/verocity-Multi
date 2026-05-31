@@ -47,6 +47,16 @@ Full spec: `docs/SPEC.md`.
   identity per the design spec + reference screenshots (these take precedence on
   aesthetics): Clash Display + Satoshi, monochrome `#f2f2f2`/`#111111`, hairlines,
   tabular numbers, the typographic Echo Stack, bold CSS-first motion.
+- **Backdrop & depth.** The full-viewport backdrop is `BackgroundLayer.astro`
+  mounted once in `Base.astro`. CSS presets paint via
+  `html[data-bg="<key>"] .bg-backdrop::before` rules in `global.css`; the
+  `aurora` 3D preset mounts `BackgroundScene3DCanvas` (lazy-loaded — pays the
+  three.js cost only when selected). New backdrops MUST stay monochrome and
+  derived from the existing `--color-*` tokens. The user toggle lives in
+  `ProfileView` and goes through `lib/background.ts` (single source of truth).
+  Card depth is the `.lift` / `.lift-interactive` utility built from
+  `--shadow-lift-rest`/`--shadow-lift-hover` — never inline a `box-shadow` in
+  a component.
 - **Signup is invite-gated** (caps < 100), redeemed server-side. **AI is deferred** —
   don't build it without an explicit go-ahead.
 - **TypeScript strict.** Domain config in `app.config.ts`; types in `lib/types.ts`.
