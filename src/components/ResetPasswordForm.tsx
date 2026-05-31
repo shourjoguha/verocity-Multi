@@ -1,38 +1,35 @@
 import { useEffect, useState } from 'react';
+import { getSession, updatePassword } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-
-const inputCls =
-  'border border-border bg-surface px-3 py-2 text-fg focus:border-fg focus:outline-none';
-const submitCls =
-  'mt-2 bg-fg px-4 py-2 font-medium uppercase tracking-wider text-bg transition-opacity hover:opacity-90 disabled:opacity-50';
+import { Button } from '@/components/ui/primitives';
+import { Item, PageStagger } from '@/components/anim';
 
 const MIN_LENGTH = 8;
 
 // Lands here from the password-recovery email link. Supabase (detectSessionInUrl)
 // turns the link's token into a recovery session; we let the user set a new
 // password via updateUser, then send them into the app.
-export function ResetPasswordForm() {
+export default function ResetPasswordForm() {
   const [status, setStatus] = useState<'checking' | 'ready' | 'invalid'>('checking');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) setStatus('ready');
     });
-    supabase.auth.getSession().then(({ data }) => {
-      setStatus((s) => (s === 'ready' ? s : data.session ? 'ready' : 'invalid'));
+    getSession().then((session) => {
+      setStatus((s) => (s === 'ready' ? s : session ? 'ready' : 'invalid'));
     });
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-
     if (password.length < MIN_LENGTH) {
       setError(`Password must be at least ${MIN_LENGTH} characters.`);
       return;
@@ -41,21 +38,22 @@ export function ResetPasswordForm() {
       setError('Passwords do not match.');
       return;
     }
-
-    setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
-    setLoading(false);
-
+    setBusy(true);
+    const { error } = await updatePassword(password);
     if (error) {
       setError(error.message);
+      setBusy(false);
       return;
     }
-
     setDone(true);
     setTimeout(() => {
       window.location.href = '/app';
     }, 1200);
   }
+
+  const inputClass =
+    'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none focus:border-subtle';
+  const labelClass = 'text-[0.7rem] uppercase tracking-[0.2em] text-muted';
 
   if (status === 'checking') {
     return <p className="text-sm text-muted">Verifying reset link…</p>;
@@ -63,72 +61,50 @@ export function ResetPasswordForm() {
 
   if (status === 'invalid') {
     return (
-      <div className="flex flex-col gap-4">
-        <h1 className="font-display text-4xl font-bold uppercase tracking-tight text-fg">
-          Link expired
-        </h1>
-        <p className="text-sm text-muted">
-          This password reset link is invalid or has expired. Request a new one from the sign-in
-          page.
-        </p>
-        <a href="/login" className="text-sm text-fg underline hover:no-underline">
-          Back to sign in
+      <p className="text-sm text-accent">
+        This reset link is invalid or has expired. Request a new one from the{' '}
+        <a href="/login" className="text-fg underline hover:text-subtle">
+          sign-in page
         </a>
-      </div>
+        .
+      </p>
     );
   }
 
   if (done) {
-    return (
-      <div className="flex flex-col gap-4">
-        <h1 className="font-display text-4xl font-bold uppercase tracking-tight text-fg">
-          Password updated
-        </h1>
-        <p className="text-sm text-muted">Taking you to the app…</p>
-      </div>
-    );
+    return <p className="text-sm text-fg">Password updated. Taking you to the app…</p>;
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <div>
-        <h1 className="font-display text-4xl font-bold uppercase tracking-tight text-fg">
-          New password
-        </h1>
-        <p className="mt-2 text-sm text-muted">Choose a new password for your account.</p>
-      </div>
-
-      <label className="flex flex-col gap-1">
-        <span className="text-[0.7rem] uppercase tracking-wider text-muted">New password</span>
-        <input
-          type="password"
-          required
-          minLength={MIN_LENGTH}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className={inputCls}
-          autoComplete="new-password"
-        />
-      </label>
-
-      <label className="flex flex-col gap-1">
-        <span className="text-[0.7rem] uppercase tracking-wider text-muted">Confirm password</span>
-        <input
-          type="password"
-          required
-          minLength={MIN_LENGTH}
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          className={inputCls}
-          autoComplete="new-password"
-        />
-      </label>
-
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-
-      <button type="submit" disabled={loading} className={submitCls}>
-        {loading ? 'Updating…' : 'Update password'}
-      </button>
-    </form>
+    <PageStagger>
+      <Item>
+        <form onSubmit={onSubmit} className="flex flex-col gap-3">
+          <label className={labelClass}>New password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            minLength={MIN_LENGTH}
+            required
+            className={inputClass}
+          />
+          <label className={`mt-2 ${labelClass}`}>Confirm password</label>
+          <input
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password"
+            minLength={MIN_LENGTH}
+            required
+            className={inputClass}
+          />
+          {error ? <p className="text-sm text-accent">{error}</p> : null}
+          <Button type="submit" disabled={busy} className="mt-4 w-full">
+            {busy ? 'Updating…' : 'Update password'}
+          </Button>
+        </form>
+      </Item>
+    </PageStagger>
   );
 }

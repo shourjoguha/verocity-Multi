@@ -9,6 +9,16 @@ export function signIn(email: string, password: string) {
   return supabase.auth.signInWithPassword({ email, password });
 }
 
+export function resetPasswordForEmail(email: string) {
+  const redirectTo =
+    typeof window !== 'undefined' ? `${window.location.origin}/reset-password` : undefined;
+  return supabase.auth.resetPasswordForEmail(email, { redirectTo });
+}
+
+export function updatePassword(password: string) {
+  return supabase.auth.updateUser({ password });
+}
+
 export function signOut() {
   return supabase.auth.signOut();
 }
