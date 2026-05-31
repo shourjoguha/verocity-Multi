@@ -9,12 +9,14 @@ import {
 } from 'three';
 
 // Login-only hero. A faceted ink crystal at center spins explosively for the
-// first ~1.2s then settles into a slow drift; a faint particle dust bursts
-// outward at the same time and decays into near-stillness. Monochrome,
+// first ~2s then settles into a slow drift; a faint particle dust bursts
+// outward at the same time and decays into near-stillness. A real shadow on a
+// ghost plane below the crystal twists with rotation. Monochrome,
 // token-derived. Honors prefers-reduced-motion (LoginHero won't even mount the
 // canvas in that case) and pauses on tab blur.
 
-const BURST_DURATION = 1.2; // seconds of fast spin / outward burst
+const BURST_DURATION = 2.0; // seconds of spin / outward burst
+const BURST_ROTATION = Math.PI * 4; // ~2 turns over BURST_DURATION (≈half the earlier angular speed)
 const PARTICLE_COUNT = 240;
 const PARTICLE_BURST_RADIUS = 7;
 const SLOW_ROTATION_RATE = 0.06; // rad/s after burst
@@ -30,16 +32,16 @@ function Crystal() {
   useFrame(({ clock }) => {
     if (!ref.current) return;
     const t = clock.getElapsedTime();
-    // Burst contributes ~2.5 turns over BURST_DURATION; the slow phase keeps
+    // Burst contributes ~2 turns over BURST_DURATION; the slow phase keeps
     // a quiet rotation forever.
-    const burst = easeOutQuart(t / BURST_DURATION) * Math.PI * 5;
+    const burst = easeOutQuart(t / BURST_DURATION) * BURST_ROTATION;
     const slow = SLOW_ROTATION_RATE * Math.max(0, t - BURST_DURATION);
     ref.current.rotation.y = burst + slow;
     ref.current.rotation.x = burst * 0.35 + slow * 0.5;
     ref.current.rotation.z = burst * 0.1;
   });
   return (
-    <mesh ref={ref} scale={1.6}>
+    <mesh ref={ref} scale={1.6} castShadow>
       <icosahedronGeometry args={[1, 0]} />
       <meshStandardMaterial
         color="#f7f7f5"
@@ -136,18 +138,36 @@ export default function LoginHeroScene() {
   return (
     <Canvas
       className="bg-canvas"
+      shadows
       dpr={[1, 1.5]}
-      camera={{ position: [0, 0, 5.5], fov: 38 }}
+      camera={{ position: [0, 0.4, 5.5], fov: 38 }}
       frameloop={paused ? 'never' : 'always'}
       gl={{ antialias: true, alpha: true }}
     >
       <color attach="background" args={['#f2f2f2']} />
       <fog attach="fog" args={['#f2f2f2', 5, 11]} />
       <ambientLight intensity={0.55} />
-      <directionalLight position={[4, 5, 6]} intensity={0.9} />
+      <directionalLight
+        position={[4, 5, 6]}
+        intensity={0.9}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-near={1}
+        shadow-camera-far={20}
+        shadow-camera-left={-4}
+        shadow-camera-right={4}
+        shadow-camera-top={4}
+        shadow-camera-bottom={-4}
+      />
       <directionalLight position={[-5, -2, 3]} intensity={0.25} />
       <Crystal />
       <Dust />
+      {/* Ghost plane that only renders the crystal's shadow — twists with rotation. */}
+      <mesh position={[0, -1.9, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[12, 12]} />
+        <shadowMaterial transparent opacity={0.22} />
+      </mesh>
     </Canvas>
   );
 }

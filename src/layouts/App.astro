@@ -73,10 +73,20 @@ const isActive = (href: string) => (href === '/app' ? path === '/app' : path.sta
 </Base>
 
 <script>
-  const toggle = document.getElementById('nav-toggle');
-  const menu = document.getElementById('nav-menu');
-  const backdrop = document.getElementById('nav-backdrop');
-  if (toggle && menu && backdrop) {
+  // ClientRouter swaps the DOM between pages, so handlers must rebind on every
+  // astro:page-load — otherwise the burger goes dead after the first navigation.
+  let ac: AbortController | null = null;
+
+  function setupNav() {
+    ac?.abort();
+    ac = new AbortController();
+    const { signal } = ac;
+
+    const toggle = document.getElementById('nav-toggle');
+    const menu = document.getElementById('nav-menu');
+    const backdrop = document.getElementById('nav-backdrop');
+    if (!toggle || !menu || !backdrop) return;
+
     let open = false;
     const setOpen = (next: boolean) => {
       open = next;
@@ -84,16 +94,27 @@ const isActive = (href: string) => (href === '/app' ? path === '/app' : path.sta
       menu.classList.toggle('-translate-x-full', !next);
       backdrop.classList.toggle('hidden', !next);
     };
-    toggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setOpen(!open);
-    });
-    backdrop.addEventListener('click', () => setOpen(false));
-    menu.querySelectorAll('[data-nav-link]').forEach((link) =>
-      link.addEventListener('click', () => setOpen(false)),
+
+    toggle.addEventListener(
+      'click',
+      (e) => {
+        e.stopPropagation();
+        setOpen(!open);
+      },
+      { signal },
     );
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') setOpen(false);
-    });
+    backdrop.addEventListener('click', () => setOpen(false), { signal });
+    menu.querySelectorAll('[data-nav-link]').forEach((link) =>
+      link.addEventListener('click', () => setOpen(false), { signal }),
+    );
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        if (e.key === 'Escape') setOpen(false);
+      },
+      { signal },
+    );
   }
+
+  document.addEventListener('astro:page-load', setupNav);
 </script>
