@@ -7,6 +7,7 @@ import {
   buildPlanCsvTemplate,
   buildPlanTsvTemplate,
   parsePlanTabular,
+  parsePlanWorkbook,
   validateParsedPlan,
 } from '@/lib/planTemplate';
 import type { ParsedPlan } from '@/lib/types';
@@ -111,20 +112,30 @@ export default function PlanUpload() {
     }
   }
 
-  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result ?? '');
-      setSource('csv');
-      setCsvText(text);
-      const result = parsePlanTabular(text);
-      setParsed(result.plan);
-      setIssues(result.issues);
-    };
-    reader.readAsText(file);
     e.target.value = '';
+    if (!file) return;
+    setError(null);
+    setSource('csv');
+    const isWorkbook = /\.xlsx?$/i.test(file.name) || file.type.includes('spreadsheet');
+    try {
+      if (isWorkbook) {
+        const buf = await file.arrayBuffer();
+        const result = await parsePlanWorkbook(buf);
+        setCsvText('');
+        setParsed(result.plan);
+        setIssues(result.issues);
+      } else {
+        const text = await file.text();
+        setCsvText(text);
+        const result = parsePlanTabular(text);
+        setParsed(result.plan);
+        setIssues(result.issues);
+      }
+    } catch (err) {
+      setError(`Could not read "${file.name}": ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   return (
@@ -162,12 +173,12 @@ export default function PlanUpload() {
               {promptCopied ? 'Prompt copied' : 'Copy AI prompt'}
             </Button>
             <Button variant="ghost" onClick={() => fileInput.current?.click()}>
-              Upload CSV/TSV
+              Upload CSV / TSV / XLSX
             </Button>
             <input
               ref={fileInput}
               type="file"
-              accept=".csv,.tsv,text/csv,text/tab-separated-values"
+              accept=".csv,.tsv,.xlsx,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={onFile}
               className="hidden"
             />

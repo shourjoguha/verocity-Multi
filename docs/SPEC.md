@@ -222,6 +222,12 @@ wireframe so an external AI can produce a plug-and-play plan:
   list of compatibility issues; `validateParsedPlan` is the final gate before
   save (also used for markdown uploads). The UI in `PlanUpload` blocks save
   while issues remain so a malformed plan cannot break silently.
+- **Workbook uploads** — `.xlsx` files are read by `parsePlanWorkbook` (dynamic
+  import of `exceljs` so the cost is only paid when a user actually uploads a
+  workbook). The reader locates the canonical header row anywhere in the first
+  sheet and feeds the data through `parsePlanTabular` — so validation and the
+  domain vocabulary remain single-sourced. XLSB (binary Excel) is not supported
+  in v1; export to XLSX or CSV.
 
 When the plan structure, sections, metrics, units, or block vocabulary change,
 update `planTemplate.ts` (sample rows + prompt) and its tests in the same

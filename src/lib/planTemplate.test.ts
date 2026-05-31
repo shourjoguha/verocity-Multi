@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import ExcelJS from 'exceljs';
 import {
   PLAN_CSV_HEADERS,
   buildPlanAiPrompt,
   buildPlanCsvTemplate,
   buildPlanTsvTemplate,
   parsePlanTabular,
+  parsePlanWorkbook,
   validateParsedPlan,
 } from '@/lib/planTemplate';
 
@@ -113,6 +115,75 @@ describe('buildPlanAiPrompt', () => {
     expect(prompt).toContain('primary');
     expect(prompt).toContain('accumulation');
     expect(prompt).toContain('weight');
+  });
+});
+
+describe('parsePlanWorkbook (xlsx)', () => {
+  async function buildXlsx(rows: string[][]): Promise<ArrayBuffer> {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Plan');
+    for (const row of rows) ws.addRow(row);
+    const buf = await wb.xlsx.writeBuffer();
+    return buf as ArrayBuffer;
+  }
+
+  it('parses an xlsx with the canonical header equivalently to CSV', async () => {
+    // Hand-built rows so quoted commas and newlines aren't a concern.
+    const rows: string[][] = [
+      [...PLAN_CSV_HEADERS],
+      ['META', 'title', 'Mini Plan', '', '', '', '', ''],
+      ['META', 'start', '2026-06-01', '', '', '', '', ''],
+      ['META', 'weeks', '2', '', '', '', '', ''],
+      ['BLOCK', 'accumulation', '', '', '', '1-2', '', ''],
+      ['DAY', 'mon', 'Monday', '', '', '', '', ''],
+      ['EX', 'mon', 'Back Squat', 'primary', 'weight', '1', '3x5', ''],
+      ['EX', 'mon', 'Back Squat', 'primary', 'weight', '2', '4x5', ''],
+      ['EX', 'mon', 'Leg Press', 'accessory', 'reps', '*', '3x12', 'meters, on 2:00'],
+    ];
+    const buf = await buildXlsx(rows);
+    const fromXlsx = await parsePlanWorkbook(buf);
+
+    const csvText =
+      [
+        PLAN_CSV_HEADERS.join(','),
+        'META,title,Mini Plan',
+        'META,start,2026-06-01',
+        'META,weeks,2',
+        'BLOCK,accumulation,,,,1-2,,',
+        'DAY,mon,Monday',
+        'EX,mon,Back Squat,primary,weight,1,3x5,',
+        'EX,mon,Back Squat,primary,weight,2,4x5,',
+        'EX,mon,Leg Press,accessory,reps,*,3x12,"meters, on 2:00"',
+      ].join('\n') + '\n';
+    const fromCsv = parsePlanTabular(csvText);
+
+    expect(fromXlsx.issues).toEqual([]);
+    expect(fromXlsx.plan).toEqual(fromCsv.plan);
+  });
+
+  it('locates the header row even with leading blank/preamble rows', async () => {
+    const buf = await buildXlsx([
+      ['My AI export', '', '', '', '', '', '', ''],
+      [],
+      [...PLAN_CSV_HEADERS],
+      ['META', 'title', 'Tiny', '', '', '', '', ''],
+      ['META', 'weeks', '1', '', '', '', '', ''],
+      ['DAY', 'mon', 'Monday', '', '', '', '', ''],
+      ['EX', 'mon', 'Squat', 'primary', 'weight', '*', '3x5', ''],
+    ]);
+    const { plan, issues } = await parsePlanWorkbook(buf);
+    expect(issues).toEqual([]);
+    expect(plan.title).toBe('Tiny');
+    expect(plan.days[0].exercises[0].movement).toBe('Squat');
+  });
+
+  it('reports a useful issue when the header is missing', async () => {
+    const buf = await buildXlsx([
+      ['wrong', 'header', 'row'],
+      ['META', 'title', 'X'],
+    ]);
+    const { issues } = await parsePlanWorkbook(buf);
+    expect(issues.some((i) => i.includes('Could not find header row'))).toBe(true);
   });
 });
 

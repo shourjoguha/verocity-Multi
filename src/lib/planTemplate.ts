@@ -473,6 +473,67 @@ export function parsePlanTabular(text: string): PlanParseResult {
   return { plan, issues };
 }
 
+// Convert a single cell value coming from an Excel reader into a string the
+// CSV parser understands. ExcelJS yields Date for date cells, number for
+// numerics, and rich-text objects for styled strings.
+function cellToString(v: unknown): string {
+  if (v == null) return '';
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    const obj = v as { text?: unknown; richText?: { text?: unknown }[]; result?: unknown };
+    if (typeof obj.text === 'string') return obj.text;
+    if (Array.isArray(obj.richText)) return obj.richText.map((p) => String(p.text ?? '')).join('');
+    if (obj.result != null) return cellToString(obj.result);
+  }
+  return String(v);
+}
+
+// Read an .xlsx workbook buffer, locate the header row anywhere in the first
+// sheet, and feed the resulting rows through the CSV parser so that all
+// validation lives in one place.
+export async function parsePlanWorkbook(buffer: ArrayBuffer): Promise<PlanParseResult> {
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const sheet = wb.worksheets[0];
+  if (!sheet) return { plan: emptyPlan(), issues: ['Workbook has no sheets.'] };
+
+  const expectedLower = PLAN_CSV_HEADERS.map((h) => h.toLowerCase());
+  const csvRows: string[] = [];
+  let headerRow = -1;
+
+  for (let r = 1; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+    const cells = values.map(cellToString).map((s) => s.trim());
+    if (headerRow === -1) {
+      const lower = cells.map((c) => c.toLowerCase());
+      const match = expectedLower.every((h, i) => lower[i] === h);
+      if (match) {
+        headerRow = r;
+        csvRows.push(PLAN_CSV_HEADERS.join(','));
+      }
+      continue;
+    }
+    if (cells.every((c) => c === '')) continue;
+    const padded = PLAN_CSV_HEADERS.map((_, i) => cells[i] ?? '');
+    csvRows.push(padded.map((c) => escapeCell(c, ',')).join(','));
+  }
+
+  if (headerRow === -1) {
+    return {
+      plan: emptyPlan(),
+      issues: [
+        `Could not find header row "${PLAN_CSV_HEADERS.join(',')}" in the first sheet.`,
+      ],
+    };
+  }
+
+  return parsePlanTabular(csvRows.join('\n') + '\n');
+}
+
 function emptyPlan(): ParsedPlan {
   return {
     title: 'Untitled Plan',
