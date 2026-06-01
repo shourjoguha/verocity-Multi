@@ -274,14 +274,14 @@ export default function StatsView() {
                       timeZone: 'UTC',
                     });
                     if (!cell) {
-                      return <div key={row} className="aspect-square bg-fg/[0.05]" />;
+                      return <div key={row} className="hill aspect-square bg-fg/[0.05]" />;
                     }
                     const label = `${dateLabel} · ${cell.activities.map((a) => a.label).join(', ')} · ${formatRound(cell.volume)} kg`;
                     const multi = cell.activities.length > 1;
                     return (
                       <div
                         key={row}
-                        className={`aspect-square cursor-pointer overflow-hidden ${multi ? 'flex flex-col ring-1 ring-fg/20' : ''}`}
+                        className={`hill aspect-square cursor-pointer overflow-hidden ${multi ? 'flex flex-col' : ''}`}
                         style={
                           multi
                             ? undefined
@@ -304,8 +304,7 @@ export default function StatsView() {
               ))}
             </div>
             <p className="mt-2 text-[0.65rem] text-muted">
-              Colored by activity · intensity by volume · striped + outlined days had multiple
-              activities.
+              Colored by activity · intensity by volume · striped days had multiple activities.
             </p>
           </section>
         </Item>
