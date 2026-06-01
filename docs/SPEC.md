@@ -349,20 +349,38 @@ Elevate via:
 
 ### Depth & backdrop
 
-A `BackgroundLayer` Astro component sits behind every page at `z-index: -10` and
-swaps presets via the `html[data-bg]` attribute. CSS presets (`grain`,
+A `BackgroundLayer` Astro component sits behind every page at `z-index: -10`
+and swaps presets via the `html[data-bg]` attribute. CSS presets (`grain`,
 `hairlines`, `topography`) paint with token-derived SVG/gradient fills; the
-`aurora` preset mounts `BackgroundScene3DCanvas` — a `@react-three/fiber`
-scene of drifting monochrome rectangles — which is **lazy-loaded** so the
-three.js cost is only paid when a user picks it. Default is `off`. The
-preference is stored in `localStorage` and applied pre-paint by an inline
-script in `Base.astro` (no FOUC) and mirrored to `<html data-bg>`.
+`aurora` preset (labelled "Depth" in the UI) mounts `BackgroundScene3DCanvas`
+— a `@react-three/fiber` scene composed of an ink-grey monolith, a mid-grey
+plinth, a hairline wire frame, and a static paper veil, anchored by a real
+cast shadow on a ground plane. Pointer parallax on the scene root group
+(≈3.4°/2°, critically-damped 400ms settle) gives it life. The scene is
+**lazy-loaded** via `client:idle` + dynamic import, so the three.js cost is
+only paid when a user is actually on that preset.
 
-Cards ship a slight resting elevation via the `.lift` utility (CSS-only,
-token-derived shadow) so the UI reads as paper resting on the canvas;
-interactive cards get `.lift-interactive` and rise a few pixels on
-hover/focus. Never inline `box-shadow` in components — extend the lift utility
-or add a new shadow token.
+The preference is stored in `localStorage` and applied pre-paint by an inline
+script in `Base.astro` (no FOUC) that picks a **device-aware default** when
+no explicit preference is stored: `aurora` on `(min-width: 768px) and
+(pointer: fine)` without `prefers-reduced-motion`; otherwise `topography`.
+This keeps WebGL off mobile / touch / reduced-motion devices while still
+giving every user a depth cue out of the box.
+
+Cards ship a resting elevation via the `.lift` utility (CSS-only,
+token-derived shadows at ~10% / ~18% rest/hover) so the UI reads as paper
+floating above the canvas. `.lift-interactive` adds a perspective tilt on
+hover (`rotateX(1.4deg) rotateY(-2.2deg) translateZ(6px)`) gated on
+`prefers-reduced-motion: no-preference`; reduced-motion users still get the
+shadow bump but no rotation. Whole-container surfaces (lists, modal panels)
+opt into `.lift` as a unit. Rows inside a hairline-divider container
+(`gap-px` grids, StatCard grids) MUST stay flat — adding shadow would muddy
+the hairline separators.
+
+`EchoText` layers each carry a real `translateZ` offset (-8px increments)
+inside a parent `perspective(800px)`, so the typographic Echo Stack is a
+literal receding stack of cards rather than a 2D shadow simulation. Any new
+echo layer MUST set both `--echo-dx` and `--echo-tz`.
 
 > Open Q: keep the existing identity (recommended) vs. a fresh visual language.
 

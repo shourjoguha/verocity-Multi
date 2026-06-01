@@ -1,6 +1,10 @@
 // Single source of truth for the toggleable backdrop. The picker writes to
 // localStorage and dispatches BACKGROUND_EVENT so the live <html data-bg>
 // attribute and the React island stay in sync without a reload.
+//
+// The "aurora" preset is the 3D depth scene — kept under the legacy key so
+// existing localStorage preferences continue to resolve. UI labels reflect
+// the actual scene ("Depth", "Monolith on paper").
 
 export const BACKGROUND_STORAGE_KEY = 'verocity:bg';
 export const BACKGROUND_EVENT = 'verocity:bg-change';
@@ -10,7 +14,7 @@ export const BACKGROUNDS = {
   grain: { label: 'Grain', description: 'Faint film grain — paper texture.' },
   hairlines: { label: 'Hairlines', description: 'A 48px grid, like a technical drawing.' },
   topography: { label: 'Topography', description: 'Concentric contour rings.' },
-  aurora: { label: 'Aurora', description: 'A drifting 3D paper sculpture. Loads on demand.' },
+  aurora: { label: 'Depth', description: '3D monolith on paper. Loads on demand. Desktop default.' },
 } as const;
 
 export type BackgroundKey = keyof typeof BACKGROUNDS;
@@ -18,6 +22,16 @@ export const BACKGROUND_KEYS = Object.keys(BACKGROUNDS) as BackgroundKey[];
 
 export function isBackgroundKey(value: string | null | undefined): value is BackgroundKey {
   return value != null && (BACKGROUND_KEYS as readonly string[]).includes(value);
+}
+
+// Device gate for the heavyweight 3D default. Touch / narrow / reduced-motion
+// users fall back to the topography CSS preset — still a depth cue, no WebGL.
+export function pickDeviceDefault(): BackgroundKey {
+  if (typeof window === 'undefined') return 'off';
+  const canBoot3D =
+    window.matchMedia('(min-width: 768px) and (pointer: fine)').matches &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return canBoot3D ? 'aurora' : 'topography';
 }
 
 export function applyBackground(key: BackgroundKey): void {

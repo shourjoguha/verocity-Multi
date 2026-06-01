@@ -406,7 +406,7 @@ export default function StatsView() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {cards.map(([name, value]) => (
-                  <div key={name} className="border border-border bg-surface p-4">
+                  <div key={name} className="lift border border-border bg-surface p-4">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate capitalize text-fg">{name}</span>
                       <span className="shrink-0 font-display text-lg tabular-nums tracking-tight text-fg">

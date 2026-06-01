@@ -38,15 +38,23 @@ const { title = 'Verocity', description = 'Strength & training logger.', noBackd
     <title>{title}</title>
     <ClientRouter />
     <script is:inline>
-      // Apply the saved backdrop before first paint to avoid FOUC.
+      // Apply the saved backdrop before first paint to avoid FOUC. If no
+      // explicit preference is stored, pick a device-aware default: desktops
+      // with a fine pointer and no reduced-motion get the 3D scene; everyone
+      // else gets the topography CSS preset (still a depth cue, no WebGL).
       (function () {
         try {
           var v = localStorage.getItem('verocity:bg');
           var allowed = ['off', 'grain', 'hairlines', 'topography', 'aurora'];
-          if (allowed.indexOf(v) === -1) v = 'off';
+          if (allowed.indexOf(v) === -1) {
+            var canBoot3D =
+              window.matchMedia('(min-width: 768px) and (pointer: fine)').matches &&
+              !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            v = canBoot3D ? 'aurora' : 'topography';
+          }
           document.documentElement.setAttribute('data-bg', v);
         } catch (_) {
-          document.documentElement.setAttribute('data-bg', 'off');
+          document.documentElement.setAttribute('data-bg', 'topography');
         }
       })();
     </script>

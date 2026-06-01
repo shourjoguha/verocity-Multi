@@ -50,13 +50,31 @@ Full spec: `docs/SPEC.md`.
 - **Backdrop & depth.** The full-viewport backdrop is `BackgroundLayer.astro`
   mounted once in `Base.astro`. CSS presets paint via
   `html[data-bg="<key>"] .bg-backdrop::before` rules in `global.css`; the
-  `aurora` 3D preset mounts `BackgroundScene3DCanvas` (lazy-loaded — pays the
-  three.js cost only when selected). New backdrops MUST stay monochrome and
-  derived from the existing `--color-*` tokens. The user toggle lives in
-  `ProfileView` and goes through `lib/background.ts` (single source of truth).
-  Card depth is the `.lift` / `.lift-interactive` utility built from
-  `--shadow-lift-rest`/`--shadow-lift-hover` — never inline a `box-shadow` in
-  a component.
+  `aurora` 3D preset (labelled "Depth" in the UI) mounts
+  `BackgroundScene3DCanvas` — the monolith-on-paper scene with real cast
+  shadows and pointer parallax — lazy-loaded via `client:idle` + dynamic
+  import. New backdrops MUST stay monochrome and derived from the existing
+  `--color-*` tokens. The user toggle lives in `ProfileView` and goes through
+  `lib/background.ts` (single source of truth).
+- **Default backdrop is device-gated.** Base.astro's pre-paint script picks
+  `aurora` only when `(min-width: 768px) and (pointer: fine)` AND no
+  `prefers-reduced-motion`. Touch / narrow / reduced-motion devices default
+  to the `topography` CSS preset (still a depth cue, no WebGL). Never
+  unconditionally default to the 3D scene — the three.js chunk is
+  ~170KB gzip and would tank LCP on mobile.
+- **Card depth** is the `.lift` / `.lift-interactive` utility built from
+  `--shadow-lift-rest` / `--shadow-lift-hover` — never inline a `box-shadow`
+  in a component. `.lift-interactive` adds a perspective tilt on hover
+  (`rotateX(1.4deg) rotateY(-2.2deg) translateZ(6px)`) wrapped in
+  `prefers-reduced-motion: no-preference`; reduced-motion users still get
+  the shadow bump but no rotation. Whole-container surfaces (lists, modal
+  panels) opt into `.lift`; individual rows inside a hairline-divider
+  container (e.g. `gap-px` grids, StatCard grids) MUST stay flat — shadow
+  would muddy the hairlines.
+- **EchoText is 3D.** Each shadow layer sits at a real `translateZ` offset
+  behind the foreground (`--echo-tz`, -8px increments) and the parent
+  `.echo` carries `perspective(800px)`. Any new echo layers MUST set both
+  `--echo-dx` and `--echo-tz` so the stack stays coherent.
 - **Signup is invite-gated** (caps < 100), redeemed server-side. **AI is deferred** —
   don't build it without an explicit go-ahead.
 - **TypeScript strict.** Domain config in `app.config.ts`; types in `lib/types.ts`.

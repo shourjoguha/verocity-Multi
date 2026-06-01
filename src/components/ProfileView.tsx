@@ -412,7 +412,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           {logs.length === 0 ? (
             <EmptyState>No sessions logged yet.</EmptyState>
           ) : (
-            <ul className="border border-border bg-surface">
+            <ul className="lift border border-border bg-surface">
               {logs.slice(0, 12).map((log) => {
                 const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
                 const inner = (

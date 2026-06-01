@@ -175,7 +175,7 @@ export default function CalendarView() {
         <Item>
           <section className="mt-8">
             <SectionHeader>This month</SectionHeader>
-            <ul className="border border-border bg-surface">
+            <ul className="lift border border-border bg-surface">
               {monthSessions.map((log) => {
                 const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
                 return (

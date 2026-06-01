@@ -12,8 +12,16 @@ export function BackgroundPicker() {
   const [value, setValue] = useState<BackgroundKey>('off');
 
   useEffect(() => {
+    // Mirror the resolution order used by Base.astro's FOUC script:
+    // explicit localStorage wins, otherwise read whatever data-bg ended up
+    // as after device-aware defaulting.
     const raw = window.localStorage.getItem(BACKGROUND_STORAGE_KEY);
-    setValue(isBackgroundKey(raw) ? raw : 'off');
+    if (isBackgroundKey(raw)) {
+      setValue(raw);
+      return;
+    }
+    const attr = document.documentElement.getAttribute('data-bg');
+    if (isBackgroundKey(attr)) setValue(attr);
   }, []);
 
   function pick(key: BackgroundKey) {

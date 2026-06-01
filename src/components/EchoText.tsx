@@ -6,11 +6,14 @@ import { createElement, type CSSProperties, type ElementType } from 'react';
 // layers are aria-hidden + pointer-events:none. Pure CSS animation (see
 // global.css .echo) — renders to static HTML in Astro with no client directive.
 
+// Each layer recedes by an additional -8px on Z. Combined with the parent's
+// perspective(800px), this gives the stack real depth — not just the 2D
+// shadow-offset look of the original version.
 const LAYERS = [
-  { dx: '-0.04em', color: 'var(--color-echo-1)' },
-  { dx: '-0.08em', color: 'var(--color-echo-2)' },
-  { dx: '-0.12em', color: 'var(--color-echo-3)' },
-  { dx: '-0.16em', color: 'var(--color-echo-4)' },
+  { dx: '-0.04em', tz: '-8px', color: 'var(--color-echo-1)' },
+  { dx: '-0.08em', tz: '-16px', color: 'var(--color-echo-2)' },
+  { dx: '-0.12em', tz: '-24px', color: 'var(--color-echo-3)' },
+  { dx: '-0.16em', tz: '-32px', color: 'var(--color-echo-4)' },
 ] as const;
 
 type EchoTextProps = {
@@ -34,7 +37,7 @@ export function EchoText({ text, as, className = '', animate = false, layers = 4
           key: l.dx,
           'aria-hidden': 'true',
           className: 'echo-layer',
-          style: { '--echo-dx': l.dx, color: l.color } as CSSProperties,
+          style: { '--echo-dx': l.dx, '--echo-tz': l.tz, color: l.color } as CSSProperties,
         },
         text,
       ),

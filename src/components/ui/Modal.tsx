@@ -42,7 +42,7 @@ export function Modal({
             transition={{ duration: 0.2 }}
           >
             <motion.div
-              className="flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface"
+              className="lift flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface"
               onClick={(e) => e.stopPropagation()}
               initial={{ opacity: 0, y: 24, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
