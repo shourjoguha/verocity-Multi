@@ -98,6 +98,19 @@ body {
   }
 }
 
+/* Hill utility — "rounded pillow popping out of the page". Inset highlight
+   on the top-left + inset shadow on the bottom-right reads as a domed cell
+   with light coming from the upper left. Designed for the consistency
+   heatmap where cells are tiny and colored, but works on any small colored
+   surface. Inset shadows stay inside the cell so they never bleed into
+   neighbouring cells in a gap-1 grid. */
+.hill {
+  border-radius: 4px;
+  box-shadow:
+    inset 1.5px 1.5px 3px hsl(0 0% 100% / 0.45),
+    inset -1.5px -1.5px 3px hsl(0 0% 0% / 0.28);
+}
+
 /* ---- Toggleable background backdrop (BackgroundLayer + ProfileView toggle).
    Backdrop is fixed behind the app at -z-10 (see Base.astro). Each preset
    paints via a `html[data-bg="<key>"] .bg-backdrop::before` rule below. The
