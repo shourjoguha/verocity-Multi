@@ -24,7 +24,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="inline-flex min-h-11 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+            className="hill-btn inline-flex min-h-11 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
           >
             Reload
           </button>

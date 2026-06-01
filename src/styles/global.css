@@ -111,6 +111,60 @@ body {
     inset -1.5px -1.5px 3px hsl(0 0% 0% / 0.28);
 }
 
+/* Hill button — extends the pillow into a proper raised button: outer drop
+   shadow lifts it above the page, inset highlight + shadow gives the dome,
+   :active inverts both axes so it reads as pressed in. Hover deepens the
+   outer shadow slightly to suggest the press is imminent. Sharp-corner
+   editorial language is preserved by keeping radius small (4px). */
+.hill-btn {
+  border-radius: 4px;
+  box-shadow:
+    0 1px 0 hsl(0 0% 7% / 0.10),
+    0 2px 5px hsl(0 0% 7% / 0.14),
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.32),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.22);
+  transition:
+    box-shadow 0.18s var(--ease-editorial),
+    transform 0.18s var(--ease-editorial);
+}
+.hill-btn:hover:not(:disabled),
+.hill-btn:focus-visible {
+  box-shadow:
+    0 2px 0 hsl(0 0% 7% / 0.12),
+    0 5px 12px hsl(0 0% 7% / 0.20),
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.36),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.24);
+}
+.hill-btn:active:not(:disabled),
+.hill-btn[aria-pressed='true'] {
+  box-shadow:
+    inset 1.5px 1.5px 2.5px hsl(0 0% 0% / 0.22),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 100% / 0.20);
+  transform: translateY(1px);
+}
+.hill-btn:disabled {
+  box-shadow:
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.20),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.12);
+}
+
+/* Flush variant — pillow inset only, no outer rise. For buttons inside an
+   already-elevated container (popover, modal) where a drop shadow would
+   double up against the container's own shadow. */
+.hill-btn-flush {
+  border-radius: 4px;
+  box-shadow:
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.32),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.22);
+  transition: box-shadow 0.18s var(--ease-editorial);
+}
+.hill-btn-flush:active:not(:disabled),
+.hill-btn-flush[aria-pressed='true'] {
+  box-shadow:
+    inset 1.5px 1.5px 2.5px hsl(0 0% 0% / 0.22),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 100% / 0.20);
+}
+
 /* ---- Toggleable background backdrop (BackgroundLayer + ProfileView toggle).
    Backdrop is fixed behind the app at -z-10 (see Base.astro). Each preset
    paints via a `html[data-bg="<key>"] .bg-backdrop::before` rule below. The

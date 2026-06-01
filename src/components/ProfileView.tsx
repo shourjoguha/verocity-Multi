@@ -309,13 +309,13 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             <button
               type="button"
               onClick={() => setAddOpen(true)}
-              className="inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+              className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
             >
               Start workout
             </button>
             <a
               href="/app/activity"
-              className="inline-flex min-h-12 flex-1 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+              className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
             >
               Log activity
             </a>
@@ -479,7 +479,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                 onClick={() => setExportMenuOpen(true)}
                 aria-label="Export data"
                 title="Export data"
-                className="inline-flex min-h-11 min-w-11 items-center justify-center border border-border text-fg transition-colors hover:border-fg"
+                className="hill-btn inline-flex min-h-11 min-w-11 items-center justify-center border border-border bg-surface text-fg transition-colors hover:border-fg"
               >
                 <DownloadIcon />
               </button>

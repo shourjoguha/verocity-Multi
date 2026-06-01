@@ -377,6 +377,16 @@ opt into `.lift` as a unit. Rows inside a hairline-divider container
 (`gap-px` grids, StatCard grids) MUST stay flat — adding shadow would muddy
 the hairline separators.
 
+Buttons carry `.hill-btn` (an extension of the `.hill` pillow used on the
+consistency-heatmap cells): 4px radius + outer drop shadow + inset highlight
+on top-left + inset shadow on bottom-right. `:active` and
+`[aria-pressed="true"]` invert both insets and drop the button 1px — it
+reads as pressed in, the way a physical switch does. Toggle buttons MUST
+set `aria-pressed` so the state lands. `.hill-btn-flush` drops the outer
+drop shadow for buttons that live inside an already-elevated container
+(popovers, modals). Tiny icon-only buttons (h-5 / h-6) and text-only links
+stay flat — the pillow doesn't read at that scale.
+
 `EchoText` layers each carry a real `translateZ` offset (-8px increments)
 inside a parent `perspective(800px)`, so the typographic Echo Stack is a
 literal receding stack of cards rather than a 2D shadow simulation. Any new

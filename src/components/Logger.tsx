@@ -362,7 +362,7 @@ export default function Logger() {
                 const nextMetric = METRIC_CYCLE[(METRIC_CYCLE.indexOf(item.primaryMetric) + 1) % METRIC_CYCLE.length];
                 setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric));
               }}
-              className="border border-border px-2 py-1 hover:text-fg"
+              className="hill-btn border border-border bg-surface px-2 py-1 hover:text-fg"
               aria-label="Change metric"
             >
               {item.primaryMetric}
@@ -370,7 +370,8 @@ export default function Logger() {
             {voice.supported ? (
               <button
                 onClick={() => listen(item.id, si, gi, ii)}
-                className={`border px-2 py-1 hover:text-fg ${
+                aria-pressed={voiceTarget === item.id}
+                className={`hill-btn border bg-surface px-2 py-1 hover:text-fg ${
                   voiceTarget === item.id ? 'border-accent text-accent' : 'border-border'
                 }`}
               >
@@ -379,13 +380,13 @@ export default function Logger() {
             ) : null}
             <button
               onClick={() => rest.start(item.restSeconds ?? TIMERS.defaultRestSeconds)}
-              className="hover:text-fg"
+              className="hill-btn border border-border bg-surface px-2 py-1 hover:text-fg"
             >
               Rest
             </button>
             <button
               onClick={() => setOptionsFor({ si, gi, ii })}
-              className="border border-border px-2 py-1 hover:text-fg"
+              className="hill-btn border border-border bg-surface px-2 py-1 hover:text-fg"
               aria-label="Movement options"
             >
               ⋯
@@ -482,7 +483,7 @@ export default function Logger() {
               key={key}
               type="button"
               onClick={() => toggleTag(key)}
-              className={`border px-2 py-1 text-[0.65rem] uppercase tracking-wider transition-colors ${
+              className={`hill-btn border bg-surface px-2 py-1 text-[0.65rem] uppercase tracking-wider transition-colors ${
                 on ? '' : 'border-border text-muted hover:text-fg'
               }`}
               style={on ? { borderColor: v.color, color: v.color } : undefined}
@@ -617,7 +618,7 @@ export default function Logger() {
               const groups = doc.sections[si].groups;
               const close = () => setOptionsFor(null);
               const rowClass =
-                'inline-flex min-h-11 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg disabled:opacity-40';
+                'hill-btn inline-flex min-h-11 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg disabled:opacity-40';
               return (
                 <div className="min-h-0 flex-1 overflow-y-auto p-4">
                   <div className="mb-4 text-sm capitalize text-fg">{item.movement}</div>
@@ -683,7 +684,7 @@ export default function Logger() {
                                 setDoc((d) => groupWith(d, si, gi, idx, 'superset'));
                                 close();
                               }}
-                              className="border border-border px-2 py-1 text-xs capitalize text-fg transition-colors hover:border-fg"
+                              className="hill-btn border border-border bg-surface px-2 py-1 text-xs capitalize text-fg transition-colors hover:border-fg"
                             >
                               {g.items.map((it) => it.movement).join(' + ')}
                             </button>
@@ -707,7 +708,8 @@ export default function Logger() {
                             type="button"
                             title={desc}
                             onClick={() => setDoc((d) => toggleItemNotation(d, si, gi, ii, sym))}
-                            className={`border px-2 py-1 text-xs transition-colors ${
+                            aria-pressed={on}
+                            className={`hill-btn border bg-surface px-2 py-1 text-xs transition-colors ${
                               on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
                             }`}
                           >
@@ -728,7 +730,8 @@ export default function Logger() {
                           key={sec}
                           type="button"
                           onClick={() => setDoc((d) => setItemRest(d, si, gi, ii, sec))}
-                          className={`border px-2 py-1 text-xs tabular-nums transition-colors ${
+                          aria-pressed={item.restSeconds === sec}
+                          className={`hill-btn border bg-surface px-2 py-1 text-xs tabular-nums transition-colors ${
                             item.restSeconds === sec
                               ? 'border-fg text-fg'
                               : 'border-border text-muted hover:text-fg'

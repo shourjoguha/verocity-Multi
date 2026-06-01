@@ -40,7 +40,7 @@ export function BackgroundPicker() {
               type="button"
               onClick={() => pick(k)}
               aria-pressed={selected}
-              className={`min-h-11 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
+              className={`hill-btn min-h-11 border bg-surface px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
                 selected ? 'border-fg text-fg' : 'border-border text-muted hover:border-fg hover:text-fg'
               }`}
             >

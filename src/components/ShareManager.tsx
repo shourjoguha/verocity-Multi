@@ -124,7 +124,8 @@ export default function ShareManager() {
             <button
               key={s.key}
               onClick={() => changeScope(s.key)}
-              className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
+              aria-pressed={scope === s.key}
+              className={`hill-btn min-h-9 border bg-surface px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
                 scope === s.key ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
               }`}
             >

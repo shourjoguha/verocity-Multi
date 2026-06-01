@@ -71,6 +71,19 @@ Full spec: `docs/SPEC.md`.
   panels) opt into `.lift`; individual rows inside a hairline-divider
   container (e.g. `gap-px` grids, StatCard grids) MUST stay flat — shadow
   would muddy the hairlines.
+- **Buttons are 3D pillows.** The `Button` primitive (and most bespoke
+  button-shaped surfaces) carries `.hill-btn`: 4px radius + outer drop
+  shadow + inset highlight (top-left) + inset shadow (bottom-right). On
+  `:active` (or `aria-pressed="true"`) both insets invert and the button
+  drops 1px — it reads as pressed in. Toggle buttons MUST set
+  `aria-pressed` so the pressed-in state lands; the existing styling
+  (border-fg, accent color) stacks on top. `.hill-btn-flush` is the
+  no-outer-shadow variant for buttons inside a popover/modal that already
+  has its own elevation. Ghost variants need a `bg-surface` body — a
+  fully transparent button has nothing for the highlight inset to render
+  against. Tiny icon-only buttons (h-5 to h-8, ✓ checkboxes inside set
+  rows, ↑/↓/× table-cell utilities, text-only link buttons) stay flat by
+  design; the pillow doesn't read at that scale.
 - **EchoText is 3D.** Each shadow layer sits at a real `translateZ` offset
   behind the foreground (`--echo-tz`, -8px increments) and the parent
   `.echo` carries `perspective(800px)`. Any new echo layers MUST set both

@@ -191,14 +191,16 @@ export default function PlanUpload() {
           <button
             type="button"
             onClick={() => setSource('markdown')}
-            className={`border px-3 py-1 ${source === 'markdown' ? 'border-fg text-fg' : 'border-border text-muted'}`}
+            aria-pressed={source === 'markdown'}
+            className={`hill-btn border bg-surface px-3 py-1 ${source === 'markdown' ? 'border-fg text-fg' : 'border-border text-muted'}`}
           >
             Markdown
           </button>
           <button
             type="button"
             onClick={() => setSource('csv')}
-            className={`border px-3 py-1 ${source === 'csv' ? 'border-fg text-fg' : 'border-border text-muted'}`}
+            aria-pressed={source === 'csv'}
+            className={`hill-btn border bg-surface px-3 py-1 ${source === 'csv' ? 'border-fg text-fg' : 'border-border text-muted'}`}
           >
             CSV / TSV
           </button>

@@ -68,7 +68,7 @@ export default function ResetPasswordForm() {
         </p>
         <a
           href="/login"
-          className="mt-2 inline-flex min-h-11 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+          className="hill-btn mt-2 inline-flex min-h-11 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
         >
           ← Back to sign in
         </a>

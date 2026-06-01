@@ -394,7 +394,8 @@ export default function StatsView() {
                       key={g}
                       type="button"
                       onClick={() => setGroupBy(g)}
-                      className={`border px-2 py-1 transition-colors ${
+                      aria-pressed={groupBy === g}
+                      className={`hill-btn border bg-surface px-2 py-1 transition-colors ${
                         groupBy === g ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
                       }`}
                     >

@@ -17,9 +17,9 @@ import { Item, PageStagger } from '@/components/anim';
 import { Modal } from '@/components/ui/Modal';
 
 const inkBtn =
-  'inline-flex min-h-11 items-center justify-center bg-fg px-3 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85 disabled:opacity-40';
+  'hill-btn inline-flex min-h-11 items-center justify-center bg-fg px-3 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85 disabled:opacity-40';
 const ghostBtn =
-  'inline-flex min-h-11 items-center justify-center border border-border px-3 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg';
+  'hill-btn inline-flex min-h-11 items-center justify-center border border-border bg-surface px-3 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg';
 
 function RecRow({
   rec,
@@ -38,7 +38,7 @@ function RecRow({
       <button
         type="button"
         onClick={onClick}
-        className={`flex w-full items-start justify-between gap-3 border border-border bg-surface p-4 text-left transition-colors hover:border-fg ${
+        className={`hill-btn flex w-full items-start justify-between gap-3 border border-border bg-surface p-4 text-left transition-colors hover:border-fg ${
           muted ? 'opacity-60' : ''
         }`}
       >
