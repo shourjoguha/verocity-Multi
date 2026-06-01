@@ -146,8 +146,8 @@ export function SetRow({
             haptic();
             onToggle();
           }}
-          className={`flex min-h-11 w-10 shrink-0 items-center justify-center border text-lg ${
-            a.completed ? 'border-accent bg-accent text-accent-fg' : 'border-border text-muted hover:text-fg'
+          className={`hill-btn flex min-h-11 w-10 shrink-0 items-center justify-center border text-lg ${
+            a.completed ? 'border-accent bg-accent text-accent-fg' : 'border-border bg-surface text-muted hover:text-fg'
           }`}
           aria-label="Toggle completed"
           aria-pressed={a.completed}

@@ -77,12 +77,17 @@ export function Button({
   disabled?: boolean;
   className?: string;
 }) {
+  // hill-btn handles the press feedback now (transform + shadow inversion),
+  // so the legacy active:scale is dropped to avoid double-squishing. Ghost
+  // gets bg-surface so the pillow effect has a body to dome from — a fully
+  // transparent ghost can't render the highlight, which would leave the
+  // pillow asymmetric.
   const base =
-    'inline-flex min-h-11 items-center justify-center px-4 text-sm uppercase tracking-wider transition duration-150 active:scale-[0.98] disabled:opacity-40';
+    'hill-btn inline-flex min-h-11 items-center justify-center px-4 text-sm uppercase tracking-wider transition-colors duration-150 disabled:opacity-40';
   const styles =
     variant === 'primary'
       ? 'bg-fg text-bg hover:bg-fg/85'
-      : 'border border-border text-fg hover:border-fg';
+      : 'border border-border bg-surface text-fg hover:border-fg';
   return (
     <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${styles} ${className}`}>
       {children}

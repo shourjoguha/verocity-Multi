@@ -57,14 +57,14 @@ export function LogQuickView({
             </span>
             <a
               href={`/app/session?id=${log.id}`}
-              className="inline-flex min-h-12 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+              className="hill-btn inline-flex min-h-12 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
             >
               Open
             </a>
             {resumable ? (
               <a
                 href={`/app/log?logId=${log.id}`}
-                className="inline-flex min-h-12 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+                className="hill-btn inline-flex min-h-12 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
               >
                 Resume
               </a>

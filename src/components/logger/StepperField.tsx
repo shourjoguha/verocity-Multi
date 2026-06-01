@@ -85,7 +85,7 @@ export function StepperField({
             <button
               type="button"
               onClick={() => bump(-1)}
-              className="flex h-20 w-14 items-center justify-center text-3xl text-fg active:bg-elevated"
+              className="hill-btn-flush flex h-20 w-14 items-center justify-center bg-surface text-3xl text-fg"
               aria-label={`Decrease ${ariaLabel}`}
             >
               −
@@ -105,7 +105,7 @@ export function StepperField({
             <button
               type="button"
               onClick={() => bump(1)}
-              className="flex h-20 w-14 items-center justify-center text-3xl text-fg active:bg-elevated"
+              className="hill-btn-flush flex h-20 w-14 items-center justify-center bg-surface text-3xl text-fg"
               aria-label={`Increase ${ariaLabel}`}
             >
               +

@@ -47,13 +47,13 @@ export function AddSessionMenu({
         <div className="flex flex-col gap-2">
           <a
             href={blankHref}
-            className="inline-flex min-h-12 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+            className="hill-btn inline-flex min-h-12 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
           >
             Blank workout
           </a>
           <a
             href={activityHref}
-            className="inline-flex min-h-12 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+            className="hill-btn inline-flex min-h-12 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
           >
             Log activity
           </a>

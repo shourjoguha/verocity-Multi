@@ -104,14 +104,14 @@ export default function CalendarView() {
             <div className="flex shrink-0 gap-2 pb-1">
               <button
                 onClick={() => shift(-1)}
-                className="min-h-11 border border-border px-3 text-fg transition-colors hover:border-fg"
+                className="hill-btn min-h-11 border border-border bg-surface px-3 text-fg transition-colors hover:border-fg"
                 aria-label="Previous month"
               >
                 ←
               </button>
               <button
                 onClick={() => shift(1)}
-                className="min-h-11 border border-border px-3 text-fg transition-colors hover:border-fg"
+                className="hill-btn min-h-11 border border-border bg-surface px-3 text-fg transition-colors hover:border-fg"
                 aria-label="Next month"
               >
                 →
