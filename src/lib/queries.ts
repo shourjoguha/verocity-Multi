@@ -29,6 +29,14 @@ export async function getActivePlan(client: SupabaseClient = supabase): Promise<
   return (data as Plan) ?? null;
 }
 
+export async function getPlanById(
+  id: string,
+  client: SupabaseClient = supabase,
+): Promise<Plan | null> {
+  const { data } = await client.from('plans').select('*').eq('id', id).maybeSingle();
+  return (data as Plan) ?? null;
+}
+
 export async function getRecentLogs(
   limit = 10,
   client: SupabaseClient = supabase,

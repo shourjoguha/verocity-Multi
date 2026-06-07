@@ -81,9 +81,32 @@ export function buildLogFromPlanDay(day: PlanDay, week: number): LogDocument {
   );
 }
 
-// Build an in-progress LogDocument from a saved session frame.
+// Build an in-progress LogDocument from a saved session frame. An empty frame
+// falls back to a blank doc so the Logger still has a section to add into.
 export function buildLogFromSession(frame: SessionFrame): LogDocument {
+  if (!frame.exercises || frame.exercises.length === 0) return buildBlankLog();
   return buildLogFromExercises(frame.exercises);
+}
+
+// The smallest week number with any programmed content for a day (1 if none).
+export function firstWeekWithContent(day: PlanDay): number {
+  let min = Infinity;
+  for (const ex of day.exercises) {
+    for (const k of Object.keys(ex.plannedByWeek)) {
+      const w = Number(k);
+      if (ex.plannedByWeek[w]?.trim() && w < min) min = w;
+    }
+  }
+  return Number.isFinite(min) ? min : 1;
+}
+
+// Resolve which week's prescription to use when launching a plan day. Prefers the
+// caller's week (e.g. the active plan's live week), but when that week has no
+// content for the day — typical for historic plans started long ago — falls back
+// to the first week that does, so the workout isn't built from blanks.
+export function resolveWeek(day: PlanDay, preferred: number): number {
+  const hasContent = day.exercises.some((ex) => ex.plannedByWeek[preferred]?.trim());
+  return hasContent ? preferred : firstWeekWithContent(day);
 }
 
 // Blank document for a custom (plan-less) session — one accessory section.

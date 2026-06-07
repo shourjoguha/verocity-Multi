@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { getLogById } from '@/lib/queries';
+import { createSession, getLogById } from '@/lib/queries';
+import { frameFromLogDocument } from '@/lib/logBuilder';
+import { toast } from '@/lib/toast';
 import type { SetActual, WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
 import { formatDate } from '@/lib/format';
@@ -26,6 +28,24 @@ const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
 export default function SessionDetail() {
   const [loading, setLoading] = useState(true);
   const [log, setLog] = useState<WorkoutLog | null>(null);
+  const [savingSession, setSavingSession] = useState(false);
+
+  async function saveAsSession(current: WorkoutLog) {
+    if (savingSession) return;
+    const frame = frameFromLogDocument(current.data ?? { sections: [] });
+    if (frame.exercises.length === 0) {
+      toast('Nothing to save — no logged movements', 'error');
+      return;
+    }
+    setSavingSession(true);
+    const created = await createSession({
+      name: `${current.activity_type ?? 'Session'} · ${formatDate(current.log_date)}`,
+      tags: current.tags,
+      frame,
+    });
+    setSavingSession(false);
+    toast(created ? 'Saved to sessions' : 'Could not save session', created ? 'success' : 'error');
+  }
 
   useEffect(() => {
     (async () => {
@@ -67,7 +87,17 @@ export default function SessionDetail() {
             <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">
               {formatDate(log.log_date)} · {log.status}
             </p>
-            <DeleteLogButton id={log.id} onDeleted={() => (window.location.href = '/app/calendar')} />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => saveAsSession(log)}
+                disabled={savingSession}
+                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg disabled:opacity-40"
+              >
+                Save as session
+              </button>
+              <DeleteLogButton id={log.id} onDeleted={() => (window.location.href = '/app/calendar')} />
+            </div>
           </div>
           <EchoText
             text={log.activity_type ?? 'Session'}

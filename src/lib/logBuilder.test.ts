@@ -3,9 +3,11 @@ import {
   buildBlankLog,
   buildLogFromPlanDay,
   buildLogFromSession,
+  firstWeekWithContent,
   frameFromLogDocument,
   frameFromPlanDay,
   parsePlanned,
+  resolveWeek,
 } from '@/lib/logBuilder';
 import type { LogDocument, PlanDay, SessionFrame } from '@/lib/types';
 
@@ -110,6 +112,26 @@ describe('buildLogFromSession', () => {
         expect(group.items).toHaveLength(1);
       }
     }
+  });
+
+  it('falls back to a blank doc for an empty frame so the logger is usable', () => {
+    expect(buildLogFromSession({ exercises: [] })).toEqual(buildBlankLog());
+  });
+});
+
+describe('firstWeekWithContent / resolveWeek', () => {
+  // Back Squat: W1,W2 ; Leg Press: W1 only.
+  it('finds the earliest week with any content', () => {
+    expect(firstWeekWithContent(DAY)).toBe(1);
+  });
+
+  it('keeps the preferred week when it has content', () => {
+    expect(resolveWeek(DAY, 2)).toBe(2);
+  });
+
+  it('falls back to the first content week when the preferred week is empty', () => {
+    // Week 9 is past everything programmed → fall back to week 1.
+    expect(resolveWeek(DAY, 9)).toBe(1);
   });
 });
 
