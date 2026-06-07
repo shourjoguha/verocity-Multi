@@ -8,6 +8,8 @@ import type {
   Plan,
   Profile,
   Recommendation,
+  Session,
+  SessionFrame,
   Share,
   ShareScope,
   WorkoutLog,
@@ -121,6 +123,59 @@ export async function updateMovement(id: string, patch: MovementInput): Promise<
 
 export async function deleteMovement(id: string): Promise<boolean> {
   const { error } = await supabase.from('movements').delete().eq('id', id);
+  return !error;
+}
+
+// ---- sessions (saved workout templates; owner-scoped by RLS) ----
+
+export async function getSessions(client: SupabaseClient = supabase): Promise<Session[]> {
+  const { data } = await client
+    .from('sessions')
+    .select('*')
+    .order('created_at', { ascending: false });
+  return (data as Session[]) ?? [];
+}
+
+export async function getSessionById(
+  id: string,
+  client: SupabaseClient = supabase,
+): Promise<Session | null> {
+  const { data } = await client.from('sessions').select('*').eq('id', id).maybeSingle();
+  return (data as Session) ?? null;
+}
+
+export type SessionInput = {
+  name: string;
+  tags: string[];
+  frame: SessionFrame;
+  source_plan_id?: string | null;
+  source_day_key?: string | null;
+};
+
+export async function createSession(input: SessionInput): Promise<Session | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from('sessions')
+    .insert({ ...input, owner_user_id: user.id })
+    .select('*')
+    .single();
+  if (error) return null;
+  return data as Session;
+}
+
+export async function updateSession(
+  id: string,
+  patch: Partial<SessionInput>,
+): Promise<boolean> {
+  const { error } = await supabase.from('sessions').update(patch).eq('id', id);
+  return !error;
+}
+
+export async function deleteSession(id: string): Promise<boolean> {
+  const { error } = await supabase.from('sessions').delete().eq('id', id);
   return !error;
 }
 

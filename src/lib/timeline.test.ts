@@ -54,6 +54,7 @@ function makeLog(opts: {
     id: `l-${opts.log_date}`,
     owner_user_id: 'u1',
     plan_id: 'p1',
+    session_id: null,
     log_date: opts.log_date,
     day_key: opts.day_key ?? null,
     week_number: null,

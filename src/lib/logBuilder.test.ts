@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildBlankLog, buildLogFromPlanDay, parsePlanned } from '@/lib/logBuilder';
-import type { PlanDay } from '@/lib/types';
+import {
+  buildBlankLog,
+  buildLogFromPlanDay,
+  buildLogFromSession,
+  frameFromLogDocument,
+  frameFromPlanDay,
+  parsePlanned,
+} from '@/lib/logBuilder';
+import type { LogDocument, PlanDay, SessionFrame } from '@/lib/types';
 
 describe('parsePlanned', () => {
   it('splits "3x5" into count and label', () => {
@@ -75,5 +82,110 @@ describe('buildLogFromPlanDay', () => {
 describe('buildBlankLog', () => {
   it('returns one empty accessory section', () => {
     expect(buildBlankLog()).toEqual({ sections: [{ key: 'accessory', groups: [] }] });
+  });
+});
+
+const FRAME: SessionFrame = {
+  exercises: [
+    { movement: 'Leg Press', section: 'accessory', primaryMetric: 'weight', planned: '3x12' },
+    { movement: 'Back Squat', section: 'primary', primaryMetric: 'weight', planned: '5x3' },
+  ],
+};
+
+describe('buildLogFromSession', () => {
+  it('orders sections canonically and expands planned strings into sets', () => {
+    const doc = buildLogFromSession(FRAME);
+    expect(doc.sections.map((s) => s.key)).toEqual(['primary', 'accessory']);
+    const squat = doc.sections[0].groups[0].items[0];
+    expect(squat.movement).toBe('Back Squat');
+    expect(squat.sets).toHaveLength(5);
+    expect(squat.sets[0].planned).toBe('3');
+  });
+
+  it('wraps each exercise in its own single-kind group', () => {
+    const doc = buildLogFromSession(FRAME);
+    for (const section of doc.sections) {
+      for (const group of section.groups) {
+        expect(group.kind).toBe('single');
+        expect(group.items).toHaveLength(1);
+      }
+    }
+  });
+});
+
+describe('frameFromPlanDay', () => {
+  it('collapses a plan day at a week into a flat frame, dropping empty rows', () => {
+    const frame = frameFromPlanDay(DAY, 2);
+    // Leg Press has no W2 column → empty planned → dropped.
+    expect(frame.exercises).toHaveLength(1);
+    expect(frame.exercises[0]).toEqual({
+      movement: 'Back Squat',
+      section: 'primary',
+      primaryMetric: 'weight',
+      planned: '4x5',
+      notes: undefined,
+    });
+  });
+});
+
+describe('frameFromLogDocument', () => {
+  it('reconstructs a planned string from set count and dominant label', () => {
+    const doc: LogDocument = {
+      sections: [
+        {
+          key: 'primary',
+          groups: [
+            {
+              id: 'g1',
+              kind: 'single',
+              items: [
+                {
+                  id: 'i1',
+                  movement: 'Bench Press',
+                  primaryMetric: 'weight',
+                  sets: [
+                    { planned: '5', actual: { completed: true, prefilled: false }, notations: [] },
+                    { planned: '5', actual: { completed: true, prefilled: false }, notations: [] },
+                    { planned: '3', actual: { completed: true, prefilled: false }, notations: [] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const frame = frameFromLogDocument(doc);
+    expect(frame.exercises).toHaveLength(1);
+    expect(frame.exercises[0].planned).toBe('3x5'); // 3 sets, dominant label "5"
+  });
+
+  it('falls back to the set count when no planned labels exist', () => {
+    const doc: LogDocument = {
+      sections: [
+        {
+          key: 'conditioning',
+          groups: [
+            {
+              id: 'g1',
+              kind: 'single',
+              items: [
+                {
+                  id: 'i1',
+                  movement: 'Row',
+                  primaryMetric: 'distance',
+                  sets: [
+                    { planned: null, actual: { completed: true, prefilled: false }, notations: [] },
+                    { planned: null, actual: { completed: true, prefilled: false }, notations: [] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const frame = frameFromLogDocument(doc);
+    expect(frame.exercises[0].planned).toBe('2');
   });
 });
