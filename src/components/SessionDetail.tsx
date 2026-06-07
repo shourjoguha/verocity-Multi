@@ -29,9 +29,10 @@ export default function SessionDetail() {
   const [loading, setLoading] = useState(true);
   const [log, setLog] = useState<WorkoutLog | null>(null);
   const [savingSession, setSavingSession] = useState(false);
+  const [savedAsSession, setSavedAsSession] = useState(false);
 
   async function saveAsSession(current: WorkoutLog) {
-    if (savingSession) return;
+    if (savingSession || savedAsSession) return;
     const frame = frameFromLogDocument(current.data ?? { sections: [] });
     if (frame.exercises.length === 0) {
       toast('Nothing to save — no logged movements', 'error');
@@ -44,6 +45,7 @@ export default function SessionDetail() {
       frame,
     });
     setSavingSession(false);
+    if (created) setSavedAsSession(true);
     toast(created ? 'Saved to sessions' : 'Could not save session', created ? 'success' : 'error');
   }
 

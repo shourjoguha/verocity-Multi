@@ -14,9 +14,11 @@ function newId(): string {
 }
 
 // Parse a planned-set string like "3x5", "5×3", "4x8 @70%" → set count + per-set
-// planned label. Falls back to a single set carrying the raw string.
+// planned label. A trailing-empty count form ("3x") yields that many label-less
+// sets — the round-trip form for logged sets with no prescription. Falls back to
+// a single set carrying the raw string.
 export function parsePlanned(raw: string): { count: number; label: string } {
-  const m = raw.trim().match(/^(\d+)\s*[x×]\s*(.+)$/i);
+  const m = raw.trim().match(/^(\d+)\s*[x×]\s*(.*)$/i);
   if (m) return { count: Math.max(1, parseInt(m[1], 10)), label: m[2].trim() };
   return { count: 1, label: raw.trim() };
 }
@@ -141,7 +143,9 @@ export function frameFromLogDocument(doc: LogDocument): SessionFrame {
       for (const item of group.items) {
         const count = item.sets.length || 1;
         const label = dominantPlanned(item.sets.map((s) => s.planned));
-        const planned = label ? `${count}x${label}` : String(count);
+        // Always the NxLabel form (label may be empty → "3x") so buildLogFromSession
+        // round-trips the set count rather than collapsing to a single set.
+        const planned = `${count}x${label}`;
         exercises.push({
           movement: item.movement,
           section: section.key,

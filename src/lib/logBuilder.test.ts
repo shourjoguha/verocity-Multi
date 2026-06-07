@@ -32,6 +32,10 @@ describe('parsePlanned', () => {
     expect(parsePlanned('AMRAP')).toEqual({ count: 1, label: 'AMRAP' });
   });
 
+  it('treats a trailing-empty count form as that many label-less sets', () => {
+    expect(parsePlanned('3x')).toEqual({ count: 3, label: '' });
+  });
+
   it('never produces a count below 1', () => {
     expect(parsePlanned('0x5')).toEqual({ count: 1, label: '5' });
   });
@@ -208,6 +212,38 @@ describe('frameFromLogDocument', () => {
       ],
     };
     const frame = frameFromLogDocument(doc);
-    expect(frame.exercises[0].planned).toBe('2');
+    expect(frame.exercises[0].planned).toBe('2x');
+  });
+
+  it('round-trips set count back through buildLogFromSession for unplanned sets', () => {
+    const doc: LogDocument = {
+      sections: [
+        {
+          key: 'conditioning',
+          groups: [
+            {
+              id: 'g1',
+              kind: 'single',
+              items: [
+                {
+                  id: 'i1',
+                  movement: 'Row',
+                  primaryMetric: 'distance',
+                  sets: [
+                    { planned: null, actual: { completed: true, prefilled: false }, notations: [] },
+                    { planned: null, actual: { completed: true, prefilled: false }, notations: [] },
+                    { planned: null, actual: { completed: true, prefilled: false }, notations: [] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const rebuilt = buildLogFromSession(frameFromLogDocument(doc));
+    const item = rebuilt.sections[0].groups[0].items[0];
+    expect(item.sets).toHaveLength(3); // not collapsed to 1
+    expect(item.sets[0].planned).toBeNull();
   });
 });

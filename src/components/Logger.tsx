@@ -211,13 +211,15 @@ export default function Logger() {
       const created = await createLog({
         log_date: logDate,
         plan_id: linkedPlanId,
-        session_id: linkedSessionId,
         day_key: linkedDayKey,
         week_number: weekNumber,
         status: 'in_progress',
         started_at: new Date().toISOString(),
         data: built,
         tags: initialTags,
+        // Only attach session_id when launched from a saved session, so plan /
+        // blank / activity workouts don't depend on migration 0008 being live.
+        ...(linkedSessionId ? { session_id: linkedSessionId } : {}),
       });
       setDoc(built);
       setLogDate(logDate);
