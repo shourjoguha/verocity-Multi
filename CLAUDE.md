@@ -12,6 +12,7 @@ Full spec: `docs/SPEC.md`.
 | Touch the data model, RLS, or sharing             | `docs/SPEC.md` §6 (auth), §8 (data)  |
 | Build the public showcase or share links          | `docs/SPEC.md` §7                    |
 | Edit plan/log JSONB or domain types               | `docs/SPEC.md` §8, `lib/types.ts`    |
+| Touch saved sessions (templates / frames)         | `docs/SPEC.md` §8, `SessionsView.tsx`|
 | Change visuals, tokens, or layout                 | `docs/SPEC.md` §11, `app.config.ts`  |
 | Scaffold, sequence work, or deploy                | `docs/SPEC.md` §4–5, §13 (roadmap)   |
 | Add anything AI / plan-parsing / "coach"          | `docs/SPEC.md` §12 — DEFERRED, ask   |
