@@ -8,6 +8,7 @@ import type {
   Plan,
   Profile,
   Recommendation,
+  RxDeepResult,
   Session,
   SessionFrame,
   Share,
@@ -366,4 +367,20 @@ export async function updateRecommendation(
 ): Promise<boolean> {
   const { error } = await supabase.from('recommendations').update(patch).eq('id', id);
   return !error;
+}
+
+// ---- rx deep enrichment (retrieval-depth cross-door porting) ----
+// Read-only here: rows are written by a Claude Code session via the
+// `/rx-deep-retrieve|contradiction-check|counter-external --door fitness`
+// commands. Owner-scoped by RLS, same as recommendations.
+export async function getDeepResults(
+  recId: string,
+  client: SupabaseClient = supabase,
+): Promise<RxDeepResult[]> {
+  const { data } = await client
+    .from('rx_deep_results')
+    .select('*')
+    .eq('rec_id', recId)
+    .order('created_at', { ascending: false });
+  return (data as RxDeepResult[]) ?? [];
 }
