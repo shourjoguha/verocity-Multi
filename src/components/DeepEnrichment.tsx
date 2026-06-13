@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getDeepResults } from '@/lib/queries';
 import type { RxDeepResult } from '@/lib/types';
+import { contradictionSeverity, disconfirmationCredibility } from '@/lib/deepGovernors';
 
 /**
  * Surfaces rx deep enrichment (retrieval-depth cross-door porting) for a
@@ -61,9 +62,12 @@ function DeepRetrieval({ payload }: { payload: Dict }) {
 }
 
 function Contradiction({ payload }: { payload: Dict }) {
-  const gov = asDict(payload.governor);
-  const raise = gov.raise_banner === true;
-  const severity = str(gov.severity) ?? 'none';
+  // Deterministic: recompute the verdict from raw fields rather than trusting
+  // payload.governor (which, on the Supabase path, was written by the LLM
+  // command). The UI is the enforcement point here.
+  const verdict = contradictionSeverity(payload);
+  const raise = verdict.raiseBanner;
+  const severity = verdict.severity;
   const sources = asArr(payload.sources).filter((s) => s.stance === 'contradicts');
   const summary = str(payload.summary);
   // Alarm-fatigue guard: no banner unless the governor raised it. Below that
@@ -96,9 +100,11 @@ function Contradiction({ payload }: { payload: Dict }) {
 }
 
 function Disconfirmation({ payload }: { payload: Dict }) {
-  const gov = asDict(payload.governor);
-  const credibility = str(gov.credibility) ?? str(payload.strength) ?? 'none';
-  const counts = gov.counts_against_thesis === true;
+  // Deterministic: recompute credibility from raw sources (diversity + tier)
+  // rather than trusting payload.governor on the Supabase path.
+  const verdict = disconfirmationCredibility(payload);
+  const credibility = verdict.credibility;
+  const counts = verdict.countsAgainstThesis;
   const counter = str(payload.external_counter);
   const sources = asArr(payload.sources);
   if (!counter) return null;
