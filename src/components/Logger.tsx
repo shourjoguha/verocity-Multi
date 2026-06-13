@@ -9,10 +9,12 @@ import {
   getLogById,
   getMovementSubs,
   getMovements,
+  getPlanById,
   getRecentLogs,
+  getSessionById,
   updateLog,
 } from '@/lib/queries';
-import { buildBlankLog, buildLogFromPlanDay } from '@/lib/logBuilder';
+import { buildBlankLog, buildLogFromPlanDay, buildLogFromSession, resolveWeek } from '@/lib/logBuilder';
 import {
   addItem,
   addSet,
@@ -41,6 +43,8 @@ import type {
   LogStatus,
   Movement,
   MovementSub,
+  Plan,
+  Session,
   SetActual,
   VibeCheck,
 } from '@/lib/types';
@@ -142,18 +146,53 @@ export default function Logger() {
       }
 
       const dk = params.get('day');
+      const sessionParam = params.get('session');
+      const planParam = params.get('plan');
       const dateParam = params.get('date');
       const logDate = dateParam ?? today();
-      const [plan, recent] = await Promise.all([getActivePlan(), getRecentLogs(50)]);
+
+      // Source the workout from a saved session, a specific (possibly historic)
+      // plan day, or — by default — the active plan.
+      const [source, recent] = await Promise.all([
+        sessionParam
+          ? getSessionById(sessionParam)
+          : planParam
+            ? getPlanById(planParam)
+            : getActivePlan(),
+        getRecentLogs(50),
+      ]);
+
       let built: LogDocument;
       let weekNumber: number | null = null;
-      const planLinked = plan && dk;
-      if (planLinked) {
-        const planDay = plan.parsed.days.find((d) => d.dayKey === dk);
-        weekNumber = weekFromDate(plan.start_date, new Date(logDate));
-        built = planDay ? buildLogFromPlanDay(planDay, weekNumber) : buildBlankLog();
+      let linkedPlanId: string | null = null;
+      let linkedSessionId: string | null = null;
+      let linkedDayKey: string | null = dk;
+      let initialTags: string[] = [];
+
+      if (sessionParam) {
+        const session = source as Session | null;
+        built = session ? buildLogFromSession(session.frame) : buildBlankLog();
+        linkedSessionId = session?.id ?? null;
+        initialTags = session?.tags ?? [];
+        linkedDayKey = null;
       } else {
-        built = buildBlankLog();
+        const plan = source as Plan | null;
+        if (plan && dk) {
+          const planDay = plan.parsed.days.find((d) => d.dayKey === dk);
+          if (planDay) {
+            const preferred = weekFromDate(plan.start_date, new Date(logDate));
+            // A historic plan day (launched via ?plan=) computes a week past the
+            // plan's range — fall back to a week that has content. The active-plan
+            // path (?day= only) keeps the live week, including deliberate rest weeks.
+            weekNumber = planParam ? resolveWeek(planDay, preferred) : preferred;
+            built = buildLogFromPlanDay(planDay, weekNumber);
+          } else {
+            built = buildBlankLog();
+          }
+          linkedPlanId = plan.id;
+        } else {
+          built = buildBlankLog();
+        }
       }
 
       for (const section of built.sections) {
@@ -169,21 +208,24 @@ export default function Logger() {
         }
       }
 
-      const linkedPlanId = planLinked ? plan.id : null;
       const created = await createLog({
         log_date: logDate,
         plan_id: linkedPlanId,
-        day_key: dk,
+        day_key: linkedDayKey,
         week_number: weekNumber,
         status: 'in_progress',
         started_at: new Date().toISOString(),
         data: built,
-        tags: [],
+        tags: initialTags,
+        // Only attach session_id when launched from a saved session, so plan /
+        // blank / activity workouts don't depend on migration 0008 being live.
+        ...(linkedSessionId ? { session_id: linkedSessionId } : {}),
       });
       setDoc(built);
       setLogDate(logDate);
       setPlanId(linkedPlanId);
-      setDayKey(dk);
+      setDayKey(linkedDayKey);
+      setTags(initialTags);
       if (created) setLogId(created.id);
       if (linkedPlanId) setSubs(await getMovementSubs(linkedPlanId));
       setShowVibe(true);
