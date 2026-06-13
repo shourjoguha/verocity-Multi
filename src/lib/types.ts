@@ -183,3 +183,22 @@ export interface Recommendation {
   snooze_until: string | null;
   created_at: string;
 }
+
+// ---- rx deep enrichment (retrieval-depth cross-door porting) ----
+// Out-of-band enrichment computed in a Claude Code session (deep retrieval /
+// contradiction / external counter) and written to `rx_deep_results` for the
+// Coach view to surface. The trust decisions (conflict banner, counter
+// credibility) are pre-computed by a deterministic governor and carried in
+// `payload.governor`.
+export type RxDeepKind = 'deep_retrieval' | 'contradiction' | 'disconfirmation';
+
+export interface RxDeepResult {
+  id: string;
+  owner_user_id: string;
+  rec_id: string | null;
+  query_hash: string | null;
+  domain: string;
+  kind: RxDeepKind;
+  payload: Record<string, unknown>;
+  created_at: string;
+}

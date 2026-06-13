@@ -15,6 +15,7 @@ import { EmptyState, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { Modal } from '@/components/ui/Modal';
+import DeepEnrichment from '@/components/DeepEnrichment';
 
 const inkBtn =
   'hill-btn inline-flex min-h-11 items-center justify-center bg-fg px-3 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85 disabled:opacity-40';
@@ -242,6 +243,7 @@ export default function CoachView() {
                   className="mt-4 w-full border border-border bg-bg px-3 py-2 text-sm text-fg outline-none focus:border-subtle"
                 />
               )}
+              <DeepEnrichment recId={active.id} />
             </div>
             {active.status === 'acted' || active.status === 'dismissed' ? null : (
               <div className="flex flex-col gap-2 border-t border-border p-4">
