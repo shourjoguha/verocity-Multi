@@ -74,6 +74,12 @@ auto-injected into edge functions.)
 
 ## Still open (optional)
 
+- **Apply migration `0008_sessions.sql`:** the Sessions library (saved workout
+  templates) needs this migration applied to the live DB — it adds the
+  `sessions` table (+ owner/anon-showcase RLS) and `workout_logs.session_id`.
+  Additive and non-destructive. Apply via `apply_migration`, then run
+  `get_advisors`. Until applied, `/app/sessions` and the "Saved sessions" group
+  read an empty list and saving fails.
 - **Browser click-through:** the interactive flows (Logger, plan editor, export, share
   links) are typecheck/test/build-verified only — exercise them once on the live URL.
 - **Invites:** insert sha-256 `code_hash` rows into `invites` if other people should be

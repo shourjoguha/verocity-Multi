@@ -187,6 +187,12 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
 - **`movement_subs`** — substitution memory: `(owner, plan, day_key, original,
   replacement, count, last_used_at, dismissed_at)` with the `bump_movement_sub`
   RPC. Drives Logger's "you usually swap X→Y" suggestion.
+- **`sessions`** *(new)* — saved workout templates ("Sessions" library):
+  `owner_user_id, name, tags[] (activity tags), frame jsonb, source_plan_id,
+  source_day_key, created_at`. A standalone, named, tagged workout — a plan day
+  without the per-week dimension. Created from scratch, from any plan day
+  (active or historic), or from a finished workout. `workout_logs.session_id`
+  links a logged workout back to the template it was launched from.
 - **`recommendations`** — coach output (status, drift_score, confidence, tldr,
   action, body_md, disposition fields, snooze fields…). **Kept in schema but
   unused until the AI phase.**
@@ -202,6 +208,10 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
 - `workout_logs.data` → `LogDocument` (sections → groups → items → sets; each set
   has `planned`, `actual {weight,reps,rpe,distance,time,completed,prefilled}`,
   `notations[]`; plus optional `session.vibe {sleep,energy,soreness}`).
+- `sessions.frame` → `SessionFrame` (`{ exercises: SessionExercise[] }`, a flat
+  ordered list of `{movement, section, primaryMetric, planned, notes?}` — a plan
+  day's exercises collapsed to a single `planned` string each). The Logger
+  reconstructs grouping, exactly as it does for plan days.
 
 Keeping these JSONB contracts means the parsing/logging logic ports with minimal
 change.
@@ -299,6 +309,11 @@ From the original app. v2 must reach parity on these before enhancing.
   movement family, top-movement e1RM sparklines (with family roll-up).
 - **Library** — browse/search/filter movements (shared + custom), edit own
   (rest, primary metric, delete), create custom.
+- **Sessions** — saved workout templates: browse/search/filter by activity tag,
+  create from scratch (name, tags, movement frame editor), edit, delete; a
+  "From your plans" browser to start or save any plan day (active or historic)
+  as a session. Surfaced in the log-a-workout flow (AddSessionMenu) and via
+  `/app/log?session=` / `?plan=&day=`.
 - **Recommendations** — coach cards: open/snoozed/recent-decisions, drift/confidence
   bars, detail dialog with disposition (acted/modified/skipped/snooze), fit slider,
   linked session, outcome note. *(AI phase.)*

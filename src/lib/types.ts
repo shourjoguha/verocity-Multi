@@ -41,6 +41,7 @@ export interface WorkoutLog {
   id: string;
   owner_user_id: string;
   plan_id: string | null;
+  session_id: string | null;
   log_date: string;
   day_key: string | null;
   week_number: number | null;
@@ -77,6 +78,35 @@ export interface Share {
   created_at: string;
   expires_at: string | null;
   revoked: boolean;
+}
+
+// ---- sessions: saved workout templates (SPEC §8). A standalone, named, tagged
+// frame — a plan day without the per-week dimension (one planned string per
+// exercise). owner-scoped; `tags` are ActivityTagKey strings. ----
+
+export interface Session {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  tags: string[];
+  frame: SessionFrame;
+  source_plan_id: string | null;
+  source_day_key: string | null;
+  created_at: string;
+}
+
+// sessions.frame JSONB contract: a flat, ordered exercise list (grouping is
+// reconstructed in the Logger, exactly as plan days are).
+export interface SessionFrame {
+  exercises: SessionExercise[];
+}
+
+export interface SessionExercise {
+  movement: string;
+  section: SectionKey;
+  primaryMetric: MetricKey;
+  planned: string; // single planned-set string, e.g. "3x5" (no per-week dimension)
+  notes?: string;
 }
 
 // ---- plans.parsed JSONB contract: ParsedPlan (SPEC §8) ----

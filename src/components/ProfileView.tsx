@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
-import { getActivePlan, getAllLogs, getAllPlans, getCurrentProfile, getRecentLogs } from '@/lib/queries';
+import {
+  getActivePlan,
+  getAllLogs,
+  getAllPlans,
+  getCurrentProfile,
+  getRecentLogs,
+  getSessions,
+} from '@/lib/queries';
 import { signOut } from '@/lib/auth';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
 import { bestE1rm } from '@/lib/e1rm';
@@ -175,13 +182,14 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
     if (exporting) return;
     setExporting(format);
     try {
-      const [prof, plans, allLogs] = await Promise.all([
+      const [prof, plans, allLogs, sessions] = await Promise.all([
         getCurrentProfile(),
         getAllPlans(),
         getAllLogs(),
+        getSessions(),
       ]);
       if (format === 'json') {
-        const json = bundleToJson(buildExportBundle(prof, plans, allLogs));
+        const json = bundleToJson(buildExportBundle(prof, plans, allLogs, sessions));
         downloadFile(exportFilename('json'), json, 'application/json');
       } else {
         downloadFile(exportFilename('csv'), logsToCsv(allLogs), 'text/csv');
