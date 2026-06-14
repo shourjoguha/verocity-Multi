@@ -3,25 +3,15 @@ import { supabase } from '@/lib/supabase';
 import { createSession, getLogById } from '@/lib/queries';
 import { frameFromLogDocument } from '@/lib/logBuilder';
 import { toast } from '@/lib/toast';
-import type { SetActual, WorkoutLog } from '@/lib/types';
+import type { WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatSetActual } from '@/lib/format';
 import { SECTIONS, type SectionKey } from '@/app.config';
 import { EmptyState, SectionHeader, Tag } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { SessionTime } from '@/components/SessionTime';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { Item, PageStagger } from '@/components/anim';
-
-function formatActual(a: SetActual): string {
-  const parts: string[] = [];
-  if (a.weight != null && a.reps != null) parts.push(`${a.weight} × ${a.reps}`);
-  else if (a.reps != null) parts.push(`${a.reps} reps`);
-  if (a.time != null) parts.push(`${a.time}s`);
-  if (a.distance != null) parts.push(`${a.distance}m`);
-  if (a.rpe != null) parts.push(`@${a.rpe}`);
-  return parts.length ? parts.join(' ') : '—';
-}
 
 const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
 
@@ -149,7 +139,7 @@ export default function SessionDetail() {
                               className="flex items-center justify-between text-sm tabular-nums"
                             >
                               <span className={set.actual.completed ? 'text-fg' : 'text-muted'}>
-                                {formatActual(set.actual)}
+                                {formatSetActual(set.actual)}
                               </span>
                               <span className="text-[0.7rem] text-muted">
                                 {set.notations.join(' ')}

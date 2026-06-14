@@ -1,11 +1,14 @@
 import type { WorkoutLog } from '@/lib/types';
-import { formatDate } from '@/lib/format';
+import { SECTIONS, type SectionKey } from '@/app.config';
+import { formatDate, formatSetActual } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
 import { Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
 import { SessionTime } from '@/components/SessionTime';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { Modal } from '@/components/ui/Modal';
+
+const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
 
 // Tap-a-log quick popup: a session at a glance with Open / Resume actions,
 // plus inline total-time editing and delete, instead of jumping straight to
@@ -24,6 +27,11 @@ export function LogQuickView({
   onDeleted?: (id: string) => void;
 }) {
   const resumable = !!log && (log.status === 'in_progress' || log.status === 'paused');
+
+  const orderedSections = (log?.data?.sections ?? [])
+    .filter((s) => s.groups.some((g) => g.items.length > 0))
+    .slice()
+    .sort((a, b) => SECTIONS.indexOf(a.key) - SECTIONS.indexOf(b.key));
 
   return (
     <Modal open={open && !!log} onClose={onClose} title={log ? formatDate(log.log_date) : 'Session'}>
@@ -44,6 +52,28 @@ export function LogQuickView({
             <div className="mt-4">
               <SetShapeStrip data={log.data} />
             </div>
+
+            {orderedSections.length > 0 ? (
+              <div className="mt-5 flex flex-col gap-4">
+                {orderedSections.map((section) => (
+                  <div key={section.key}>
+                    <div className="mb-1.5 text-[0.6rem] uppercase tracking-[0.2em] text-muted">
+                      {sectionLabel(section.key)}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {section.groups.flatMap((g) => g.items).map((item) => (
+                        <div key={item.id} className="flex items-baseline justify-between gap-3">
+                          <span className="shrink-0 capitalize text-fg">{item.movement}</span>
+                          <span className="text-right text-xs tabular-nums text-muted">
+                            {item.sets.map((s) => formatSetActual(s.actual)).join(', ')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div className="flex items-center gap-2 border-t border-border p-4">
             <span className="mr-auto">
