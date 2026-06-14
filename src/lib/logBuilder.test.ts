@@ -3,13 +3,15 @@ import {
   buildBlankLog,
   buildLogFromPlanDay,
   buildLogFromSession,
+  daysToMiniSessions,
   firstWeekWithContent,
   frameFromLogDocument,
   frameFromPlanDay,
   parsePlanned,
+  reduceLogDocument,
   resolveWeek,
 } from '@/lib/logBuilder';
-import type { LogDocument, PlanDay, SessionFrame } from '@/lib/types';
+import type { LogDocument, ParsedPlan, PlanDay, SessionFrame } from '@/lib/types';
 
 describe('parsePlanned', () => {
   it('splits "3x5" into count and label', () => {
@@ -151,6 +153,66 @@ describe('frameFromPlanDay', () => {
       planned: '4x5',
       notes: undefined,
     });
+  });
+});
+
+describe('reduceLogDocument (minis)', () => {
+  // warmup + primary + secondary + accessory, one item each.
+  const full: LogDocument = {
+    sections: (['warmup', 'primary', 'secondary', 'accessory'] as const).map((key) => ({
+      key,
+      groups: [
+        {
+          id: `g-${key}`,
+          kind: 'single' as const,
+          items: [{ id: `i-${key}`, movement: key, primaryMetric: 'weight' as const, sets: [] }],
+        },
+      ],
+    })),
+  };
+
+  it('express keeps only warmup + primary', () => {
+    const doc = reduceLogDocument(full, 'express');
+    expect(doc.sections.map((s) => s.key)).toEqual(['warmup', 'primary']);
+  });
+
+  it('half keeps warmup + primary + secondary', () => {
+    const doc = reduceLogDocument(full, 'half');
+    expect(doc.sections.map((s) => s.key)).toEqual(['warmup', 'primary', 'secondary']);
+  });
+
+  it('falls back to the first section when no preset section is present', () => {
+    const conditioningOnly: LogDocument = {
+      sections: [{ key: 'conditioning', groups: [{ id: 'g', kind: 'single', items: [{ id: 'i', movement: 'Row', primaryMetric: 'distance', sets: [] }] }] }],
+    };
+    const doc = reduceLogDocument(conditioningOnly, 'express');
+    expect(doc.sections.map((s) => s.key)).toEqual(['conditioning']);
+  });
+});
+
+describe('daysToMiniSessions', () => {
+  const plan: ParsedPlan = {
+    title: 'Block',
+    startDate: null,
+    endDate: null,
+    blocks: [],
+    weeklyTemplate: ['mon', 'empty'],
+    days: [
+      DAY,
+      { dayKey: 'empty', label: 'Empty', exercises: [] },
+    ],
+  };
+
+  it('turns each non-empty day into a mini session tagged to the plan', () => {
+    const minis = daysToMiniSessions(plan, 'plan-1');
+    expect(minis).toHaveLength(1); // the empty day is dropped
+    expect(minis[0]).toMatchObject({
+      name: 'Monday',
+      source_plan_id: 'plan-1',
+      source_day_key: 'mon',
+      is_mini: true,
+    });
+    expect(minis[0].frame.exercises.length).toBeGreaterThan(0);
   });
 });
 

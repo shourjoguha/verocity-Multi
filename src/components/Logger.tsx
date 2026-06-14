@@ -14,7 +14,14 @@ import {
   getSessionById,
   updateLog,
 } from '@/lib/queries';
-import { buildBlankLog, buildLogFromPlanDay, buildLogFromSession, resolveWeek } from '@/lib/logBuilder';
+import {
+  buildBlankLog,
+  buildLogFromPlanDay,
+  buildLogFromSession,
+  reduceLogDocument,
+  resolveWeek,
+  type MiniPreset,
+} from '@/lib/logBuilder';
 import {
   addItem,
   addSet,
@@ -148,6 +155,7 @@ export default function Logger() {
       const dk = params.get('day');
       const sessionParam = params.get('session');
       const planParam = params.get('plan');
+      const miniParam = params.get('mini');
       const dateParam = params.get('date');
       const logDate = dateParam ?? today();
 
@@ -186,6 +194,11 @@ export default function Logger() {
             // path (?day= only) keeps the live week, including deliberate rest weeks.
             weekNumber = planParam ? resolveWeek(planDay, preferred) : preferred;
             built = buildLogFromPlanDay(planDay, weekNumber);
+            // "Short on time?" — trim to a mini of the same plan day (primary
+            // work intact). plan_id + day_key still link it, so it stays on-plan.
+            if (miniParam === 'express' || miniParam === 'half') {
+              built = reduceLogDocument(built, miniParam as MiniPreset);
+            }
           } else {
             built = buildBlankLog();
           }

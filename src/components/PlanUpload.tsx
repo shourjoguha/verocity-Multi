@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { adoptPlan, createPlan } from '@/lib/queries';
+import { adoptPlan, createPlan, createSession, getActivePlan } from '@/lib/queries';
+import { daysToMiniSessions } from '@/lib/logBuilder';
 import { parsePlanMarkdown, PLAN_FORMAT_HELP } from '@/lib/planParser';
 import {
   buildPlanAiPrompt,
@@ -10,7 +11,7 @@ import {
   parsePlanWorkbook,
   validateParsedPlan,
 } from '@/lib/planTemplate';
-import type { ParsedPlan } from '@/lib/types';
+import type { ParsedPlan, Plan } from '@/lib/types';
 import { Button, EmptyState, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
@@ -39,6 +40,8 @@ export default function PlanUpload() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
+  const [asMinis, setAsMinis] = useState(false);
+  const [activePlan, setActivePlan] = useState<Plan | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -54,6 +57,7 @@ export default function PlanUpload() {
         window.location.href = result ? '/app/plan' : '/app/plan/upload';
         return;
       }
+      setActivePlan(await getActivePlan());
       setReady(true);
     })();
   }, []);
@@ -92,6 +96,31 @@ export default function PlanUpload() {
     }
     setSaving(true);
     setError(null);
+
+    // Minis path: each parsed day becomes a standalone short session tagged to
+    // the active plan, instead of creating a new multi-week plan.
+    if (asMinis) {
+      if (!activePlan) {
+        setSaving(false);
+        setError('Activate a plan first — minis attach to your active plan.');
+        return;
+      }
+      const minis = daysToMiniSessions(parsed, activePlan.id);
+      if (minis.length === 0) {
+        setSaving(false);
+        setError('No usable days to turn into minis.');
+        return;
+      }
+      const results = await Promise.all(minis.map((m) => createSession(m)));
+      setSaving(false);
+      if (results.some((r) => !r)) {
+        setError('Some minis could not be saved. Check your connection and try again.');
+        return;
+      }
+      window.location.href = '/app/sessions';
+      return;
+    }
+
     const sourceText = source === 'csv' ? csvText : markdown;
     const result = await createPlan(parsed, sourceText);
     setSaving(false);
@@ -226,13 +255,41 @@ export default function PlanUpload() {
           />
         )}
 
+        <div className="mt-4 border border-border bg-surface p-3">
+          <button
+            type="button"
+            onClick={() => setAsMinis((v) => !v)}
+            aria-pressed={asMinis}
+            className={`hill-btn border bg-surface px-3 py-1 text-xs uppercase tracking-wider transition-colors ${
+              asMinis ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+            }`}
+          >
+            Upload as minis
+          </button>
+          <p className="mt-2 text-xs text-muted">
+            {asMinis ? (
+              activePlan ? (
+                <>
+                  Each day becomes a short, standalone session tagged to{' '}
+                  <span className="text-fg">{activePlan.name}</span> — pick them from “Start
+                  something” when you’re short on time.
+                </>
+              ) : (
+                'Activate a plan first — minis attach to your active plan.'
+              )
+            ) : (
+              'Off: saves as a full multi-week plan. Toggle on to add short on-plan sessions instead.'
+            )}
+          </p>
+        </div>
+
         <div className="mt-4 flex gap-3">
           <Button variant="ghost" onClick={parse}>
             Parse
           </Button>
           {parsed ? (
-            <Button onClick={save} disabled={saving || issues.length > 0}>
-              {saving ? 'Saving…' : 'Save & activate'}
+            <Button onClick={save} disabled={saving || issues.length > 0 || (asMinis && !activePlan)}>
+              {saving ? 'Saving…' : asMinis ? 'Save minis' : 'Save & activate'}
             </Button>
           ) : null}
         </div>

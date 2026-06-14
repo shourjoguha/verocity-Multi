@@ -62,6 +62,8 @@ function makeLog(opts: {
     started_at: null,
     ended_at: null,
     total_seconds: null,
+    hr_avg: null,
+    hr_max: null,
     notes: null,
     activity_type: opts.activity_type ?? null,
     tags: opts.tags ?? [],

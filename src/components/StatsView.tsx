@@ -7,10 +7,12 @@ import { showcaseRefDate } from '@/lib/showcase';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
 import { flattenSets, familyOf, sessionVolume } from '@/lib/stats';
+import { computeAspectSuggestions } from '@/lib/aspects';
 import { formatDuration, formatRound } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
 import { EmptyState, SectionHeader, StatCard } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
+import { FitnessProfile } from '@/components/FitnessProfile';
 import { EASE, Item, PageStagger } from '@/components/anim';
 
 const WEEKS = 8;
@@ -226,6 +228,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   const adherence = totalSets ? Math.round((doneSets / totalSets) * 100) : null;
 
   const totalSeconds = all.reduce((a, l) => a + (l.total_seconds ?? 0), 0);
+  const aspectSuggestions = computeAspectSuggestions(all);
 
   if (all.length === 0) {
     return (
@@ -261,6 +264,14 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               unit={adherence != null ? '%' : undefined}
             />
           </section>
+        </Item>
+
+        <Item>
+          <FitnessProfile
+            suggestions={aspectSuggestions}
+            canEdit={mode === 'app'}
+            client={client}
+          />
         </Item>
 
         <Item>

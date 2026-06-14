@@ -5,6 +5,7 @@ import { tagColor } from '@/lib/tags';
 import { Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
 import { SessionTime } from '@/components/SessionTime';
+import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { Modal } from '@/components/ui/Modal';
 
@@ -48,6 +49,9 @@ export function LogQuickView({
             <div className="flex items-center justify-between text-sm">
               <span className="uppercase tracking-wider text-muted">{log.status}</span>
               <SessionTime log={log} onUpdate={(s) => onUpdated?.({ ...log, total_seconds: s })} />
+            </div>
+            <div className="mt-2 flex justify-end text-sm">
+              <HeartRate log={log} onUpdate={(hr) => onUpdated?.({ ...log, ...hr })} />
             </div>
             <div className="mt-4">
               <SetShapeStrip data={log.data} />

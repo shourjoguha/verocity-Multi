@@ -1,4 +1,4 @@
-import type { BlockKey, MetricKey, SectionKey } from '@/app.config';
+import type { AspectKey, BlockKey, MetricKey, SectionKey } from '@/app.config';
 
 // ---- DB row types (mirror supabase/migrations) ----
 
@@ -49,6 +49,8 @@ export interface WorkoutLog {
   started_at: string | null;
   ended_at: string | null;
   total_seconds: number | null;
+  hr_avg: number | null;
+  hr_max: number | null;
   notes: string | null;
   activity_type: string | null;
   tags: string[];
@@ -92,6 +94,7 @@ export interface Session {
   frame: SessionFrame;
   source_plan_id: string | null;
   source_day_key: string | null;
+  is_mini: boolean;
   created_at: string;
 }
 
@@ -107,6 +110,19 @@ export interface SessionExercise {
   primaryMetric: MetricKey;
   planned: string; // single planned-set string, e.g. "3x5" (no per-week dimension)
   notes?: string;
+}
+
+// ---- fitness_assessments: dated 1–10 self-ratings per fitness aspect (Stats
+// spider chart). `scores` is keyed by AspectKey; missing axes are unrated. ----
+
+export type AspectScores = Partial<Record<AspectKey, number>>;
+
+export interface FitnessAssessment {
+  id: string;
+  owner_user_id: string;
+  taken_at: string;
+  scores: AspectScores;
+  created_at: string;
 }
 
 // ---- plans.parsed JSONB contract: ParsedPlan (SPEC §8) ----

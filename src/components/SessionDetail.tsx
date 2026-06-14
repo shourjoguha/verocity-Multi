@@ -10,6 +10,7 @@ import { SECTIONS, type SectionKey } from '@/app.config';
 import { EmptyState, SectionHeader, Tag } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { SessionTime } from '@/components/SessionTime';
+import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -101,6 +102,7 @@ export default function SessionDetail() {
               <Tag key={t} label={t} color={tagColor(t)} />
             ))}
             <SessionTime log={log} onUpdate={(s) => setLog({ ...log, total_seconds: s })} />
+            <HeartRate log={log} onUpdate={(hr) => setLog({ ...log, ...hr })} />
           </div>
           {vibe ? (
             <div className="mt-3 flex gap-4 text-[0.7rem] uppercase tracking-wider text-muted">

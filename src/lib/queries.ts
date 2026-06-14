@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { MetricKey } from '@/app.config';
 import type {
+  AspectScores,
+  FitnessAssessment,
   Movement,
   MovementSub,
   ParsedPlan,
@@ -159,6 +161,7 @@ export type SessionInput = {
   frame: SessionFrame;
   source_plan_id?: string | null;
   source_day_key?: string | null;
+  is_mini?: boolean;
 };
 
 export async function createSession(input: SessionInput): Promise<Session | null> {
@@ -186,6 +189,33 @@ export async function updateSession(
 export async function deleteSession(id: string): Promise<boolean> {
   const { error } = await supabase.from('sessions').delete().eq('id', id);
   return !error;
+}
+
+// ---- fitness assessments (Stats spider chart; owner-scoped by RLS, anon reads
+// only the showcase profile's snapshots) ----
+
+export async function getAssessments(
+  client: SupabaseClient = supabase,
+): Promise<FitnessAssessment[]> {
+  const { data } = await client
+    .from('fitness_assessments')
+    .select('*')
+    .order('taken_at', { ascending: false });
+  return (data as FitnessAssessment[]) ?? [];
+}
+
+export async function createAssessment(scores: AspectScores): Promise<FitnessAssessment | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from('fitness_assessments')
+    .insert({ owner_user_id: user.id, scores })
+    .select('*')
+    .single();
+  if (error) return null;
+  return data as FitnessAssessment;
 }
 
 // ---- write paths (authenticated only; owner_user_id is set from the session) ----

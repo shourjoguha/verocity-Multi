@@ -3,10 +3,12 @@ import type {
   LogGroup,
   LogItem,
   LogSection,
+  ParsedPlan,
   PlanDay,
   SessionExercise,
   SessionFrame,
 } from '@/lib/types';
+import type { SessionInput } from '@/lib/queries';
 import { SECTIONS, type MetricKey, type SectionKey } from '@/app.config';
 
 function newId(): string {
@@ -114,6 +116,43 @@ export function resolveWeek(day: PlanDay, preferred: number): number {
 // Blank document for a custom (plan-less) session — one accessory section.
 export function buildBlankLog(): LogDocument {
   return { sections: [{ key: 'accessory', groups: [] }] };
+}
+
+// ---- minis: shorter on-plan sessions (short on time / back from a break) ----
+
+export type MiniPreset = 'express' | 'half';
+
+// Sections kept when shortening a plan day. The main work stays intact (same
+// goals) — only the supporting volume is trimmed.
+const MINI_SECTIONS: Record<MiniPreset, SectionKey[]> = {
+  express: ['warmup', 'primary'],
+  half: ['warmup', 'primary', 'secondary'],
+};
+
+// Trim a built LogDocument to a shorter on-plan session. Keeps WHOLE sections
+// (never partial sets) so the primary lift is unchanged; falls back to the first
+// section when the preset's sections aren't present (e.g. a conditioning day).
+export function reduceLogDocument(doc: LogDocument, preset: MiniPreset): LogDocument {
+  const keep = new Set<SectionKey>(MINI_SECTIONS[preset]);
+  const sections = doc.sections.filter((s) => keep.has(s.key) && s.groups.length > 0);
+  return { ...doc, sections: sections.length > 0 ? sections : doc.sections.slice(0, 1) };
+}
+
+// Convert each day of a parsed plan into a standalone "mini" session input
+// (single planned string per exercise, from the first programmed week), tagged
+// to the owning plan. Days with no usable exercises are skipped. Used by the
+// plan-upload "minis" path.
+export function daysToMiniSessions(plan: ParsedPlan, planId: string): SessionInput[] {
+  return plan.days
+    .map((day) => ({
+      name: day.label,
+      tags: [] as string[],
+      frame: frameFromPlanDay(day, firstWeekWithContent(day)),
+      source_plan_id: planId,
+      source_day_key: day.dayKey,
+      is_mini: true,
+    }))
+    .filter((s) => s.frame.exercises.length > 0);
 }
 
 // ---- frame converters (Sessions library "save as session" paths) ----
