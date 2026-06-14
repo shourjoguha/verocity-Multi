@@ -1,4 +1,16 @@
 import { UNITS } from '@/app.config';
+import type { SetActual } from '@/lib/types';
+
+// One logged set as a compact line, e.g. "60 × 5 @8", "12 reps", "30s 400m".
+export function formatSetActual(a: SetActual): string {
+  const parts: string[] = [];
+  if (a.weight != null && a.reps != null) parts.push(`${a.weight} × ${a.reps}`);
+  else if (a.reps != null) parts.push(`${a.reps} reps`);
+  if (a.time != null) parts.push(`${a.time}s`);
+  if (a.distance != null) parts.push(`${a.distance}m`);
+  if (a.rpe != null) parts.push(`@${a.rpe}`);
+  return parts.length ? parts.join(' ') : '—';
+}
 
 // "1h 23m" / "45m" / "30s"
 export function formatDuration(totalSeconds: number | null | undefined): string {
