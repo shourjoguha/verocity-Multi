@@ -94,6 +94,7 @@ export interface Session {
   frame: SessionFrame;
   source_plan_id: string | null;
   source_day_key: string | null;
+  is_mini: boolean;
   created_at: string;
 }
 

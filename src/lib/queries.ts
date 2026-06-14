@@ -161,6 +161,7 @@ export type SessionInput = {
   frame: SessionFrame;
   source_plan_id?: string | null;
   source_day_key?: string | null;
+  is_mini?: boolean;
 };
 
 export async function createSession(input: SessionInput): Promise<Session | null> {
