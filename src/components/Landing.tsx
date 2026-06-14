@@ -72,10 +72,10 @@ export default function Landing() {
             className="mt-10 flex flex-wrap items-center justify-center gap-3"
           >
             <a
-              href="/app"
-              className="inline-flex h-12 items-center rounded-full bg-fg px-7 text-sm uppercase tracking-wider text-bg transition-transform duration-200 hover:scale-[1.03]"
+              href="/login"
+              className="inline-flex h-12 items-center rounded-full border border-fg px-7 text-sm uppercase tracking-wider text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
             >
-              Open app
+              Log in
             </a>
             <a
               href="/showcase"
@@ -84,6 +84,13 @@ export default function Landing() {
               View showcase
             </a>
           </motion.div>
+          <motion.p variants={heroItem} className="mt-5 text-xs text-subtle">
+            Have an invite code?{' '}
+            <a href="/signup" className="text-fg underline hover:text-subtle">
+              Sign up
+            </a>
+            .
+          </motion.p>
         </motion.section>
 
         {/* Philosophy / narrative — scroll-revealed via Motion */}
