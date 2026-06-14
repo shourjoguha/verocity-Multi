@@ -1,3 +1,4 @@
+import { supabase, supabasePublic } from '@/lib/supabase';
 import { getActivePlan, getAllLogs } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { flattenSets } from '@/lib/stats';
@@ -8,12 +9,17 @@ import { EmptyState, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
-export default function PlanView() {
-  const { data, loading } = useAuthedQuery(async () => {
-    const plan = await getActivePlan();
-    const logs = plan ? await getAllLogs() : [];
-    return { plan, logs };
-  });
+export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
+  const showcase = mode === 'showcase';
+  const client = showcase ? supabasePublic : supabase;
+  const { data, loading } = useAuthedQuery(
+    async () => {
+      const plan = await getActivePlan(client);
+      const logs = plan ? await getAllLogs(client) : [];
+      return { plan, logs };
+    },
+    { auth: !showcase },
+  );
 
   if (loading) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
 
@@ -29,11 +35,16 @@ export default function PlanView() {
           className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
         />
         <EmptyState>
-          No active plan.{' '}
-          <a href="/app/plan/upload" className="text-fg underline hover:text-subtle">
-            Create one
-          </a>
-          .
+          No active plan.
+          {showcase ? null : (
+            <>
+              {' '}
+              <a href="/app/plan/upload" className="text-fg underline hover:text-subtle">
+                Create one
+              </a>
+              .
+            </>
+          )}
         </EmptyState>
       </div>
     );
@@ -84,20 +95,22 @@ export default function PlanView() {
               as="h1"
               className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
             />
-            <div className="flex shrink-0 gap-4 pb-1">
-              <a
-                href="/app/plan/edit"
-                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
-              >
-                Edit
-              </a>
-              <a
-                href="/app/plan/upload"
-                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
-              >
-                New plan
-              </a>
-            </div>
+            {showcase ? null : (
+              <div className="flex shrink-0 gap-4 pb-1">
+                <a
+                  href="/app/plan/edit"
+                  className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                >
+                  Edit
+                </a>
+                <a
+                  href="/app/plan/upload"
+                  className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                >
+                  New plan
+                </a>
+              </div>
+            )}
           </div>
           {parsed.blocks.length > 0 ? (
             <div className="mt-4 flex flex-wrap gap-2">
@@ -123,12 +136,14 @@ export default function PlanView() {
           <section className="mb-8">
             <div className="mb-3 flex items-center justify-between">
               <SectionHeader>{day.label}</SectionHeader>
-              <a
-                href={`/app/log?day=${encodeURIComponent(day.dayKey)}`}
-                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
-              >
-                Start →
-              </a>
+              {showcase ? null : (
+                <a
+                  href={`/app/log?day=${encodeURIComponent(day.dayKey)}`}
+                  className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                >
+                  Start →
+                </a>
+              )}
             </div>
             <div className="overflow-x-auto border border-border">
               <table className="w-full text-sm">

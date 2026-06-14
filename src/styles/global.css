@@ -12,8 +12,8 @@
   --color-surface: hsl(0 0% 100%);      /* #ffffff */
   --color-elevated: hsl(0 0% 90%);      /* tracks / hover fills */
   --color-border: hsl(0 0% 12% / 0.1);  /* #1e1e1e @ 10% — hairline */
-  --color-muted: hsl(0 0% 51%);         /* #838282 — standard secondary text */
-  --color-subtle: hsl(0 0% 34%);        /* #575757 — stronger secondary text */
+  --color-muted: hsl(0 0% 40%);         /* #666666 — standard secondary text (AA ≥4.5:1 on bg) */
+  --color-subtle: hsl(0 0% 30%);        /* #4d4d4d — stronger secondary text */
   --color-fg: hsl(0 0% 7%);             /* #111111 */
 
   /* Monochrome signal (neutral per spec): selected/active = ink */

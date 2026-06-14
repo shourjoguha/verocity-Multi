@@ -3,27 +3,39 @@ import Base from './Base.astro';
 
 interface Props {
   title?: string;
+  // Read-only public showcase: swaps the nav to the /showcase/* surfaces (which
+  // mount no write affordances) and shows a "sign in" CTA instead of app tools.
+  showcase?: boolean;
 }
 
-const { title = 'Verocity' } = Astro.props;
+const { title = 'Verocity', showcase = false } = Astro.props;
 const path = Astro.url.pathname.replace(/\/+$/, '') || '/';
-const links = [
-  { href: '/app', label: 'Home' },
-  { href: '/app/calendar', label: 'Calendar' },
-  { href: '/app/stats', label: 'Stats' },
-  { href: '/app/coach', label: 'Coach' },
-  { href: '/app/plan', label: 'Plan' },
-  { href: '/app/sessions', label: 'Sessions' },
-  { href: '/app/library', label: 'Library' },
-  { href: '/app/shares', label: 'Share' },
-];
-const isActive = (href: string) => (href === '/app' ? path === '/app' : path.startsWith(href));
+const home = showcase ? '/showcase' : '/app';
+const links = showcase
+  ? [
+      { href: '/showcase', label: 'Home' },
+      { href: '/showcase/calendar', label: 'Calendar' },
+      { href: '/showcase/stats', label: 'Stats' },
+      { href: '/showcase/plan', label: 'Plan' },
+      { href: '/showcase/library', label: 'Library' },
+    ]
+  : [
+      { href: '/app', label: 'Home' },
+      { href: '/app/calendar', label: 'Calendar' },
+      { href: '/app/stats', label: 'Stats' },
+      { href: '/app/coach', label: 'Coach' },
+      { href: '/app/plan', label: 'Plan' },
+      { href: '/app/sessions', label: 'Sessions' },
+      { href: '/app/library', label: 'Library' },
+      { href: '/app/shares', label: 'Share' },
+    ];
+const isActive = (href: string) => (href === home ? path === home : path.startsWith(href));
 ---
 
 <Base title={title}>
   <a href="#main" class="skip-link">Skip to content</a>
   <header class="sticky top-0 z-50 border-b border-border bg-bg/90 backdrop-blur-md">
-    <div class="mx-auto flex h-16 max-w-3xl items-center px-6">
+    <div class="mx-auto flex h-16 max-w-3xl items-center justify-between px-6">
       <button
         id="nav-toggle"
         type="button"
@@ -38,6 +50,21 @@ const isActive = (href: string) => (href === '/app' ? path === '/app' : path.sta
         </span>
         <span class="font-display text-lg font-semibold uppercase tracking-tight">Verocity</span>
       </button>
+      {
+        showcase && (
+          <div class="flex items-center gap-3">
+            <span class="hidden text-[0.6rem] uppercase tracking-[0.18em] text-muted sm:inline">
+              Read-only showcase
+            </span>
+            <a
+              href="/login"
+              class="inline-flex h-9 items-center rounded-full border border-fg px-4 text-xs uppercase tracking-wider text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
+            >
+              Sign in
+            </a>
+          </div>
+        )
+      }
     </div>
   </header>
 
@@ -68,6 +95,21 @@ const isActive = (href: string) => (href === '/app' ? path === '/app' : path.sta
         ))
       }
     </div>
+    {
+      showcase && (
+        <div class="mt-2 border-t border-border px-6 py-4">
+          <p class="text-[0.7rem] leading-relaxed text-muted">
+            You're viewing a read-only demo profile. Nothing here can be edited.
+          </p>
+          <a
+            href="/login"
+            class="mt-3 inline-flex h-10 items-center rounded-full bg-fg px-5 text-xs uppercase tracking-wider text-bg transition-transform duration-200 hover:scale-[1.03]"
+          >
+            Start your own
+          </a>
+        </div>
+      )
+    }
   </nav>
 
   <main id="main"><slot /></main>

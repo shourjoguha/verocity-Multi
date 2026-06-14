@@ -7,6 +7,7 @@ import {
   type MovementInput,
 } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
+import { supabasePublic } from '@/lib/supabase';
 import type { Movement } from '@/lib/types';
 import { METRICS, type MetricKey } from '@/app.config';
 import { Button, EmptyState } from '@/components/ui/primitives';
@@ -101,8 +102,12 @@ function MovementForm({
 
 const byName = (a: Movement, b: Movement) => a.name.localeCompare(b.name);
 
-export default function LibraryView() {
-  const { data, loading } = useAuthedQuery(() => getMovements());
+export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
+  const showcase = mode === 'showcase';
+  const { data, loading } = useAuthedQuery(
+    () => getMovements(showcase ? supabasePublic : undefined),
+    { auth: !showcase },
+  );
   const [items, setItems] = useState<Movement[] | null>(null);
   const [q, setQ] = useState('');
   const [category, setCategory] = useState<string | null>(null);
@@ -202,7 +207,7 @@ export default function LibraryView() {
             as="h1"
             className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
           />
-          {!adding ? (
+          {!showcase && !adding ? (
             <button
               onClick={startAdd}
               className="shrink-0 pb-1 text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
@@ -297,7 +302,7 @@ export default function LibraryView() {
                   {METRICS[m.primary_metric]?.label ?? m.primary_metric}
                   <div className="text-[0.7rem] text-muted">{m.default_rest_seconds}s rest</div>
                 </div>
-                {custom ? (
+                {custom && !showcase ? (
                   <div className="flex shrink-0 items-center gap-1">
                     <button
                       onClick={() => startEdit(m)}

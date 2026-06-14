@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { supabase, supabasePublic } from '@/lib/supabase';
 import { getLogsInRange } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
+import { showcaseRefDate } from '@/lib/showcase';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
 import { flattenSets, familyOf, sessionVolume } from '@/lib/stats';
@@ -90,12 +92,16 @@ function Sparkline({
   );
 }
 
-export default function StatsView() {
-  const today = new Date();
+export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
+  const client = mode === 'showcase' ? supabasePublic : supabase;
+  const today = mode === 'showcase' ? showcaseRefDate() : new Date();
   const from = new Date(
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (WEEKS * 7 - 1)),
   );
-  const { data: logs, loading } = useAuthedQuery(() => getLogsInRange(ymd(from), ymd(today)));
+  const { data: logs, loading } = useAuthedQuery(
+    () => getLogsInRange(ymd(from), ymd(today), client),
+    { auth: mode === 'app' },
+  );
 
   const [tip, setTip] = useState<{ x: number; y: number; label: string } | null>(null);
   const [groupBy, setGroupBy] = useState<'movement' | 'family'>('movement');
