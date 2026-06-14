@@ -49,6 +49,8 @@ export interface WorkoutLog {
   started_at: string | null;
   ended_at: string | null;
   total_seconds: number | null;
+  hr_avg: number | null;
+  hr_max: number | null;
   notes: string | null;
   activity_type: string | null;
   tags: string[];
