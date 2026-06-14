@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabasePublic } from '@/lib/supabase';
 import { getActivePlan, getLogsInRange } from '@/lib/queries';
+import { showcaseMonthStart } from '@/lib/showcase';
 import type { Plan, WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
 import { formatDate, formatDuration } from '@/lib/format';
@@ -24,10 +25,12 @@ function mondayIndex(date: Date): number {
   return (date.getUTCDay() + 6) % 7;
 }
 
-export default function CalendarView() {
+export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
+  const showcase = mode === 'showcase';
+  const client = showcase ? supabasePublic : supabase;
   const [ready, setReady] = useState(false);
   const [month, setMonth] = useState(() => {
-    const d = new Date();
+    const d = showcase ? showcaseMonthStart() : new Date();
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
   });
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
@@ -37,6 +40,11 @@ export default function CalendarView() {
   const [quickLog, setQuickLog] = useState<WorkoutLog | null>(null);
 
   useEffect(() => {
+    if (showcase) {
+      setReady(true);
+      getActivePlan(client).then(setPlan);
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) {
         window.location.href = '/login';
@@ -53,7 +61,7 @@ export default function CalendarView() {
     setLoading(true);
     const start = month;
     const end = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0));
-    getLogsInRange(ymd(start), ymd(end)).then((l) => {
+    getLogsInRange(ymd(start), ymd(end), client).then((l) => {
       if (!active) return;
       setLogs(l);
       setLoading(false);
@@ -135,35 +143,53 @@ export default function CalendarView() {
             if (day == null) return <div key={`b${i}`} className="aspect-square bg-bg" />;
             const key = ymd(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), day)));
             const sessions = byDay.get(key) ?? [];
+            const interactive = !showcase;
             return (
               <div
                 key={key}
-                role="button"
-                tabIndex={0}
-                onClick={() => setAddDate(key)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setAddDate(key);
-                  }
-                }}
-                className="aspect-square cursor-pointer bg-surface p-1 transition-colors hover:bg-elevated focus:outline-none focus-visible:ring-1 focus-visible:ring-fg"
+                role={interactive ? 'button' : undefined}
+                tabIndex={interactive ? 0 : undefined}
+                onClick={interactive ? () => setAddDate(key) : undefined}
+                onKeyDown={
+                  interactive
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setAddDate(key);
+                        }
+                      }
+                    : undefined
+                }
+                className={`aspect-square bg-surface p-1 ${
+                  interactive
+                    ? 'cursor-pointer transition-colors hover:bg-elevated focus:outline-none focus-visible:ring-1 focus-visible:ring-fg'
+                    : ''
+                }`}
               >
                 <div className="text-[0.65rem] tabular-nums text-muted">{day}</div>
                 <div className="mt-1 flex flex-col gap-[2px]">
-                  {sessions.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setQuickLog(s);
-                      }}
-                      title={formatDuration(s.total_seconds)}
-                      className="h-1.5 w-full"
-                      style={{ backgroundColor: tagColor(s.tags[0] ?? '') }}
-                    />
-                  ))}
+                  {sessions.map((s) =>
+                    interactive ? (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQuickLog(s);
+                        }}
+                        title={formatDuration(s.total_seconds)}
+                        className="h-1.5 w-full"
+                        style={{ backgroundColor: tagColor(s.tags[0] ?? '') }}
+                      />
+                    ) : (
+                      <span
+                        key={s.id}
+                        title={formatDuration(s.total_seconds)}
+                        className="block h-1.5 w-full"
+                        style={{ backgroundColor: tagColor(s.tags[0] ?? '') }}
+                      />
+                    ),
+                  )}
                 </div>
               </div>
             );
@@ -178,31 +204,45 @@ export default function CalendarView() {
             <ul className="lift border border-border bg-surface">
               {monthSessions.map((log) => {
                 const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
+                const row = (
+                  <>
+                    <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">
+                      {formatDate(log.log_date)}
+                    </div>
+                    <div className="flex flex-1 flex-wrap gap-1">
+                      {log.tags.length > 0 ? (
+                        log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
+                      ) : (
+                        <span className="text-sm text-muted">
+                          {log.day_key ?? log.activity_type ?? 'Session'}
+                        </span>
+                      )}
+                    </div>
+                    <SetShapeStrip data={log.data} className="shrink-0" />
+                    <div className="w-12 shrink-0 text-right text-sm tabular-nums text-muted">
+                      {formatDuration(log.total_seconds)}
+                    </div>
+                  </>
+                );
                 return (
                   <li key={log.id} className="border-b border-border last:border-b-0">
-                    <button
-                      type="button"
-                      onClick={() => setQuickLog(log)}
-                      className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-elevated"
-                      style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
-                    >
-                      <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">
-                        {formatDate(log.log_date)}
+                    {showcase ? (
+                      <div
+                        className="flex items-center gap-4 px-4 py-3"
+                        style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
+                      >
+                        {row}
                       </div>
-                      <div className="flex flex-1 flex-wrap gap-1">
-                        {log.tags.length > 0 ? (
-                          log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
-                        ) : (
-                          <span className="text-sm text-muted">
-                            {log.day_key ?? log.activity_type ?? 'Session'}
-                          </span>
-                        )}
-                      </div>
-                      <SetShapeStrip data={log.data} className="shrink-0" />
-                      <div className="w-12 shrink-0 text-right text-sm tabular-nums text-muted">
-                        {formatDuration(log.total_seconds)}
-                      </div>
-                    </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setQuickLog(log)}
+                        className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-elevated"
+                        style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
+                      >
+                        {row}
+                      </button>
+                    )}
                   </li>
                 );
               })}
@@ -220,22 +260,26 @@ export default function CalendarView() {
       ) : null}
     </PageStagger>
 
-      <AddSessionMenu
-        plan={plan}
-        date={addDate ?? undefined}
-        open={addDate !== null}
-        onClose={() => setAddDate(null)}
-      />
-      <LogQuickView
-        log={quickLog}
-        open={quickLog !== null}
-        onClose={() => setQuickLog(null)}
-        onUpdated={(updated) => {
-          setLogs((ls) => ls.map((l) => (l.id === updated.id ? updated : l)));
-          setQuickLog(updated);
-        }}
-        onDeleted={(id) => setLogs((ls) => ls.filter((l) => l.id !== id))}
-      />
+      {showcase ? null : (
+        <>
+          <AddSessionMenu
+            plan={plan}
+            date={addDate ?? undefined}
+            open={addDate !== null}
+            onClose={() => setAddDate(null)}
+          />
+          <LogQuickView
+            log={quickLog}
+            open={quickLog !== null}
+            onClose={() => setQuickLog(null)}
+            onUpdated={(updated) => {
+              setLogs((ls) => ls.map((l) => (l.id === updated.id ? updated : l)));
+              setQuickLog(updated);
+            }}
+            onDeleted={(id) => setLogs((ls) => ls.filter((l) => l.id !== id))}
+          />
+        </>
+      )}
     </>
   );
 }
