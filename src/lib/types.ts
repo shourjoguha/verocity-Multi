@@ -1,4 +1,4 @@
-import type { BlockKey, MetricKey, SectionKey } from '@/app.config';
+import type { AspectKey, BlockKey, MetricKey, SectionKey } from '@/app.config';
 
 // ---- DB row types (mirror supabase/migrations) ----
 
@@ -109,6 +109,19 @@ export interface SessionExercise {
   primaryMetric: MetricKey;
   planned: string; // single planned-set string, e.g. "3x5" (no per-week dimension)
   notes?: string;
+}
+
+// ---- fitness_assessments: dated 1–10 self-ratings per fitness aspect (Stats
+// spider chart). `scores` is keyed by AspectKey; missing axes are unrated. ----
+
+export type AspectScores = Partial<Record<AspectKey, number>>;
+
+export interface FitnessAssessment {
+  id: string;
+  owner_user_id: string;
+  taken_at: string;
+  scores: AspectScores;
+  created_at: string;
 }
 
 // ---- plans.parsed JSONB contract: ParsedPlan (SPEC §8) ----

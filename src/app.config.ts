@@ -102,6 +102,20 @@ export const NOTATIONS = {
 // e1RM estimate uses Brzycki (see src/lib/e1rm.ts).
 export const E1RM = { formula: 'brzycki' } as const;
 
+// Fitness-profile radar axes (Stats spider chart). `auto` axes receive a
+// computed suggestion in the check-in (hybrid model, see lib/aspects.ts); every
+// axis stays user-adjustable. Scores are on ASPECT_SCALE.
+export const FITNESS_ASPECTS = [
+  { key: 'strength', label: 'Strength', auto: true },
+  { key: 'endurance', label: 'Endurance', auto: true },
+  { key: 'power', label: 'Power', auto: false },
+  { key: 'mobility', label: 'Mobility', auto: false },
+  { key: 'consistency', label: 'Consistency', auto: true },
+  { key: 'recovery', label: 'Recovery', auto: true },
+] as const;
+
+export const ASPECT_SCALE = { min: 1, max: 10 } as const;
+
 export const appConfig = {
   units: UNITS,
   blocks: BLOCKS,
@@ -122,3 +136,4 @@ export type MetricKey = keyof typeof METRICS;
 export type SectionKey = (typeof SECTIONS)[number];
 export type BlockKey = keyof typeof BLOCKS;
 export type ActivityTagKey = keyof typeof ACTIVITY_TAGS;
+export type AspectKey = (typeof FITNESS_ASPECTS)[number]['key'];
