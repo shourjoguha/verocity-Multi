@@ -51,12 +51,22 @@
 
 html,
 body {
-  background-color: var(--color-bg);
   color: var(--color-fg);
   font-family: var(--font-sans);
   font-weight: 500; /* Satoshi medium (spec) */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* The toggleable backdrop (BackgroundLayer.astro) is fixed at z-index -10, so it
+   paints BEFORE the in-flow <body> box. Keep the base paper colour on <html>
+   (the canvas / overscroll fill) but leave <body> transparent — an opaque body
+   background would cover the backdrop and make every preset invisible. */
+html {
+  background-color: var(--color-bg);
+}
+body {
+  background-color: transparent;
 }
 
 /* Tabular numbers by default — this is a data-heavy app */
