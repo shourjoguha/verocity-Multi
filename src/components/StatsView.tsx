@@ -13,6 +13,7 @@ import { tagColor } from '@/lib/tags';
 import { EmptyState, SectionHeader, StatCard } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { FitnessProfile } from '@/components/FitnessProfile';
+import { GarminHealthSection } from '@/components/GarminHealthSection';
 import { EASE, Item, PageStagger } from '@/components/anim';
 
 const WEEKS = 8;
@@ -265,6 +266,8 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
             />
           </section>
         </Item>
+
+        {mode === 'app' ? <GarminHealthSection /> : null}
 
         <Item>
           <FitnessProfile
