@@ -59,6 +59,7 @@ interface ShapeConfig {
   bobPeriod: number;
   bobAmp: number;
   scaleAmp?: number;
+  opacity?: number;
   phase: number;
 }
 
@@ -78,7 +79,13 @@ function MorphShape(cfg: ShapeConfig) {
   return (
     <mesh ref={ref} position={cfg.position} rotation={[0, cfg.rotY, 0]} castShadow receiveShadow>
       <boxGeometry args={cfg.size} />
-      <meshStandardMaterial color={cfg.color} roughness={cfg.roughness} metalness={cfg.metalness} />
+      <meshStandardMaterial
+        color={cfg.color}
+        roughness={cfg.roughness}
+        metalness={cfg.metalness}
+        transparent={cfg.opacity !== undefined && cfg.opacity < 1}
+        opacity={cfg.opacity ?? 1}
+      />
     </mesh>
   );
 }
@@ -176,16 +183,20 @@ function DesktopScene() {
   );
 }
 
-// ---- compact / PWA: 4 minimized morph shapes that fit a narrow viewport ----
+// ---- compact / PWA: 4 minimized morph shapes, spread across the frame and
+// translucent so they read as a quiet backdrop behind the UI, not a foreground
+// busy-pattern. Positions fan toward the corners (FitCamera dollies back to keep
+// them on a narrow viewport); opacity ~0.55 lets the paper show through. ----
+const COMPACT_OPACITY = 0.55;
 const COMPACT_SHAPES: ShapeConfig[] = [
-  // slim hero slab, centre-left
-  { position: [-0.85, 0.35, 0], size: [0.5, 1.7, 0.5], rotY: -0.3, color: DEPTH.slab, roughness: 0.5, metalness: 0.12, spinPeriod: 17, spinAmp: 0.1, bobPeriod: 21, bobAmp: 0.05, scaleAmp: 0.015, phase: 0 },
-  // cube plinth, centre-right
-  { position: [0.9, -0.55, -0.3], size: [0.85, 0.85, 0.85], rotY: 0.2, color: DEPTH.plinth, roughness: 0.58, metalness: 0.06, spinPeriod: 14, spinAmp: 0.14, bobPeriod: 18, bobAmp: 0.04, scaleAmp: 0.02, phase: 1.1 },
-  // small upper slab
-  { position: [0.35, 0.95, -0.6], size: [0.42, 0.78, 0.42], rotY: 0.4, color: DEPTH.slabAlt, roughness: 0.5, metalness: 0.1, spinPeriod: 19, spinAmp: 0.12, bobPeriod: 16, bobAmp: 0.05, scaleAmp: 0.018, phase: 2.0 },
-  // small lower cube
-  { position: [-0.95, -0.85, 0.25], size: [0.55, 0.55, 0.55], rotY: -0.5, color: DEPTH.plinth, roughness: 0.6, metalness: 0.05, spinPeriod: 22, spinAmp: 0.1, bobPeriod: 20, bobAmp: 0.04, scaleAmp: 0.022, phase: 0.6 },
+  // slim slab, far left
+  { position: [-1.3, 0.5, 0.1], size: [0.48, 1.6, 0.48], rotY: -0.3, color: DEPTH.slab, roughness: 0.5, metalness: 0.12, spinPeriod: 17, spinAmp: 0.1, bobPeriod: 21, bobAmp: 0.05, scaleAmp: 0.015, opacity: COMPACT_OPACITY, phase: 0 },
+  // cube, far right
+  { position: [1.25, -0.6, -0.5], size: [0.8, 0.8, 0.8], rotY: 0.2, color: DEPTH.plinth, roughness: 0.58, metalness: 0.06, spinPeriod: 14, spinAmp: 0.14, bobPeriod: 18, bobAmp: 0.04, scaleAmp: 0.02, opacity: COMPACT_OPACITY, phase: 1.1 },
+  // small slab, upper right
+  { position: [0.55, 1.15, -0.8], size: [0.4, 0.75, 0.4], rotY: 0.4, color: DEPTH.slabAlt, roughness: 0.5, metalness: 0.1, spinPeriod: 19, spinAmp: 0.12, bobPeriod: 16, bobAmp: 0.05, scaleAmp: 0.018, opacity: COMPACT_OPACITY, phase: 2.0 },
+  // small cube, lower left
+  { position: [-1.1, -0.95, 0.45], size: [0.52, 0.52, 0.52], rotY: -0.5, color: DEPTH.plinth, roughness: 0.6, metalness: 0.05, spinPeriod: 22, spinAmp: 0.1, bobPeriod: 20, bobAmp: 0.04, scaleAmp: 0.022, opacity: COMPACT_OPACITY, phase: 0.6 },
 ];
 
 function CompactScene() {
@@ -194,7 +205,7 @@ function CompactScene() {
       {COMPACT_SHAPES.map((cfg, i) => (
         <MorphShape key={i} {...cfg} />
       ))}
-      <HairlineFrame edge={1.3} position={[0.1, 0.2, -1]} rotation={[0.2, -0.3, 0]} />
+      <HairlineFrame edge={1.5} position={[0.1, 0.1, -1.1]} rotation={[0.2, -0.3, 0]} />
     </>
   );
 }
@@ -230,7 +241,8 @@ function FitCamera({ compact }: { compact: boolean }) {
     const cam = camera as PerspectiveCamera;
     const aspect = size.width / size.height;
     if (compact) {
-      cam.position.set(0, 0.1, aspect < 0.8 ? 8.5 : 6.5);
+      // Extra pull-back vs the first cut so the now-spread shapes stay framed.
+      cam.position.set(0, 0.1, aspect < 0.8 ? 9.5 : 7);
       cam.fov = 42;
     } else {
       cam.position.set(0, 0.2, 5);
@@ -241,13 +253,14 @@ function FitCamera({ compact }: { compact: boolean }) {
   return null;
 }
 
-function GroundShadow() {
+function GroundShadow({ opacity }: { opacity: number }) {
   // ShadowMaterial only renders the projected shadow — invisible everywhere else.
-  // Stronger + darker than before so the contact shadow reads crisp.
+  // Desktop runs it strong + dark (crisp contact); compact dials it back so the
+  // translucent, spread shapes stay a quiet backdrop.
   return (
     <mesh position={[0, -1.4, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       <planeGeometry args={[18, 18]} />
-      <shadowMaterial transparent opacity={0.3} color={DEPTH.shadow} />
+      <shadowMaterial transparent opacity={opacity} color={DEPTH.shadow} />
     </mesh>
   );
 }
@@ -320,7 +333,7 @@ export default function BackgroundScene3DCanvas() {
       <directionalLight position={[-5, 2, -2]} intensity={0.25} />
       <FitCamera compact={compact} />
       <Parallax>{compact ? <CompactScene /> : <DesktopScene />}</Parallax>
-      <GroundShadow />
+      <GroundShadow opacity={compact ? 0.16 : 0.3} />
     </Canvas>
   );
 }
