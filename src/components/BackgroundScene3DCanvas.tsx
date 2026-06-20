@@ -20,6 +20,17 @@ import {
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
+// "Depth" palette — shades of #49F2E1 (hsl 174 87% 62%), per an explicit owner
+// override of the otherwise-monochrome backdrop rule. The slab/plinth/wire take
+// deep→bright teal; the cast shadow is tinted dark teal instead of black. The
+// paper veil and #f2f2f2 canvas stay neutral so the teal reads against paper.
+const DEPTH = {
+  slab: 'hsl(174, 84%, 24%)', // deep teal — the monolith (was ink-grey)
+  plinth: 'hsl(174, 62%, 52%)', // mid teal — the plinth
+  wire: 'hsl(174, 87%, 62%)', // #49F2E1 — the hairline wire-ring
+  shadow: '#0c463f', // dark teal — the ground cast shadow
+} as const;
+
 function Monolith() {
   const ref = useRef<Mesh>(null);
   useFrame(({ clock }) => {
@@ -33,7 +44,7 @@ function Monolith() {
   return (
     <mesh ref={ref} position={[-1.6, 0.4, 0]} rotation={[0, -0.35, 0]} castShadow receiveShadow>
       <boxGeometry args={[0.9, 3.2, 0.9]} />
-      <meshStandardMaterial color="hsl(0, 0%, 22%)" roughness={0.65} metalness={0.08} />
+      <meshStandardMaterial color={DEPTH.slab} roughness={0.65} metalness={0.08} />
     </mesh>
   );
 }
@@ -49,7 +60,7 @@ function Plinth() {
   return (
     <mesh ref={ref} position={[1.8, -0.6, -0.4]} rotation={[0, 0.18, 0]} castShadow receiveShadow>
       <boxGeometry args={[1.4, 0.9, 1.4]} />
-      <meshStandardMaterial color="hsl(0, 0%, 58%)" roughness={0.78} metalness={0.04} />
+      <meshStandardMaterial color={DEPTH.plinth} roughness={0.78} metalness={0.04} />
     </mesh>
   );
 }
@@ -70,19 +81,19 @@ function HairlineFrame() {
     <group ref={group} position={[-0.4, 0.9, -1.2]} rotation={[0.2, -0.4, 0]}>
       <mesh position={[0, edge / 2, 0]}>
         <boxGeometry args={[edge, thick, thick]} />
-        <meshBasicMaterial color="hsl(0, 0%, 7%)" transparent opacity={0.6} />
+        <meshBasicMaterial color={DEPTH.wire} transparent opacity={0.6} />
       </mesh>
       <mesh position={[0, -edge / 2, 0]}>
         <boxGeometry args={[edge, thick, thick]} />
-        <meshBasicMaterial color="hsl(0, 0%, 7%)" transparent opacity={0.6} />
+        <meshBasicMaterial color={DEPTH.wire} transparent opacity={0.6} />
       </mesh>
       <mesh position={[edge / 2, 0, 0]}>
         <boxGeometry args={[thick, edge, thick]} />
-        <meshBasicMaterial color="hsl(0, 0%, 7%)" transparent opacity={0.6} />
+        <meshBasicMaterial color={DEPTH.wire} transparent opacity={0.6} />
       </mesh>
       <mesh position={[-edge / 2, 0, 0]}>
         <boxGeometry args={[thick, edge, thick]} />
-        <meshBasicMaterial color="hsl(0, 0%, 7%)" transparent opacity={0.6} />
+        <meshBasicMaterial color={DEPTH.wire} transparent opacity={0.6} />
       </mesh>
     </group>
   );
@@ -129,7 +140,7 @@ function GroundShadow() {
   return (
     <mesh position={[0, -1.4, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       <planeGeometry args={[18, 18]} />
-      <shadowMaterial transparent opacity={0.18} />
+      <shadowMaterial transparent opacity={0.18} color={DEPTH.shadow} />
     </mesh>
   );
 }

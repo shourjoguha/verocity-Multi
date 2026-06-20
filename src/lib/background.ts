@@ -11,7 +11,7 @@ export const BACKGROUND_EVENT = 'verocity:bg-change';
 
 export const BACKGROUNDS = {
   off: { label: 'Off', description: 'No backdrop. Closest to the original editorial silence.' },
-  grain: { label: 'Grain', description: 'Faint film grain — paper texture.' },
+  grain: { label: 'Notebook', description: 'Horizontal ruled lines — notebook paper.' },
   hairlines: { label: 'Hairlines', description: 'A 48px grid, like a technical drawing.' },
   topography: { label: 'Topography', description: 'Concentric contour rings.' },
   aurora: { label: 'Depth', description: '3D monolith on paper. Loads on demand. Desktop default.' },

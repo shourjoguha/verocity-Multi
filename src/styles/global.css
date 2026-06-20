@@ -193,10 +193,17 @@ body {
   opacity: 0;
   transition: opacity 0.4s var(--ease-editorial);
 }
+/* "Notebook" — horizontal ruled lines (legacy data-bg key 'grain'). A 1px ink
+   hairline every 32px, like ruled paper. */
 html[data-bg='grain'] .bg-backdrop::before {
   opacity: 1;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.067 0 0 0 0 0.067 0 0 0 0 0.067 0 0 0 0.12 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  background-size: 160px 160px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    hsl(0 0% 7% / 0.08) 31px,
+    hsl(0 0% 7% / 0.08) 32px
+  );
 }
 html[data-bg='hairlines'] .bg-backdrop::before {
   opacity: 1;
