@@ -7,10 +7,12 @@
 // every write is idempotent so re-importing an export, or overlapping daily
 // windows, converges instead of duplicating.
 //
-// Auth is a server-to-server shared secret (x-garmin-ingest-secret), NOT a user
-// JWT: the caller is the worker/import job, not a browser. The browser never
-// touches this surface — it reads connection status through the
-// garmin_connection_status view only.
+// Auth has two modes (see the handler): the browser GDPR-ZIP import calls with
+// the user's JWT (owner = the authenticated user; a client-supplied owner is
+// never trusted, and the shared secret is never shipped to the browser), while
+// the server worker / official webhook calls with a shared secret header
+// (x-garmin-ingest-secret) and names the owner in the body. Writes are always
+// service-role because the Garmin tables are service-role-write-only.
 //
 // NEEDS MIGRATIONS 0013 + 0014 APPLIED to run end-to-end: it writes
 // garmin_raw_events, garmin_activities, garmin_health_daily, the workout_logs
@@ -203,28 +205,40 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
-  // Server-to-server shared secret. Constant-time-ish: compare only when set.
-  const secret = Deno.env.get('GARMIN_INGEST_SECRET');
-  if (!secret) return json({ error: 'not_configured' }, 503);
-  if (req.headers.get('x-garmin-ingest-secret') !== secret) {
-    return json({ error: 'unauthorized' }, 401);
-  }
-
   let body: GarminIngestRequest;
   try {
     body = await req.json();
   } catch {
     return json({ error: 'invalid_json' }, 400);
   }
-  if (!isUuid(body.owner_user_id)) return json({ error: 'invalid_owner' }, 400);
   if (!['zip', 'client', 'webhook'].includes(body.source)) return json({ error: 'invalid_source' }, 400);
 
-  const ownerId = body.owner_user_id;
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
+
+  // Two callers, two auth modes — the writes are always service-role (the tables
+  // are service-role-write-only), but WHO the rows belong to is established here:
+  //  • Browser ZIP import → the user's JWT (Authorization: Bearer). The owner is
+  //    the authenticated user; a client-supplied owner_user_id is NEVER trusted.
+  //  • Server worker / official webhook → a shared secret header, acting on
+  //    behalf of the user whose id is in the body.
+  const secret = Deno.env.get('GARMIN_INGEST_SECRET');
+  const isServer = !!secret && req.headers.get('x-garmin-ingest-secret') === secret;
+
+  let ownerId: string;
+  if (isServer) {
+    if (!isUuid(body.owner_user_id)) return json({ error: 'invalid_owner' }, 400);
+    ownerId = body.owner_user_id;
+  } else {
+    const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
+    if (!jwt) return json({ error: 'unauthorized' }, 401);
+    const { data: userData, error: authErr } = await admin.auth.getUser(jwt);
+    if (authErr || !userData.user) return json({ error: 'unauthorized' }, 401);
+    ownerId = userData.user.id;
+  }
 
   try {
     await writeRawEvents(admin, ownerId, body.source, body.raw_events ?? []);

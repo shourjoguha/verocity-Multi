@@ -32,6 +32,7 @@ import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
 import { Modal } from '@/components/ui/Modal';
 import { BackgroundPicker } from '@/components/BackgroundPicker';
+import { GarminPanel } from '@/components/GarminPanel';
 
 const DownloadIcon = () => (
   <svg
@@ -473,6 +474,15 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           <section className="mt-10">
             <SectionHeader>Backdrop</SectionHeader>
             <BackgroundPicker />
+          </section>
+        </Item>
+      ) : null}
+
+      {mode === 'app' ? (
+        <Item>
+          <section className="mt-10">
+            <SectionHeader>Garmin</SectionHeader>
+            <GarminPanel />
           </section>
         </Item>
       ) : null}
