@@ -46,9 +46,14 @@
   /* Depth — "thick cardboard sitting on the ground" at rest; interaction lifts.
      Soft, monochrome, derived from the ink color so it stays in-token.
      Doubled from initial pass — earlier values were buried by the editorial
-     surface tones; this lands as actual elevation without color leaking. */
-  --shadow-lift-rest: 0 1px 0 hsl(0 0% 7% / 0.08), 0 6px 14px hsl(0 0% 7% / 0.10);
-  --shadow-lift-hover: 0 3px 0 hsl(0 0% 7% / 0.10), 0 14px 30px hsl(0 0% 7% / 0.18);
+     surface tones; this lands as actual elevation without color leaking.
+     The tight 2–4px layer is the "sharpness" tier: a crisp contact edge that
+     separates interactive surfaces from the animated backdrop, on top of the
+     existing soft ambient cast. */
+  --shadow-lift-rest:
+    0 1px 0 hsl(0 0% 7% / 0.10), 0 2px 4px hsl(0 0% 7% / 0.13), 0 8px 18px hsl(0 0% 7% / 0.11);
+  --shadow-lift-hover:
+    0 3px 0 hsl(0 0% 7% / 0.12), 0 4px 8px hsl(0 0% 7% / 0.17), 0 16px 34px hsl(0 0% 7% / 0.20);
 }
 
 :root {
