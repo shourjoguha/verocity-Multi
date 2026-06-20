@@ -20,14 +20,16 @@ import {
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
-// "Depth" palette — shades of #49F2E1 (hsl 174 87% 62%), per an explicit owner
-// override of the otherwise-monochrome backdrop rule. The slab/plinth/wire take
-// deep→bright teal; the cast shadow is tinted dark teal instead of black. The
-// paper veil and #f2f2f2 canvas stay neutral so the teal reads against paper.
+// "Depth" palette — shades of the --color-teal design token (#49F2E1), per an
+// explicit owner override of the otherwise-monochrome backdrop rule. WebGL
+// materials can't read CSS custom properties (and THREE's color parser wants the
+// comma hsl() form), so the base is mirrored here — keep `wire` in sync with
+// --color-teal in global.css. slab/plinth/wire run deep→bright; the cast shadow
+// is tinted dark teal instead of black. Paper veil + #f2f2f2 canvas stay neutral.
 const DEPTH = {
   slab: 'hsl(174, 84%, 24%)', // deep teal — the monolith (was ink-grey)
   plinth: 'hsl(174, 62%, 52%)', // mid teal — the plinth
-  wire: 'hsl(174, 87%, 62%)', // #49F2E1 — the hairline wire-ring
+  wire: 'hsl(174, 87%, 62%)', // = --color-teal (#49F2E1) — the hairline wire-ring
   shadow: '#0c463f', // dark teal — the ground cast shadow
 } as const;
 
