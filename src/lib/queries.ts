@@ -4,6 +4,9 @@ import type { MetricKey } from '@/app.config';
 import type {
   AspectScores,
   FitnessAssessment,
+  GarminActivity,
+  GarminConnectionInfo,
+  GarminHealthDaily,
   Movement,
   MovementSub,
   ParsedPlan,
@@ -397,6 +400,45 @@ export async function updateRecommendation(
 ): Promise<boolean> {
   const { error } = await supabase.from('recommendations').update(patch).eq('id', id);
   return !error;
+}
+
+// ---- Garmin integration (plan §6, §7). Reads are owner-scoped by RLS. Tokens
+// are never exposed: connection state comes from the safe `garmin_connection_
+// status` view (no token columns). All writes happen server-side (the import
+// function / sync worker via service-role), so there are no client write paths
+// here. ----
+
+export async function getGarminConnection(
+  client: SupabaseClient = supabase,
+): Promise<GarminConnectionInfo | null> {
+  const { data } = await client.from('garmin_connection_status').select('*').maybeSingle();
+  return (data as GarminConnectionInfo) ?? null;
+}
+
+export async function getGarminActivities(
+  limit = 50,
+  client: SupabaseClient = supabase,
+): Promise<GarminActivity[]> {
+  const { data } = await client
+    .from('garmin_activities')
+    .select('*')
+    .order('start_time', { ascending: false })
+    .limit(limit);
+  return (data as GarminActivity[]) ?? [];
+}
+
+export async function getGarminHealthDaily(
+  from: string,
+  to: string,
+  client: SupabaseClient = supabase,
+): Promise<GarminHealthDaily[]> {
+  const { data } = await client
+    .from('garmin_health_daily')
+    .select('*')
+    .gte('calendar_date', from)
+    .lte('calendar_date', to)
+    .order('calendar_date', { ascending: true });
+  return (data as GarminHealthDaily[]) ?? [];
 }
 
 // ---- rx deep enrichment (retrieval-depth cross-door porting) ----

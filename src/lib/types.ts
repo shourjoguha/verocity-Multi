@@ -4,6 +4,7 @@ import type { AspectKey, BlockKey, MetricKey, SectionKey } from '@/app.config';
 
 export type LogStatus = 'planned' | 'in_progress' | 'paused' | 'done' | 'cancelled';
 export type ShareScope = 'profile' | 'plan' | 'log';
+export type LogSource = 'manual' | 'garmin';
 
 export interface Profile {
   id: string;
@@ -55,6 +56,8 @@ export interface WorkoutLog {
   activity_type: string | null;
   tags: string[];
   data: LogDocument;
+  source: LogSource; // 'garmin' rows are projected from garmin_activities (mig 0014)
+  garmin_activity_id: string | null;
   created_at: string;
 }
 
@@ -122,6 +125,78 @@ export interface FitnessAssessment {
   owner_user_id: string;
   taken_at: string;
   scores: AspectScores;
+  created_at: string;
+}
+
+// ---- Garmin integration (plan §6). Reads are owner-scoped by RLS; rows are
+// written only by the ingestion worker / import function (service-role). The
+// browser sees connection state only through `garmin_connection_status` (a safe
+// view that never exposes token columns). ----
+
+export type GarminConnectionStatus =
+  | 'pending'
+  | 'connected'
+  | 'needs_reconnect'
+  | 'revoked'
+  | 'error';
+
+export type GarminBackfillStatus = 'pending' | 'running' | 'done' | 'error';
+
+// Safe status subset exposed to the client (the garmin_connection_status view).
+export interface GarminConnectionInfo {
+  owner_user_id: string;
+  status: GarminConnectionStatus;
+  connected_at: string | null;
+  last_sync_at: string | null;
+  backfill_status: GarminBackfillStatus;
+  backfill_from: string | null;
+  backfill_to: string | null;
+  scopes: string[];
+  last_error: string | null;
+}
+
+export interface GarminActivity {
+  id: string;
+  owner_user_id: string;
+  provider_activity_id: string;
+  activity_type: string | null;
+  start_time: string | null;
+  duration_seconds: number | null;
+  distance_m: number | null;
+  avg_hr: number | null;
+  max_hr: number | null;
+  calories: number | null;
+  avg_speed: number | null;
+  elevation_gain_m: number | null;
+  raw: Record<string, unknown>;
+  garmin_updated_at: string | null;
+  created_at: string;
+}
+
+export interface GarminHealthDaily {
+  id: string;
+  owner_user_id: string;
+  calendar_date: string;
+  resting_hr: number | null;
+  avg_hr: number | null;
+  max_hr: number | null;
+  hrv_ms: number | null;
+  stress_avg: number | null;
+  body_battery_high: number | null;
+  body_battery_low: number | null;
+  sleep_seconds: number | null;
+  sleep_score: number | null;
+  deep_sleep_seconds: number | null;
+  rem_sleep_seconds: number | null;
+  light_sleep_seconds: number | null;
+  awake_seconds: number | null;
+  respiration_avg: number | null;
+  spo2_avg: number | null;
+  steps: number | null;
+  calories: number | null;
+  vo2max: number | null;
+  raw: Record<string, unknown>;
+  garmin_updated_at: string | null;
   created_at: string;
 }
 

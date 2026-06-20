@@ -68,6 +68,8 @@ function makeLog(opts: {
     activity_type: opts.activity_type ?? null,
     tags: opts.tags ?? [],
     data: {} as LogDocument,
+    source: 'manual',
+    garmin_activity_id: null,
     created_at: `${opts.log_date}T00:00:00Z`,
   };
 }

@@ -71,6 +71,53 @@ export const ACTIVITY_TAGS = {
 // Quick-pick activity types for the lightweight non-strength ActivityLogger.
 export const ACTIVITY_TYPES = ['Run', 'Walk', 'Cycle', 'Row', 'Swim', 'Hike', 'Yoga', 'Mobility'] as const;
 
+// Garmin activity-type → ActivityTagKey. Garmin emits lowercase type codes
+// (e.g. "running", "lap_swimming", "strength_training"); these project onto our
+// five activity tags so synced sessions colour correctly across the app. The
+// normalizer lowercases the incoming type and also falls back to keyword matching
+// for codes not listed here (see src/lib/garmin/normalize.ts), defaulting to
+// GARMIN_DEFAULT_TAG when nothing matches.
+export const GARMIN_ACTIVITY_TAG_MAP: Record<string, ActivityTagKey> = {
+  running: 'endurance',
+  treadmill_running: 'endurance',
+  trail_running: 'endurance',
+  track_running: 'endurance',
+  indoor_running: 'endurance',
+  cycling: 'endurance',
+  road_biking: 'endurance',
+  mountain_biking: 'endurance',
+  gravel_cycling: 'endurance',
+  indoor_cycling: 'endurance',
+  virtual_ride: 'endurance',
+  swimming: 'endurance',
+  lap_swimming: 'endurance',
+  open_water_swimming: 'endurance',
+  rowing: 'endurance',
+  indoor_rowing: 'endurance',
+  elliptical: 'endurance',
+  cardio: 'endurance',
+  indoor_cardio: 'endurance',
+  walking: 'endurance',
+  hiking: 'endurance',
+  strength_training: 'strength',
+  indoor_climbing: 'strength',
+  bouldering: 'strength',
+  yoga: 'mobility',
+  pilates: 'mobility',
+  stretching: 'mobility',
+  mobility: 'mobility',
+  breathwork: 'recovery',
+  meditation: 'recovery',
+  hiit: 'sport',
+  soccer: 'sport',
+  basketball: 'sport',
+  tennis: 'sport',
+  pickleball: 'sport',
+};
+
+// Tag used when a Garmin activity type is neither mapped nor keyword-matched.
+export const GARMIN_DEFAULT_TAG: ActivityTagKey = 'sport';
+
 // Movement families for stats roll-up.
 export const MOVEMENT_FAMILIES = {
   squat: ['back squat', 'front squat', 'goblet squat', 'box squat'],
@@ -126,6 +173,8 @@ export const appConfig = {
   timers: TIMERS,
   activityTags: ACTIVITY_TAGS,
   activityTypes: ACTIVITY_TYPES,
+  garminActivityTagMap: GARMIN_ACTIVITY_TAG_MAP,
+  garminDefaultTag: GARMIN_DEFAULT_TAG,
   movementFamilies: MOVEMENT_FAMILIES,
   touch: TOUCH,
   notations: NOTATIONS,
