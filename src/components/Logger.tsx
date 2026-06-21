@@ -6,6 +6,7 @@ import {
   createLog,
   dismissMovementSub,
   getActivePlan,
+  getAllLogs,
   getLogById,
   getMovementSubs,
   getMovements,
@@ -40,6 +41,7 @@ import {
   ungroup,
 } from '@/lib/logEdits';
 import { lastPerformance } from '@/lib/lastPerformance';
+import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
 import { weekFromDate } from '@/lib/week';
@@ -105,6 +107,8 @@ export default function Logger() {
   const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
   const [logDate, setLogDate] = useState<string>(today());
   const [tags, setTags] = useState<string[]>([]);
+  // Pre-session all-time best e1RM per movement, for the PR ring on completion.
+  const [bestByMovement, setBestByMovement] = useState<Map<string, number>>(new Map());
 
   const stopwatch = useStopwatch(0, false);
   const rest = useCountdown();
@@ -161,14 +165,16 @@ export default function Logger() {
 
       // Source the workout from a saved session, a specific (possibly historic)
       // plan day, or — by default — the active plan.
-      const [source, recent] = await Promise.all([
+      const [source, recent, allLogs] = await Promise.all([
         sessionParam
           ? getSessionById(sessionParam)
           : planParam
             ? getPlanById(planParam)
             : getActivePlan(),
         getRecentLogs(50),
+        getAllLogs(),
       ]);
+      setBestByMovement(bestE1rmByMovement(allLogs));
 
       let built: LogDocument;
       let weekNumber: number | null = null;
@@ -473,6 +479,7 @@ export default function Logger() {
                 <SetRow
                   metric={item.primaryMetric}
                   set={set}
+                  isPr={isPrSet(set.actual, bestByMovement.get(item.movement) ?? null)}
                   onPatch={(patch) => setDoc((d) => patchSetActual(d, si, gi, ii, ki, patch))}
                   onToggle={() =>
                     setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: !set.actual.completed }))
