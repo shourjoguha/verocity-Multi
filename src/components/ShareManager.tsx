@@ -4,7 +4,7 @@ import { createShare, getAllPlans, getRecentLogs, getShares, revokeShare } from 
 import { randomToken, sha256Hex, shareUrl } from '@/lib/share';
 import type { Plan, Share, ShareScope, WorkoutLog } from '@/lib/types';
 import { formatDate } from '@/lib/format';
-import { Button, EmptyState, SectionHeader } from '@/components/ui/primitives';
+import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -98,7 +98,7 @@ export default function ShareManager() {
     if (ok) setShares((prev) => prev.map((s) => (s.id === id ? { ...s, revoked: true } : s)));
   }
 
-  if (!ready) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  if (!ready) return <LoadingScreen />;
 
   return (
     <PageStagger className="mx-auto max-w-3xl px-6 py-10">

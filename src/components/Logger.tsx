@@ -55,7 +55,7 @@ import type {
   SetActual,
   VibeCheck,
 } from '@/lib/types';
-import { Button, SectionHeader } from '@/components/ui/primitives';
+import { Button, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
 import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
@@ -340,7 +340,7 @@ export default function Logger() {
       next === 'done' && idRef.current ? `/app/session?id=${idRef.current}` : '/app';
   }
 
-  if (!ready) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  if (!ready) return <LoadingScreen />;
 
   const ordered = doc.sections
     .slice()

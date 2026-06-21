@@ -7,7 +7,7 @@ import type { WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
 import { formatDate, formatSetActual } from '@/lib/format';
 import { SECTIONS, type SectionKey } from '@/app.config';
-import { EmptyState, SectionHeader, Tag } from '@/components/ui/primitives';
+import { EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { SessionTime } from '@/components/SessionTime';
 import { HeartRate } from '@/components/HeartRate';
@@ -57,7 +57,7 @@ export default function SessionDetail() {
     })();
   }, []);
 
-  if (loading) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  if (loading) return <LoadingScreen />;
 
   if (!log) {
     return (

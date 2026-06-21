@@ -5,7 +5,7 @@ import { showcaseMonthStart } from '@/lib/showcase';
 import type { Plan, WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
 import { formatDate, formatDuration } from '@/lib/format';
-import { EmptyState, SectionHeader, Tag } from '@/components/ui/primitives';
+import { EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
 import { Item, PageStagger } from '@/components/anim';
@@ -71,7 +71,7 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
     };
   }, [ready, month]);
 
-  if (!ready) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  if (!ready) return <LoadingScreen />;
 
   const byDay = new Map<string, WorkoutLog[]>();
   for (const log of logs) {

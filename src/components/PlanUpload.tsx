@@ -12,7 +12,7 @@ import {
   validateParsedPlan,
 } from '@/lib/planTemplate';
 import type { ParsedPlan, Plan } from '@/lib/types';
-import { Button, EmptyState, SectionHeader } from '@/components/ui/primitives';
+import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -62,7 +62,7 @@ export default function PlanUpload() {
     })();
   }, []);
 
-  if (!ready) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  if (!ready) return <LoadingScreen />;
 
   const weeks = parsed
     ? Math.max(

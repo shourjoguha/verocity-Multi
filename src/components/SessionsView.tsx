@@ -13,7 +13,7 @@ import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import type { Movement, Plan, PlanDay, Session, SessionExercise } from '@/lib/types';
 import { ACTIVITY_TAGS, METRICS, SECTIONS, type ActivityTagKey, type MetricKey, type SectionKey } from '@/app.config';
 import { tagColor } from '@/lib/tags';
-import { Button, EmptyState, Tag } from '@/components/ui/primitives';
+import { Button, EmptyState, LoadingScreen, Tag } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { MovementPicker } from '@/components/logger/MovementPicker';
@@ -417,7 +417,7 @@ export default function SessionsView() {
   }
 
   if (sessionsQ.loading || items === null) {
-    return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+    return <LoadingScreen />;
   }
 
   return (
