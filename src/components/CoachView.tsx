@@ -11,7 +11,7 @@ import { generateRecommendations } from '@/lib/coach';
 import type { Recommendation, RecDisposition } from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { toast } from '@/lib/toast';
-import { EmptyState, SectionHeader } from '@/components/ui/primitives';
+import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { Modal } from '@/components/ui/Modal';
@@ -140,7 +140,7 @@ export default function CoachView() {
     await refresh();
   }
 
-  if (!ready) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  if (!ready) return <LoadingScreen />;
 
   const now = Date.now();
   const isLive = (r: Recommendation) =>

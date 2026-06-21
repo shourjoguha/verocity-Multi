@@ -39,7 +39,9 @@ export default function Toaster() {
               transition={{ duration: 0.25, ease: EASE }}
               role="status"
               className={`pointer-events-auto max-w-sm px-4 py-2 text-sm shadow-sm ${
-                t.type === 'error' ? 'bg-fg text-bg' : 'border border-border bg-surface text-fg'
+                t.type === 'error'
+                  ? 'bg-fg text-bg'
+                  : 'border border-border border-l-2 border-l-teal bg-surface text-fg'
               }`}
             >
               {t.message}

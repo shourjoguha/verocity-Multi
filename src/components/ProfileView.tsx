@@ -13,7 +13,7 @@ import { weekFromDate } from '@/lib/week';
 import { formatDate, formatDuration, formatRound } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
 import { buildTimeline, DAY_NAMES, dayNameFromLabel, typeFromLabel } from '@/lib/timeline';
-import { Card, EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
+import { Card, EmptyState, LoadingScreen, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
@@ -203,7 +203,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   }, [mode, profile]);
 
   if (loading) {
-    return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+    return <LoadingScreen />;
   }
 
   if (mode === 'showcase' && !profile) {

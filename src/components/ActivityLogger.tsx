@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { createLog } from '@/lib/queries';
 import { ACTIVITY_TAGS, ACTIVITY_TYPES, METRICS } from '@/app.config';
 import type { LogDocument } from '@/lib/types';
-import { Button } from '@/components/ui/primitives';
+import { Button, LoadingScreen } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -70,7 +70,7 @@ export default function ActivityLogger() {
     })();
   }, []);
 
-  if (!ready) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  if (!ready) return <LoadingScreen />;
 
   const toggleTag = (t: string) =>
     setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));

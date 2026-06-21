@@ -96,6 +96,18 @@ export function Button({
   );
 }
 
+// Branded full-view loading state — replaces the plain "Loading…" string across
+// the read islands. A teal hairline sweep (the functional accent) over a muted
+// label; reduced-motion-safe via the .loading-sweep rule.
+export function LoadingScreen({ label = 'Loading' }: { label?: string }) {
+  return (
+    <div className="flex flex-col items-center gap-3 px-6 py-16">
+      <div className="loading-sweep h-px w-32 overflow-hidden bg-border" />
+      <span className="text-[0.65rem] uppercase tracking-[0.25em] text-muted">{label}</span>
+    </div>
+  );
+}
+
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
     <div className="border border-dashed border-border px-4 py-10 text-center text-sm text-muted">

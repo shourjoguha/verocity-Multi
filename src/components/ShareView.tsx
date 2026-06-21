@@ -4,7 +4,7 @@ import type { ParsedPlan, Plan, Profile, WorkoutLog } from '@/lib/types';
 import { BLOCKS, type BlockKey } from '@/app.config';
 import { formatDate, formatDuration } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
-import { EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
+import { EmptyState, LoadingScreen, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -259,7 +259,7 @@ export default function ShareView() {
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
       {state.kind === 'loading' ? (
-        <div className="px-6 py-16 text-sm text-muted">Loading…</div>
+        <LoadingScreen />
       ) : state.kind === 'error' ? (
         <EmptyState>{state.message}</EmptyState>
       ) : (

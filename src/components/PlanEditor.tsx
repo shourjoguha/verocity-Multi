@@ -22,7 +22,7 @@ import {
 } from '@/lib/planEdits';
 import { BLOCKS, SECTIONS, type BlockKey, type SectionKey } from '@/app.config';
 import type { ParsedPlan } from '@/lib/types';
-import { Button, EmptyState } from '@/components/ui/primitives';
+import { Button, EmptyState, LoadingScreen } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -76,7 +76,7 @@ export default function PlanEditor() {
     return () => clearTimeout(t);
   }, [plan, planId]);
 
-  if (!ready) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  if (!ready) return <LoadingScreen />;
 
   if (!plan) {
     return (

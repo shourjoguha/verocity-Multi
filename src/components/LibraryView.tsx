@@ -10,7 +10,7 @@ import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { supabasePublic } from '@/lib/supabase';
 import type { Movement } from '@/lib/types';
 import { METRICS, type MetricKey } from '@/app.config';
-import { Button, EmptyState } from '@/components/ui/primitives';
+import { Button, EmptyState, LoadingScreen } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -195,7 +195,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   }
 
   if (loading || items === null) {
-    return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+    return <LoadingScreen />;
   }
 
   return (

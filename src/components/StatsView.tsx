@@ -10,7 +10,7 @@ import { flattenSets, familyOf, sessionVolume } from '@/lib/stats';
 import { computeAspectSuggestions } from '@/lib/aspects';
 import { formatDuration, formatRound } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
-import { EmptyState, SectionHeader, StatCard } from '@/components/ui/primitives';
+import { EmptyState, LoadingScreen, SectionHeader, StatCard } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { FitnessProfile } from '@/components/FitnessProfile';
 import { GarminHealthSection } from '@/components/GarminHealthSection';
@@ -116,7 +116,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   }
   useEffect(() => () => clearTimeout(tipTimer.current), []);
 
-  if (loading) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  if (loading) return <LoadingScreen />;
   const all: WorkoutLog[] = logs ?? [];
 
   // Week buckets (oldest → newest).

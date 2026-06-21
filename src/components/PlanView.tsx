@@ -5,7 +5,7 @@ import { flattenSets } from '@/lib/stats';
 import { e1rm } from '@/lib/e1rm';
 import { formatRound } from '@/lib/format';
 import { BLOCKS, type BlockKey } from '@/app.config';
-import { EmptyState, SectionHeader } from '@/components/ui/primitives';
+import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -21,7 +21,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     { auth: !showcase },
   );
 
-  if (loading) return <div className="px-6 py-16 text-sm text-muted">Loading…</div>;
+  if (loading) return <LoadingScreen />;
 
   const plan = data?.plan ?? null;
   const logs = data?.logs ?? [];
