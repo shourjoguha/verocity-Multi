@@ -26,6 +26,11 @@
      still the default — use this sparingly and intentionally. */
   --color-teal: hsl(174 87% 62%);
 
+  /* Functional accent — the teal promoted to a sparing UI role (keyboard focus
+     now; active/selected cues in later phases). Same hue both themes; reads
+     bright on paper and on carbon. Monochrome stays the default everywhere else. */
+  --color-focus: hsl(174 87% 62%);
+
   /* Echo-stack background layers (#bfbfbf → #d9d9d9) */
   --color-echo-1: hsl(0 0% 75%);
   --color-echo-2: hsl(0 0% 79%);
@@ -312,9 +317,9 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   height: 100%;
 }
 
-/* Visible focus for keyboard users (a11y) */
+/* Visible focus for keyboard users (a11y) — the functional teal accent. */
 :focus-visible {
-  outline: 2px solid var(--color-fg);
+  outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
 
