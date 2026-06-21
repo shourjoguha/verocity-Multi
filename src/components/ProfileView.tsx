@@ -3,10 +3,8 @@ import { supabase, supabasePublic } from '@/lib/supabase';
 import {
   getActivePlan,
   getAllLogs,
-  getAllPlans,
   getCurrentProfile,
   getRecentLogs,
-  getSessions,
 } from '@/lib/queries';
 import { signOut } from '@/lib/auth';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
@@ -15,14 +13,6 @@ import { weekFromDate } from '@/lib/week';
 import { formatDate, formatDuration, formatRound } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
 import { buildTimeline, DAY_NAMES, dayNameFromLabel, typeFromLabel } from '@/lib/timeline';
-import { toast } from '@/lib/toast';
-import {
-  bundleToJson,
-  buildExportBundle,
-  downloadFile,
-  exportFilename,
-  logsToCsv,
-} from '@/lib/exportData';
 import { Card, EmptyState, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
 import { EchoText } from '@/components/EchoText';
@@ -30,25 +20,6 @@ import { Item, PageStagger } from '@/components/anim';
 import { DayPreviewDialog } from '@/components/DayPreviewDialog';
 import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
-import { Modal } from '@/components/ui/Modal';
-import { BackgroundPicker } from '@/components/BackgroundPicker';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { GarminPanel } from '@/components/GarminPanel';
-
-const DownloadIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="square"
-    aria-hidden
-  >
-    <path d="M12 3v12M7 10l5 5 5-5M4 20h16" />
-  </svg>
-);
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;
@@ -174,35 +145,9 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [allLogs, setAllLogs] = useState<WorkoutLog[]>([]);
-  const [exporting, setExporting] = useState<'json' | 'csv' | null>(null);
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [previewDay, setPreviewDay] = useState<PlanDay | null>(null);
   const [quickLog, setQuickLog] = useState<WorkoutLog | null>(null);
-
-  async function handleExport(format: 'json' | 'csv') {
-    if (exporting) return;
-    setExporting(format);
-    try {
-      const [prof, plans, allLogs, sessions] = await Promise.all([
-        getCurrentProfile(),
-        getAllPlans(),
-        getAllLogs(),
-        getSessions(),
-      ]);
-      if (format === 'json') {
-        const json = bundleToJson(buildExportBundle(prof, plans, allLogs, sessions));
-        downloadFile(exportFilename('json'), json, 'application/json');
-      } else {
-        downloadFile(exportFilename('csv'), logsToCsv(allLogs), 'text/csv');
-      }
-      toast(`${format.toUpperCase()} export ready`, 'success');
-    } catch {
-      toast('Export failed — try again', 'error');
-    } finally {
-      setExporting(null);
-    }
-  }
 
   useEffect(() => {
     let active = true;
@@ -470,54 +415,6 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </section>
       </Item>
 
-      {mode === 'app' ? (
-        <Item>
-          <section className="mt-10">
-            <SectionHeader>Appearance</SectionHeader>
-            <div className="mb-2 text-[0.6rem] uppercase tracking-[0.16em] text-muted">Theme</div>
-            <ThemeToggle />
-            <div className="mt-6 mb-2 text-[0.6rem] uppercase tracking-[0.16em] text-muted">Backdrop</div>
-            <BackgroundPicker />
-          </section>
-        </Item>
-      ) : null}
-
-      {mode === 'app' ? (
-        <Item>
-          <section className="mt-10">
-            <SectionHeader>Garmin</SectionHeader>
-            <GarminPanel />
-          </section>
-        </Item>
-      ) : null}
-
-      {mode === 'app' ? (
-        <Item>
-          <section className="mt-10">
-            <SectionHeader>Your data</SectionHeader>
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setExportMenuOpen(true)}
-                aria-label="Export data"
-                title="Export data"
-                className="hill-btn inline-flex min-h-11 min-w-11 items-center justify-center border border-border bg-surface text-fg transition-colors hover:border-fg"
-              >
-                <DownloadIcon />
-              </button>
-              <a
-                href="/app/shares"
-                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
-              >
-                Share links →
-              </a>
-            </div>
-            <p className="mt-2 text-[0.7rem] text-muted">
-              JSON is the complete backup. CSV is a flattened per-set view for spreadsheets.
-            </p>
-          </section>
-        </Item>
-      ) : null}
     </PageStagger>
 
       {mode === 'app' ? (
@@ -539,34 +436,6 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             }}
             onDeleted={(id) => setLogs((ls) => ls.filter((l) => l.id !== id))}
           />
-          <Modal open={exportMenuOpen} onClose={() => setExportMenuOpen(false)} title="Export data">
-            <div className="flex flex-col">
-              <button
-                type="button"
-                onClick={() => {
-                  setExportMenuOpen(false);
-                  handleExport('json');
-                }}
-                disabled={!!exporting}
-                className="flex items-center justify-between border-b border-border px-4 py-4 text-left transition-colors hover:bg-elevated disabled:opacity-40"
-              >
-                <span className="text-fg">Download JSON</span>
-                <span className="text-[0.65rem] uppercase tracking-wider text-muted">complete backup</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setExportMenuOpen(false);
-                  handleExport('csv');
-                }}
-                disabled={!!exporting}
-                className="flex items-center justify-between px-4 py-4 text-left transition-colors hover:bg-elevated disabled:opacity-40"
-              >
-                <span className="text-fg">Download CSV</span>
-                <span className="text-[0.65rem] uppercase tracking-wider text-muted">per-set rows</span>
-              </button>
-            </div>
-          </Modal>
         </>
       ) : null}
     </>

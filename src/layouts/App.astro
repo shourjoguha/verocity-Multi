@@ -27,7 +27,6 @@ const links = showcase
       { href: '/app/plan', label: 'Plan' },
       { href: '/app/sessions', label: 'Sessions' },
       { href: '/app/library', label: 'Library' },
-      { href: '/app/shares', label: 'Share' },
     ];
 const isActive = (href: string) => (href === home ? path === home : path.startsWith(href));
 ---
@@ -93,6 +92,24 @@ const isActive = (href: string) => (href === home ? path === home : path.startsW
             {l.label}
           </a>
         ))
+      }
+      {
+        !showcase && (
+          <>
+            <div class="my-2 border-t border-border" />
+            <a
+              href="/app/settings"
+              data-nav-link
+              aria-current={isActive('/app/settings') ? 'page' : undefined}
+              class:list={[
+                'block px-3 py-2.5 text-sm uppercase tracking-wider transition-colors duration-150 hover:text-fg',
+                isActive('/app/settings') ? 'text-fg' : 'text-muted',
+              ]}
+            >
+              Settings
+            </a>
+          </>
+        )
       }
     </div>
     {
