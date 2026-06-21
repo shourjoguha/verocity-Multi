@@ -66,7 +66,13 @@ export function applyTheme(pref: ThemePref): void {
 // theme change — both manual (applyTheme) and system flips (the pre-paint
 // script re-dispatches THEME_EVENT when pref is 'system').
 export function useResolvedTheme(): ResolvedTheme {
-  const [theme, setTheme] = useState<ResolvedTheme>('light');
+  // Initialize from the live attribute (set pre-paint by Base.astro) so the
+  // WebGL scenes don't render one frame of the wrong theme before the effect.
+  const [theme, setTheme] = useState<ResolvedTheme>(() =>
+    typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark'
+      ? 'dark'
+      : 'light',
+  );
   useEffect(() => {
     const read = () =>
       setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');

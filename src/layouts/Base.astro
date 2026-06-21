@@ -38,58 +38,69 @@ const { title = 'Verocity', description = 'Strength & training logger.', noBackd
     <title>{title}</title>
     <ClientRouter />
     <script is:inline>
-      // Apply the saved theme before first paint (no flash). Preference is
-      // 'light' | 'dark' | 'system'; 'system' (default) follows the OS and stays
-      // live when it flips, re-dispatching verocity:theme-change so React
-      // islands (the WebGL scenes) re-read. Mirrors src/lib/theme.ts.
+      // Apply the saved theme before first paint (no flash) AND re-apply after
+      // every ClientRouter navigation: Astro's swap resets <html> attributes
+      // (and the head's theme-color meta) to the server markup, which would
+      // otherwise revert the theme on every tab switch. Mirrors src/lib/theme.ts.
       (function () {
-        try {
-          var KEY = 'verocity:theme';
-          var pref = localStorage.getItem(KEY);
-          if (pref !== 'light' && pref !== 'dark' && pref !== 'system') pref = 'system';
-          var mql = window.matchMedia('(prefers-color-scheme: dark)');
-          function paint(resolved) {
-            document.documentElement.setAttribute('data-theme', resolved);
-            document.documentElement.style.colorScheme = resolved;
+        var KEY = 'verocity:theme';
+        var mql = window.matchMedia('(prefers-color-scheme: dark)');
+        function paint() {
+          try {
+            var pref = localStorage.getItem(KEY);
+            if (pref !== 'light' && pref !== 'dark' && pref !== 'system') pref = 'system';
+            var r = pref === 'dark' || (pref === 'system' && mql.matches) ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', r);
+            document.documentElement.style.colorScheme = r;
             var m = document.querySelector('meta[name="theme-color"]');
-            if (m) m.setAttribute('content', resolved === 'dark' ? '#0d0d0d' : '#f2f2f2');
+            if (m) m.setAttribute('content', r === 'dark' ? '#0d0d0d' : '#f2f2f2');
+            return r;
+          } catch (e) {
+            document.documentElement.setAttribute('data-theme', 'light');
+            return 'light';
           }
-          paint(pref === 'dark' || (pref === 'system' && mql.matches) ? 'dark' : 'light');
-          if (!window.__vTheme) {
-            window.__vTheme = true;
-            mql.addEventListener('change', function () {
-              var p = localStorage.getItem(KEY);
-              if (p === 'light' || p === 'dark') return; // manual pin ignores system
-              var r = mql.matches ? 'dark' : 'light';
-              paint(r);
-              window.dispatchEvent(
-                new CustomEvent('verocity:theme-change', { detail: { pref: 'system', resolved: r } }),
-              );
-            });
-          }
-        } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'light');
+        }
+        paint();
+        if (!window.__vTheme) {
+          window.__vTheme = true;
+          document.addEventListener('astro:after-swap', paint);
+          mql.addEventListener('change', function () {
+            var p = localStorage.getItem(KEY);
+            if (p === 'light' || p === 'dark') return; // manual pin ignores system
+            var r = paint();
+            window.dispatchEvent(
+              new CustomEvent('verocity:theme-change', { detail: { pref: 'system', resolved: r } }),
+            );
+          });
         }
       })();
     </script>
     <script is:inline>
-      // Apply the saved backdrop before first paint to avoid FOUC. If no
-      // explicit preference is stored, pick a device-aware default: desktops
-      // with a fine pointer and no reduced-motion get the 3D scene; everyone
-      // else gets the topography CSS preset (still a depth cue, no WebGL).
+      // Apply the saved backdrop before first paint, and re-apply after every
+      // ClientRouter swap (same <html>-attribute reset as the theme above). If no
+      // explicit preference is stored, pick a device-aware default: desktops with
+      // a fine pointer and no reduced-motion get the 3D scene; everyone else gets
+      // the topography CSS preset (still a depth cue, no WebGL).
       (function () {
-        try {
-          var v = localStorage.getItem('verocity:bg');
-          var allowed = ['off', 'grain', 'hairlines', 'topography', 'aurora'];
-          if (allowed.indexOf(v) === -1) {
-            var canBoot3D =
-              window.matchMedia('(min-width: 768px) and (pointer: fine)').matches &&
-              !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            v = canBoot3D ? 'aurora' : 'topography';
+        function apply() {
+          try {
+            var v = localStorage.getItem('verocity:bg');
+            var allowed = ['off', 'grain', 'hairlines', 'topography', 'aurora'];
+            if (allowed.indexOf(v) === -1) {
+              var canBoot3D =
+                window.matchMedia('(min-width: 768px) and (pointer: fine)').matches &&
+                !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+              v = canBoot3D ? 'aurora' : 'topography';
+            }
+            document.documentElement.setAttribute('data-bg', v);
+          } catch (_) {
+            document.documentElement.setAttribute('data-bg', 'topography');
           }
-          document.documentElement.setAttribute('data-bg', v);
-        } catch (_) {
-          document.documentElement.setAttribute('data-bg', 'topography');
+        }
+        apply();
+        if (!window.__vBg) {
+          window.__vBg = true;
+          document.addEventListener('astro:after-swap', apply);
         }
       })();
     </script>
