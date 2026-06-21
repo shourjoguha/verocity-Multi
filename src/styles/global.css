@@ -56,6 +56,79 @@
     0 3px 0 hsl(0 0% 7% / 0.12), 0 4px 8px hsl(0 0% 7% / 0.17), 0 16px 34px hsl(0 0% 7% / 0.20);
 }
 
+/* Pillow (.hill*) shadow tokens — light defaults. Tokenized so the dark theme
+   block below can re-light the dome (faint highlight + deeper shadow). */
+:root {
+  --hill:
+    inset 1.5px 1.5px 3px hsl(0 0% 100% / 0.45),
+    inset -1.5px -1.5px 3px hsl(0 0% 0% / 0.28);
+  --hill-btn-rest:
+    0 1px 0 hsl(0 0% 7% / 0.10), 0 2px 5px hsl(0 0% 7% / 0.14),
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.32),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.22);
+  --hill-btn-hover:
+    0 2px 0 hsl(0 0% 7% / 0.12), 0 5px 12px hsl(0 0% 7% / 0.20),
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.36),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.24);
+  --hill-btn-active:
+    inset 1.5px 1.5px 2.5px hsl(0 0% 0% / 0.22),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 100% / 0.20);
+  --hill-btn-disabled:
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.20),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.12);
+  --hill-btn-flush-rest:
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.32),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.22);
+}
+
+/* ---- Dark theme — "Carbon editorial". Inverts the monochrome ink-on-paper
+   identity: near-black paper, off-white ink, white hairlines, teal accent
+   intact. Overrides only token VALUES; every component consuming var(--color-*)
+   or the pillow vars flips with zero per-component change. Applied via the
+   pre-paint script in Base.astro (System / Light / Dark, see lib/theme.ts). ---- */
+html[data-theme='dark'] {
+  --color-bg: hsl(0 0% 5%); /* #0d0d0d carbon */
+  --color-surface: hsl(0 0% 9%); /* raised card */
+  --color-elevated: hsl(0 0% 15%); /* tracks / hover fills */
+  --color-border: hsl(0 0% 100% / 0.12); /* white hairline */
+  --color-muted: hsl(0 0% 62%); /* AA secondary on carbon */
+  --color-subtle: hsl(0 0% 76%); /* stronger secondary */
+  --color-fg: hsl(0 0% 95%); /* paper as ink */
+  --color-accent: hsl(0 0% 95%); /* active = paper (monochrome rule) */
+  --color-accent-fg: hsl(0 0% 7%);
+  --color-echo-1: hsl(0 0% 20%);
+  --color-echo-2: hsl(0 0% 17%);
+  --color-echo-3: hsl(0 0% 14%);
+  --color-echo-4: hsl(0 0% 11%);
+
+  /* On carbon, soft casts read weakly — deepen them and let the white hairline
+     borders carry separation. Pillow highlight drops to a faint white. */
+  --shadow-lift-rest:
+    0 1px 0 hsl(0 0% 0% / 0.5), 0 2px 4px hsl(0 0% 0% / 0.5), 0 10px 22px hsl(0 0% 0% / 0.55);
+  --shadow-lift-hover:
+    0 3px 0 hsl(0 0% 0% / 0.55), 0 6px 12px hsl(0 0% 0% / 0.55), 0 18px 38px hsl(0 0% 0% / 0.6);
+  --hill:
+    inset 1.5px 1.5px 3px hsl(0 0% 100% / 0.1),
+    inset -1.5px -1.5px 3px hsl(0 0% 0% / 0.5);
+  --hill-btn-rest:
+    0 1px 0 hsl(0 0% 0% / 0.5), 0 2px 5px hsl(0 0% 0% / 0.5),
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.08),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.5);
+  --hill-btn-hover:
+    0 2px 0 hsl(0 0% 0% / 0.55), 0 5px 12px hsl(0 0% 0% / 0.6),
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.11),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.52);
+  --hill-btn-active:
+    inset 1.5px 1.5px 2.5px hsl(0 0% 0% / 0.55),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 100% / 0.06);
+  --hill-btn-disabled:
+    inset 1.5px 1.5px 2.5px hsl(0 0% 0% / 0.32),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 100% / 0.05);
+  --hill-btn-flush-rest:
+    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.08),
+    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.5);
+}
+
 :root {
   color-scheme: light;
 }
@@ -127,46 +200,34 @@ body {
    neighbouring cells in a gap-1 grid. */
 .hill {
   border-radius: 4px;
-  box-shadow:
-    inset 1.5px 1.5px 3px hsl(0 0% 100% / 0.45),
-    inset -1.5px -1.5px 3px hsl(0 0% 0% / 0.28);
+  box-shadow: var(--hill);
 }
 
 /* Hill button — extends the pillow into a proper raised button: outer drop
    shadow lifts it above the page, inset highlight + shadow gives the dome,
    :active inverts both axes so it reads as pressed in. Hover deepens the
    outer shadow slightly to suggest the press is imminent. Sharp-corner
-   editorial language is preserved by keeping radius small (4px). */
+   editorial language is preserved by keeping radius small (4px). Pillow shadow
+   values are tokenized (--hill-btn-*) so the dark theme re-lights the dome
+   (faint highlight, deeper shadow) without touching these rules. */
 .hill-btn {
   border-radius: 4px;
-  box-shadow:
-    0 1px 0 hsl(0 0% 7% / 0.10),
-    0 2px 5px hsl(0 0% 7% / 0.14),
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.32),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.22);
+  box-shadow: var(--hill-btn-rest);
   transition:
     box-shadow 0.18s var(--ease-editorial),
     transform 0.18s var(--ease-editorial);
 }
 .hill-btn:hover:not(:disabled),
 .hill-btn:focus-visible {
-  box-shadow:
-    0 2px 0 hsl(0 0% 7% / 0.12),
-    0 5px 12px hsl(0 0% 7% / 0.20),
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.36),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.24);
+  box-shadow: var(--hill-btn-hover);
 }
 .hill-btn:active:not(:disabled),
 .hill-btn[aria-pressed='true'] {
-  box-shadow:
-    inset 1.5px 1.5px 2.5px hsl(0 0% 0% / 0.22),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 100% / 0.20);
+  box-shadow: var(--hill-btn-active);
   transform: translateY(1px);
 }
 .hill-btn:disabled {
-  box-shadow:
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.20),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.12);
+  box-shadow: var(--hill-btn-disabled);
 }
 
 /* Flush variant — pillow inset only, no outer rise. For buttons inside an
@@ -174,16 +235,12 @@ body {
    double up against the container's own shadow. */
 .hill-btn-flush {
   border-radius: 4px;
-  box-shadow:
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.32),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.22);
+  box-shadow: var(--hill-btn-flush-rest);
   transition: box-shadow 0.18s var(--ease-editorial);
 }
 .hill-btn-flush:active:not(:disabled),
 .hill-btn-flush[aria-pressed='true'] {
-  box-shadow:
-    inset 1.5px 1.5px 2.5px hsl(0 0% 0% / 0.22),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 100% / 0.20);
+  box-shadow: var(--hill-btn-active);
 }
 
 /* ---- Toggleable background backdrop (BackgroundLayer + ProfileView toggle).
@@ -227,6 +284,26 @@ html[data-bg='topography'] .bg-backdrop::before {
   opacity: 1;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280' viewBox='0 0 280 280'><g fill='none' stroke='hsl(0 0%25 7%25 / 0.06)' stroke-width='1'><circle cx='140' cy='140' r='20'/><circle cx='140' cy='140' r='44'/><circle cx='140' cy='140' r='72'/><circle cx='140' cy='140' r='104'/><circle cx='140' cy='140' r='140'/></g></svg>");
   background-size: 280px 280px;
+}
+/* Dark theme: the CSS backdrop presets flip from ink-on-paper to faint
+   light-on-carbon. Two attrs → higher specificity than the base preset rules,
+   so order-independent. */
+html[data-theme='dark'][data-bg='grain'] .bg-backdrop::before {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    hsl(0 0% 100% / 0.06) 31px,
+    hsl(0 0% 100% / 0.06) 32px
+  );
+}
+html[data-theme='dark'][data-bg='hairlines'] .bg-backdrop::before {
+  background-image:
+    linear-gradient(hsl(0 0% 100% / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(0 0% 100% / 0.045) 1px, transparent 1px);
+}
+html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280' viewBox='0 0 280 280'><g fill='none' stroke='hsl(0 0%25 100%25 / 0.07)' stroke-width='1'><circle cx='140' cy='140' r='20'/><circle cx='140' cy='140' r='44'/><circle cx='140' cy='140' r='72'/><circle cx='140' cy='140' r='104'/><circle cx='140' cy='140' r='140'/></g></svg>");
 }
 .bg-canvas {
   position: absolute;

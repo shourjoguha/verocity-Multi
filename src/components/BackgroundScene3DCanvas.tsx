@@ -7,6 +7,7 @@ import {
   MathUtils,
   PCFShadowMap,
 } from 'three';
+import { useResolvedTheme } from '@/lib/theme';
 
 // "Monolith on paper" — on desktop, one tall ink-teal slab anchors the frame, a
 // mid-teal plinth gives it scale, a hairline wire-ring is the editorial wink, and
@@ -161,24 +162,31 @@ function HairlineFrame({
   );
 }
 
-function PaperVeil() {
+function PaperVeil({ dark }: { dark: boolean }) {
   // Completely static — it's a literal sheet of paper. Half-occludes the
-  // monolith's left side to create collage depth.
+  // monolith's left side to create collage depth. Goes to a dark sheet on
+  // carbon so it doesn't punch a white hole in the dark backdrop.
   return (
     <mesh position={[-2.2, 0.2, 0.6]} rotation={[0, 0.5, 0]} receiveShadow>
       <planeGeometry args={[3.6, 5]} />
-      <meshStandardMaterial color="hsl(0, 0%, 97%)" roughness={1} metalness={0} transparent opacity={0.85} />
+      <meshStandardMaterial
+        color={dark ? 'hsl(0, 0%, 11%)' : 'hsl(0, 0%, 97%)'}
+        roughness={1}
+        metalness={0}
+        transparent
+        opacity={0.85}
+      />
     </mesh>
   );
 }
 
-function DesktopScene() {
+function DesktopScene({ dark }: { dark: boolean }) {
   return (
     <>
       <Monolith />
       <Plinth />
       <HairlineFrame />
-      <PaperVeil />
+      <PaperVeil dark={dark} />
     </>
   );
 }
@@ -269,6 +277,8 @@ export default function BackgroundScene3DCanvas() {
   const [reducedMotion, setReducedMotion] = useState(false);
   const [tabHidden, setTabHidden] = useState(false);
   const [compact, setCompact] = useState(false);
+  const dark = useResolvedTheme() === 'dark';
+  const bgColor = dark ? '#0d0d0d' : '#f2f2f2';
 
   useEffect(() => {
     const motionMql = window.matchMedia(REDUCED_MOTION_QUERY);
@@ -311,9 +321,9 @@ export default function BackgroundScene3DCanvas() {
         }
       }}
     >
-      <color attach="background" args={['#f2f2f2']} />
+      <color attach="background" args={[bgColor]} />
       {/* Fog pushed back so the shapes stay crisp; it only fades the far ground. */}
-      <fog attach="fog" args={['#f2f2f2', 9, 20]} />
+      <fog attach="fog" args={[bgColor, 9, 20]} />
       <ambientLight intensity={0.32} />
       <directionalLight
         position={[4, 6, 3]}
@@ -332,7 +342,7 @@ export default function BackgroundScene3DCanvas() {
       />
       <directionalLight position={[-5, 2, -2]} intensity={0.25} />
       <FitCamera compact={compact} />
-      <Parallax>{compact ? <CompactScene /> : <DesktopScene />}</Parallax>
+      <Parallax>{compact ? <CompactScene /> : <DesktopScene dark={dark} />}</Parallax>
       <GroundShadow opacity={compact ? 0.16 : 0.3} />
     </Canvas>
   );
