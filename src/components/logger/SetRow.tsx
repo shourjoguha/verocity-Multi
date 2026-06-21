@@ -16,6 +16,7 @@ const snapRpe = (n: number) => Math.min(RPE.max, Math.max(RPE.min, Math.round(n 
 export function SetRow({
   metric,
   set,
+  isPr = false,
   onPatch,
   onToggle,
   onRemove,
@@ -23,6 +24,7 @@ export function SetRow({
 }: {
   metric: MetricKey;
   set: LogSet;
+  isPr?: boolean;
   onPatch: (patch: Partial<SetActual>) => void;
   onToggle: () => void;
   onRemove: () => void;
@@ -31,15 +33,21 @@ export function SetRow({
   const a = set.actual;
 
   // One-shot teal ring-pop the moment a set is marked complete (false→true) —
-  // the satisfying confirm on the core logging action. Skipped under
+  // the satisfying confirm on the core logging action. A personal record gets a
+  // bigger ring + a "PR" badge + an extra haptic (easter egg). Skipped under
   // reduced-motion; the monochrome completed state below is the resting look.
   const reduce = useReducedMotion();
   const [pop, setPop] = useState(0);
+  const [popPr, setPopPr] = useState(false);
   const wasComplete = useRef(a.completed);
   useEffect(() => {
-    if (a.completed && !wasComplete.current && !reduce) setPop((n) => n + 1);
+    if (a.completed && !wasComplete.current && !reduce) {
+      setPopPr(isPr);
+      setPop((n) => n + 1);
+      if (isPr) haptic(30);
+    }
     wasComplete.current = a.completed;
-  }, [a.completed, reduce]);
+  }, [a.completed, reduce, isPr]);
 
   const fields = () => {
     switch (metric) {
@@ -161,9 +169,21 @@ export function SetRow({
               aria-hidden
               className="pointer-events-none absolute inset-0 rounded-[4px] border-2 border-teal"
               initial={{ opacity: 0.85, scale: 1 }}
-              animate={{ opacity: 0, scale: 1.8 }}
-              transition={{ duration: 0.5, ease: EASE }}
+              animate={{ opacity: 0, scale: popPr ? 2.4 : 1.8 }}
+              transition={{ duration: popPr ? 0.65 : 0.5, ease: EASE }}
             />
+          ) : null}
+          {pop > 0 && popPr ? (
+            <motion.span
+              key={`pr-${pop}`}
+              aria-hidden
+              className="pointer-events-none absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[0.55rem] font-bold uppercase tracking-[0.2em] text-teal"
+              initial={{ opacity: 0, y: 4, scale: 0.8 }}
+              animate={{ opacity: [0, 1, 1, 0], y: -6, scale: 1 }}
+              transition={{ duration: 1, ease: EASE }}
+            >
+              PR
+            </motion.span>
           ) : null}
           <button
             type="button"

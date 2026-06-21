@@ -163,6 +163,19 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Typographic calibration — balanced headlines and orphan-free paragraphs
+   without touching the type scale. Progressive enhancement: engines that don't
+   support text-wrap simply ignore it. (A fuller scale/spacing redesign is a
+   separate, visually-reviewed pass — not done blind here.) */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+
 /* Hairline utility */
 .hairline {
   border: 1px solid var(--color-border);

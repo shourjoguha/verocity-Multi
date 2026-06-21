@@ -66,11 +66,12 @@ export function RadarChart({ series }: { series: RadarSeries[] }) {
           );
         })}
         {/* series polygons (baseline first so primary sits on top) — bloom out
-            from the centre on first view; reduced-motion renders them in place. */}
+            from the centre on mount, then rest fully visible. Uses animate (not
+            whileInView) so it can never get stuck hidden if the observer doesn't
+            fire; reduced-motion renders it in place. */}
         <motion.g
           initial={reduce ? false : { scale: 0.6, opacity: 0 }}
-          whileInView={reduce ? undefined : { scale: 1, opacity: 1 }}
-          viewport={{ once: true, margin: '-10% 0px' }}
+          animate={reduce ? undefined : { scale: 1, opacity: 1 }}
           transition={{ duration: 0.7, ease: EASE }}
           style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
         >
