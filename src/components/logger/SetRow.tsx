@@ -1,6 +1,9 @@
+import { useEffect, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import { METRICS, RPE, type MetricKey } from '@/app.config';
 import type { LogSet, SetActual } from '@/lib/types';
 import { StepperField } from '@/components/logger/StepperField';
+import { EASE } from '@/components/anim';
 import { haptic } from '@/lib/haptics';
 
 const snap = (step: number) => (n: number) => Math.max(0, Math.round(n / step) * step);
@@ -26,6 +29,17 @@ export function SetRow({
   onCloneForward?: () => void;
 }) {
   const a = set.actual;
+
+  // One-shot teal ring-pop the moment a set is marked complete (false→true) —
+  // the satisfying confirm on the core logging action. Skipped under
+  // reduced-motion; the monochrome completed state below is the resting look.
+  const reduce = useReducedMotion();
+  const [pop, setPop] = useState(0);
+  const wasComplete = useRef(a.completed);
+  useEffect(() => {
+    if (a.completed && !wasComplete.current && !reduce) setPop((n) => n + 1);
+    wasComplete.current = a.completed;
+  }, [a.completed, reduce]);
 
   const fields = () => {
     switch (metric) {
@@ -140,20 +154,34 @@ export function SetRow({
         >
           ×
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            haptic();
-            onToggle();
-          }}
-          className={`hill-btn flex min-h-11 w-10 shrink-0 items-center justify-center border text-lg ${
-            a.completed ? 'border-accent bg-accent text-accent-fg' : 'border-border bg-surface text-muted hover:text-fg'
-          }`}
-          aria-label="Toggle completed"
-          aria-pressed={a.completed}
-        >
-          ✓
-        </button>
+        <span className="relative inline-flex shrink-0">
+          {pop > 0 ? (
+            <motion.span
+              key={pop}
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-[4px] border-2 border-teal"
+              initial={{ opacity: 0.85, scale: 1 }}
+              animate={{ opacity: 0, scale: 1.8 }}
+              transition={{ duration: 0.5, ease: EASE }}
+            />
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              haptic();
+              onToggle();
+            }}
+            className={`hill-btn flex min-h-11 w-10 shrink-0 items-center justify-center border text-lg ${
+              a.completed
+                ? 'border-accent bg-accent text-accent-fg'
+                : 'border-border bg-surface text-muted hover:text-fg'
+            }`}
+            aria-label="Toggle completed"
+            aria-pressed={a.completed}
+          >
+            ✓
+          </button>
+        </span>
       </div>
     </div>
   );
