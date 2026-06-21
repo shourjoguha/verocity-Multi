@@ -32,6 +32,7 @@ import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
 import { Modal } from '@/components/ui/Modal';
 import { BackgroundPicker } from '@/components/BackgroundPicker';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { GarminPanel } from '@/components/GarminPanel';
 
 const DownloadIcon = () => (
@@ -472,7 +473,10 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
       {mode === 'app' ? (
         <Item>
           <section className="mt-10">
-            <SectionHeader>Backdrop</SectionHeader>
+            <SectionHeader>Appearance</SectionHeader>
+            <div className="mb-2 text-[0.6rem] uppercase tracking-[0.16em] text-muted">Theme</div>
+            <ThemeToggle />
+            <div className="mt-6 mb-2 text-[0.6rem] uppercase tracking-[0.16em] text-muted">Backdrop</div>
             <BackgroundPicker />
           </section>
         </Item>

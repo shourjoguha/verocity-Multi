@@ -7,6 +7,7 @@ import {
   type Mesh,
   type Points,
 } from 'three';
+import { useResolvedTheme } from '@/lib/theme';
 
 // Login-only hero. A faceted ink crystal at center spins explosively for the
 // first ~2s then settles into a slow drift; a faint particle dust bursts
@@ -53,7 +54,7 @@ function Crystal() {
   );
 }
 
-function Dust() {
+function Dust({ dark }: { dark: boolean }) {
   const ref = useRef<Points>(null);
 
   const { geometry, directions, basePositions } = useMemo(() => {
@@ -117,7 +118,7 @@ function Dust() {
   return (
     <points ref={ref} geometry={geometry}>
       <pointsMaterial
-        color={new Color('#1a1a1a')}
+        color={new Color(dark ? '#cfcfcf' : '#1a1a1a')}
         size={0.025}
         sizeAttenuation
         transparent
@@ -129,6 +130,8 @@ function Dust() {
 
 export default function LoginHeroScene() {
   const [paused, setPaused] = useState(false);
+  const dark = useResolvedTheme() === 'dark';
+  const bgColor = dark ? '#0d0d0d' : '#f2f2f2';
   useEffect(() => {
     const onVis = () => setPaused(document.hidden);
     document.addEventListener('visibilitychange', onVis);
@@ -144,8 +147,8 @@ export default function LoginHeroScene() {
       frameloop={paused ? 'never' : 'always'}
       gl={{ antialias: true, alpha: true }}
     >
-      <color attach="background" args={['#f2f2f2']} />
-      <fog attach="fog" args={['#f2f2f2', 5, 11]} />
+      <color attach="background" args={[bgColor]} />
+      <fog attach="fog" args={[bgColor, 5, 11]} />
       <ambientLight intensity={0.55} />
       <directionalLight
         position={[4, 5, 6]}
@@ -162,7 +165,7 @@ export default function LoginHeroScene() {
       />
       <directionalLight position={[-5, -2, 3]} intensity={0.25} />
       <Crystal />
-      <Dust />
+      <Dust dark={dark} />
       {/* Ghost plane that only renders the crystal's shadow — twists with rotation. */}
       <mesh position={[0, -1.9, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[12, 12]} />
