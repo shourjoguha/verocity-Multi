@@ -4,10 +4,10 @@ import { getActivePlan, getLogsInRange } from '@/lib/queries';
 import { showcaseMonthStart } from '@/lib/showcase';
 import type { Plan, WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
-import { formatDate, formatDuration } from '@/lib/format';
-import { EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
+import { formatDuration } from '@/lib/format';
+import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
-import { SetShapeStrip } from '@/components/SetShapeStrip';
+import { LogList } from '@/components/LogList';
 import { Item, PageStagger } from '@/components/anim';
 import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
@@ -212,52 +212,7 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
         <Item>
           <section className="mt-8">
             <SectionHeader>This month</SectionHeader>
-            <ul className="lift border border-border bg-surface">
-              {monthSessions.map((log) => {
-                const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
-                const row = (
-                  <>
-                    <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">
-                      {formatDate(log.log_date)}
-                    </div>
-                    <div className="flex flex-1 flex-wrap gap-1">
-                      {log.tags.length > 0 ? (
-                        log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
-                      ) : (
-                        <span className="text-sm text-muted">
-                          {log.day_key ?? log.activity_type ?? 'Session'}
-                        </span>
-                      )}
-                    </div>
-                    <SetShapeStrip data={log.data} className="shrink-0" />
-                    <div className="w-12 shrink-0 text-right text-sm tabular-nums text-muted">
-                      {formatDuration(log.total_seconds)}
-                    </div>
-                  </>
-                );
-                return (
-                  <li key={log.id} className="border-b border-border last:border-b-0">
-                    {showcase ? (
-                      <div
-                        className="flex items-center gap-4 px-4 py-3"
-                        style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
-                      >
-                        {row}
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setQuickLog(log)}
-                        className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-elevated"
-                        style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
-                      >
-                        {row}
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <LogList logs={monthSessions} onSelect={showcase ? undefined : setQuickLog} />
           </section>
         </Item>
       ) : null}

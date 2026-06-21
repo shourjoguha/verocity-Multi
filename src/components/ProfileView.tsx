@@ -11,11 +11,10 @@ import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
 import { bestE1rm } from '@/lib/e1rm';
 import { weekFromDate } from '@/lib/week';
-import { formatDate, formatDuration, formatRound } from '@/lib/format';
-import { tagColor } from '@/lib/tags';
+import { formatDuration, formatRound } from '@/lib/format';
 import { buildTimeline, DAY_NAMES, dayNameFromLabel, typeFromLabel } from '@/lib/timeline';
-import { Card, EmptyState, LoadingScreen, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
-import { SetShapeStrip } from '@/components/SetShapeStrip';
+import { Card, EmptyState, LoadingScreen, SectionHeader, StatCard } from '@/components/ui/primitives';
+import { LogList } from '@/components/LogList';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { DayPreviewDialog } from '@/components/DayPreviewDialog';
@@ -378,52 +377,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           {logs.length === 0 ? (
             <EmptyState>No sessions logged yet.</EmptyState>
           ) : (
-            <ul className="lift border border-border bg-surface">
-              {logs.slice(0, 12).map((log) => {
-                const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
-                const inner = (
-                  <>
-                    <div className="w-16 shrink-0">
-                      <div className="text-sm tabular-nums text-subtle">{formatDate(log.log_date)}</div>
-                      {log.total_seconds ? (
-                        <div className="text-[0.7rem] tabular-nums text-muted">
-                          {formatDuration(log.total_seconds)}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-1 flex-wrap gap-1">
-                      {log.tags.length > 0 ? (
-                        log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
-                      ) : (
-                        <span className="text-sm text-muted">{log.activity_type ?? 'Session'}</span>
-                      )}
-                    </div>
-                    <SetShapeStrip data={log.data} className="shrink-0" />
-                  </>
-                );
-                return (
-                  <li key={log.id} className="border-b border-border last:border-b-0">
-                    {mode === 'app' ? (
-                      <button
-                        type="button"
-                        onClick={() => setQuickLog(log)}
-                        className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-elevated"
-                        style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
-                      >
-                        {inner}
-                      </button>
-                    ) : (
-                      <div
-                        className="flex items-center gap-4 px-4 py-3"
-                        style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
-                      >
-                        {inner}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <LogList logs={logs.slice(0, 12)} onSelect={mode === 'app' ? setQuickLog : undefined} />
           )}
         </section>
       </Item>
