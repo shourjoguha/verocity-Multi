@@ -9,22 +9,20 @@ import {
 } from 'three';
 import { useResolvedTheme } from '@/lib/theme';
 
-// "Monolith on paper" — on desktop, one tall ink-teal slab anchors the frame, a
-// mid-teal plinth gives it scale, a hairline wire-ring is the editorial wink, and
-// a static paper veil layers in front. A ground plane catches the hero's cast
-// shadow — that contact shadow is the entire reason the scene reads as 3D.
+// "Floating field on paper" — a quiet, distributed set of small teal solids
+// (slabs + cubes) drifting over a paper ground, with a hairline wire-ring as the
+// editorial wink and a static paper veil for collage depth. A ground plane
+// catches their cast shadows — that contact shadow is the entire reason the
+// scene reads as 3D. Both layouts are data-driven (ShapeConfig + MorphShape):
+// desktop runs ~6 opaque forms across the frame; compact / installed-PWA runs ~5
+// smaller translucent forms pulled inside the narrower cone (FitCamera dollies
+// the camera back + widens so they stay framed).
 //
-// On a handheld / installed PWA the desktop framing falls off the narrow viewport
-// (at this FOV a portrait phone only sees ≈±0.8 horizontally, but the slabs sit
-// at ±1.6). So compact devices get a MINIMIZED MORPH variant: 3–4 smaller shapes
-// pulled inside the visible cone, gently breathing/rotating, with the camera
-// dollied back + widened (FitCamera) so they actually fit. Desktop keeps its two
-// hero solids.
-//
-// Slow oscillations only (14–22s periods). Subtle pointer parallax on the scene
-// root. Pauses on tab blur, off-screen (IntersectionObserver in the parent), or
-// reduced-motion. Shapes + shadows are tuned SHARP: a crisp PCF shadow map, a
-// tight light frustum, pushed-back fog, and a higher DPR ceiling.
+// Slow oscillations only (14–22s periods, phase-spread so nothing beats in
+// unison). Subtle pointer parallax on the scene root. Pauses on tab blur,
+// off-screen (IntersectionObserver in the parent), or reduced-motion. Shapes +
+// shadows are tuned SHARP: a crisp PCF shadow map, a tight light frustum,
+// pushed-back fog, and a higher DPR ceiling.
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 // Compact = narrow viewport OR an installed PWA on a touch device. Desktop PWAs
@@ -38,16 +36,16 @@ const COMPACT_QUERY = '(max-width: 768px), (display-mode: standalone) and (point
 // --color-teal in global.css. Shades run deep→bright; the cast shadow is tinted
 // dark teal instead of black. Paper veil + #f2f2f2 canvas stay neutral.
 const DEPTH = {
-  slab: 'hsl(174, 84%, 24%)', // deep teal — the monolith
-  slabAlt: 'hsl(174, 74%, 36%)', // deep-mid teal — compact accent slab
-  plinth: 'hsl(174, 62%, 52%)', // mid teal — the plinth
+  slab: 'hsl(174, 84%, 24%)', // deep teal — anchor slab
+  slabAlt: 'hsl(174, 74%, 36%)', // deep-mid teal — accent slab
+  plinth: 'hsl(174, 62%, 52%)', // mid teal — cubes
   wire: 'hsl(174, 87%, 62%)', // = --color-teal (#49F2E1) — the hairline wire-ring
   shadow: '#0c463f', // dark teal — the ground cast shadow
 } as const;
 
-// ---- generic slow-morph solid: shared by the desktop heroes' siblings and the
-// compact set. Tiny sine amplitudes on spin / bob / scale so the eye only catches
-// the motion on a second glance; phase-offset so shapes never beat in unison. ----
+// ---- generic slow-morph solid, shared by both layouts. Tiny sine amplitudes on
+// spin / bob / scale so the eye only catches the motion on a second glance;
+// phase-offset so shapes never beat in unison. ----
 interface ShapeConfig {
   position: [number, number, number];
   size: [number, number, number];
@@ -91,38 +89,24 @@ function MorphShape(cfg: ShapeConfig) {
   );
 }
 
-// ---- desktop hero solids (unchanged framing, crisper materials) ----
-
-function Monolith() {
-  const ref = useRef<Mesh>(null);
-  useFrame(({ clock }) => {
-    if (!ref.current) return;
-    const t = clock.getElapsedTime();
-    ref.current.rotation.y = -0.35 + Math.sin(t * (Math.PI / 8)) * 0.08;
-    ref.current.position.y = 0.4 + Math.cos(t * (Math.PI / 10)) * 0.04;
-  });
-  return (
-    <mesh ref={ref} position={[-1.6, 0.4, 0]} rotation={[0, -0.35, 0]} castShadow receiveShadow>
-      <boxGeometry args={[0.9, 3.2, 0.9]} />
-      <meshStandardMaterial color={DEPTH.slab} roughness={0.5} metalness={0.12} />
-    </mesh>
-  );
-}
-
-function Plinth() {
-  const ref = useRef<Mesh>(null);
-  useFrame(({ clock }) => {
-    if (!ref.current) return;
-    const t = clock.getElapsedTime();
-    ref.current.rotation.y = 0.18 + Math.sin(t * (Math.PI / 6.5) + Math.PI / 2) * 0.12;
-  });
-  return (
-    <mesh ref={ref} position={[1.8, -0.6, -0.4]} rotation={[0, 0.18, 0]} castShadow receiveShadow>
-      <boxGeometry args={[1.4, 0.9, 1.4]} />
-      <meshStandardMaterial color={DEPTH.plinth} roughness={0.6} metalness={0.06} />
-    </mesh>
-  );
-}
+// ---- desktop: a field of smaller, well-distributed solids (replaces the two
+// big hero blocks) on the shared MorphShape system. Spread across the frame with
+// real negative space; opaque so they keep crisp cast shadows. Sizes ~0.4–1.35;
+// slow periods (14–22s) with spread phases so nothing beats in unison. ----
+const DESKTOP_SHAPES: ShapeConfig[] = [
+  // tall slim slab, left
+  { position: [-1.7, 0.15, 0.2], size: [0.55, 1.35, 0.55], rotY: -0.32, color: DEPTH.slab, roughness: 0.5, metalness: 0.12, spinPeriod: 18, spinAmp: 0.08, bobPeriod: 21, bobAmp: 0.045, scaleAmp: 0.012, phase: 0 },
+  // cube, lower-left
+  { position: [-0.95, -1.05, -0.3], size: [0.68, 0.68, 0.68], rotY: 0.22, color: DEPTH.plinth, roughness: 0.58, metalness: 0.06, spinPeriod: 15, spinAmp: 0.12, bobPeriod: 18, bobAmp: 0.04, scaleAmp: 0.016, phase: 1.1 },
+  // small slab, upper-left
+  { position: [-0.45, 1.2, -0.6], size: [0.4, 0.58, 0.4], rotY: 0.4, color: DEPTH.slabAlt, roughness: 0.5, metalness: 0.1, spinPeriod: 20, spinAmp: 0.1, bobPeriod: 16, bobAmp: 0.05, scaleAmp: 0.018, phase: 2.2 },
+  // cube, centre-low
+  { position: [0.4, -0.6, 0.45], size: [0.6, 0.6, 0.6], rotY: -0.18, color: DEPTH.plinth, roughness: 0.6, metalness: 0.05, spinPeriod: 16, spinAmp: 0.11, bobPeriod: 19, bobAmp: 0.04, scaleAmp: 0.015, phase: 3.4 },
+  // slab, right
+  { position: [1.45, 0.45, -0.2], size: [0.5, 1.15, 0.5], rotY: 0.3, color: DEPTH.slab, roughness: 0.5, metalness: 0.12, spinPeriod: 19, spinAmp: 0.09, bobPeriod: 22, bobAmp: 0.045, scaleAmp: 0.013, phase: 4.5 },
+  // small slab, upper-right
+  { position: [1.05, 1.25, -0.9], size: [0.42, 0.6, 0.42], rotY: -0.45, color: DEPTH.slabAlt, roughness: 0.52, metalness: 0.1, spinPeriod: 22, spinAmp: 0.1, bobPeriod: 17, bobAmp: 0.05, scaleAmp: 0.02, phase: 5.6 },
+];
 
 // Wire-ring built from 4 thin boxes — `edge` scales it for desktop vs compact.
 function HairlineFrame({
@@ -163,9 +147,9 @@ function HairlineFrame({
 }
 
 function PaperVeil({ dark }: { dark: boolean }) {
-  // Completely static — it's a literal sheet of paper. Half-occludes the
-  // monolith's left side to create collage depth. Goes to a dark sheet on
-  // carbon so it doesn't punch a white hole in the dark backdrop.
+  // Completely static — it's a literal sheet of paper layered to the left for
+  // collage depth. Goes to a dark sheet on carbon so it doesn't punch a white
+  // hole in the dark backdrop.
   return (
     <mesh position={[-2.2, 0.2, 0.6]} rotation={[0, 0.5, 0]} receiveShadow>
       <planeGeometry args={[3.6, 5]} />
@@ -183,28 +167,31 @@ function PaperVeil({ dark }: { dark: boolean }) {
 function DesktopScene({ dark }: { dark: boolean }) {
   return (
     <>
-      <Monolith />
-      <Plinth />
+      {DESKTOP_SHAPES.map((cfg, i) => (
+        <MorphShape key={i} {...cfg} />
+      ))}
       <HairlineFrame />
       <PaperVeil dark={dark} />
     </>
   );
 }
 
-// ---- compact / PWA: 4 minimized morph shapes, spread across the frame and
+// ---- compact / PWA: 5 minimized morph shapes, spread across the frame and
 // translucent so they read as a quiet backdrop behind the UI, not a foreground
 // busy-pattern. Positions fan toward the corners (FitCamera dollies back to keep
 // them on a narrow viewport); opacity ~0.55 lets the paper show through. ----
 const COMPACT_OPACITY = 0.55;
 const COMPACT_SHAPES: ShapeConfig[] = [
   // slim slab, far left
-  { position: [-1.3, 0.5, 0.1], size: [0.48, 1.6, 0.48], rotY: -0.3, color: DEPTH.slab, roughness: 0.5, metalness: 0.12, spinPeriod: 17, spinAmp: 0.1, bobPeriod: 21, bobAmp: 0.05, scaleAmp: 0.015, opacity: COMPACT_OPACITY, phase: 0 },
+  { position: [-1.3, 0.5, 0.1], size: [0.44, 1.45, 0.44], rotY: -0.3, color: DEPTH.slab, roughness: 0.5, metalness: 0.12, spinPeriod: 17, spinAmp: 0.1, bobPeriod: 21, bobAmp: 0.05, scaleAmp: 0.015, opacity: COMPACT_OPACITY, phase: 0 },
   // cube, far right
-  { position: [1.25, -0.6, -0.5], size: [0.8, 0.8, 0.8], rotY: 0.2, color: DEPTH.plinth, roughness: 0.58, metalness: 0.06, spinPeriod: 14, spinAmp: 0.14, bobPeriod: 18, bobAmp: 0.04, scaleAmp: 0.02, opacity: COMPACT_OPACITY, phase: 1.1 },
+  { position: [1.25, -0.6, -0.5], size: [0.72, 0.72, 0.72], rotY: 0.2, color: DEPTH.plinth, roughness: 0.58, metalness: 0.06, spinPeriod: 14, spinAmp: 0.14, bobPeriod: 18, bobAmp: 0.04, scaleAmp: 0.02, opacity: COMPACT_OPACITY, phase: 1.3 },
   // small slab, upper right
-  { position: [0.55, 1.15, -0.8], size: [0.4, 0.75, 0.4], rotY: 0.4, color: DEPTH.slabAlt, roughness: 0.5, metalness: 0.1, spinPeriod: 19, spinAmp: 0.12, bobPeriod: 16, bobAmp: 0.05, scaleAmp: 0.018, opacity: COMPACT_OPACITY, phase: 2.0 },
+  { position: [0.6, 1.15, -0.8], size: [0.38, 0.7, 0.38], rotY: 0.4, color: DEPTH.slabAlt, roughness: 0.5, metalness: 0.1, spinPeriod: 19, spinAmp: 0.12, bobPeriod: 16, bobAmp: 0.05, scaleAmp: 0.018, opacity: COMPACT_OPACITY, phase: 2.6 },
   // small cube, lower left
-  { position: [-1.1, -0.95, 0.45], size: [0.52, 0.52, 0.52], rotY: -0.5, color: DEPTH.plinth, roughness: 0.6, metalness: 0.05, spinPeriod: 22, spinAmp: 0.1, bobPeriod: 20, bobAmp: 0.04, scaleAmp: 0.022, opacity: COMPACT_OPACITY, phase: 0.6 },
+  { position: [-1.05, -0.95, 0.45], size: [0.5, 0.5, 0.5], rotY: -0.5, color: DEPTH.plinth, roughness: 0.6, metalness: 0.05, spinPeriod: 22, spinAmp: 0.1, bobPeriod: 20, bobAmp: 0.04, scaleAmp: 0.022, opacity: COMPACT_OPACITY, phase: 3.9 },
+  // small cube, centre-back (fills the middle so coverage is even)
+  { position: [0.15, 0.1, -1.2], size: [0.46, 0.46, 0.46], rotY: 0.15, color: DEPTH.slabAlt, roughness: 0.55, metalness: 0.08, spinPeriod: 16, spinAmp: 0.11, bobPeriod: 19, bobAmp: 0.04, scaleAmp: 0.02, opacity: COMPACT_OPACITY, phase: 5.0 },
 ];
 
 function CompactScene() {
@@ -240,20 +227,21 @@ function Parallax({ children }: { children: React.ReactNode }) {
   return <group ref={group}>{children}</group>;
 }
 
-// Dolly the camera so the active scene fills the viewport: desktop keeps the hero
-// framing; compact pulls back (further still on portrait, where the horizontal
-// cone is tightest) and widens so all 4 minimized shapes stay on-screen.
+// Dolly the camera so the active scene fills the viewport: desktop frames the
+// whole distributed field; compact pulls back further (further still on portrait,
+// where the horizontal cone is tightest) and widens so every shape stays on-screen.
 function FitCamera({ compact }: { compact: boolean }) {
   const { camera, size } = useThree();
   useEffect(() => {
     const cam = camera as PerspectiveCamera;
     const aspect = size.width / size.height;
     if (compact) {
-      // Extra pull-back vs the first cut so the now-spread shapes stay framed.
       cam.position.set(0, 0.1, aspect < 0.8 ? 9.5 : 7);
       cam.fov = 42;
     } else {
-      cam.position.set(0, 0.2, 5);
+      // Pulled back vs the old hero framing so the wider distributed field stays
+      // on-screen even on a narrower (near-square) desktop window.
+      cam.position.set(0, 0.2, 5.8);
       cam.fov = 38;
     }
     cam.updateProjectionMatrix();
@@ -310,7 +298,7 @@ export default function BackgroundScene3DCanvas() {
       className="bg-canvas"
       shadows
       dpr={[1, 2]}
-      camera={{ position: [0, 0.2, 5], fov: 38 }}
+      camera={{ position: [0, 0.2, 5.8], fov: 38 }}
       frameloop={frameloop}
       gl={{ antialias: true, alpha: true, powerPreference: 'low-power' }}
       onCreated={({ gl, invalidate }) => {
