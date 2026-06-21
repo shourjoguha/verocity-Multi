@@ -1,5 +1,14 @@
-import { motion, MotionConfig, type Variants } from 'motion/react';
-import type { ReactNode } from 'react';
+import {
+  animate,
+  motion,
+  MotionConfig,
+  useInView,
+  useMotionValue,
+  useReducedMotion,
+  useTransform,
+  type Variants,
+} from 'motion/react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 // Shared Motion helpers for the React islands. The editorial easing curve from
 // the design spec drives entrance/stagger/scroll-reveal motion. MotionConfig
@@ -51,5 +60,41 @@ export function Item({ children, className }: { children: ReactNode; className?:
     <motion.div className={className} variants={itemVariants}>
       {children}
     </motion.div>
+  );
+}
+
+// Count-up numeral — rolls from 0 to `value` once it scrolls into view, on the
+// editorial easing, with tabular figures so the width never jitters. Honors
+// reduced-motion (snaps straight to the value). The delight vocabulary the data
+// surfaces reuse (StatCard, Stats, etc.).
+export function AnimatedNumber({
+  value,
+  format = (n: number) => String(Math.round(n)),
+  duration = 0.9,
+}: {
+  value: number;
+  format?: (n: number) => string;
+  duration?: number;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: '-8% 0px' });
+  const reduce = useReducedMotion();
+  const mv = useMotionValue(reduce ? value : 0);
+  const text = useTransform(mv, (n) => format(n));
+
+  useEffect(() => {
+    if (reduce) {
+      mv.set(value);
+      return;
+    }
+    if (!inView) return;
+    const controls = animate(mv, value, { duration, ease: EASE });
+    return () => controls.stop();
+  }, [inView, value, reduce, duration, mv]);
+
+  return (
+    <motion.span ref={ref} className="tabular-nums">
+      {text}
+    </motion.span>
   );
 }

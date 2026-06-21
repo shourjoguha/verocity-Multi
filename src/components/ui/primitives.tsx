@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { AnimatedNumber } from '@/components/anim';
 
 // Editorial light primitives. Tokens only (classes map to --color-* tokens);
 // dynamic accent colors (activity tags / training blocks) come from app.config
@@ -43,7 +44,7 @@ export function StatCard({
     <div className="border border-border bg-surface px-4 py-4">
       <div className="text-[0.65rem] uppercase tracking-[0.2em] text-muted">{label}</div>
       <div className="mt-2 font-display text-3xl font-semibold tabular-nums tracking-[-0.03em] text-fg">
-        {value}
+        {typeof value === 'number' ? <AnimatedNumber value={value} /> : value}
         {unit ? <span className="ml-1 text-base font-medium text-muted">{unit}</span> : null}
       </div>
     </div>
