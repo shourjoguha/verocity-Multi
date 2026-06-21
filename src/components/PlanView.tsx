@@ -89,11 +89,11 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
       <Item>
         <header className="mb-8">
           <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">Plan</p>
-          <div className="mt-2 flex items-end justify-between gap-4">
+          <div className="mt-2 flex flex-col items-start gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
             <EchoText
               text={parsed.title}
               as="h1"
-              className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+              className="min-w-0 break-words font-display text-4xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
             />
             {showcase ? null : (
               <div className="flex shrink-0 gap-4 pb-1">

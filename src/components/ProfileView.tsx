@@ -383,8 +383,13 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                 const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
                 const inner = (
                   <>
-                    <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">
-                      {formatDate(log.log_date)}
+                    <div className="w-16 shrink-0">
+                      <div className="text-sm tabular-nums text-subtle">{formatDate(log.log_date)}</div>
+                      {log.total_seconds ? (
+                        <div className="text-[0.7rem] tabular-nums text-muted">
+                          {formatDuration(log.total_seconds)}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="flex flex-1 flex-wrap gap-1">
                       {log.tags.length > 0 ? (
@@ -394,9 +399,6 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                       )}
                     </div>
                     <SetShapeStrip data={log.data} className="shrink-0" />
-                    <div className="w-12 shrink-0 text-right text-sm tabular-nums text-muted">
-                      {formatDuration(log.total_seconds)}
-                    </div>
                   </>
                 );
                 return (

@@ -66,6 +66,10 @@ import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { toast } from '@/lib/toast';
 
+// Workouts left running are auto-ended at this cap (wall-clock since started_at)
+// so a stale session never racks up a 9-hour duration. The user can edit later.
+const MAX_WORKOUT_SECONDS = 2 * 60 * 60;
+
 const METRIC_CYCLE: MetricKey[] = ['weight', 'reps', 'time', 'distance', 'rpe'];
 
 function clock(total: number): string {
@@ -109,6 +113,7 @@ export default function Logger() {
   const [tags, setTags] = useState<string[]>([]);
   // Pre-session all-time best e1RM per movement, for the PR ring on completion.
   const [bestByMovement, setBestByMovement] = useState<Map<string, number>>(new Map());
+  const [startedAt, setStartedAt] = useState<string | null>(null);
 
   const stopwatch = useStopwatch(0, false);
   const rest = useCountdown();
@@ -120,12 +125,15 @@ export default function Logger() {
   const idRef = useRef(logId);
   const logDateRef = useRef(logDate);
   const tagsRef = useRef(tags);
+  const startedAtRef = useRef(startedAt);
+  const autoEndedRef = useRef(false);
   docRef.current = doc;
   secondsRef.current = stopwatch.seconds;
   statusRef.current = status;
   idRef.current = logId;
   logDateRef.current = logDate;
   tagsRef.current = tags;
+  startedAtRef.current = startedAt;
 
   useEffect(() => {
     (async () => {
@@ -150,6 +158,7 @@ export default function Logger() {
           setLogDate(log.log_date);
           setTags(log.tags ?? []);
           if (log.plan_id) setSubs(await getMovementSubs(log.plan_id));
+          setStartedAt(log.started_at);
           if (log.total_seconds) stopwatch.start();
         }
         setReady(true);
@@ -227,13 +236,14 @@ export default function Logger() {
         }
       }
 
+      const startedIso = new Date().toISOString();
       const created = await createLog({
         log_date: logDate,
         plan_id: linkedPlanId,
         day_key: linkedDayKey,
         week_number: weekNumber,
         status: 'in_progress',
-        started_at: new Date().toISOString(),
+        started_at: startedIso,
         data: built,
         tags: initialTags,
         // Only attach session_id when launched from a saved session, so plan /
@@ -246,6 +256,7 @@ export default function Logger() {
       setDayKey(linkedDayKey);
       setTags(initialTags);
       if (created) setLogId(created.id);
+      setStartedAt(startedIso);
       if (linkedPlanId) setSubs(await getMovementSubs(linkedPlanId));
       setShowVibe(true);
       stopwatch.start();
@@ -269,6 +280,45 @@ export default function Logger() {
     }, TIMERS.autosaveSeconds * 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Auto-end an in-progress workout once it has been running over 2 hours
+  // (wall-clock since started_at) — covers sessions left open and reopened. Caps
+  // the duration at 2:00 and notifies; the user can edit the end time later.
+  async function autoEnd() {
+    if (autoEndedRef.current || statusRef.current === 'done' || statusRef.current === 'cancelled') {
+      return;
+    }
+    autoEndedRef.current = true;
+    setStatus('done');
+    stopwatch.pause();
+    const start = startedAtRef.current;
+    const endedIso = start
+      ? new Date(new Date(start).getTime() + MAX_WORKOUT_SECONDS * 1000).toISOString()
+      : new Date().toISOString();
+    if (idRef.current) {
+      await updateLog(idRef.current, {
+        data: docRef.current,
+        total_seconds: MAX_WORKOUT_SECONDS,
+        status: 'done',
+        ended_at: endedIso,
+        log_date: logDateRef.current,
+        tags: tagsRef.current,
+      });
+    }
+    toast('Workout passed 2 hours — auto-ended at 2:00. You can edit the time anytime.', 'success');
+  }
+
+  useEffect(() => {
+    if (!ready || status !== 'in_progress' || !startedAt) return;
+    const check = () => {
+      const elapsed = (Date.now() - new Date(startedAt).getTime()) / 1000;
+      if (elapsed >= MAX_WORKOUT_SECONDS) autoEnd();
+    };
+    check();
+    const id = setInterval(check, 30_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, status, startedAt]);
 
   function saveVibe(vibe: VibeCheck) {
     setDoc((d) => ({ ...d, session: { ...d.session, vibe } }));
