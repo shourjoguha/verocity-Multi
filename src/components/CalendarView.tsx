@@ -93,6 +93,10 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
     year: 'numeric',
     timeZone: 'UTC',
   });
+  const nowLocal = new Date();
+  const todayKey = ymd(
+    new Date(Date.UTC(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate())),
+  );
 
   const shift = (delta: number) =>
     setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + delta, 1)));
@@ -144,6 +148,7 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
             const key = ymd(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), day)));
             const sessions = byDay.get(key) ?? [];
             const interactive = !showcase;
+            const isToday = key === todayKey;
             return (
               <div
                 key={key}
@@ -161,12 +166,18 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
                     : undefined
                 }
                 className={`aspect-square bg-surface p-1 ${
+                  isToday ? 'ring-1 ring-inset ring-teal' : ''
+                } ${
                   interactive
-                    ? 'cursor-pointer transition-colors hover:bg-elevated focus:outline-none focus-visible:ring-1 focus-visible:ring-fg'
+                    ? 'cursor-pointer transition-colors hover:bg-elevated focus:outline-none focus-visible:ring-1 focus-visible:ring-teal'
                     : ''
                 }`}
               >
-                <div className="text-[0.65rem] tabular-nums text-muted">{day}</div>
+                <div
+                  className={`text-[0.65rem] tabular-nums ${isToday ? 'font-semibold text-teal' : 'text-muted'}`}
+                >
+                  {day}
+                </div>
                 <div className="mt-1 flex flex-col gap-[2px]">
                   {sessions.map((s) =>
                     interactive ? (
