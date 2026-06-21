@@ -116,5 +116,25 @@ const { title = 'Verocity', description = 'Strength & training logger.', noBackd
         });
       }
     </script>
+    <script is:inline>
+      // A small signature for anyone who opens the console. Once per session.
+      (function () {
+        if (window.__vSig) return;
+        window.__vSig = true;
+        try {
+          console.log(
+            '%cVEROCITY',
+            'font: 700 26px "Clash Display", system-ui, sans-serif; letter-spacing:-0.04em; color:#49F2E1; text-shadow:1px 1px 0 rgba(0,0,0,.35);',
+          );
+          console.log(
+            '%cStrength logged. Progress compounded.%c\nPoking around? Same. → guha.shourjo@gmail.com',
+            'color:#888; font-size:12px;',
+            'color:#555; font-size:11px;',
+          );
+        } catch (e) {
+          /* no console — no problem */
+        }
+      })();
+    </script>
   </body>
 </html>
