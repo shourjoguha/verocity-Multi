@@ -1,5 +1,7 @@
+import { motion, useReducedMotion } from 'motion/react';
 import { FITNESS_ASPECTS, ASPECT_SCALE, type AspectKey } from '@/app.config';
 import type { AspectScores } from '@/lib/types';
+import { EASE } from '@/components/anim';
 
 export type RadarSeries = { label: string; scores: AspectScores; variant: 'primary' | 'baseline' };
 
@@ -12,6 +14,7 @@ const R = C - 46; // leave room for axis labels
 const RINGS = [0.25, 0.5, 0.75, 1];
 
 export function RadarChart({ series }: { series: RadarSeries[] }) {
+  const reduce = useReducedMotion();
   const axes = FITNESS_ASPECTS;
   const n = axes.length;
   const angle = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2;
@@ -62,11 +65,19 @@ export function RadarChart({ series }: { series: RadarSeries[] }) {
             </g>
           );
         })}
-        {/* series polygons (baseline first so primary sits on top) */}
-        {[...series]
-          .sort((a) => (a.variant === 'baseline' ? -1 : 1))
-          .map((s) =>
-            s.variant === 'baseline' ? (
+        {/* series polygons (baseline first so primary sits on top) — bloom out
+            from the centre on first view; reduced-motion renders them in place. */}
+        <motion.g
+          initial={reduce ? false : { scale: 0.6, opacity: 0 }}
+          whileInView={reduce ? undefined : { scale: 1, opacity: 1 }}
+          viewport={{ once: true, margin: '-10% 0px' }}
+          transition={{ duration: 0.7, ease: EASE }}
+          style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+        >
+          {[...series]
+            .sort((a) => (a.variant === 'baseline' ? -1 : 1))
+            .map((s) =>
+              s.variant === 'baseline' ? (
               <polygon
                 key={s.label}
                 points={polygon(s.scores)}
@@ -86,7 +97,8 @@ export function RadarChart({ series }: { series: RadarSeries[] }) {
                 strokeWidth={1.5}
               />
             ),
-          )}
+            )}
+        </motion.g>
       </svg>
       <div className="mt-2 flex flex-wrap justify-center gap-4 text-[0.65rem] uppercase tracking-wider text-muted">
         {series.map((s) => (
