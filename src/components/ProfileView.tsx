@@ -7,6 +7,7 @@ import {
   getRecentLogs,
 } from '@/lib/queries';
 import { signOut } from '@/lib/auth';
+import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
 import { bestE1rm } from '@/lib/e1rm';
 import { weekFromDate } from '@/lib/week';
@@ -217,6 +218,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const sessionCount = logs.length;
   const totalSeconds = logs.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0);
   const top = topE1rm(logs);
+  const streak = currentStreak(allLogs);
   const week = plan ? weekFromDate(plan.start_date, new Date()) : null;
   const todayDayName = DAY_NAMES[new Date().getDay()];
 
@@ -257,6 +259,15 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           />
         </section>
       </Item>
+
+      {mode === 'app' && streak >= 2 ? (
+        <Item>
+          <div className="mb-10 -mt-6 flex items-center gap-2 text-[0.65rem] uppercase tracking-[0.2em] text-teal">
+            <span aria-hidden className="inline-block h-1.5 w-1.5 bg-teal" />
+            {streak}-day streak
+          </div>
+        </Item>
+      ) : null}
 
       {mode === 'app' ? (
         <Item>
