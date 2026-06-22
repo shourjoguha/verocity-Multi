@@ -181,6 +181,25 @@ p {
   border: 1px solid var(--color-border);
 }
 
+/* ---- Type scale — caps tier. The editorial micro-labels (eyebrows, section
+   meta, pill/table captions) had drifted across screens into four sizes and
+   seven tracking values for what are really two tiers. These collapse them into
+   a coherent, slightly tighter modular set so hierarchy reads the same on every
+   surface. One source of truth; opt in per element. The font-display headers
+   (EchoText hero + sub-heads) remain the display tier above these. ---- */
+.t-eyebrow {
+  font-size: 0.6875rem; /* 11px — primary kicker above headers + section meta */
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+}
+.t-label {
+  font-size: 0.625rem; /* 10px — inline caps: pills, table heads, micro meta */
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
 /* Lift utility — resting depth + hover bump. Cards and stat tiles opt in via
    the Card primitive. Stays inside the existing CSS-first motion budget.
    Interactive variant gets a real 3D perspective tilt on hover — perspective
