@@ -164,7 +164,7 @@ export default function CoachView() {
                 className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
               />
               <button onClick={analyze} disabled={analyzing} className={`shrink-0 ${inkBtn}`}>
-                {analyzing ? 'Analyzing…' : 'Analyze my training'}
+                {analyzing ? 'Checking in…' : 'Check-in'}
               </button>
             </div>
           </header>
@@ -174,7 +174,7 @@ export default function CoachView() {
           <section className="mb-10">
             <SectionHeader>Open</SectionHeader>
             {open.length === 0 ? (
-              <EmptyState>Nothing open. Tap “Analyze my training” to scan recent sessions.</EmptyState>
+              <EmptyState>Nothing open. Tap “Check-in” to scan recent sessions.</EmptyState>
             ) : (
               <ul className="flex flex-col gap-2">
                 {open.map((r) => (
