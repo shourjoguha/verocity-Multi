@@ -199,9 +199,9 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   }
 
   return (
-    <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+    <PageStagger className="mx-auto max-w-3xl px-6 py-8">
       <Item>
-        <div className="mb-8 flex items-end justify-between gap-4">
+        <div className="mb-6 flex items-end justify-between gap-4">
           <EchoText
             text="LIBRARY"
             as="h1"

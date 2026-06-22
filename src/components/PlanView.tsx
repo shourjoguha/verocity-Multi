@@ -28,11 +28,11 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
 
   if (!plan) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-10">
+      <div className="mx-auto max-w-3xl px-6 py-8">
         <EchoText
           text="PLAN"
           as="h1"
-          className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+          className="mb-6 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
         />
         <EmptyState>
           No active plan.
@@ -85,10 +85,10 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   }
 
   return (
-    <PageStagger className="mx-auto max-w-5xl px-6 py-10">
+    <PageStagger className="mx-auto max-w-5xl px-6 py-8">
       <Item>
-        <header className="mb-8">
-          <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">Plan</p>
+        <header className="mb-6">
+          <p className="t-eyebrow text-muted">Plan</p>
           <div className="mt-2 flex flex-col items-start gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
             <EchoText
               text={parsed.title}
@@ -133,7 +133,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
 
       {parsed.days.map((day) => (
         <Item key={day.dayKey}>
-          <section className="mb-8">
+          <section className="mb-6">
             <div className="mb-3 flex items-center justify-between">
               <SectionHeader>{day.label}</SectionHeader>
               {showcase ? null : (

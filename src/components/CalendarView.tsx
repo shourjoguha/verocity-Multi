@@ -103,10 +103,10 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
 
   return (
     <>
-    <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+    <PageStagger className="mx-auto max-w-3xl px-6 py-8">
       <Item>
-        <header className="mb-8">
-          <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">{monthLabel}</p>
+        <header className="mb-6">
+          <p className="t-eyebrow text-muted">{monthLabel}</p>
           <div className="mt-2 flex items-end justify-between gap-4">
             <EchoText
               text="CALENDAR"
@@ -136,7 +136,7 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
       <Item>
         <div className="mb-2 grid grid-cols-7 gap-px">
           {WEEKDAYS.map((d) => (
-            <div key={d} className="text-center text-[0.6rem] uppercase tracking-wider text-muted">
+            <div key={d} className="t-label text-center text-muted">
               {d}
             </div>
           ))}
