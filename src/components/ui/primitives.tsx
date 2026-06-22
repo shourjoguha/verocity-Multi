@@ -42,7 +42,7 @@ export function StatCard({
 }) {
   return (
     <div className="border border-border bg-surface px-4 py-4">
-      <div className="text-[0.65rem] uppercase tracking-[0.2em] text-muted">{label}</div>
+      <div className="t-label text-muted">{label}</div>
       <div className="mt-2 font-display text-3xl font-semibold tabular-nums tracking-[-0.03em] text-fg">
         {typeof value === 'number' ? <AnimatedNumber value={value} /> : value}
         {unit ? <span className="ml-1 text-base font-medium text-muted">{unit}</span> : null}
@@ -55,7 +55,7 @@ export function Tag({ label, color }: { label: string; color: string }) {
   const style: CSSProperties = { borderColor: color, color };
   return (
     <span
-      className="inline-flex items-center border px-2 py-0.5 text-[0.65rem] uppercase tracking-wider"
+      className="t-label inline-flex items-center border px-2 py-0.5"
       style={style}
     >
       {label}
@@ -103,7 +103,7 @@ export function LoadingScreen({ label = 'Loading' }: { label?: string }) {
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-16">
       <div className="loading-sweep h-px w-32 overflow-hidden bg-border" />
-      <span className="text-[0.65rem] uppercase tracking-[0.25em] text-muted">{label}</span>
+      <span className="t-label text-muted">{label}</span>
     </div>
   );
 }

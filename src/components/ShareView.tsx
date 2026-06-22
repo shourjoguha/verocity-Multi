@@ -39,7 +39,7 @@ function PlanReadView({ parsed }: { parsed: ParsedPlan }) {
     <PageStagger>
       <Item>
         <header className="mb-2">
-          <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">Plan</p>
+          <p className="t-eyebrow text-muted">Plan</p>
           <EchoText text={parsed.title} as="h1" className={`mt-2 ${echoTitle}`} />
           {parsed.blocks.length > 0 ? (
             <div className="mt-4 flex flex-wrap gap-2">
@@ -257,7 +257,7 @@ export default function ShareView() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto max-w-5xl px-6 py-8">
       {state.kind === 'loading' ? (
         <LoadingScreen />
       ) : state.kind === 'error' ? (

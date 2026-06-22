@@ -567,7 +567,7 @@ export default function Logger() {
         transition={{ duration: 0.4, ease: EASE }}
         className="mx-auto max-w-2xl px-6 py-8 pb-32"
       >
-      <header className="mb-8 flex items-center justify-between">
+      <header className="mb-6 flex items-center justify-between">
         <div>
           <div className="font-display text-5xl tabular-nums text-fg">{clock(stopwatch.seconds)}</div>
           <div className="text-[0.7rem] uppercase tracking-wider text-muted">
@@ -580,7 +580,7 @@ export default function Logger() {
         </Button>
       </header>
 
-      <div className="mb-8 flex flex-wrap items-center gap-2">
+      <div className="mb-6 flex flex-wrap items-center gap-2">
         <input
           type="date"
           value={logDate}
@@ -632,7 +632,7 @@ export default function Logger() {
         const si = doc.sections.findIndex((s) => s.key === section.key);
         const groups = doc.sections[si].groups;
         return (
-          <section key={section.key} className="mb-8">
+          <section key={section.key} className="mb-6">
             <div className="mb-3 flex items-center justify-between">
               <SectionHeader>{sectionLabel(section.key)}</SectionHeader>
               <button

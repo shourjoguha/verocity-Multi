@@ -106,7 +106,7 @@ export default function PlanEditor() {
       <Item>
         <header className="mb-8">
           <div className="flex items-center justify-between gap-4">
-            <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">Edit plan</p>
+            <p className="t-eyebrow text-muted">Edit plan</p>
             <div className="flex shrink-0 items-center gap-4">
               <span className="text-[0.7rem] uppercase tracking-wider text-muted">
                 {save === 'saving' ? 'Saving…' : save === 'pending' ? 'Editing…' : save === 'saved' ? 'Saved' : ''}
