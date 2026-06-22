@@ -96,7 +96,7 @@ export function GarminHealthSection() {
 
         {stages ? (
           <div className="mt-px bg-surface px-4 py-4">
-            <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">Last sleep</div>
+            <div className="mb-2 t-label text-muted">Last sleep</div>
             <div className="flex h-2.5 w-full overflow-hidden">
               <span style={{ flexGrow: stages.deep }} className="bg-fg" />
               <span style={{ flexGrow: stages.rem }} className="bg-fg/60" />
@@ -114,7 +114,7 @@ export function GarminHealthSection() {
           <div className="mt-px grid grid-cols-2 gap-px bg-border">
             {restingHrSeries.length > 1 ? (
               <div className="bg-surface px-4 py-4">
-                <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">
+                <div className="mb-2 t-label text-muted">
                   Resting HR · {DAYS}d
                 </div>
                 <Spark points={restingHrSeries} />
@@ -122,7 +122,7 @@ export function GarminHealthSection() {
             ) : null}
             {hrvSeries.length > 1 ? (
               <div className="bg-surface px-4 py-4">
-                <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">
+                <div className="mb-2 t-label text-muted">
                   HRV · {DAYS}d
                 </div>
                 <Spark points={hrvSeries} />

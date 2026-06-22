@@ -125,7 +125,7 @@ export default function ShareManager() {
               key={s.key}
               onClick={() => changeScope(s.key)}
               aria-pressed={scope === s.key}
-              className={`hill-btn min-h-9 border bg-surface px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
+              className={`hill-btn min-h-9 border bg-surface px-3 t-control transition-colors ${
                 scope === s.key ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
               }`}
             >
@@ -199,7 +199,7 @@ export default function ShareManager() {
 
         {created ? (
           <div className="flex flex-col gap-2 border border-border bg-bg p-3">
-            <span className="text-[0.7rem] uppercase tracking-wider text-muted">
+            <span className="t-control text-muted">
               Copy this now — it won't be shown again
             </span>
             <div className="flex items-center gap-2">
@@ -232,13 +232,13 @@ export default function ShareManager() {
                   <li key={s.id} className="flex items-center gap-3 px-4 py-3">
                     <div className="flex-1">
                       <div className="text-fg">{s.label ?? s.scope}</div>
-                      <div className="text-[0.7rem] uppercase tracking-wider text-muted">
+                      <div className="t-control text-muted">
                         {s.scope} · {formatDate(s.created_at)}
                         {s.expires_at ? ` · expires ${formatDate(s.expires_at)}` : ''}
                       </div>
                     </div>
                     <span
-                      className={`text-[0.7rem] uppercase tracking-wider ${
+                      className={`t-control ${
                         status === 'active' ? 'text-subtle' : 'text-muted'
                       }`}
                     >
@@ -247,7 +247,7 @@ export default function ShareManager() {
                     {status === 'active' ? (
                       <button
                         onClick={() => handleRevoke(s.id)}
-                        className="px-2 text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-accent"
+                        className="px-2 t-control text-muted transition-colors hover:text-accent"
                       >
                         Revoke
                       </button>

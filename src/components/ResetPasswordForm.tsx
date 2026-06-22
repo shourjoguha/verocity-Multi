@@ -87,7 +87,7 @@ export default function ResetPasswordForm() {
     <PageStagger>
       <Item>
         <form onSubmit={onSubmit} className="flex flex-col gap-3">
-          <label className="text-[0.7rem] uppercase tracking-[0.2em] text-muted">New password</label>
+          <label className="t-label text-muted">New password</label>
           <input
             type="password"
             value={password}
@@ -97,7 +97,7 @@ export default function ResetPasswordForm() {
             required
             className={inputClass}
           />
-          <label className="mt-2 text-[0.7rem] uppercase tracking-[0.2em] text-muted">
+          <label className="mt-2 t-label text-muted">
             Confirm password
           </label>
           <input

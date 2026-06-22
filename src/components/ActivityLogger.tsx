@@ -114,14 +114,14 @@ export default function ActivityLogger() {
       </Item>
 
       <Item>
-      <label className="mb-2 block text-[0.7rem] uppercase tracking-wider text-muted">Type</label>
+      <label className="mb-2 block t-control text-muted">Type</label>
       <div className="mb-5 flex flex-wrap gap-2">
         {ACTIVITY_TYPES.map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setType(t)}
-            className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
+            className={`min-h-9 border px-3 t-control transition-colors ${
               type === t ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
             }`}
           >
@@ -132,7 +132,7 @@ export default function ActivityLogger() {
 
       <div className="mb-5 grid grid-cols-2 gap-4">
         <div>
-          <label className="mb-2 block text-[0.7rem] uppercase tracking-wider text-muted">Date</label>
+          <label className="mb-2 block t-control text-muted">Date</label>
           <input
             type="date"
             value={date}
@@ -141,7 +141,7 @@ export default function ActivityLogger() {
           />
         </div>
         <div>
-          <label className="mb-2 block text-[0.7rem] uppercase tracking-wider text-muted">Minutes</label>
+          <label className="mb-2 block t-control text-muted">Minutes</label>
           <input
             type="number"
             inputMode="decimal"
@@ -153,7 +153,7 @@ export default function ActivityLogger() {
         </div>
       </div>
 
-      <label className="mb-2 block text-[0.7rem] uppercase tracking-wider text-muted">
+      <label className="mb-2 block t-control text-muted">
         Distance ({METRICS.distance.unit}, optional)
       </label>
       <input
@@ -165,14 +165,14 @@ export default function ActivityLogger() {
         className="mb-5 min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
       />
 
-      <label className="mb-2 block text-[0.7rem] uppercase tracking-wider text-muted">Tags</label>
+      <label className="mb-2 block t-control text-muted">Tags</label>
       <div className="mb-5 flex flex-wrap gap-2">
         {Object.entries(ACTIVITY_TAGS).map(([key, { label, color }]) => (
           <button
             key={key}
             type="button"
             onClick={() => toggleTag(key)}
-            className="min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors"
+            className="min-h-9 border px-3 t-control transition-colors"
             style={
               tags.includes(key)
                 ? { borderColor: color, color }
@@ -184,7 +184,7 @@ export default function ActivityLogger() {
         ))}
       </div>
 
-      <label className="mb-2 block text-[0.7rem] uppercase tracking-wider text-muted">Notes</label>
+      <label className="mb-2 block t-control text-muted">Notes</label>
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}

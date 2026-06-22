@@ -46,7 +46,7 @@ function PlanReadView({ parsed }: { parsed: ParsedPlan }) {
               {parsed.blocks.map((b, i) => (
                 <span
                   key={i}
-                  className="inline-flex items-center gap-2 text-[0.7rem] uppercase tracking-wider text-muted"
+                  className="inline-flex items-center gap-2 t-control text-muted"
                 >
                   <span className="inline-block h-2 w-2" style={{ backgroundColor: BLOCKS[b.type]?.color }} />
                   {BLOCKS[b.type]?.label ?? b.type} · W{b.startWeek}–{b.endWeek}
@@ -64,7 +64,7 @@ function PlanReadView({ parsed }: { parsed: ParsedPlan }) {
           <div className="overflow-x-auto border border-border">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-[0.65rem] uppercase tracking-wider text-muted">
+                <tr className="t-control text-muted">
                   <th className="sticky left-0 z-10 border-b border-border bg-surface px-3 py-2 text-left font-medium">
                     Movement
                   </th>
@@ -111,7 +111,7 @@ function LogReadView({ log }: { log: WorkoutLog }) {
     <PageStagger>
       <Item>
         <header className="mb-2">
-          <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">{formatDate(log.log_date)}</p>
+          <p className="t-eyebrow text-muted">{formatDate(log.log_date)}</p>
           <EchoText text={log.activity_type ?? 'Session'} as="h1" className={`mt-2 ${echoTitle}`} />
           <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted">
             <span>{formatDuration(log.total_seconds)}</span>
@@ -173,7 +173,7 @@ function ProfileReadView({
     <PageStagger>
       <Item>
         <header className="mb-2">
-          <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">Shared profile</p>
+          <p className="t-eyebrow text-muted">Shared profile</p>
           <EchoText text={profile?.display_name ?? 'Athlete'} as="h1" className={`mt-2 ${echoTitle}`} />
         </header>
       </Item>

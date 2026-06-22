@@ -28,7 +28,7 @@ export function DayPreviewDialog({
           <div className="flex flex-col gap-5">
             {grouped.map((s) => (
               <div key={s.key}>
-                <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">{s.key}</div>
+                <div className="mb-2 t-label text-muted">{s.key}</div>
                 <ul className="flex flex-col gap-1.5">
                   {s.items.map((ex, i) => (
                     <li key={i} className="flex items-baseline justify-between gap-3 text-sm">

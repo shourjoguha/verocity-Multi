@@ -85,7 +85,7 @@ const { title = 'Verocity', description = 'Strength & training logger.', noBackd
         function apply() {
           try {
             var v = localStorage.getItem('verocity:bg');
-            var allowed = ['off', 'grain', 'hairlines', 'topography', 'aurora'];
+            var allowed = ['off', 'grain', 'dots', 'hairlines', 'topography', 'aurora'];
             if (allowed.indexOf(v) === -1) {
               var canBoot3D =
                 window.matchMedia('(min-width: 768px) and (pointer: fine)').matches &&
