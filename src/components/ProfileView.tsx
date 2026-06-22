@@ -90,7 +90,7 @@ function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[
 
   return (
     <div ref={containerRef} className="relative border-b border-border pb-3">
-      <div className="mb-2 text-[0.6rem] uppercase tracking-[0.16em] text-muted">Plan progress</div>
+      <div className="t-label mb-2 text-muted">Plan progress</div>
       <div ref={scrollRef} className="-mx-6 overflow-x-auto px-6" style={edgeFade}>
         <div className="relative flex items-end" style={{ gap: `${BAR_GAP}px`, minHeight: BAR_HEIGHT }}>
           {points.map((p, i) => {
@@ -223,10 +223,10 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
 
   return (
     <>
-    <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+    <PageStagger className="mx-auto max-w-3xl px-6 py-8">
       <Item>
-        <header className="mb-10">
-          <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">
+        <header className="mb-6">
+          <p className="t-eyebrow text-muted">
             {mode === 'showcase' ? 'Showcase' : 'Dashboard'}
           </p>
           <div className="mt-2 flex items-end justify-between gap-4">
@@ -238,7 +238,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             {mode === 'app' ? (
               <button
                 onClick={() => signOut().then(() => (window.location.href = '/login'))}
-                className="shrink-0 pb-1 text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                className="t-eyebrow shrink-0 pb-1 text-muted transition-colors hover:text-fg"
               >
                 Sign out
               </button>
@@ -248,7 +248,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
       </Item>
 
       <Item>
-        <section className="mb-10 grid grid-cols-3 gap-px bg-border">
+        <section className="mb-6 grid grid-cols-3 gap-px bg-border">
           <StatCard label="Sessions" value={sessionCount} />
           <StatCard label="Total time" value={formatDuration(totalSeconds)} />
           <StatCard
@@ -261,7 +261,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
 
       {mode === 'app' && streak >= 2 ? (
         <Item>
-          <div className="mb-10 -mt-6 flex items-center gap-2 text-[0.65rem] uppercase tracking-[0.2em] text-teal">
+          <div className="t-label mb-6 -mt-6 flex items-center gap-2 text-teal">
             <span aria-hidden className="inline-block h-1.5 w-1.5 bg-teal" />
             {streak}-day streak
           </div>
@@ -270,7 +270,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
 
       {mode === 'app' ? (
         <Item>
-          <section className="mb-10 flex gap-3">
+          <section className="mb-6 flex gap-3">
             <button
               type="button"
               onClick={() => setAddOpen(true)}
@@ -290,8 +290,8 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
 
       {mode === 'app' ? (
         <Item>
-          <section className="mb-10">
-            <div className="mb-4 text-[0.7rem] uppercase tracking-[0.18em] text-muted">
+          <section className="mb-6">
+            <div className="t-eyebrow mb-4 text-muted">
               {new Date().toDateString()}
               {week ? ` · Week ${week}` : ''}
             </div>
@@ -302,12 +302,12 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
 
       {mode === 'app' && plan && plan.parsed.days.length > 0 ? (
         <Item>
-          <section className="mb-10">
+          <section className="mb-6">
             <div className="mb-3 flex items-baseline justify-between">
-              <div className="text-[0.65rem] uppercase tracking-[0.16em] text-muted">Pick a day</div>
+              <div className="t-label text-muted">Pick a day</div>
               <a
                 href="/app/plan"
-                className="text-[0.65rem] uppercase tracking-[0.14em] text-muted transition-colors hover:text-fg"
+                className="t-label text-muted transition-colors hover:text-fg"
               >
                 Plan overview →
               </a>
@@ -329,7 +329,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                         {typeFromLabel(d.label)}
                       </div>
                       <div
-                        className={`mt-1 text-[0.6rem] uppercase tracking-[0.14em] ${
+                        className={`t-label mt-1 ${
                           isToday ? 'text-bg/70' : 'text-muted'
                         }`}
                         aria-hidden
@@ -346,7 +346,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
       ) : null}
 
       <Item>
-        <section className="mb-10">
+        <section className="mb-6">
           <SectionHeader>Active plan</SectionHeader>
           {plan ? (
             <Card>
@@ -358,7 +358,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                 {mode === 'app' ? (
                   <a
                     href="/app/plan"
-                    className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                    className="t-eyebrow text-muted transition-colors hover:text-fg"
                   >
                     View →
                   </a>

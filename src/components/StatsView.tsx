@@ -233,11 +233,11 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
   if (all.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-10">
+      <div className="mx-auto max-w-3xl px-6 py-8">
         <EchoText
           text="STATS"
           as="h1"
-          className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+          className="mb-6 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
         />
         <EmptyState>No sessions in the last {WEEKS} weeks.</EmptyState>
       </div>
@@ -246,17 +246,17 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
   return (
     <>
-      <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+      <PageStagger className="mx-auto max-w-3xl px-6 py-8">
         <Item>
           <EchoText
             text="STATS"
             as="h1"
-            className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+            className="mb-6 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
           />
         </Item>
 
         <Item>
-          <section className="mb-10 grid grid-cols-3 gap-px bg-border">
+          <section className="mb-6 grid grid-cols-3 gap-px bg-border">
             <StatCard label="Sessions" value={all.length} />
             <StatCard label="Time" value={formatDuration(totalSeconds)} />
             <StatCard
@@ -278,7 +278,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
         </Item>
 
         <Item>
-          <section className="mb-10">
+          <section className="mb-6">
             <SectionHeader>Consistency</SectionHeader>
             <div className="flex gap-1">
               {weekStarts.map((ws, col) => (
@@ -330,11 +330,11 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
         </Item>
 
         <Item>
-          <section className="mb-10">
+          <section className="mb-6">
             <SectionHeader>Weekly</SectionHeader>
             <table className="w-full border border-border bg-surface text-sm">
               <thead>
-                <tr className="text-[0.65rem] uppercase tracking-wider text-muted">
+                <tr className="t-label text-muted">
                   <th className="border-b border-border px-3 py-2 text-left font-medium">Week</th>
                   <th className="border-b border-border px-3 py-2 text-right font-medium">Sessions</th>
                   <th className="border-b border-border px-3 py-2 text-right font-medium">Time</th>
@@ -357,7 +357,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
         {rpeRows.length > 0 ? (
           <Item>
-            <section className="mb-10">
+            <section className="mb-6">
               <SectionHeader>RPE fingerprint</SectionHeader>
               <div className="flex flex-col gap-3">
                 {rpeRows.map((r) => (
@@ -408,7 +408,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                 <h2 className="font-display text-sm font-semibold uppercase tracking-[0.04em] text-fg">
                   Top {groupBy === 'family' ? 'families' : 'movements'} (e1RM)
                 </h2>
-                <div className="flex gap-1 text-[0.65rem] uppercase tracking-wider">
+                <div className="t-label flex gap-1">
                   {(['movement', 'family'] as const).map((g) => (
                     <button
                       key={g}
