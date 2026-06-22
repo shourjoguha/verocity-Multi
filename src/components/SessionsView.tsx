@@ -305,9 +305,9 @@ function PlansBrowser({
 const byCreated = (a: Session, b: Session) => b.created_at.localeCompare(a.created_at);
 
 export default function SessionsView() {
-  const sessionsQ = useAuthedQuery(() => getSessions());
-  const movementsQ = useAuthedQuery(() => getMovements());
-  const plansQ = useAuthedQuery(() => getAllPlans());
+  const sessionsQ = useAuthedQuery(() => getSessions(), { key: 'sessions' });
+  const movementsQ = useAuthedQuery(() => getMovements(), { key: 'movements' });
+  const plansQ = useAuthedQuery(() => getAllPlans(), { key: 'plans:all' });
 
   const [items, setItems] = useState<Session[] | null>(null);
   const [q, setQ] = useState('');

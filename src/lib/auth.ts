@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { clearQueryCache } from '@/lib/queryCache';
 
 export async function getSession() {
   const { data } = await supabase.auth.getSession();
@@ -10,6 +11,9 @@ export function signIn(email: string, password: string) {
 }
 
 export function signOut() {
+  // Drop cached query results so the next user (or re-login) never sees the
+  // previous session's rows from the in-memory SWR cache.
+  clearQueryCache();
   return supabase.auth.signOut();
 }
 

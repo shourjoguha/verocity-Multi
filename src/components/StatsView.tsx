@@ -103,7 +103,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   );
   const { data: logs, loading } = useAuthedQuery(
     () => getLogsInRange(ymd(from), ymd(today), client),
-    { auth: mode === 'app' },
+    { auth: mode === 'app', key: mode === 'app' ? 'stats:logs:8w' : undefined },
   );
 
   const [tip, setTip] = useState<{ x: number; y: number; label: string } | null>(null);

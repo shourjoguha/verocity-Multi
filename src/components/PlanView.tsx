@@ -18,7 +18,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
       const logs = plan ? await getAllLogs(client) : [];
       return { plan, logs };
     },
-    { auth: !showcase },
+    { auth: !showcase, key: showcase ? undefined : 'plan:view' },
   );
 
   if (loading) return <LoadingScreen />;

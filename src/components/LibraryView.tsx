@@ -106,7 +106,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   const showcase = mode === 'showcase';
   const { data, loading } = useAuthedQuery(
     () => getMovements(showcase ? supabasePublic : undefined),
-    { auth: !showcase },
+    { auth: !showcase, key: showcase ? undefined : 'movements' },
   );
   const [items, setItems] = useState<Movement[] | null>(null);
   const [q, setQ] = useState('');
