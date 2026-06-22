@@ -57,7 +57,7 @@ export default function LoginForm() {
     <PageStagger>
       <Item>
         <form onSubmit={onSubmit} className="flex flex-col gap-3">
-          <label className="text-[0.7rem] uppercase tracking-[0.2em] text-muted">Email</label>
+          <label className="t-label text-muted">Email</label>
           <input
             type="email"
             value={email}
@@ -70,11 +70,11 @@ export default function LoginForm() {
           {mode === 'signin' ? (
             <>
               <div className="mt-2 flex items-baseline justify-between">
-                <label className="text-[0.7rem] uppercase tracking-[0.2em] text-muted">Password</label>
+                <label className="t-label text-muted">Password</label>
                 <button
                   type="button"
                   onClick={() => switchMode('reset')}
-                  className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                  className="t-control text-muted transition-colors hover:text-fg"
                 >
                   Forgot password?
                 </button>
@@ -111,7 +111,7 @@ export default function LoginForm() {
             <button
               type="button"
               onClick={() => switchMode('signin')}
-              className="mt-1 text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              className="mt-1 t-control text-muted transition-colors hover:text-fg"
             >
               ← Back to sign in
             </button>

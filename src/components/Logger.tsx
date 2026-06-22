@@ -467,7 +467,7 @@ export default function Logger() {
             </button>
             <span className="capitalize text-fg">{item.movement}</span>
           </div>
-          <div className="flex items-center gap-2 text-[0.7rem] uppercase tracking-wider text-muted">
+          <div className="flex items-center gap-2 t-control text-muted">
             <button
               onClick={() => {
                 const nextMetric = METRIC_CYCLE[(METRIC_CYCLE.indexOf(item.primaryMetric) + 1) % METRIC_CYCLE.length];
@@ -505,7 +505,7 @@ export default function Logger() {
           </div>
         </div>
         {isCollapsed ? (
-          <div className="text-[0.7rem] uppercase tracking-wider text-muted">
+          <div className="t-control text-muted">
             {item.sets.length} {item.sets.length === 1 ? 'set' : 'sets'}
             {allDone ? ' · done' : ''}
           </div>
@@ -538,7 +538,7 @@ export default function Logger() {
                   onCloneForward={() => cloneForward(si, gi, ii, ki)}
                 />
                 {cliff ? (
-                  <div className="pl-3 text-[0.65rem] uppercase tracking-wider text-accent">
+                  <div className="pl-3 t-control text-accent">
                     Rep drop {prev!.actual.reps! - set.actual.reps!} — extend rest or stop
                   </div>
                 ) : null}
@@ -548,7 +548,7 @@ export default function Logger() {
         </div>
         <button
           onClick={() => setDoc((d) => addSet(d, si, gi, ii))}
-          className="mt-3 text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+          className="mt-3 t-control text-muted hover:text-fg"
         >
           + Add set
         </button>
@@ -570,7 +570,7 @@ export default function Logger() {
       <header className="mb-6 flex items-center justify-between">
         <div>
           <div className="font-display text-5xl tabular-nums text-fg">{clock(stopwatch.seconds)}</div>
-          <div className="text-[0.7rem] uppercase tracking-wider text-muted">
+          <div className="t-control text-muted">
             {status}
             {saving ? ' · saving…' : ''}
           </div>
@@ -595,7 +595,7 @@ export default function Logger() {
               key={key}
               type="button"
               onClick={() => toggleTag(key)}
-              className={`hill-btn border bg-surface px-2 py-1 text-[0.65rem] uppercase tracking-wider transition-colors ${
+              className={`hill-btn border bg-surface px-2 py-1 t-control transition-colors ${
                 on ? '' : 'border-border text-muted hover:text-fg'
               }`}
               style={on ? { borderColor: v.color, color: v.color } : undefined}
@@ -619,9 +619,9 @@ export default function Logger() {
             transition={{ duration: 0.3, ease: EASE }}
             className="flex items-center justify-between overflow-hidden border border-accent px-4 py-2"
           >
-            <span className="text-[0.7rem] uppercase tracking-wider text-accent">Rest</span>
+            <span className="t-control text-accent">Rest</span>
             <span className="font-display text-2xl tabular-nums text-fg">{clock(rest.secondsLeft)}</span>
-            <button onClick={rest.stop} className="text-[0.7rem] uppercase tracking-wider text-muted">
+            <button onClick={rest.stop} className="t-control text-muted">
               Skip
             </button>
           </motion.div>
@@ -637,7 +637,7 @@ export default function Logger() {
               <SectionHeader>{sectionLabel(section.key)}</SectionHeader>
               <button
                 onClick={() => setPicker({ mode: 'add', sectionKey: section.key })}
-                className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+                className="t-control text-muted hover:text-fg"
               >
                 + Movement
               </button>
@@ -647,7 +647,7 @@ export default function Logger() {
                 if (group.items.length > 1) {
                   return (
                     <div key={group.id} className="border border-accent p-4">
-                      <div className="mb-3 flex items-center justify-between text-[0.7rem] uppercase tracking-wider">
+                      <div className="mb-3 flex items-center justify-between t-control">
                         <div className="flex gap-2">
                           {(['superset', 'circuit'] as GroupKind[]).map((k) => (
                             <button
@@ -673,7 +673,7 @@ export default function Logger() {
                 return (
                   <div key={group.id} className="border border-border p-4">
                     {renderItem(si, gi, 0, false)}
-                    <div className="mt-3 flex justify-end gap-3 text-[0.7rem] uppercase tracking-wider">
+                    <div className="mt-3 flex justify-end gap-3 t-control">
                       {gi < groups.length - 1 ? (
                         <button
                           onClick={() => setDoc((d) => mergeWithNext(d, si, gi, 'superset'))}
@@ -783,7 +783,7 @@ export default function Logger() {
 
                   {groups.length > 1 ? (
                     <div className="mt-5">
-                      <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">
+                      <div className="mb-2 t-label text-muted">
                         Superset with
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -807,7 +807,7 @@ export default function Logger() {
                   ) : null}
 
                   <div className="mt-5">
-                    <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">
+                    <div className="mb-2 t-label text-muted">
                       Notations
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -833,7 +833,7 @@ export default function Logger() {
                   </div>
 
                   <div className="mt-5">
-                    <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">
+                    <div className="mb-2 t-label text-muted">
                       Rest between sets
                     </div>
                     <div className="flex flex-wrap gap-2">

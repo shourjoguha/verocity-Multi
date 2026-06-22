@@ -26,7 +26,7 @@ export function DeleteLogButton({ id, onDeleted }: { id: string; onDeleted: () =
       <button
         type="button"
         onClick={() => setConfirming(true)}
-        className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+        className="t-control text-muted transition-colors hover:text-fg"
       >
         Delete
       </button>
@@ -34,7 +34,7 @@ export function DeleteLogButton({ id, onDeleted }: { id: string; onDeleted: () =
   }
 
   return (
-    <span className="inline-flex items-center gap-2 text-[0.7rem] uppercase tracking-wider">
+    <span className="inline-flex items-center gap-2 t-control">
       <span className="text-muted">Delete?</span>
       <button
         type="button"

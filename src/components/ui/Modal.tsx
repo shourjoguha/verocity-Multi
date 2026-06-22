@@ -51,11 +51,11 @@ export function Modal({
             >
               {title ? (
                 <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                  <span className="text-[0.7rem] uppercase tracking-[0.25em] text-muted">{title}</span>
+                  <span className="t-eyebrow text-muted">{title}</span>
                   <button
                     type="button"
                     onClick={onClose}
-                    className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                    className="t-control text-muted transition-colors hover:text-fg"
                   >
                     Close
                   </button>

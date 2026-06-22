@@ -29,7 +29,7 @@ export default function SignupForm() {
 
   const inputClass =
     'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none focus:border-subtle';
-  const labelClass = 'mt-2 text-[0.7rem] uppercase tracking-[0.2em] text-muted';
+  const labelClass = 'mt-2 t-label text-muted';
 
   return (
     <PageStagger>
@@ -52,7 +52,7 @@ export default function SignupForm() {
           }}
           className="flex flex-col gap-3"
         >
-          <label className="text-[0.7rem] uppercase tracking-[0.2em] text-muted">Display name</label>
+          <label className="t-label text-muted">Display name</label>
           <input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}

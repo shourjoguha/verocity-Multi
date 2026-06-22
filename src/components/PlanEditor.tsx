@@ -108,12 +108,12 @@ export default function PlanEditor() {
           <div className="flex items-center justify-between gap-4">
             <p className="t-eyebrow text-muted">Edit plan</p>
             <div className="flex shrink-0 items-center gap-4">
-              <span className="text-[0.7rem] uppercase tracking-wider text-muted">
+              <span className="t-control text-muted">
                 {save === 'saving' ? 'Saving…' : save === 'pending' ? 'Editing…' : save === 'saved' ? 'Saved' : ''}
               </span>
               <a
                 href="/app/plan"
-                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                className="t-control text-muted transition-colors hover:text-fg"
               >
                 Done →
               </a>
@@ -131,10 +131,10 @@ export default function PlanEditor() {
       <Item>
         <section className="mb-8">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[0.7rem] uppercase tracking-[0.25em] text-muted">Phases</span>
+          <span className="t-eyebrow text-muted">Phases</span>
           <button
             onClick={() => edit((p) => addBlock(p))}
-            className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+            className="t-control text-muted hover:text-fg"
           >
             + Phase
           </button>
@@ -162,7 +162,7 @@ export default function PlanEditor() {
                     </option>
                   ))}
                 </select>
-                <span className="text-[0.7rem] uppercase tracking-wider text-muted">W</span>
+                <span className="t-control text-muted">W</span>
                 <input
                   type="number"
                   min={1}
@@ -247,7 +247,7 @@ export default function PlanEditor() {
           <div className="overflow-x-auto border border-border">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-[0.65rem] uppercase tracking-wider text-muted">
+                <tr className="t-control text-muted">
                   <th className="border-b border-border px-2 py-2 text-left font-medium">Movement</th>
                   <th className="border-b border-l border-border px-2 py-2 text-left font-medium">Section</th>
                   {weeks.map((w) => (
@@ -348,7 +348,7 @@ export default function PlanEditor() {
           </div>
           <button
             onClick={() => edit((p) => addExercise(p, di))}
-            className="mt-2 text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+            className="mt-2 t-control text-muted transition-colors hover:text-fg"
           >
             + Exercise
           </button>

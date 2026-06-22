@@ -12,6 +12,7 @@ export const BACKGROUND_EVENT = 'verocity:bg-change';
 export const BACKGROUNDS = {
   off: { label: 'Off', description: 'No backdrop. Closest to the original editorial silence.' },
   grain: { label: 'Notebook', description: 'Horizontal ruled lines — notebook paper.' },
+  dots: { label: 'Dotted', description: 'A dot grid — dotted notebook paper.' },
   hairlines: { label: 'Hairlines', description: 'A 48px grid, like a technical drawing.' },
   topography: { label: 'Topography', description: 'Concentric contour rings.' },
   aurora: { label: 'Depth', description: '3D monolith on paper. Loads on demand. Desktop default.' },

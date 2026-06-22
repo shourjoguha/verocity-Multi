@@ -120,7 +120,7 @@ export function GarminPanel() {
       <div className="flex items-baseline justify-between border-b border-border pb-2">
         <span className="text-sm text-fg">{statusText}</span>
         {connection?.last_sync_at ? (
-          <span className="text-[0.65rem] uppercase tracking-wider text-muted">
+          <span className="t-control text-muted">
             Synced {formatDate(connection.last_sync_at)}
           </span>
         ) : null}
@@ -158,7 +158,7 @@ export function GarminPanel() {
             <button
               type="button"
               onClick={() => setShowConnect(false)}
-              className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              className="t-control text-muted transition-colors hover:text-fg"
             >
               Cancel
             </button>

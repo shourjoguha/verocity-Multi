@@ -61,7 +61,7 @@ export function LogQuickView({
               <div className="mt-5 flex flex-col gap-4">
                 {orderedSections.map((section) => (
                   <div key={section.key}>
-                    <div className="mb-1.5 text-[0.6rem] uppercase tracking-[0.2em] text-muted">
+                    <div className="t-label mb-1.5 text-muted">
                       {sectionLabel(section.key)}
                     </div>
                     <div className="flex flex-col gap-2">

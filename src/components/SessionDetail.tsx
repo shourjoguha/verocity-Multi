@@ -77,7 +77,7 @@ export default function SessionDetail() {
       <Item>
         <header className="mb-8">
           <div className="flex items-center justify-between gap-4">
-            <p className="text-[0.7rem] uppercase tracking-[0.3em] text-muted">
+            <p className="t-eyebrow text-muted">
               {formatDate(log.log_date)} · {log.status}
             </p>
             <div className="flex items-center gap-3">
@@ -85,7 +85,7 @@ export default function SessionDetail() {
                 type="button"
                 onClick={() => saveAsSession(log)}
                 disabled={savingSession}
-                className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg disabled:opacity-40"
+                className="t-control text-muted transition-colors hover:text-fg disabled:opacity-40"
               >
                 Save as session
               </button>
@@ -105,7 +105,7 @@ export default function SessionDetail() {
             <HeartRate log={log} onUpdate={(hr) => setLog({ ...log, ...hr })} />
           </div>
           {vibe ? (
-            <div className="mt-3 flex gap-4 text-[0.7rem] uppercase tracking-wider text-muted">
+            <div className="mt-3 flex gap-4 t-control text-muted">
               <span>Sleep {vibe.sleep}</span>
               <span>Energy {vibe.energy}</span>
               <span>Soreness {vibe.soreness}</span>
@@ -127,7 +127,7 @@ export default function SessionDetail() {
                 {section.groups.map((group) => (
                   <div key={group.id} className="border border-border">
                     {group.kind !== 'single' ? (
-                      <div className="border-b border-border px-3 py-1 text-[0.65rem] uppercase tracking-wider text-muted">
+                      <div className="border-b border-border px-3 py-1 t-control text-muted">
                         {group.kind}
                       </div>
                     ) : null}

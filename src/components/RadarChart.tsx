@@ -101,7 +101,7 @@ export function RadarChart({ series }: { series: RadarSeries[] }) {
             )}
         </motion.g>
       </svg>
-      <div className="mt-2 flex flex-wrap justify-center gap-4 text-[0.65rem] uppercase tracking-wider text-muted">
+      <div className="mt-2 flex flex-wrap justify-center gap-4 t-control text-muted">
         {series.map((s) => (
           <span key={s.label} className="inline-flex items-center gap-1.5">
             <span

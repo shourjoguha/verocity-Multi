@@ -58,7 +58,7 @@ export function AddSessionMenu({
 
   const rowClass =
     'flex items-center justify-between border-b border-border px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-elevated';
-  const groupLabelClass = 'mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted';
+  const groupLabelClass = 'mb-2 t-label text-muted';
   const hasMore = savedSessions.length > 0 || pastPlans.length > 0;
 
   return (
@@ -67,7 +67,7 @@ export function AddSessionMenu({
         {plan && plan.parsed.days.length > 0 ? (
           <>
             <div className="mb-2 flex items-center justify-between gap-3">
-              <span className="text-[0.65rem] uppercase tracking-[0.2em] text-muted">
+              <span className="t-label text-muted">
                 From {plan.parsed.title}
               </span>
               {/* Short on time? Trim the picked day to a mini, primaries intact. */}
@@ -122,7 +122,7 @@ export function AddSessionMenu({
               type="button"
               onClick={() => setShowMore((v) => !v)}
               aria-expanded={showMore}
-              className="hill-btn flex min-h-12 w-full items-center justify-between border border-border bg-surface px-4 text-[0.7rem] uppercase tracking-wider text-fg transition-colors hover:border-fg"
+              className="hill-btn flex min-h-12 w-full items-center justify-between border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg"
             >
               <span>Past plans &amp; saved sessions</span>
               <span className="text-muted">{showMore ? '−' : '+'}</span>
@@ -136,7 +136,7 @@ export function AddSessionMenu({
                       <span className={groupLabelClass}>Saved sessions</span>
                       <a
                         href="/app/sessions"
-                        className="text-[0.65rem] uppercase tracking-wider text-muted hover:text-fg"
+                        className="t-control text-muted hover:text-fg"
                       >
                         Manage →
                       </a>

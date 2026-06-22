@@ -210,7 +210,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
           {!showcase && !adding ? (
             <button
               onClick={startAdd}
-              className="shrink-0 pb-1 text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              className="shrink-0 pb-1 t-control text-muted transition-colors hover:text-fg"
             >
               + Movement
             </button>
@@ -245,7 +245,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
           <div className="mb-5 flex flex-wrap gap-2">
             <button
               onClick={() => setCategory(null)}
-              className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
+              className={`min-h-9 border px-3 t-control transition-colors ${
                 category === null ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
               }`}
             >
@@ -255,7 +255,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
               <button
                 key={c}
                 onClick={() => setCategory(c)}
-                className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
+                className={`min-h-9 border px-3 t-control transition-colors ${
                   category === c ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
                 }`}
               >
@@ -293,7 +293,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
               <li key={m.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="flex-1">
                   <div className="capitalize text-fg">{m.name}</div>
-                  <div className="text-[0.7rem] uppercase tracking-wider text-muted">
+                  <div className="t-control text-muted">
                     {m.category ?? 'uncategorized'}
                     {custom ? ' · custom' : ' · shared'}
                   </div>
@@ -306,7 +306,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
                   <div className="flex shrink-0 items-center gap-1">
                     <button
                       onClick={() => startEdit(m)}
-                      className="px-2 text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+                      className="px-2 t-control text-muted hover:text-fg"
                       aria-label={`Edit ${m.name}`}
                     >
                       Edit

@@ -56,11 +56,11 @@ export function MovementPicker({
         transition={{ duration: 0.3, ease: EASE }}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="text-[0.7rem] uppercase tracking-[0.25em] text-muted">{title}</span>
+          <span className="t-eyebrow text-muted">{title}</span>
           <button
             type="button"
             onClick={onClose}
-            className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+            className="t-control text-muted hover:text-fg"
           >
             Close
           </button>
@@ -68,7 +68,7 @@ export function MovementPicker({
 
         {suggestions.length > 0 ? (
           <div className="border-b border-border px-4 py-3">
-            <div className="mb-2 text-[0.65rem] uppercase tracking-wider text-muted">
+            <div className="mb-2 t-control text-muted">
               You usually swap to
             </div>
             <div className="flex flex-wrap gap-2">
@@ -118,7 +118,7 @@ export function MovementPicker({
                 className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-elevated"
               >
                 <span className="text-fg">Add “{q.trim()}”</span>
-                <span className="text-[0.7rem] uppercase tracking-wider text-muted">custom</span>
+                <span className="t-control text-muted">custom</span>
               </button>
             </li>
           ) : null}
@@ -130,7 +130,7 @@ export function MovementPicker({
                 className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-elevated"
               >
                 <span className="capitalize text-fg">{m.name}</span>
-                <span className="text-[0.7rem] uppercase tracking-wider text-muted">
+                <span className="t-control text-muted">
                   {m.category ?? (m.owner_user_id == null ? 'shared' : 'custom')}
                 </span>
               </button>

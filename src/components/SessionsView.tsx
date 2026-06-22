@@ -42,7 +42,7 @@ function TagPicker({ value, onChange }: { value: string[]; onChange: (tags: stri
             type="button"
             onClick={() => toggle(key)}
             aria-pressed={on}
-            className={`hill-btn border bg-surface px-2 py-1 text-[0.65rem] uppercase tracking-wider transition-colors ${
+            className={`hill-btn border bg-surface px-2 py-1 t-control transition-colors ${
               on ? '' : 'border-border text-muted hover:text-fg'
             }`}
             style={on ? { borderColor: color, color } : undefined}
@@ -119,12 +119,12 @@ function SessionForm({
       />
 
       <div>
-        <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">Tags</div>
+        <div className="mb-2 t-label text-muted">Tags</div>
         <TagPicker value={draft.tags} onChange={(tags) => setDraft({ ...draft, tags })} />
       </div>
 
       <div>
-        <div className="mb-2 text-[0.65rem] uppercase tracking-[0.2em] text-muted">Movements</div>
+        <div className="mb-2 t-label text-muted">Movements</div>
         {draft.exercises.length === 0 ? (
           <p className="mb-3 text-sm text-muted">No movements yet.</p>
         ) : (
@@ -198,7 +198,7 @@ function SessionForm({
         <button
           type="button"
           onClick={() => setPicking(true)}
-          className="text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+          className="t-control text-muted hover:text-fg"
         >
           + Movement
         </button>
@@ -243,7 +243,7 @@ function PlansBrowser({
   return (
     <Item>
       <div className="mt-12">
-        <div className="mb-4 text-[0.7rem] uppercase tracking-[0.25em] text-muted">From your plans</div>
+        <div className="mb-4 t-eyebrow text-muted">From your plans</div>
         <ul className="divide-y divide-border border border-border">
           {withDays.map((plan) => {
             const open = openId === plan.id;
@@ -258,7 +258,7 @@ function PlansBrowser({
                   <span className="text-fg">
                     {plan.name}
                     {plan.is_active ? (
-                      <span className="ml-2 text-[0.65rem] uppercase tracking-wider text-muted">active</span>
+                      <span className="ml-2 t-control text-muted">active</span>
                     ) : null}
                   </span>
                   <span className={`text-[0.7rem] text-muted transition-transform ${open ? 'rotate-90' : ''}`}>
@@ -273,7 +273,7 @@ function PlansBrowser({
                         className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 pl-6 last:border-b-0"
                       >
                         <span className="text-sm text-fg">{day.label}</span>
-                        <div className="flex items-center gap-3 text-[0.7rem] uppercase tracking-wider">
+                        <div className="flex items-center gap-3 t-control">
                           <button
                             type="button"
                             disabled={busy}
@@ -432,7 +432,7 @@ export default function SessionsView() {
           {!adding ? (
             <button
               onClick={startAdd}
-              className="shrink-0 pb-1 text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              className="shrink-0 pb-1 t-control text-muted transition-colors hover:text-fg"
             >
               + Session
             </button>
@@ -466,7 +466,7 @@ export default function SessionsView() {
         <div className="mb-5 flex flex-wrap gap-2">
           <button
             onClick={() => setTagFilter(null)}
-            className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
+            className={`min-h-9 border px-3 t-control transition-colors ${
               tagFilter === null ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
             }`}
           >
@@ -476,7 +476,7 @@ export default function SessionsView() {
             <button
               key={key}
               onClick={() => setTagFilter(tagFilter === key ? null : key)}
-              className={`min-h-9 border px-3 text-[0.7rem] uppercase tracking-wider transition-colors ${
+              className={`min-h-9 border px-3 t-control transition-colors ${
                 tagFilter === key ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
               }`}
             >
@@ -518,7 +518,7 @@ export default function SessionsView() {
                       {s.tags.map((t) => (
                         <Tag key={t} label={ACTIVITY_TAGS[t as ActivityTagKey]?.label ?? t} color={tagColor(t)} />
                       ))}
-                      <span className="text-[0.7rem] uppercase tracking-wider text-muted">
+                      <span className="t-control text-muted">
                         {count} {count === 1 ? 'movement' : 'movements'}
                         {s.source_plan_id ? ' · from plan' : ''}
                       </span>
@@ -527,13 +527,13 @@ export default function SessionsView() {
                   <div className="flex shrink-0 items-center gap-1">
                     <a
                       href={`/app/log?session=${encodeURIComponent(s.id)}`}
-                      className="hill-btn border border-border bg-surface px-2 py-1 text-[0.7rem] uppercase tracking-wider text-fg hover:border-fg"
+                      className="hill-btn border border-border bg-surface px-2 py-1 t-control text-fg hover:border-fg"
                     >
                       Start
                     </a>
                     <button
                       onClick={() => startEdit(s)}
-                      className="px-2 text-[0.7rem] uppercase tracking-wider text-muted hover:text-fg"
+                      className="px-2 t-control text-muted hover:text-fg"
                       aria-label={`Edit ${s.name}`}
                     >
                       Edit

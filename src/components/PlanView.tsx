@@ -99,13 +99,13 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               <div className="flex shrink-0 gap-4 pb-1">
                 <a
                   href="/app/plan/edit"
-                  className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                  className="t-control text-muted transition-colors hover:text-fg"
                 >
                   Edit
                 </a>
                 <a
                   href="/app/plan/upload"
-                  className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                  className="t-control text-muted transition-colors hover:text-fg"
                 >
                   New plan
                 </a>
@@ -117,7 +117,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               {parsed.blocks.map((b, i) => (
                 <span
                   key={i}
-                  className="inline-flex items-center gap-2 text-[0.7rem] uppercase tracking-wider text-muted"
+                  className="inline-flex items-center gap-2 t-control text-muted"
                 >
                   <span
                     className="inline-block h-2 w-2"
@@ -139,7 +139,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               {showcase ? null : (
                 <a
                   href={`/app/log?day=${encodeURIComponent(day.dayKey)}`}
-                  className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+                  className="t-control text-muted transition-colors hover:text-fg"
                 >
                   Start →
                 </a>
@@ -148,7 +148,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
             <div className="overflow-x-auto border border-border">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-[0.65rem] uppercase tracking-wider text-muted">
+                  <tr className="t-control text-muted">
                     <th className="sticky left-0 z-10 border-b border-border bg-surface px-3 py-2 text-left font-medium">
                       Movement
                     </th>

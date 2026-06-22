@@ -23,7 +23,7 @@ import { BackgroundPicker } from '@/components/BackgroundPicker';
 import { GarminPanel } from '@/components/GarminPanel';
 
 const exportBtn =
-  'hill-btn min-h-11 border border-border bg-surface px-4 text-[0.7rem] uppercase tracking-wider text-fg transition-colors hover:border-fg disabled:opacity-40';
+  'hill-btn min-h-11 border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg disabled:opacity-40';
 
 export default function SettingsView() {
   const [email, setEmail] = useState<string | null>(null);
@@ -82,9 +82,9 @@ export default function SettingsView() {
       <Item>
         <section className="mb-6">
           <SectionHeader>Appearance</SectionHeader>
-          <div className="mb-2 text-[0.6rem] uppercase tracking-[0.16em] text-muted">Theme</div>
+          <div className="mb-2 t-label text-muted">Theme</div>
           <ThemeToggle />
-          <div className="mt-6 mb-2 text-[0.6rem] uppercase tracking-[0.16em] text-muted">Backdrop</div>
+          <div className="mt-6 mb-2 t-label text-muted">Backdrop</div>
           <BackgroundPicker />
         </section>
       </Item>
@@ -118,7 +118,7 @@ export default function SettingsView() {
             </button>
             <a
               href="/app/shares"
-              className="text-[0.7rem] uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              className="t-control text-muted transition-colors hover:text-fg"
             >
               Share links →
             </a>

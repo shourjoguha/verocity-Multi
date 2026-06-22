@@ -53,7 +53,7 @@ export function FitnessProfile({
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="hill-btn border border-border bg-surface px-3 py-1 text-[0.65rem] uppercase tracking-wider text-fg transition-colors hover:border-fg"
+            className="hill-btn border border-border bg-surface px-3 py-1 t-control text-fg transition-colors hover:border-fg"
           >
             {latest ? 'Update' : 'Check in'}
           </button>

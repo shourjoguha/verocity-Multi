@@ -21,7 +21,7 @@ export function VibeCheckCard({
 
   return (
     <div className="mb-8 border border-border p-4">
-      <div className="mb-4 text-[0.7rem] uppercase tracking-[0.25em] text-muted">Vibe check</div>
+      <div className="mb-4 t-eyebrow text-muted">Vibe check</div>
       <div className="flex flex-col gap-4">
         {FIELDS.map(({ key, label }) => (
           <div key={key} className="flex items-center justify-between gap-3">
