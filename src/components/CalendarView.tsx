@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getActivePlan, getLogsInRange } from '@/lib/queries';
+import { getCached, setCached } from '@/lib/queryCache';
 import { showcaseMonthStart } from '@/lib/showcase';
 import type { Plan, WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
@@ -58,11 +59,23 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
   useEffect(() => {
     if (!ready) return;
     let active = true;
-    setLoading(true);
     const start = month;
     const end = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0));
+    // SWR per month (app only): paint a previously-viewed month instantly while
+    // revalidating in the background.
+    const cacheKey = showcase
+      ? null
+      : `cal:logs:${month.getUTCFullYear()}-${month.getUTCMonth() + 1}`;
+    const cached = cacheKey ? getCached<WorkoutLog[]>(cacheKey) : undefined;
+    if (cached) {
+      setLogs(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     getLogsInRange(ymd(start), ymd(end), client).then((l) => {
       if (!active) return;
+      if (cacheKey) setCached(cacheKey, l);
       setLogs(l);
       setLoading(false);
     });

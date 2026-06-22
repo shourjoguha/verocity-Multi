@@ -1,16 +1,22 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCached, setCached } from '@/lib/queryCache';
 
 // Guards auth (redirects to /login if no session) then runs the loader against
 // the authenticated client. Shared by the read-path islands. Pass `auth: false`
 // for the read-only showcase, which has no session and loads via the anon
 // (public) client — the guard would otherwise bounce the visitor to /login.
+//
+// Pass `key` to opt into the stale-while-revalidate cache (queryCache): a
+// revisited tab paints last-known data immediately (no spinner) while the
+// loader revalidates in the background. Omit `key` for uncached behaviour.
 export function useAuthedQuery<T>(
   loader: () => Promise<T>,
-  { auth = true }: { auth?: boolean } = {},
+  { auth = true, key }: { auth?: boolean; key?: string } = {},
 ): { data: T | null; loading: boolean } {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cached = key ? getCached<T>(key) : undefined;
+  const [data, setData] = useState<T | null>(cached ?? null);
+  const [loading, setLoading] = useState(cached === undefined);
 
   useEffect(() => {
     let active = true;
@@ -24,6 +30,7 @@ export function useAuthedQuery<T>(
       }
       const result = await loader();
       if (!active) return;
+      if (key) setCached(key, result);
       setData(result);
       setLoading(false);
     })();

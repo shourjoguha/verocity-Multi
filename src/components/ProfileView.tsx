@@ -7,6 +7,7 @@ import {
   getRecentLogs,
 } from '@/lib/queries';
 import { signOut } from '@/lib/auth';
+import { getCached, setCached } from '@/lib/queryCache';
 import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
 import { bestE1rm } from '@/lib/e1rm';
@@ -140,11 +141,21 @@ function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[
 
 export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const client = mode === 'showcase' ? supabasePublic : supabase;
-  const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [plan, setPlan] = useState<Plan | null>(null);
-  const [logs, setLogs] = useState<WorkoutLog[]>([]);
-  const [allLogs, setAllLogs] = useState<WorkoutLog[]>([]);
+
+  // Seed from the SWR cache (app mode only) so revisiting Home paints instantly
+  // while the effect below revalidates in the background.
+  const seeded = mode === 'app' ? getCached<Profile>('profile') : undefined;
+  const [loading, setLoading] = useState(seeded === undefined);
+  const [profile, setProfile] = useState<Profile | null>(seeded ?? null);
+  const [plan, setPlan] = useState<Plan | null>(
+    mode === 'app' ? (getCached<Plan>('plan:active') ?? null) : null,
+  );
+  const [logs, setLogs] = useState<WorkoutLog[]>(
+    mode === 'app' ? (getCached<WorkoutLog[]>('logs:recent30') ?? []) : [],
+  );
+  const [allLogs, setAllLogs] = useState<WorkoutLog[]>(
+    mode === 'app' ? (getCached<WorkoutLog[]>('logs:all') ?? []) : [],
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [previewDay, setPreviewDay] = useState<PlanDay | null>(null);
   const [quickLog, setQuickLog] = useState<WorkoutLog | null>(null);
@@ -166,6 +177,12 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         getAllLogs(client),
       ]);
       if (!active) return;
+      if (mode === 'app') {
+        setCached('profile', p);
+        setCached('plan:active', pl);
+        setCached('logs:recent30', lg);
+        setCached('logs:all', all);
+      }
       setProfile(p);
       setPlan(pl);
       setLogs(lg);
@@ -192,8 +209,14 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           filter: `owner_user_id=eq.${profile.id}`,
         },
         () => {
-          getRecentLogs(30).then(setLogs);
-          getAllLogs().then(setAllLogs);
+          getRecentLogs(30).then((l) => {
+            setCached('logs:recent30', l);
+            setLogs(l);
+          });
+          getAllLogs().then((l) => {
+            setCached('logs:all', l);
+            setAllLogs(l);
+          });
         },
       )
       .subscribe();
