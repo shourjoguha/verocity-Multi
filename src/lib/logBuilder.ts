@@ -9,7 +9,7 @@ import type {
   SessionFrame,
 } from '@/lib/types';
 import type { SessionInput } from '@/lib/queries';
-import { SECTIONS, type MetricKey, type SectionKey } from '@/app.config';
+import { RPE, SECTIONS, type MetricKey, type SectionKey } from '@/app.config';
 
 function newId(): string {
   return crypto.randomUUID();
@@ -26,7 +26,7 @@ export function parsePlanned(raw: string): { count: number; label: string } {
 }
 
 function emptyActual() {
-  return { completed: false, prefilled: false };
+  return { completed: false, prefilled: false, rpe: RPE.default };
 }
 
 // A section-tagged exercise with a single planned string — the common shape

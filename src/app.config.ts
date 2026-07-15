@@ -49,13 +49,13 @@ export const METRICS = {
   rpe: { label: 'RPE', unit: '', step: 0.5 },
 } as const;
 
-export const RPE = { min: 5, max: 10, step: 0.5 } as const;
+export const RPE = { min: 5, max: 10, step: 0.5, default: 7 } as const;
 
 // Timer tunables (seconds).
 export const TIMERS = {
   defaultRestSeconds: 120,
   autosaveSeconds: 15,
-  restPresets: [60, 90, 120, 180, 300],
+  restPresets: [0, 60, 90, 120, 180, 300],
 } as const;
 
 // Activity tags with accent colors — used to shade activities across the app

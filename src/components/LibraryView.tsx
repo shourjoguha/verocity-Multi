@@ -31,6 +31,9 @@ function MovementForm({
   onCancel,
   submitLabel,
   busy,
+  categories,
+  customCat,
+  setCustomCat,
 }: {
   draft: Draft;
   setDraft: (d: Draft) => void;
@@ -38,6 +41,9 @@ function MovementForm({
   onCancel: () => void;
   submitLabel: string;
   busy: boolean;
+  categories: string[];
+  customCat: boolean;
+  setCustomCat: (v: boolean) => void;
 }) {
   return (
     <form
@@ -56,13 +62,41 @@ function MovementForm({
         autoFocus
       />
       <div className="flex flex-wrap gap-3">
-        <input
-          value={draft.category ?? ''}
-          onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-          placeholder="Category (optional)"
-          className={`${inputClass} min-w-40 flex-1`}
-          aria-label="Category"
-        />
+        <div className="flex min-w-40 flex-1 flex-col gap-2">
+          <select
+            value={customCat ? '__new__' : (draft.category ?? '')}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === '__new__') {
+                setCustomCat(true);
+                setDraft({ ...draft, category: '' });
+              } else {
+                setCustomCat(false);
+                setDraft({ ...draft, category: v || null });
+              }
+            }}
+            className={inputClass}
+            aria-label="Category"
+          >
+            <option value="">No category</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+            <option value="__new__">New category…</option>
+          </select>
+          {customCat ? (
+            <input
+              value={draft.category ?? ''}
+              onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+              placeholder="New category name"
+              className={inputClass}
+              aria-label="New category name"
+              autoFocus
+            />
+          ) : null}
+        </div>
         <select
           value={draft.primary_metric}
           onChange={(e) => setDraft({ ...draft, primary_metric: e.target.value as MetricKey })}
@@ -114,6 +148,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
+  const [customCat, setCustomCat] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -142,12 +177,14 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   function startAdd() {
     setEditingId(null);
     setDraft(emptyDraft());
+    setCustomCat(false);
     setAdding(true);
   }
 
   function startEdit(m: Movement) {
     setAdding(false);
     setEditingId(m.id);
+    setCustomCat(false);
     setDraft({
       name: m.name,
       category: m.category,
@@ -159,6 +196,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   function cancel() {
     setAdding(false);
     setEditingId(null);
+    setCustomCat(false);
     setDraft(emptyDraft());
   }
 
@@ -228,6 +266,9 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
               onCancel={cancel}
               submitLabel="Add"
               busy={busy}
+              categories={categories}
+              customCat={customCat}
+              setCustomCat={setCustomCat}
             />
           </div>
         </Item>
@@ -285,6 +326,9 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
                     onCancel={cancel}
                     submitLabel="Save"
                     busy={busy}
+                    categories={categories}
+                    customCat={customCat}
+                    setCustomCat={setCustomCat}
                   />
                 </li>
               );

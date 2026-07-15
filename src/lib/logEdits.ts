@@ -1,7 +1,7 @@
 // Pure, immutable transforms on a LogDocument. The Logger island calls these
 // from setDoc(...) so all the structural editing (sets, metric swap, movement
 // add/swap/remove, superset grouping) stays out of the component and testable.
-import type { MetricKey } from '@/app.config';
+import { RPE, type MetricKey } from '@/app.config';
 import type { GroupKind, LogDocument, LogGroup, LogItem, SetActual } from '@/lib/types';
 
 function newId(): string {
@@ -9,7 +9,7 @@ function newId(): string {
 }
 
 function emptyActual(): SetActual {
-  return { completed: false, prefilled: false };
+  return { completed: false, prefilled: false, rpe: RPE.default };
 }
 
 function mapSection(doc: LogDocument, si: number, fn: (s: LogDocument['sections'][number]) => LogDocument['sections'][number]): LogDocument {
@@ -48,7 +48,13 @@ export function addSet(doc: LogDocument, si: number, gi: number, ii: number): Lo
         ...it.sets,
         {
           planned: prev?.planned ?? null,
-          actual: { weight: prev?.actual.weight, reps: prev?.actual.reps, completed: false, prefilled: true },
+          actual: {
+            weight: prev?.actual.weight,
+            reps: prev?.actual.reps,
+            rpe: prev?.actual.rpe ?? RPE.default,
+            completed: false,
+            prefilled: true,
+          },
           notations: [],
         },
       ],
@@ -149,6 +155,47 @@ export function moveGroup(doc: LogDocument, si: number, gi: number, dir: -1 | 1)
     [groups[gi], groups[j]] = [groups[j], groups[gi]];
     return { ...s, groups };
   });
+}
+
+// Move a whole group (single or superset) to another section by key, appending
+// it to the end of the target section (creating the section if absent). No-op
+// when the target is the group's current section.
+export function moveGroupToSection(
+  doc: LogDocument,
+  si: number,
+  gi: number,
+  targetKey: LogDocument['sections'][number]['key'],
+): LogDocument {
+  const section = doc.sections[si];
+  const group = section?.groups[gi];
+  if (!group || section.key === targetKey) return doc;
+  const pruned = mapSection(doc, si, (s) => ({ ...s, groups: s.groups.filter((_, i) => i !== gi) }));
+  const idx = pruned.sections.findIndex((s) => s.key === targetKey);
+  if (idx < 0) return { ...pruned, sections: [...pruned.sections, { key: targetKey, groups: [group] }] };
+  return mapSection(pruned, idx, (s) => ({ ...s, groups: [...s.groups, group] }));
+}
+
+// Merge two groups that may live in different sections into one superset/circuit.
+// The merged group stays in the SOURCE section (source items first); the target
+// group's items are appended and the target group removed.
+export function groupWithAcrossSections(
+  doc: LogDocument,
+  si: number,
+  gi: number,
+  targetSi: number,
+  targetGi: number,
+  kind: GroupKind = 'superset',
+): LogDocument {
+  if (si === targetSi) return groupWith(doc, si, gi, targetGi, kind);
+  const src = doc.sections[si]?.groups[gi];
+  const dst = doc.sections[targetSi]?.groups[targetGi];
+  if (!src || !dst) return doc;
+  const merged: LogGroup = { id: src.id, kind, items: [...src.items, ...dst.items] };
+  const withMerged = mapGroup(doc, si, gi, () => merged);
+  return mapSection(withMerged, targetSi, (s) => ({
+    ...s,
+    groups: s.groups.filter((_, i) => i !== targetGi),
+  }));
 }
 
 // Merge two arbitrary groups in a section into one superset/circuit, placed at
