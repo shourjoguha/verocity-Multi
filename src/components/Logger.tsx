@@ -26,9 +26,10 @@ import {
 import {
   addItem,
   addSet,
-  groupWith,
+  groupWithAcrossSections,
   mergeWithNext,
   moveGroup,
+  moveGroupToSection,
   patchSetActual,
   removeGroup,
   removeItem,
@@ -432,7 +433,8 @@ export default function Logger() {
       if (src.distance != null) patch.distance = src.distance;
       return patchSetActual(next, si, gi, ii, ki + 1, patch);
     });
-    rest.start(item.restSeconds ?? TIMERS.defaultRestSeconds);
+    const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
+    if (restSeconds > 0) rest.start(restSeconds);
   }
 
   function renderItem(si: number, gi: number, ii: number, grouped: boolean) {
@@ -490,7 +492,10 @@ export default function Logger() {
               </button>
             ) : null}
             <button
-              onClick={() => rest.start(item.restSeconds ?? TIMERS.defaultRestSeconds)}
+              onClick={() => {
+                const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
+                if (restSeconds > 0) rest.start(restSeconds);
+              }}
               className="hill-btn border border-border bg-surface px-2 py-1 hover:text-fg"
             >
               Rest
@@ -728,6 +733,12 @@ export default function Logger() {
               const item = doc.sections[si]?.groups[gi]?.items[ii];
               if (!item) return null;
               const groups = doc.sections[si].groups;
+              const currentKey = doc.sections[si].key;
+              const supersetTargets = doc.sections.flatMap((s, tsi) =>
+                s.groups
+                  .map((g, tgi) => ({ group: g, targetSi: tsi, targetGi: tgi, sectionKey: s.key }))
+                  .filter(({ targetSi, targetGi }) => !(targetSi === si && targetGi === gi)),
+              );
               const close = () => setOptionsFor(null);
               const rowClass =
                 'hill-btn inline-flex min-h-11 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg disabled:opacity-40';
@@ -781,27 +792,51 @@ export default function Logger() {
                     </button>
                   </div>
 
-                  {groups.length > 1 ? (
+                  <div className="mt-5">
+                    <div className="mb-2 t-label text-muted">
+                      Move to section
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {SECTIONS.filter((k) => k !== currentKey).map((k) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => {
+                            setDoc((d) => moveGroupToSection(d, si, gi, k));
+                            close();
+                          }}
+                          className="hill-btn border border-border bg-surface px-2 py-1 text-xs text-fg transition-colors hover:border-fg"
+                        >
+                          {sectionLabel(k)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {supersetTargets.length > 0 ? (
                     <div className="mt-5">
                       <div className="mb-2 t-label text-muted">
                         Superset with
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {groups.map((g, idx) =>
-                          idx === gi ? null : (
-                            <button
-                              key={g.id}
-                              type="button"
-                              onClick={() => {
-                                setDoc((d) => groupWith(d, si, gi, idx, 'superset'));
-                                close();
-                              }}
-                              className="hill-btn border border-border bg-surface px-2 py-1 text-xs capitalize text-fg transition-colors hover:border-fg"
-                            >
-                              {g.items.map((it) => it.movement).join(' + ')}
-                            </button>
-                          ),
-                        )}
+                        {supersetTargets.map(({ group: g, targetSi, targetGi, sectionKey }) => (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => {
+                              setDoc((d) => groupWithAcrossSections(d, si, gi, targetSi, targetGi, 'superset'));
+                              close();
+                            }}
+                            className="hill-btn border border-border bg-surface px-2 py-1 text-xs capitalize text-fg transition-colors hover:border-fg"
+                          >
+                            {g.items.map((it) => it.movement).join(' + ')}
+                            {sectionKey !== currentKey ? (
+                              <span className="ml-1 uppercase tracking-wider text-muted">
+                                · {sectionLabel(sectionKey)}
+                              </span>
+                            ) : null}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   ) : null}
