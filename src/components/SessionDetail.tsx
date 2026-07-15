@@ -81,6 +81,12 @@ export default function SessionDetail() {
               {formatDate(log.log_date)} · {log.status}
             </p>
             <div className="flex items-center gap-3">
+              <a
+                href={`/app/log?logId=${log.id}&edit=1`}
+                className="t-control text-muted transition-colors hover:text-fg"
+              >
+                Edit
+              </a>
               <button
                 type="button"
                 onClick={() => saveAsSession(log)}

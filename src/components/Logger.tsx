@@ -115,6 +115,9 @@ export default function Logger() {
   // Pre-session all-time best e1RM per movement, for the PR ring on completion.
   const [bestByMovement, setBestByMovement] = useState<Map<string, number>>(new Map());
   const [startedAt, setStartedAt] = useState<string | null>(null);
+  // Editing a past workout (opened via ?logId=…&edit=1): reuse every logging
+  // control but freeze the live-session behaviors (stopwatch, auto-end, finish).
+  const [editing, setEditing] = useState(false);
 
   const stopwatch = useStopwatch(0, false);
   const rest = useCountdown();
@@ -127,6 +130,7 @@ export default function Logger() {
   const logDateRef = useRef(logDate);
   const tagsRef = useRef(tags);
   const startedAtRef = useRef(startedAt);
+  const editingRef = useRef(editing);
   const autoEndedRef = useRef(false);
   docRef.current = doc;
   secondsRef.current = stopwatch.seconds;
@@ -135,6 +139,7 @@ export default function Logger() {
   logDateRef.current = logDate;
   tagsRef.current = tags;
   startedAtRef.current = startedAt;
+  editingRef.current = editing;
 
   useEffect(() => {
     (async () => {
@@ -145,6 +150,8 @@ export default function Logger() {
       }
       const params = new URLSearchParams(window.location.search);
       const resumeId = params.get('logId');
+      const editMode = params.get('edit') === '1';
+      setEditing(editMode);
       const library = await getMovements();
       setMovements(library);
 
@@ -160,7 +167,9 @@ export default function Logger() {
           setTags(log.tags ?? []);
           if (log.plan_id) setSubs(await getMovementSubs(log.plan_id));
           setStartedAt(log.started_at);
-          if (log.total_seconds) stopwatch.start();
+          // Editing a past workout keeps the recorded duration frozen — don't
+          // run the stopwatch (it would count from 0 and clobber total_seconds).
+          if (log.total_seconds && !editMode) stopwatch.start();
         }
         setReady(true);
         return;
@@ -268,7 +277,20 @@ export default function Logger() {
 
   useEffect(() => {
     const id = setInterval(async () => {
-      if (!idRef.current || statusRef.current === 'done' || statusRef.current === 'cancelled') return;
+      if (!idRef.current) return;
+      // When editing a past workout, persist the document/date/tags regardless
+      // of status, but never touch the recorded duration or status/ended_at.
+      if (editingRef.current) {
+        setSaving(true);
+        await updateLog(idRef.current, {
+          data: docRef.current,
+          log_date: logDateRef.current,
+          tags: tagsRef.current,
+        });
+        setSaving(false);
+        return;
+      }
+      if (statusRef.current === 'done' || statusRef.current === 'cancelled') return;
       setSaving(true);
       await updateLog(idRef.current, {
         data: docRef.current,
@@ -310,7 +332,7 @@ export default function Logger() {
   }
 
   useEffect(() => {
-    if (!ready || status !== 'in_progress' || !startedAt) return;
+    if (!ready || editing || status !== 'in_progress' || !startedAt) return;
     const check = () => {
       const elapsed = (Date.now() - new Date(startedAt).getTime()) / 1000;
       if (elapsed >= MAX_WORKOUT_SECONDS) autoEnd();
@@ -397,6 +419,24 @@ export default function Logger() {
       next === 'done' && idRef.current ? `/app/session?id=${idRef.current}` : '/app';
   }
 
+  // Finish an edit of a past workout: persist the edited document (plus date/
+  // tags) without changing status, duration, or ended_at, then return to the
+  // read-only session view.
+  async function finishEdit() {
+    if (idRef.current) {
+      const ok = await updateLog(idRef.current, {
+        data: docRef.current,
+        log_date: logDateRef.current,
+        tags: tagsRef.current,
+      });
+      if (!ok) {
+        toast('Save failed — check your connection and try again', 'error');
+        return;
+      }
+    }
+    window.location.href = idRef.current ? `/app/session?id=${idRef.current}` : '/app';
+  }
+
   if (!ready) return <LoadingScreen />;
 
   const ordered = doc.sections
@@ -434,7 +474,7 @@ export default function Logger() {
       return patchSetActual(next, si, gi, ii, ki + 1, patch);
     });
     const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
-    if (restSeconds > 0) rest.start(restSeconds);
+    if (restSeconds > 0 && !editing) rest.start(restSeconds);
   }
 
   function renderItem(si: number, gi: number, ii: number, grouped: boolean) {
@@ -480,7 +520,7 @@ export default function Logger() {
             >
               {item.primaryMetric}
             </button>
-            {voice.supported ? (
+            {voice.supported && !editing ? (
               <button
                 onClick={() => listen(item.id, si, gi, ii)}
                 aria-pressed={voiceTarget === item.id}
@@ -491,15 +531,17 @@ export default function Logger() {
                 {voiceTarget === item.id ? 'Listening…' : 'Voice'}
               </button>
             ) : null}
-            <button
-              onClick={() => {
-                const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
-                if (restSeconds > 0) rest.start(restSeconds);
-              }}
-              className="hill-btn border border-border bg-surface px-2 py-1 hover:text-fg"
-            >
-              Rest
-            </button>
+            {!editing ? (
+              <button
+                onClick={() => {
+                  const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
+                  if (restSeconds > 0) rest.start(restSeconds);
+                }}
+                className="hill-btn border border-border bg-surface px-2 py-1 hover:text-fg"
+              >
+                Rest
+              </button>
+            ) : null}
             <button
               onClick={() => setOptionsFor({ si, gi, ii })}
               className="hill-btn border border-border bg-surface px-2 py-1 hover:text-fg"
@@ -573,16 +615,28 @@ export default function Logger() {
         className="mx-auto max-w-2xl px-6 py-8 pb-32"
       >
       <header className="mb-6 flex items-center justify-between">
-        <div>
-          <div className="font-display text-5xl tabular-nums text-fg">{clock(stopwatch.seconds)}</div>
-          <div className="t-control text-muted">
-            {status}
-            {saving ? ' · saving…' : ''}
+        {editing ? (
+          <div>
+            <div className="font-display text-3xl uppercase tracking-tight text-fg">Editing</div>
+            <div className="t-control text-muted">
+              {status}
+              {saving ? ' · saving…' : ''}
+            </div>
           </div>
-        </div>
-        <Button variant="ghost" onClick={() => (stopwatch.running ? stopwatch.pause() : stopwatch.resume())}>
-          {stopwatch.running ? 'Pause' : 'Resume'}
-        </Button>
+        ) : (
+          <>
+            <div>
+              <div className="font-display text-5xl tabular-nums text-fg">{clock(stopwatch.seconds)}</div>
+              <div className="t-control text-muted">
+                {status}
+                {saving ? ' · saving…' : ''}
+              </div>
+            </div>
+            <Button variant="ghost" onClick={() => (stopwatch.running ? stopwatch.pause() : stopwatch.resume())}>
+              {stopwatch.running ? 'Pause' : 'Resume'}
+            </Button>
+          </>
+        )}
       </header>
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -897,12 +951,20 @@ export default function Logger() {
 
       <div className="fixed inset-x-0 bottom-0 border-t border-border bg-bg/95 px-6 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-2xl gap-3">
-          <Button onClick={() => finish('done')} className="flex-1">
-            Finish
-          </Button>
-          <Button variant="ghost" onClick={() => finish('cancelled')}>
-            Cancel
-          </Button>
+          {editing ? (
+            <Button onClick={finishEdit} className="flex-1">
+              Done
+            </Button>
+          ) : (
+            <>
+              <Button onClick={() => finish('done')} className="flex-1">
+                Finish
+              </Button>
+              <Button variant="ghost" onClick={() => finish('cancelled')}>
+                Cancel
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </motion.div>
