@@ -7,6 +7,8 @@ import { tagColor } from '@/lib/tags';
 import { EmptyState, LoadingScreen, SectionHeader, StatCard, Tag } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
+import { SubroutineBody } from '@/components/SubroutineBody';
+import { isSubroutine } from '@/lib/subroutine';
 
 const echoTitle =
   'font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl';
@@ -82,19 +84,28 @@ function PlanReadView({ parsed }: { parsed: ParsedPlan }) {
                 </tr>
               </thead>
               <tbody>
-                {day.exercises.map((ex, i) => (
-                  <tr key={i} className="border-b border-border last:border-0">
-                    <td className="sticky left-0 z-10 bg-surface px-3 py-2 capitalize text-fg">{ex.movement}</td>
-                    {weeks.map((w) => (
-                      <td
-                        key={w}
-                        className="border-l border-border px-3 py-2 text-center tabular-nums text-subtle"
-                      >
-                        {ex.plannedByWeek[w] ?? '·'}
+                {day.exercises.map((ex, i) =>
+                  isSubroutine(ex) ? (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="sticky left-0 z-10 bg-surface px-3 py-2 capitalize text-fg">{ex.movement}</td>
+                      <td colSpan={weeks.length} className="border-l border-border px-3 py-2">
+                        <SubroutineBody description={ex.description} url={ex.url} />
                       </td>
-                    ))}
-                  </tr>
-                ))}
+                    </tr>
+                  ) : (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="sticky left-0 z-10 bg-surface px-3 py-2 capitalize text-fg">{ex.movement}</td>
+                      {weeks.map((w) => (
+                        <td
+                          key={w}
+                          className="border-l border-border px-3 py-2 text-center tabular-nums text-subtle"
+                        >
+                          {ex.plannedByWeek[w] ?? '·'}
+                        </td>
+                      ))}
+                    </tr>
+                  ),
+                )}
               </tbody>
             </table>
           </div>
@@ -136,15 +147,19 @@ function LogReadView({ log }: { log: WorkoutLog }) {
                 g.items.map((item) => (
                   <li key={item.id} className="px-4 py-3">
                     <div className="capitalize text-fg">{item.movement}</div>
-                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums text-subtle">
-                      {item.sets.map((s, i) => (
-                        <span key={i} className={s.actual.completed ? '' : 'text-muted line-through'}>
-                          {[s.actual.weight && `${s.actual.weight}kg`, s.actual.reps && `${s.actual.reps}`, s.actual.rpe && `@${s.actual.rpe}`, s.actual.distance && `${s.actual.distance}m`, s.actual.time && `${s.actual.time}s`]
-                            .filter(Boolean)
-                            .join(' × ') || (s.planned ?? '—')}
-                        </span>
-                      ))}
-                    </div>
+                    {isSubroutine(item) ? (
+                      <SubroutineBody description={item.description} url={item.url} className="mt-1" />
+                    ) : (
+                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums text-subtle">
+                        {item.sets.map((s, i) => (
+                          <span key={i} className={s.actual.completed ? '' : 'text-muted line-through'}>
+                            {[s.actual.weight && `${s.actual.weight}kg`, s.actual.reps && `${s.actual.reps}`, s.actual.rpe && `@${s.actual.rpe}`, s.actual.distance && `${s.actual.distance}m`, s.actual.time && `${s.actual.time}s`]
+                              .filter(Boolean)
+                              .join(' × ') || (s.planned ?? '—')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </li>
                 )),
               )}

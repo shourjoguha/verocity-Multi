@@ -113,6 +113,11 @@ export interface SessionExercise {
   primaryMetric: MetricKey;
   planned: string; // single planned-set string, e.g. "3x5" (no per-week dimension)
   notes?: string;
+  // Subroutine fields (kind === 'subroutine'): movement holds the title,
+  // description the ≤300-char body, url an optional link. planned stays "".
+  kind?: ItemKind;
+  description?: string;
+  url?: string;
 }
 
 // ---- fitness_assessments: dated 1–10 self-ratings per fitness aspect (Stats
@@ -230,6 +235,11 @@ export interface PlanExercise {
   // per-week planned-set strings, keyed by 1-based week number
   plannedByWeek: Record<number, string>;
   notes?: string;
+  // Subroutine fields (kind === 'subroutine'): movement holds the title,
+  // description the ≤300-char body, url an optional link. No sets/weeks.
+  kind?: ItemKind;
+  description?: string;
+  url?: string;
 }
 
 // ---- workout_logs.data JSONB contract: LogDocument (SPEC §8) ----
@@ -252,6 +262,11 @@ export interface LogSection {
 
 export type GroupKind = 'single' | 'superset' | 'circuit';
 
+// Item discriminator. Absent ⇒ a normal movement (back-compat with existing
+// JSONB). A 'subroutine' item carries free text (title + description + link)
+// instead of sets/metric.
+export type ItemKind = 'movement' | 'subroutine';
+
 export interface LogGroup {
   id: string;
   kind: GroupKind;
@@ -266,6 +281,11 @@ export interface LogItem {
   sets: LogSet[];
   restSeconds?: number;
   notes?: string;
+  // Subroutine fields (kind === 'subroutine'): movement holds the title,
+  // description the ≤300-char body, url an optional link. sets stays [].
+  kind?: ItemKind;
+  description?: string;
+  url?: string;
 }
 
 export interface LogSet {

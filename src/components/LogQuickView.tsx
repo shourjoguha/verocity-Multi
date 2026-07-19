@@ -4,6 +4,8 @@ import { formatDate, formatSetActual } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
 import { Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
+import { SubroutineBody } from '@/components/SubroutineBody';
+import { isSubroutine } from '@/lib/subroutine';
 import { SessionTime } from '@/components/SessionTime';
 import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
@@ -65,14 +67,21 @@ export function LogQuickView({
                       {sectionLabel(section.key)}
                     </div>
                     <div className="flex flex-col gap-2">
-                      {section.groups.flatMap((g) => g.items).map((item) => (
-                        <div key={item.id} className="flex items-baseline justify-between gap-3">
-                          <span className="shrink-0 capitalize text-fg">{item.movement}</span>
-                          <span className="text-right text-xs tabular-nums text-muted">
-                            {item.sets.map((s) => formatSetActual(s.actual)).join(', ')}
-                          </span>
-                        </div>
-                      ))}
+                      {section.groups.flatMap((g) => g.items).map((item) =>
+                        isSubroutine(item) ? (
+                          <div key={item.id}>
+                            <span className="capitalize text-fg">{item.movement}</span>
+                            <SubroutineBody description={item.description} url={item.url} className="mt-0.5" />
+                          </div>
+                        ) : (
+                          <div key={item.id} className="flex items-baseline justify-between gap-3">
+                            <span className="shrink-0 capitalize text-fg">{item.movement}</span>
+                            <span className="text-right text-xs tabular-nums text-muted">
+                              {item.sets.map((s) => formatSetActual(s.actual)).join(', ')}
+                            </span>
+                          </div>
+                        ),
+                      )}
                     </div>
                   </div>
                 ))}

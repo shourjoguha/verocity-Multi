@@ -1,4 +1,5 @@
 import type {
+  ItemKind,
   LogDocument,
   LogGroup,
   LogItem,
@@ -10,6 +11,7 @@ import type {
 } from '@/lib/types';
 import type { SessionInput } from '@/lib/queries';
 import { RPE, SECTIONS, type MetricKey, type SectionKey } from '@/app.config';
+import { isSubroutine } from '@/lib/subroutine';
 
 function newId(): string {
   return crypto.randomUUID();
@@ -37,26 +39,43 @@ type FrameExercise = {
   primaryMetric: MetricKey;
   planned: string;
   notes?: string;
+  kind?: ItemKind;
+  description?: string;
+  url?: string;
 };
 
 // Build an in-progress LogDocument from a flat exercise list. Each exercise
 // becomes a single-item group in its section; sets come from the planned string.
+// Subroutines carry text (title/description/link) and no sets.
 function buildLogFromExercises(exercises: FrameExercise[]): LogDocument {
   const bySection = new Map<SectionKey, LogItem[]>();
 
   for (const ex of exercises) {
-    const { count, label } = parsePlanned(ex.planned);
-    const item: LogItem = {
-      id: newId(),
-      movement: ex.movement,
-      primaryMetric: ex.primaryMetric,
-      notes: ex.notes,
-      sets: Array.from({ length: count }, () => ({
-        planned: label || null,
-        actual: emptyActual(),
-        notations: [],
-      })),
-    };
+    let item: LogItem;
+    if (isSubroutine(ex)) {
+      item = {
+        id: newId(),
+        kind: 'subroutine',
+        movement: ex.movement,
+        description: ex.description,
+        ...(ex.url ? { url: ex.url } : {}),
+        primaryMetric: ex.primaryMetric,
+        sets: [],
+      };
+    } else {
+      const { count, label } = parsePlanned(ex.planned);
+      item = {
+        id: newId(),
+        movement: ex.movement,
+        primaryMetric: ex.primaryMetric,
+        notes: ex.notes,
+        sets: Array.from({ length: count }, () => ({
+          planned: label || null,
+          actual: emptyActual(),
+          notations: [],
+        })),
+      };
+    }
     bySection.set(ex.section, [...(bySection.get(ex.section) ?? []), item]);
   }
 
@@ -81,6 +100,9 @@ export function buildLogFromPlanDay(day: PlanDay, week: number): LogDocument {
       primaryMetric: ex.primaryMetric,
       planned: ex.plannedByWeek[week] ?? '',
       notes: ex.notes,
+      kind: ex.kind,
+      description: ex.description,
+      url: ex.url,
     })),
   );
 }
@@ -167,8 +189,14 @@ export function frameFromPlanDay(day: PlanDay, week: number): SessionFrame {
         primaryMetric: ex.primaryMetric,
         planned: ex.plannedByWeek[week] ?? '',
         notes: ex.notes,
+        kind: ex.kind,
+        description: ex.description,
+        url: ex.url,
       }))
-      .filter((ex) => ex.movement.trim() !== '' && ex.planned.trim() !== ''),
+      // Keep subroutines (title, no planned); movements need both movement + planned.
+      .filter((ex) =>
+        isSubroutine(ex) ? ex.movement.trim() !== '' : ex.movement.trim() !== '' && ex.planned.trim() !== '',
+      ),
   };
 }
 
@@ -180,6 +208,18 @@ export function frameFromLogDocument(doc: LogDocument): SessionFrame {
   for (const section of doc.sections) {
     for (const group of section.groups) {
       for (const item of group.items) {
+        if (isSubroutine(item)) {
+          exercises.push({
+            movement: item.movement,
+            section: section.key,
+            primaryMetric: item.primaryMetric,
+            planned: '',
+            kind: 'subroutine',
+            description: item.description,
+            ...(item.url ? { url: item.url } : {}),
+          });
+          continue;
+        }
         const count = item.sets.length || 1;
         const label = dominantPlanned(item.sets.map((s) => s.planned));
         // Always the NxLabel form (label may be empty → "3x") so buildLogFromSession

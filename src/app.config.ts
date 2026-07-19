@@ -55,8 +55,13 @@ export const RPE = { min: 5, max: 10, step: 0.5, default: 7 } as const;
 export const TIMERS = {
   defaultRestSeconds: 120,
   autosaveSeconds: 15,
-  restPresets: [0, 60, 90, 120, 180, 300],
+  restPresets: [0, 30, 60, 90, 120, 180, 300],
 } as const;
+
+// Subroutines: free-text blocks (title + description + optional link) that sit
+// among movements in a section. The description cap is shared by the editing
+// UI (maxLength) and the plan validator.
+export const SUBROUTINE = { maxDescriptionChars: 300 } as const;
 
 // Activity tags with accent colors — used to shade activities across the app
 // (progress ribbon, stats heatmap). Five categories, fixed brand hexes.
@@ -171,6 +176,7 @@ export const appConfig = {
   metrics: METRICS,
   rpe: RPE,
   timers: TIMERS,
+  subroutine: SUBROUTINE,
   activityTags: ACTIVITY_TAGS,
   activityTypes: ACTIVITY_TYPES,
   garminActivityTagMap: GARMIN_ACTIVITY_TAG_MAP,

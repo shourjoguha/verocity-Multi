@@ -309,3 +309,51 @@ describe('frameFromLogDocument', () => {
     expect(item.sets[0].planned).toBeNull();
   });
 });
+
+describe('subroutines round-trip', () => {
+  const planDay: PlanDay = {
+    dayKey: 'mon',
+    label: 'Monday',
+    exercises: [
+      { movement: 'Back Squat', section: 'primary', primaryMetric: 'weight', plannedByWeek: { 1: '3x5' } },
+      {
+        kind: 'subroutine',
+        movement: 'Box breathing',
+        section: 'cooldown',
+        primaryMetric: 'reps',
+        plannedByWeek: {},
+        description: '5 rounds of 4-4-4-4.',
+        url: 'https://example.com/breathe',
+      },
+    ],
+  };
+
+  it('builds a subroutine log item with no sets and carries the text/link', () => {
+    const doc = buildLogFromPlanDay(planDay, 1);
+    const cooldown = doc.sections.find((s) => s.key === 'cooldown')!;
+    const item = cooldown.groups[0].items[0];
+    expect(item.kind).toBe('subroutine');
+    expect(item.movement).toBe('Box breathing');
+    expect(item.sets).toHaveLength(0);
+    expect(item.description).toBe('5 rounds of 4-4-4-4.');
+    expect(item.url).toBe('https://example.com/breathe');
+  });
+
+  it('keeps a subroutine when collapsing a plan day into a frame (not dropped for empty planned)', () => {
+    const frame = frameFromPlanDay(planDay, 1);
+    const sub = frame.exercises.find((e) => e.movement === 'Box breathing')!;
+    expect(sub.kind).toBe('subroutine');
+    expect(sub.description).toBe('5 rounds of 4-4-4-4.');
+    expect(sub.url).toBe('https://example.com/breathe');
+  });
+
+  it('round-trips a subroutine through frameFromLogDocument → buildLogFromSession', () => {
+    const built = buildLogFromPlanDay(planDay, 1);
+    const rebuilt = buildLogFromSession(frameFromLogDocument(built));
+    const item = rebuilt.sections.find((s) => s.key === 'cooldown')!.groups[0].items[0];
+    expect(item.kind).toBe('subroutine');
+    expect(item.sets).toHaveLength(0);
+    expect(item.description).toBe('5 rounds of 4-4-4-4.');
+    expect(item.url).toBe('https://example.com/breathe');
+  });
+});

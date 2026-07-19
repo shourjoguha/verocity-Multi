@@ -60,6 +60,41 @@ export function addExercise(
   return mapDay(plan, di, (d) => ({ ...d, exercises: [...d.exercises, ex] }));
 }
 
+// Append a subroutine (free-text block) to a day. Like an exercise it carries a
+// section, but holds a title/description/link and no per-week sets.
+export function addSubroutine(
+  plan: ParsedPlan,
+  di: number,
+  title = '',
+  section: SectionKey = 'accessory',
+  description = '',
+  url = '',
+): ParsedPlan {
+  const ex: PlanExercise = {
+    kind: 'subroutine',
+    movement: title,
+    section,
+    primaryMetric: 'reps',
+    plannedByWeek: {},
+    description,
+    ...(url ? { url } : {}),
+  };
+  return mapDay(plan, di, (d) => ({ ...d, exercises: [...d.exercises, ex] }));
+}
+
+export function setExerciseDescription(plan: ParsedPlan, di: number, ei: number, description: string): ParsedPlan {
+  return mapExercise(plan, di, ei, (e) => ({ ...e, description }));
+}
+
+export function setExerciseUrl(plan: ParsedPlan, di: number, ei: number, url: string): ParsedPlan {
+  return mapExercise(plan, di, ei, (e) => {
+    const next = { ...e };
+    if (url.trim()) next.url = url;
+    else delete next.url;
+    return next;
+  });
+}
+
 export function removeExercise(plan: ParsedPlan, di: number, ei: number): ParsedPlan {
   return mapDay(plan, di, (d) => ({ ...d, exercises: d.exercises.filter((_, i) => i !== ei) }));
 }
