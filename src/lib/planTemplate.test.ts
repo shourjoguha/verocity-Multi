@@ -41,12 +41,22 @@ describe('plan CSV template', () => {
     const rdl = plan.days[0].exercises.find((e) => e.movement === 'Romanian Deadlift')!;
     expect(Object.keys(rdl.plannedByWeek)).toHaveLength(8);
     expect(rdl.plannedByWeek[3]).toBe('3x8');
+    // The SUB row parses into a subroutine with title/description/url and no weeks.
+    const box = plan.days[1].exercises.find((e) => e.movement === 'Box breathing')!;
+    expect(box.kind).toBe('subroutine');
+    expect(box.description).toContain('4 counts in');
+    expect(box.url).toBe('https://example.com/box-breathing');
+    expect(Object.keys(box.plannedByWeek)).toHaveLength(0);
   });
 
   it('TSV parses identically to CSV', () => {
     const fromCsv = parsePlanTabular(buildPlanCsvTemplate()).plan;
     const fromTsv = parsePlanTabular(buildPlanTsvTemplate()).plan;
     expect(fromTsv).toEqual(fromCsv);
+  });
+
+  it('AI prompt documents the SUB row kind', () => {
+    expect(buildPlanAiPrompt()).toContain('SUB');
   });
 });
 
@@ -219,5 +229,44 @@ describe('validateParsedPlan', () => {
     });
     expect(issues).toContain('Plan title is required.');
     expect(issues).toContain('Plan needs at least one day.');
+  });
+
+  const planWithSubroutine = (description: string, title = 'Breathe') => ({
+    title: 'T',
+    startDate: null,
+    endDate: null,
+    blocks: [],
+    weeklyTemplate: ['mon'],
+    days: [
+      {
+        dayKey: 'mon',
+        label: 'Monday',
+        exercises: [
+          {
+            kind: 'subroutine' as const,
+            movement: title,
+            section: 'cooldown' as const,
+            primaryMetric: 'reps' as const,
+            plannedByWeek: {},
+            description,
+          },
+        ],
+      },
+    ],
+  });
+
+  it('accepts a valid subroutine and does not require planned sets', () => {
+    const issues = validateParsedPlan(planWithSubroutine('Box breathing, 5 rounds.'));
+    expect(issues).toEqual([]);
+  });
+
+  it('flags a subroutine with no title and one with no description', () => {
+    expect(validateParsedPlan(planWithSubroutine('Breathe', '')).some((i) => i.includes('subroutine with no title'))).toBe(true);
+    expect(validateParsedPlan(planWithSubroutine('')).some((i) => i.includes('needs a description'))).toBe(true);
+  });
+
+  it('flags a subroutine description over 300 characters', () => {
+    const issues = validateParsedPlan(planWithSubroutine('x'.repeat(301)));
+    expect(issues.some((i) => i.includes('exceeds 300 characters'))).toBe(true);
   });
 });

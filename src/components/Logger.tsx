@@ -26,6 +26,7 @@ import {
 import {
   addItem,
   addSet,
+  addSubroutine,
   groupWithAcrossSections,
   mergeWithNext,
   moveGroup,
@@ -37,10 +38,13 @@ import {
   setGroupKind,
   setItemMetric,
   setItemRest,
+  setSubroutine,
   swapItemMovement,
   toggleItemNotation,
   ungroup,
 } from '@/lib/logEdits';
+import { isSubroutine } from '@/lib/subroutine';
+import { SubroutineBody } from '@/components/SubroutineBody';
 import { lastPerformance } from '@/lib/lastPerformance';
 import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
@@ -63,6 +67,7 @@ import { Modal } from '@/components/ui/Modal';
 import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
 import { MovementPicker } from '@/components/logger/MovementPicker';
+import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { toast } from '@/lib/toast';
@@ -89,6 +94,10 @@ type Picker =
   | { mode: 'add'; sectionKey: SectionKey }
   | { mode: 'swap'; si: number; gi: number; ii: number };
 
+type SubEditor =
+  | { mode: 'add'; sectionKey: SectionKey }
+  | { mode: 'edit'; si: number; gi: number; ii: number };
+
 export default function Logger() {
   const [ready, setReady] = useState(false);
   const [logId, setLogId] = useState<string | null>(null);
@@ -100,6 +109,7 @@ export default function Logger() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [subs, setSubs] = useState<MovementSub[]>([]);
   const [picker, setPicker] = useState<Picker | null>(null);
+  const [subEditor, setSubEditor] = useState<SubEditor | null>(null);
   const [optionsFor, setOptionsFor] = useState<{ si: number; gi: number; ii: number } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggleCollapse = (id: string) =>
@@ -479,6 +489,25 @@ export default function Logger() {
 
   function renderItem(si: number, gi: number, ii: number, grouped: boolean) {
     const item = doc.sections[si].groups[gi].items[ii];
+    if (isSubroutine(item)) {
+      return (
+        <div key={item.id} className={grouped ? 'border-t border-border pt-3 first:border-0 first:pt-0' : ''}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <span className="capitalize text-fg">{item.movement}</span>
+              <SubroutineBody description={item.description} url={item.url} className="mt-1" />
+            </div>
+            <button
+              onClick={() => setOptionsFor({ si, gi, ii })}
+              className="hill-btn shrink-0 border border-border bg-surface px-2 py-1 t-control text-muted hover:text-fg"
+              aria-label="Subroutine options"
+            >
+              ⋯
+            </button>
+          </div>
+        </div>
+      );
+    }
     const allDone = item.sets.length > 0 && item.sets.every((s) => s.actual.completed);
     const isCollapsed = collapsed.has(item.id);
     return (
@@ -694,12 +723,20 @@ export default function Logger() {
           <section key={section.key} className="mb-6">
             <div className="mb-3 flex items-center justify-between">
               <SectionHeader>{sectionLabel(section.key)}</SectionHeader>
-              <button
-                onClick={() => setPicker({ mode: 'add', sectionKey: section.key })}
-                className="t-control text-muted hover:text-fg"
-              >
-                + Movement
-              </button>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setPicker({ mode: 'add', sectionKey: section.key })}
+                  className="t-control text-muted hover:text-fg"
+                >
+                  + Movement
+                </button>
+                <button
+                  onClick={() => setSubEditor({ mode: 'add', sectionKey: section.key })}
+                  className="t-control text-muted hover:text-fg"
+                >
+                  + Subroutine
+                </button>
+              </div>
             </div>
             <div className="flex flex-col gap-4">
               {groups.map((group, gi) => {
@@ -786,6 +823,7 @@ export default function Logger() {
               const { si, gi, ii } = optionsFor;
               const item = doc.sections[si]?.groups[gi]?.items[ii];
               if (!item) return null;
+              const sub = isSubroutine(item);
               const groups = doc.sections[si].groups;
               const currentKey = doc.sections[si].key;
               const supersetTargets = doc.sections.flatMap((s, tsi) =>
@@ -803,12 +841,13 @@ export default function Logger() {
                     <button
                       type="button"
                       onClick={() => {
-                        setPicker({ mode: 'swap', si, gi, ii });
+                        if (sub) setSubEditor({ mode: 'edit', si, gi, ii });
+                        else setPicker({ mode: 'swap', si, gi, ii });
                         close();
                       }}
                       className={rowClass}
                     >
-                      Swap movement
+                      {sub ? 'Edit subroutine' : 'Swap movement'}
                     </button>
                     <div className="flex gap-2">
                       <button
@@ -842,7 +881,7 @@ export default function Logger() {
                       }}
                       className={rowClass}
                     >
-                      Remove movement
+                      {sub ? 'Remove subroutine' : 'Remove movement'}
                     </button>
                   </div>
 
@@ -867,7 +906,7 @@ export default function Logger() {
                     </div>
                   </div>
 
-                  {supersetTargets.length > 0 ? (
+                  {!sub && supersetTargets.length > 0 ? (
                     <div className="mt-5">
                       <div className="mb-2 t-label text-muted">
                         Superset with
@@ -895,6 +934,8 @@ export default function Logger() {
                     </div>
                   ) : null}
 
+                  {!sub ? (
+                  <>
                   <div className="mt-5">
                     <div className="mb-2 t-label text-muted">
                       Notations
@@ -943,11 +984,42 @@ export default function Logger() {
                       ))}
                     </div>
                   </div>
+                  </>
+                  ) : null}
                 </div>
               );
             })()
           : null}
       </Modal>
+
+      {subEditor
+        ? (() => {
+            const editItem =
+              subEditor.mode === 'edit'
+                ? doc.sections[subEditor.si]?.groups[subEditor.gi]?.items[subEditor.ii]
+                : undefined;
+            return (
+              <SubroutineEditor
+                open
+                initial={{
+                  title: editItem?.movement ?? '',
+                  description: editItem?.description ?? '',
+                  url: editItem?.url ?? '',
+                }}
+                onSave={({ title, description, url }) => {
+                  if (subEditor.mode === 'add') {
+                    setDoc((d) => addSubroutine(d, subEditor.sectionKey, title, description, url));
+                  } else {
+                    const { si, gi, ii } = subEditor;
+                    setDoc((d) => setSubroutine(d, si, gi, ii, { title, description, url }));
+                  }
+                  setSubEditor(null);
+                }}
+                onClose={() => setSubEditor(null)}
+              />
+            );
+          })()
+        : null}
 
       <div className="fixed inset-x-0 bottom-0 border-t border-border bg-bg/95 px-6 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-2xl gap-3">

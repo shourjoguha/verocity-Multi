@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addBlock,
   addDay,
+  addSubroutine,
   moveDay,
   removeBlock,
   reorder,
@@ -9,8 +10,11 @@ import {
   setBlockStart,
   setBlockType,
   setDayLabel,
+  setExerciseDescription,
+  setExerciseUrl,
   setPlanned,
 } from '@/lib/planEdits';
+import { isSubroutine } from '@/lib/subroutine';
 import type { ParsedPlan } from '@/lib/types';
 
 const PLAN: ParsedPlan = {
@@ -30,6 +34,28 @@ describe('reorder', () => {
     expect(reorder([1, 2, 3], 0, 2)).toEqual([2, 3, 1]);
     expect(reorder([1, 2, 3], 1, 1)).toEqual([1, 2, 3]);
     expect(reorder([1, 2, 3], 0, 9)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('addSubroutine / subroutine setters', () => {
+  it('appends a subroutine exercise with no weeks', () => {
+    const next = addSubroutine(PLAN, 0, 'Breathe', 'cooldown', 'Box breathing.');
+    const ex = next.days[0].exercises.at(-1)!;
+    expect(isSubroutine(ex)).toBe(true);
+    expect(ex.movement).toBe('Breathe');
+    expect(ex.description).toBe('Box breathing.');
+    expect(Object.keys(ex.plannedByWeek)).toHaveLength(0);
+  });
+
+  it('patches description and sets/clears the url immutably', () => {
+    const withSub = addSubroutine(PLAN, 0, 'Breathe', 'cooldown', 'v1');
+    const ei = withSub.days[0].exercises.length - 1;
+    const described = setExerciseDescription(withSub, 0, ei, 'v2');
+    expect(described.days[0].exercises[ei].description).toBe('v2');
+    expect(withSub.days[0].exercises[ei].description).toBe('v1'); // original untouched
+    const linked = setExerciseUrl(described, 0, ei, 'https://x.test');
+    expect(linked.days[0].exercises[ei].url).toBe('https://x.test');
+    expect(setExerciseUrl(linked, 0, ei, '').days[0].exercises[ei].url).toBeUndefined();
   });
 });
 

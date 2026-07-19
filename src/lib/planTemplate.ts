@@ -7,12 +7,14 @@ import {
   METRICS,
   SECTIONS,
   SECTION_ALIASES,
+  SUBROUTINE,
   UNITS,
   type BlockKey,
   type MetricKey,
   type SectionKey,
 } from '@/app.config';
 import type { ParsedPlan, PlanBlock, PlanDay, PlanExercise } from '@/lib/types';
+import { isSubroutine } from '@/lib/subroutine';
 
 export const PLAN_CSV_HEADERS = [
   'kind',
@@ -164,6 +166,15 @@ function sampleRows(): Row[] {
     planned: '2x60',
     notes: 'seconds per side',
   });
+  rows.push({
+    ...emptyRow(),
+    kind: 'SUB',
+    id: 'thursday-upper',
+    label: 'Box breathing',
+    section: 'cooldown',
+    notes: '4 counts in, 4 hold, 4 out, 4 hold — repeat for 5 rounds to down-regulate.',
+    planned: 'https://example.com/box-breathing',
+  });
 
   return rows;
 }
@@ -193,7 +204,7 @@ OUTPUT FORMAT
 - A single CSV file. The first row must be exactly:
   ${PLAN_CSV_HEADERS.join(',')}
 - One row per record. Allowed values for the first column ("kind"):
-  META, BLOCK, DAY, EX.
+  META, BLOCK, DAY, EX, SUB.
 - Cells that contain commas, quotes, or newlines must be wrapped in double
   quotes; embedded quotes are doubled ("").
 - Leave unused columns empty. Do not invent new columns.
@@ -211,6 +222,10 @@ ROW SHAPES
        notes is free text (units, tempo, cues).
     • Use "*" for the week column when every week uses the same prescription.
     • Use multiple rows for per-week variation (one row per week).
+- SUB: a subroutine — a free-text block (protocol, instructions, a link) that
+       sits among the movements. id = the day slug; label = a short title;
+       section ∈ {${sectionList}}; notes = the description (≤${SUBROUTINE.maxDescriptionChars} chars);
+       planned = an optional URL. Leave metric and week empty.
 
 DOMAIN VOCABULARY (single source of truth — app.config.ts)
 - Units: weight in ${UNITS.weight}.
@@ -228,6 +243,7 @@ INVARIANTS THE APP WILL CHECK ON UPLOAD
 5. Each week value is either "*" or an integer in 1..weeks (META.weeks).
 6. Every EX has at least one planned cell across its week rows.
 7. BLOCK weeks fall within 1..weeks and do not overlap.
+8. Every SUB has a title (label) and a description (notes) ≤${SUBROUTINE.maxDescriptionChars} chars.
 
 NOTES ON CURRENT CAPABILITY
 - Supersets and circuits are configured by the user in the logger after the
@@ -362,6 +378,44 @@ export function parsePlanTabular(text: string): PlanParseResult {
       continue;
     }
 
+    if (kind === 'SUB') {
+      const dayKey = get('id');
+      const title = get('label');
+      const section = get('section').toLowerCase();
+      const description = get('notes');
+      const url = get('planned');
+
+      if (!dayKey) {
+        issues.push(`Row ${r + 1}: SUB missing day id.`);
+        continue;
+      }
+      if (!daysByKey.has(dayKey)) {
+        daysByKey.set(dayKey, { label: dayKey, order: dayOrder.length, exercises: [] });
+        dayOrder.push(dayKey);
+        issues.push(`Row ${r + 1}: SUB refers to undeclared day "${dayKey}" (auto-created).`);
+      }
+      if (!title) {
+        issues.push(`Row ${r + 1}: SUB missing title (label).`);
+        continue;
+      }
+      if (!(SECTIONS as readonly string[]).includes(section)) {
+        issues.push(
+          `Row ${r + 1}: section "${section}" not in {${(SECTIONS as readonly string[]).join(', ')}}.`,
+        );
+        continue;
+      }
+      daysByKey.get(dayKey)!.exercises.push({
+        kind: 'subroutine',
+        movement: title,
+        section: section as SectionKey,
+        primaryMetric: 'reps',
+        plannedByWeek: {},
+        description,
+        ...(url ? { url } : {}),
+      });
+      continue;
+    }
+
     if (kind === 'EX') {
       const dayKey = get('id');
       const movement = get('label');
@@ -427,7 +481,7 @@ export function parsePlanTabular(text: string): PlanParseResult {
       continue;
     }
 
-    issues.push(`Row ${r + 1}: unknown kind "${kind}". Allowed: META, BLOCK, DAY, EX.`);
+    issues.push(`Row ${r + 1}: unknown kind "${kind}". Allowed: META, BLOCK, DAY, EX, SUB.`);
   }
 
   const maxBlockEnd = blocks.reduce((m, b) => Math.max(m, b.endWeek), 1);
@@ -572,10 +626,23 @@ export function validateParsedPlan(
     seenDayKeys.add(day.dayKey);
     if (day.exercises.length === 0) issues.push(`Day "${day.label}" has no exercises.`);
     for (const ex of day.exercises) {
-      if (!ex.movement) issues.push(`Day "${day.label}" has an exercise with no movement.`);
       if (!(SECTIONS as readonly string[]).includes(ex.section)) {
         issues.push(`"${ex.movement}" has unknown section "${ex.section}".`);
       }
+      if (isSubroutine(ex)) {
+        // Subroutines carry text, not sets: title + a capped description, no
+        // metric/weeks.
+        if (!ex.movement) issues.push(`Day "${day.label}" has a subroutine with no title.`);
+        if (!ex.description || !ex.description.trim()) {
+          issues.push(`Subroutine "${ex.movement}" needs a description.`);
+        } else if (ex.description.length > SUBROUTINE.maxDescriptionChars) {
+          issues.push(
+            `Subroutine "${ex.movement}" description exceeds ${SUBROUTINE.maxDescriptionChars} characters.`,
+          );
+        }
+        continue;
+      }
+      if (!ex.movement) issues.push(`Day "${day.label}" has an exercise with no movement.`);
       if (!(ex.primaryMetric in METRICS)) {
         issues.push(`"${ex.movement}" has unknown metric "${ex.primaryMetric}".`);
       }

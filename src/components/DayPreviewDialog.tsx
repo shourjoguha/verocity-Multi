@@ -1,6 +1,8 @@
 import { SECTIONS } from '@/app.config';
 import type { PlanDay } from '@/lib/types';
 import { Modal } from '@/components/ui/Modal';
+import { SubroutineBody } from '@/components/SubroutineBody';
+import { isSubroutine } from '@/lib/subroutine';
 
 // Preview a plan day's prescription for the current week, then start it.
 export function DayPreviewDialog({
@@ -30,14 +32,21 @@ export function DayPreviewDialog({
               <div key={s.key}>
                 <div className="mb-2 t-label text-muted">{s.key}</div>
                 <ul className="flex flex-col gap-1.5">
-                  {s.items.map((ex, i) => (
-                    <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
-                      <span className="capitalize text-fg">{ex.movement}</span>
-                      <span className="shrink-0 tabular-nums text-subtle">
-                        {ex.plannedByWeek[week] ?? '—'}
-                      </span>
-                    </li>
-                  ))}
+                  {s.items.map((ex, i) =>
+                    isSubroutine(ex) ? (
+                      <li key={i} className="text-sm">
+                        <span className="capitalize text-fg">{ex.movement}</span>
+                        <SubroutineBody description={ex.description} url={ex.url} className="mt-0.5" />
+                      </li>
+                    ) : (
+                      <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
+                        <span className="capitalize text-fg">{ex.movement}</span>
+                        <span className="shrink-0 tabular-nums text-subtle">
+                          {ex.plannedByWeek[week] ?? '—'}
+                        </span>
+                      </li>
+                    ),
+                  )}
                 </ul>
               </div>
             ))}

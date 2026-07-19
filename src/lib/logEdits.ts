@@ -3,6 +3,7 @@
 // add/swap/remove, superset grouping) stays out of the component and testable.
 import { RPE, type MetricKey } from '@/app.config';
 import type { GroupKind, LogDocument, LogGroup, LogItem, SetActual } from '@/lib/types';
+import { isSubroutine } from '@/lib/subroutine';
 
 function newId(): string {
   return crypto.randomUUID();
@@ -41,6 +42,7 @@ export function patchSetActual(
 // Append a set, carrying weight/reps forward from the last set as a prefill.
 export function addSet(doc: LogDocument, si: number, gi: number, ii: number): LogDocument {
   return mapItem(doc, si, gi, ii, (it) => {
+    if (isSubroutine(it)) return it; // subroutines have no sets
     const prev = it.sets[it.sets.length - 1];
     return {
       ...it,
@@ -109,6 +111,51 @@ export function addItem(
   const idx = doc.sections.findIndex((s) => s.key === sectionKey);
   if (idx < 0) return { ...doc, sections: [...doc.sections, { key: sectionKey, groups: [group] }] };
   return mapSection(doc, idx, (s) => ({ ...s, groups: [...s.groups, group] }));
+}
+
+// Append a subroutine (free-text block) as a new single-item group. Like a
+// movement it lives in a section, but carries a title/description/link and no
+// sets. primaryMetric is a harmless default (never rendered for subroutines).
+export function addSubroutine(
+  doc: LogDocument,
+  sectionKey: LogDocument['sections'][number]['key'],
+  title: string,
+  description: string,
+  url?: string,
+): LogDocument {
+  const item: LogItem = {
+    id: newId(),
+    kind: 'subroutine',
+    movement: title,
+    description,
+    ...(url ? { url } : {}),
+    primaryMetric: 'reps',
+    sets: [],
+  };
+  const group: LogGroup = { id: newId(), kind: 'single', items: [item] };
+  const idx = doc.sections.findIndex((s) => s.key === sectionKey);
+  if (idx < 0) return { ...doc, sections: [...doc.sections, { key: sectionKey, groups: [group] }] };
+  return mapSection(doc, idx, (s) => ({ ...s, groups: [...s.groups, group] }));
+}
+
+// Patch a subroutine's title/description/link. Empty url clears it.
+export function setSubroutine(
+  doc: LogDocument,
+  si: number,
+  gi: number,
+  ii: number,
+  patch: { title?: string; description?: string; url?: string },
+): LogDocument {
+  return mapItem(doc, si, gi, ii, (it) => {
+    const next: LogItem = { ...it };
+    if (patch.title !== undefined) next.movement = patch.title;
+    if (patch.description !== undefined) next.description = patch.description;
+    if (patch.url !== undefined) {
+      if (patch.url.trim()) next.url = patch.url;
+      else delete next.url;
+    }
+    return next;
+  });
 }
 
 // Remove an item; drop the whole group (and section) once they go empty.
@@ -234,6 +281,7 @@ export function toggleItemNotation(
   note: string,
 ): LogDocument {
   return mapItem(doc, si, gi, ii, (it) => {
+    if (isSubroutine(it)) return it; // subroutines have no sets to notate
     const allHave = it.sets.length > 0 && it.sets.every((set) => set.notations.includes(note));
     return {
       ...it,

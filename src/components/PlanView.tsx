@@ -8,6 +8,8 @@ import { BLOCKS, type BlockKey } from '@/app.config';
 import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
+import { SubroutineBody } from '@/components/SubroutineBody';
+import { isSubroutine } from '@/lib/subroutine';
 
 export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
   const showcase = mode === 'showcase';
@@ -173,27 +175,38 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   </tr>
                 </thead>
                 <tbody>
-                  {day.exercises.map((ex, i) => (
-                    <tr key={i} className="border-b border-border last:border-0">
-                      <td className="sticky left-0 z-10 bg-surface px-3 py-2 capitalize text-fg">
-                        {ex.movement}
-                      </td>
-                      {weeks.map((w) => {
-                        const actual = actualBest.get(`${ex.movement.toLowerCase()}|${w}`);
-                        return (
-                          <td
-                            key={w}
-                            title={actual ? `Best actual · W${w}` : undefined}
-                            className={`border-l border-border px-3 py-2 text-center tabular-nums ${
-                              w === lastCompletedWeek ? 'bg-elevated' : ''
-                            } ${actual ? 'font-medium text-fg' : 'text-subtle'}`}
-                          >
-                            {actual ? actual.label : (ex.plannedByWeek[w] ?? '·')}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                  {day.exercises.map((ex, i) =>
+                    isSubroutine(ex) ? (
+                      <tr key={i} className="border-b border-border last:border-0">
+                        <td className="sticky left-0 z-10 bg-surface px-3 py-2 capitalize text-fg">
+                          {ex.movement}
+                        </td>
+                        <td colSpan={weeks.length} className="border-l border-border px-3 py-2">
+                          <SubroutineBody description={ex.description} url={ex.url} />
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr key={i} className="border-b border-border last:border-0">
+                        <td className="sticky left-0 z-10 bg-surface px-3 py-2 capitalize text-fg">
+                          {ex.movement}
+                        </td>
+                        {weeks.map((w) => {
+                          const actual = actualBest.get(`${ex.movement.toLowerCase()}|${w}`);
+                          return (
+                            <td
+                              key={w}
+                              title={actual ? `Best actual · W${w}` : undefined}
+                              className={`border-l border-border px-3 py-2 text-center tabular-nums ${
+                                w === lastCompletedWeek ? 'bg-elevated' : ''
+                              } ${actual ? 'font-medium text-fg' : 'text-subtle'}`}
+                            >
+                              {actual ? actual.label : (ex.plannedByWeek[w] ?? '·')}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ),
+                  )}
                 </tbody>
               </table>
             </div>
