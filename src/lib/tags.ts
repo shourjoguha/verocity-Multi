@@ -6,6 +6,21 @@ export function tagColor(tag: string): string {
   return known ? known.color : 'hsl(0 0% 42%)';
 }
 
+// Distinct stacked colors for one session's tags (order-preserving, deduped).
+// Falls back to activity_type / 'strength' when a log has no tags.
+export function sessionTagColors(tags: string[], activityType?: string | null): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of tags) {
+    const c = tagColor(t);
+    if (!seen.has(c)) {
+      seen.add(c);
+      out.push(c);
+    }
+  }
+  return out.length ? out : [tagColor(activityType ?? 'strength')];
+}
+
 // Classify a plan day's label into an activity tag — used to tint upcoming
 // ("planned") days on the plan-progress ribbon, where there is no log to color by.
 export function dayTagFromLabel(label: string): ActivityTagKey {

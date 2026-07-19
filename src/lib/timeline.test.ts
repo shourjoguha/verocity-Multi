@@ -121,7 +121,30 @@ describe('buildTimeline', () => {
     const p = points.find((x) => x.date === logDate)!;
     expect(p.state).toBe('done');
     expect(p.color).toBe(tagColor('sport'));
+    expect(p.sessions).toEqual([[tagColor('sport')]]);
     expect(p.fullLabel).toBe('Lower A (Squat-Dominant)');
+  });
+
+  it('stacks a session with multiple tags into distinct colors', () => {
+    const logDate = ymd(addDays(NOW, -2));
+    const log = makeLog({ log_date: logDate, tags: ['strength', 'mobility'] });
+    const points = buildTimeline(makePlan({ end_date: null, days: [] }), [log], NOW);
+    const p = points.find((x) => x.date === logDate)!;
+    expect(p.sessions).toEqual([[tagColor('strength'), tagColor('mobility')]]);
+  });
+
+  it('widens a multi-session day into one column per session', () => {
+    const logDate = ymd(addDays(NOW, -2));
+    const logs = [
+      makeLog({ log_date: logDate, tags: ['strength'] }),
+      makeLog({ log_date: logDate, tags: ['endurance', 'mobility'] }),
+    ];
+    const points = buildTimeline(makePlan({ end_date: null, days: [] }), logs, NOW);
+    const p = points.find((x) => x.date === logDate)!;
+    expect(p.sessions).toHaveLength(2);
+    expect(p.sessions[0]).toEqual([tagColor('strength')]);
+    expect(p.sessions[1]).toEqual([tagColor('endurance'), tagColor('mobility')]);
+    expect(p.fullLabel).toContain('×2');
   });
 
   it('counts in_progress as done and falls back to activity_type for the label', () => {

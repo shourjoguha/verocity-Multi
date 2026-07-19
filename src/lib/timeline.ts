@@ -1,5 +1,5 @@
 import type { Plan, PlanDay, WorkoutLog } from '@/lib/types';
-import { dayTagFromLabel, tagColor } from '@/lib/tags';
+import { dayTagFromLabel, sessionTagColors, tagColor } from '@/lib/tags';
 
 export const DAY_NAMES = [
   'Sunday',
@@ -25,13 +25,12 @@ export function typeFromLabel(label: string): string {
   return (parts.length > 1 ? parts.slice(1).join('—') : parts[0]).trim() || label;
 }
 
-function colorForLog(l: WorkoutLog): string {
-  return tagColor(l.tags[0] ?? l.activity_type ?? 'strength');
-}
-
 export type TimelinePoint = {
   date: string;
   state: 'done' | 'planned' | 'blank';
+  // One entry per logged session = that session's stacked tag colors; [] for planned/blank.
+  sessions: string[][];
+  // Representative color (first session's first tag, or the planned day's tag) for tint/label.
   color: string;
   isToday: boolean;
   fullLabel: string;
@@ -50,10 +49,10 @@ export function buildTimeline(
   today.setHours(0, 0, 0, 0);
   const todayStr = ymd(today);
 
-  const logByDate = new Map<string, WorkoutLog>();
+  const logByDate = new Map<string, WorkoutLog[]>();
   for (const l of logs) {
-    if ((l.status === 'done' || l.status === 'in_progress') && !logByDate.has(l.log_date)) {
-      logByDate.set(l.log_date, l);
+    if (l.status === 'done' || l.status === 'in_progress') {
+      logByDate.set(l.log_date, [...(logByDate.get(l.log_date) ?? []), l]);
     }
   }
   const doneDates = Array.from(logByDate.keys()).sort((a, b) => (a < b ? 1 : -1)); // desc
@@ -80,28 +79,40 @@ export function buildTimeline(
     const dateStr = ymd(cursor);
     const weekday = DAY_NAMES[cursor.getDay()].toLowerCase();
     const planDay = planByWeekday.get(weekday);
-    const log = logByDate.get(dateStr);
+    const dayLogs = logByDate.get(dateStr);
     const isToday = dateStr === todayStr;
 
-    if (log) {
-      const pd = log.day_key ? planByDayKey.get(log.day_key) : undefined;
+    if (dayLogs && dayLogs.length > 0) {
+      const first = dayLogs[0];
+      const pd = first.day_key ? planByDayKey.get(first.day_key) : undefined;
+      const sessions = dayLogs.map((l) => sessionTagColors(l.tags, l.activity_type));
+      const label = pd ? typeFromLabel(pd.label) : (first.activity_type ?? first.tags[0] ?? 'Done');
       points.push({
         date: dateStr,
         state: 'done',
-        color: colorForLog(log),
+        sessions,
+        color: sessions[0][0],
         isToday,
-        fullLabel: pd ? typeFromLabel(pd.label) : (log.activity_type ?? log.tags[0] ?? 'Done'),
+        fullLabel: dayLogs.length > 1 ? `${label} · ×${dayLogs.length}` : label,
       });
     } else if (planDay && cursor.getTime() >= today.getTime()) {
       points.push({
         date: dateStr,
         state: 'planned',
+        sessions: [],
         color: tagColor(dayTagFromLabel(planDay.label)),
         isToday,
         fullLabel: typeFromLabel(planDay.label),
       });
     } else {
-      points.push({ date: dateStr, state: 'blank', color: 'transparent', isToday, fullLabel: 'Rest' });
+      points.push({
+        date: dateStr,
+        state: 'blank',
+        sessions: [],
+        color: 'transparent',
+        isToday,
+        fullLabel: 'Rest',
+      });
     }
     cursor.setDate(cursor.getDate() + 1);
   }

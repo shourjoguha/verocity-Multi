@@ -4,7 +4,7 @@ import { getActivePlan, getLogsInRange } from '@/lib/queries';
 import { getCached, setCached } from '@/lib/queryCache';
 import { showcaseMonthStart } from '@/lib/showcase';
 import type { Plan, WorkoutLog } from '@/lib/types';
-import { tagColor } from '@/lib/tags';
+import { sessionTagColors } from '@/lib/tags';
 import { formatDuration } from '@/lib/format';
 import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
@@ -192,8 +192,11 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
                   {day}
                 </div>
                 <div className="mt-1 flex flex-col gap-[2px]">
-                  {sessions.map((s) =>
-                    interactive ? (
+                  {sessions.map((s) => {
+                    const segments = sessionTagColors(s.tags, s.activity_type).map((c, ci) => (
+                      <span key={ci} className="h-full flex-1" style={{ backgroundColor: c }} />
+                    ));
+                    return interactive ? (
                       <button
                         key={s.id}
                         type="button"
@@ -202,18 +205,20 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
                           setQuickLog(s);
                         }}
                         title={formatDuration(s.total_seconds)}
-                        className="h-1.5 w-full"
-                        style={{ backgroundColor: tagColor(s.tags[0] ?? '') }}
-                      />
+                        className="flex h-1.5 w-full"
+                      >
+                        {segments}
+                      </button>
                     ) : (
                       <span
                         key={s.id}
                         title={formatDuration(s.total_seconds)}
-                        className="block h-1.5 w-full"
-                        style={{ backgroundColor: tagColor(s.tags[0] ?? '') }}
-                      />
-                    ),
-                  )}
+                        className="flex h-1.5 w-full"
+                      >
+                        {segments}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             );
