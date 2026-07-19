@@ -71,12 +71,16 @@ function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[
   }, []);
 
   // Right-align the scroll on the most recent logged day (or today) so upcoming peeks in.
+  // Fat (multi-session) days are wider, so sum prior bar widths rather than assume a uniform pitch.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || anchorIndex < 0) return;
-    const pitch = barW + BAR_GAP;
-    el.scrollTo({ left: Math.max(0, anchorIndex * pitch - el.clientWidth * 0.8), behavior: 'auto' });
-  }, [anchorIndex, barW]);
+    let offset = 0;
+    for (let i = 0; i < anchorIndex; i++) {
+      offset += barW * Math.max(1, points[i].sessions.length) + BAR_GAP;
+    }
+    el.scrollTo({ left: Math.max(0, offset - el.clientWidth * 0.8), behavior: 'auto' });
+  }, [anchorIndex, barW, points]);
 
   // Outside-tap dismiss for the peek popover.
   useEffect(() => {
@@ -95,20 +99,18 @@ function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[
       <div ref={scrollRef} className="-mx-6 overflow-x-auto px-6" style={edgeFade}>
         <div className="relative flex items-end" style={{ gap: `${BAR_GAP}px`, minHeight: BAR_HEIGHT }}>
           {points.map((p, i) => {
-            const barStyle: CSSProperties = { width: barW, height: BAR_HEIGHT };
-            if (p.state === 'done') {
-              barStyle.backgroundColor = p.color;
-            } else if (p.state === 'planned') {
-              barStyle.border = `1px solid color-mix(in srgb, ${p.color} 55%, transparent)`;
-              barStyle.backgroundColor = `color-mix(in srgb, ${p.color} 12%, transparent)`;
-            } else {
-              barStyle.backgroundImage =
+            const columnStyle: CSSProperties = { width: barW, height: BAR_HEIGHT };
+            if (p.state === 'planned') {
+              columnStyle.border = `1px solid color-mix(in srgb, ${p.color} 55%, transparent)`;
+              columnStyle.backgroundColor = `color-mix(in srgb, ${p.color} 12%, transparent)`;
+            } else if (p.state === 'blank') {
+              columnStyle.backgroundImage =
                 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-muted) 40%, transparent) 0, color-mix(in srgb, var(--color-muted) 40%, transparent) 1.5px, transparent 1.5px, transparent 4px)';
-              barStyle.backgroundColor = 'color-mix(in srgb, var(--color-muted) 22%, transparent)';
+              columnStyle.backgroundColor = 'color-mix(in srgb, var(--color-muted) 22%, transparent)';
             }
-            if (p.isToday) {
-              barStyle.boxShadow = 'inset 0 0 0 2px var(--color-fg)';
-            }
+            const wrapStyle: CSSProperties = p.isToday
+              ? { boxShadow: 'inset 0 0 0 2px var(--color-fg)' }
+              : {};
             return (
               <button
                 key={p.date + i}
@@ -123,7 +125,23 @@ function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[
                 aria-label={`${p.date} ${p.fullLabel}`}
                 title={`${p.fullLabel} · ${p.date}`}
               >
-                <span className="block" style={barStyle} aria-hidden />
+                {p.state === 'done' ? (
+                  <span
+                    className="flex items-end"
+                    style={{ gap: `${BAR_GAP}px`, ...wrapStyle }}
+                    aria-hidden
+                  >
+                    {p.sessions.map((colors, si) => (
+                      <span key={si} className="flex flex-col" style={columnStyle}>
+                        {colors.map((c, ci) => (
+                          <span key={ci} style={{ flex: 1, backgroundColor: c }} />
+                        ))}
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="block" style={{ ...columnStyle, ...wrapStyle }} aria-hidden />
+                )}
                 {peekIndex === i && (
                   <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 flex -translate-x-1/2 flex-col items-center gap-0.5 whitespace-nowrap bg-fg px-2 py-1 text-[0.6rem] uppercase tracking-[0.12em] text-bg">
                     <span>{p.fullLabel}</span>
