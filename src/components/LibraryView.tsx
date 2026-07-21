@@ -10,9 +10,12 @@ import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { supabasePublic } from '@/lib/supabase';
 import type { Movement } from '@/lib/types';
 import { METRICS, type MetricKey } from '@/app.config';
+import { isSubroutine } from '@/lib/subroutine';
 import { Button, EmptyState, LoadingScreen } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
+import { SubroutineBody } from '@/components/SubroutineBody';
+import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 
 const METRIC_KEYS = Object.keys(METRICS) as MetricKey[];
 const inputClass =
@@ -150,6 +153,10 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [customCat, setCustomCat] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Subroutine add/edit uses the shared modal editor rather than the inline form.
+  const [subEditing, setSubEditing] = useState<
+    { mode: 'add' } | { mode: 'edit'; id: string } | null
+  >(null);
 
   useEffect(() => {
     if (data) setItems(data);
@@ -223,6 +230,42 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
     }
   }
 
+  // Persist a library subroutine (create or update). Title → name, description →
+  // notes, plus the link; metric/rest are unused placeholders for this kind.
+  async function handleSaveSubroutine(values: { title: string; description: string; url: string }) {
+    if (busy || !subEditing || !values.title.trim()) return;
+    const input = {
+      name: values.title,
+      category: null,
+      primary_metric: 'reps' as MetricKey,
+      default_rest_seconds: 0,
+      kind: 'subroutine' as const,
+      notes: values.description || null,
+      url: values.url || null,
+    };
+    setBusy(true);
+    if (subEditing.mode === 'add') {
+      const created = await createMovement(input);
+      setBusy(false);
+      if (created) {
+        setItems((prev) => [...(prev ?? []), created].sort(byName));
+        setSubEditing(null);
+      }
+    } else {
+      const { id } = subEditing;
+      const ok = await updateMovement(id, input);
+      setBusy(false);
+      if (ok) {
+        setItems((prev) =>
+          (prev ?? [])
+            .map((m) => (m.id === id ? { ...m, name: input.name, notes: input.notes, url: input.url } : m))
+            .sort(byName),
+        );
+        setSubEditing(null);
+      }
+    }
+  }
+
   async function handleDelete(m: Movement) {
     if (busy) return;
     if (!confirm(`Delete "${m.name}"? This can't be undone.`)) return;
@@ -246,12 +289,20 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
             className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
           />
           {!showcase && !adding ? (
-            <button
-              onClick={startAdd}
-              className="shrink-0 pb-1 t-control text-muted transition-colors hover:text-fg"
-            >
-              + Movement
-            </button>
+            <div className="flex shrink-0 gap-4 pb-1">
+              <button
+                onClick={startAdd}
+                className="t-control text-muted transition-colors hover:text-fg"
+              >
+                + Movement
+              </button>
+              <button
+                onClick={() => setSubEditing({ mode: 'add' })}
+                className="t-control text-muted transition-colors hover:text-fg"
+              >
+                + Subroutine
+              </button>
+            </div>
           ) : null}
         </div>
       </Item>
@@ -333,23 +384,35 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
                 </li>
               );
             }
+            const sub = isSubroutine(m);
             return (
               <li key={m.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <div className="capitalize text-fg">{m.name}</div>
-                  <div className="t-control text-muted">
-                    {m.category ?? 'uncategorized'}
-                    {custom ? ' · custom' : ' · shared'}
+                  {sub ? (
+                    <>
+                      <SubroutineBody description={m.notes ?? undefined} url={m.url ?? undefined} className="mt-0.5" />
+                      <div className="mt-0.5 t-control text-muted">
+                        subroutine{custom ? ' · custom' : ' · shared'}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="t-control text-muted">
+                      {m.category ?? 'uncategorized'}
+                      {custom ? ' · custom' : ' · shared'}
+                    </div>
+                  )}
+                </div>
+                {sub ? null : (
+                  <div className="text-right text-sm text-subtle">
+                    {METRICS[m.primary_metric]?.label ?? m.primary_metric}
+                    <div className="text-[0.7rem] text-muted">{m.default_rest_seconds}s rest</div>
                   </div>
-                </div>
-                <div className="text-right text-sm text-subtle">
-                  {METRICS[m.primary_metric]?.label ?? m.primary_metric}
-                  <div className="text-[0.7rem] text-muted">{m.default_rest_seconds}s rest</div>
-                </div>
+                )}
                 {custom && !showcase ? (
                   <div className="flex shrink-0 items-center gap-1">
                     <button
-                      onClick={() => startEdit(m)}
+                      onClick={() => (sub ? setSubEditing({ mode: 'edit', id: m.id }) : startEdit(m))}
                       className="px-2 t-control text-muted hover:text-fg"
                       aria-label={`Edit ${m.name}`}
                     >
@@ -370,6 +433,25 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
           </ul>
         </Item>
       )}
+
+      {subEditing
+        ? (() => {
+            const editItem =
+              subEditing.mode === 'edit' ? movements.find((m) => m.id === subEditing.id) : undefined;
+            return (
+              <SubroutineEditor
+                open
+                initial={{
+                  title: editItem?.name ?? '',
+                  description: editItem?.notes ?? '',
+                  url: editItem?.url ?? '',
+                }}
+                onSave={handleSaveSubroutine}
+                onClose={() => setSubEditing(null)}
+              />
+            );
+          })()
+        : null}
     </PageStagger>
   );
 }

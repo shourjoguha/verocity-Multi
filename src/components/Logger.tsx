@@ -392,7 +392,12 @@ export default function Logger() {
       'primary_metric' in picked ? (picked as Movement).primary_metric : known?.primary_metric ?? 'weight';
 
     if (picker?.mode === 'add') {
-      setDoc((d) => addItem(d, picker.sectionKey, name, metric));
+      if ('kind' in picked && isSubroutine(picked)) {
+        const { sectionKey } = picker;
+        setDoc((d) => addSubroutine(d, sectionKey, picked.name, picked.notes ?? '', picked.url ?? undefined));
+      } else {
+        setDoc((d) => addItem(d, picker.sectionKey, name, metric));
+      }
     } else if (picker?.mode === 'swap') {
       const { si, gi, ii } = picker;
       const original = doc.sections[si]?.groups[gi]?.items[ii]?.movement ?? '';
