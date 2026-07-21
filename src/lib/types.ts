@@ -23,6 +23,10 @@ export interface Movement {
   default_rest_seconds: number;
   notes: string | null;
   owner_user_id: string | null; // null = shared library
+  // Library subroutines (kind === 'subroutine'): name holds the title, notes the
+  // ≤300-char description, url an optional link. Absent kind ⇒ a normal movement.
+  kind: ItemKind;
+  url: string | null;
 }
 
 export interface Plan {

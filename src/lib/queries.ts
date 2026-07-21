@@ -7,6 +7,7 @@ import type {
   GarminActivity,
   GarminConnectionInfo,
   GarminHealthDaily,
+  ItemKind,
   Movement,
   MovementSub,
   ParsedPlan,
@@ -106,6 +107,10 @@ export type MovementInput = {
   category: string | null;
   primary_metric: MetricKey;
   default_rest_seconds: number;
+  // Set for library subroutines: kind 'subroutine', notes = description, url = link.
+  kind?: ItemKind;
+  notes?: string | null;
+  url?: string | null;
 };
 
 export async function createMovement(input: MovementInput): Promise<Movement | null> {

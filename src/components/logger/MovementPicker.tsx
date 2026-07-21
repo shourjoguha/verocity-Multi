@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import type { Movement } from '@/lib/types';
+import { isSubroutine } from '@/lib/subroutine';
 import { EASE } from '@/components/anim';
 
 export interface Suggestion {
@@ -131,7 +132,9 @@ export function MovementPicker({
               >
                 <span className="capitalize text-fg">{m.name}</span>
                 <span className="t-control text-muted">
-                  {m.category ?? (m.owner_user_id == null ? 'shared' : 'custom')}
+                  {isSubroutine(m)
+                    ? 'subroutine'
+                    : (m.category ?? (m.owner_user_id == null ? 'shared' : 'custom'))}
                 </span>
               </button>
             </li>
