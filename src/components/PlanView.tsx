@@ -10,6 +10,7 @@ import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { isSubroutine } from '@/lib/subroutine';
+import { planWeekByLog, planWeekCount } from '@/lib/progression';
 
 export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
   const showcase = mode === 'showcase';
@@ -53,13 +54,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   }
 
   const parsed = plan.parsed;
-  const maxWeek = Math.max(
-    1,
-    ...parsed.blocks.map((b) => b.endWeek),
-    ...parsed.days.flatMap((d) =>
-      d.exercises.flatMap((e) => Object.keys(e.plannedByWeek).map(Number)),
-    ),
-  );
+  const maxWeek = planWeekCount(parsed);
   const weeks = Array.from({ length: maxWeek }, (_, i) => i + 1);
 
   const blockForWeek = (w: number): BlockKey | null =>
@@ -67,13 +62,17 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
 
   // Best actual set per (movement, week) from this plan's done logs, plus the
   // most recent completed week — to overlay real performance onto the plan grid.
+  // The week is recomputed from logging order (the Nth session of a day is week
+  // N), so stored week_number never drives display.
+  const weekByLog = planWeekByLog(plan.id, logs, maxWeek);
   const doneLogs = logs.filter(
-    (l) => l.plan_id === plan.id && l.status === 'done' && l.week_number != null,
+    (l) => l.plan_id === plan.id && l.status === 'done' && weekByLog.has(l.id),
   );
-  const lastCompletedWeek = doneLogs.reduce((m, l) => Math.max(m, l.week_number ?? 0), 0) || null;
+  const lastCompletedWeek =
+    doneLogs.reduce((m, l) => Math.max(m, weekByLog.get(l.id) ?? 0), 0) || null;
   const actualBest = new Map<string, { e1rm: number; label: string }>();
   for (const log of doneLogs) {
-    const wk = log.week_number as number;
+    const wk = weekByLog.get(log.id) as number;
     for (const s of flattenSets(log)) {
       if (s.weight == null || s.reps == null) continue;
       const est = e1rm(s.weight, s.reps);

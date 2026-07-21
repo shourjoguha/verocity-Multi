@@ -50,6 +50,7 @@ import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
 import { weekFromDate } from '@/lib/week';
+import { nextWeekForDay, planWeekCount } from '@/lib/progression';
 import { ACTIVITY_TAGS, NOTATIONS, SECTIONS, TIMERS, type MetricKey, type SectionKey } from '@/app.config';
 import type {
   GroupKind,
@@ -223,12 +224,15 @@ export default function Logger() {
         if (plan && dk) {
           const planDay = plan.parsed.days.find((d) => d.dayKey === dk);
           if (planDay) {
-            const preferred = weekFromDate(plan.start_date, new Date(logDate));
-            // A historic plan day (launched via ?plan=) computes a week past the
-            // plan's range — fall back to a week that has content. The active-plan
-            // path (?day= only) keeps the live week, including deliberate rest weeks.
-            weekNumber = planParam ? resolveWeek(planDay, preferred) : preferred;
-            built = buildLogFromPlanDay(planDay, weekNumber);
+            // Active plan: the week is how many times this day has already been
+            // logged (+1) — the Nth session of a day is program week N, grounded
+            // in real logging rather than the calendar. A historic plan day
+            // (launched via ?plan=) still derives its week from the plan's start
+            // date, falling back to a week that has content.
+            weekNumber = planParam
+              ? resolveWeek(planDay, weekFromDate(plan.start_date, new Date(logDate)))
+              : nextWeekForDay(allLogs, plan.id, dk, planWeekCount(plan.parsed));
+            built = buildLogFromPlanDay(planDay, resolveWeek(planDay, weekNumber));
             // "Short on time?" — trim to a mini of the same plan day (primary
             // work intact). plan_id + day_key still link it, so it stays on-plan.
             if (miniParam === 'express' || miniParam === 'half') {

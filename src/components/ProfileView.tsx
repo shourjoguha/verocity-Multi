@@ -11,7 +11,7 @@ import { getCached, setCached } from '@/lib/queryCache';
 import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
 import { bestE1rm } from '@/lib/e1rm';
-import { weekFromDate } from '@/lib/week';
+import { currentProgramWeek, planWeekCount } from '@/lib/progression';
 import { formatDuration, formatRound } from '@/lib/format';
 import { buildTimeline, DAY_NAMES, dayNameFromLabel, typeFromLabel } from '@/lib/timeline';
 import { Card, EmptyState, LoadingScreen, SectionHeader, StatCard } from '@/components/ui/primitives';
@@ -259,7 +259,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const totalSeconds = logs.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0);
   const top = topE1rm(logs);
   const streak = currentStreak(allLogs);
-  const week = plan ? weekFromDate(plan.start_date, new Date()) : null;
+  const week = plan ? currentProgramWeek(plan.id, allLogs, planWeekCount(plan.parsed)) : null;
   const todayDayName = DAY_NAMES[new Date().getDay()];
 
   return (
