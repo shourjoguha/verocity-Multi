@@ -2,7 +2,7 @@ import type { Plan, WorkoutLog } from '@/lib/types';
 import type { RecInput } from '@/lib/queries';
 import { flattenSets } from '@/lib/stats';
 import { e1rm } from '@/lib/e1rm';
-import { weekFromDate } from '@/lib/week';
+import { currentProgramWeek, planWeekCount } from '@/lib/progression';
 
 // Rule-based coach (Coach phase 1). Reads recent training and surfaces a few
 // fitness-only insights. Phase 2 swaps this for an AI edge function over
@@ -96,7 +96,7 @@ export function generateRecommendations(logs: WorkoutLog[], plan: Plan | null): 
 
   // Deload reminder from the plan's block schedule.
   if (plan) {
-    const wk = weekFromDate(plan.start_date, new Date());
+    const wk = currentProgramWeek(plan.id, logs, planWeekCount(plan.parsed));
     const block = plan.parsed.blocks.find((b) => wk != null && wk >= b.startWeek && wk <= b.endWeek);
     if (block?.type === 'deload') {
       recs.push({
