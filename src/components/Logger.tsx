@@ -119,6 +119,31 @@ export default function Logger() {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  // Completed groups that have been "parked" into the Done list at the bottom. A
+  // fully-complete group parks only once the user starts a DIFFERENT movement
+  // (deferred), so nothing jumps away mid-set. Parked groups render collapsed but
+  // stay fully editable. `activate(id)` is called on any interaction with a
+  // movement: it parks every OTHER already-complete group, in completion order.
+  const [parked, setParked] = useState<Set<string>>(new Set());
+  const activate = (groupId: string) => {
+    const toPark = doc.sections
+      .flatMap((s) => s.groups)
+      .filter((g) => g.completedAt && g.id !== groupId)
+      .map((g) => g.id);
+    if (toPark.length === 0) return;
+    const addAll = (prev: Set<string>) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of toPark)
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      return changed ? next : prev;
+    };
+    setParked(addAll);
+    setCollapsed(addAll);
+  };
   const [showVibe, setShowVibe] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
   const [logDate, setLogDate] = useState<string>(today());
@@ -288,6 +313,37 @@ export default function Logger() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Seed the Done list from a reopened workout: any group already stamped
+  // complete parks (collapsed), ordered by completedAt at render time.
+  useEffect(() => {
+    if (!ready) return;
+    const done = doc.sections.flatMap((s) => s.groups).filter((g) => g.completedAt);
+    if (done.length === 0) return;
+    const ids = done.map((g) => g.id);
+    setParked(new Set(ids));
+    setCollapsed((prev) => new Set([...prev, ...ids]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  // Un-park a group that has gone incomplete (e.g. a set was added or unticked
+  // while editing it in Done) — completedAt is cleared, so it returns to its
+  // section.
+  useEffect(() => {
+    setParked((prev) => {
+      if (prev.size === 0) return prev;
+      const stillDone = new Set(
+        doc.sections.flatMap((s) => s.groups).filter((g) => g.completedAt).map((g) => g.id),
+      );
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (stillDone.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [doc]);
 
   useEffect(() => {
     const id = setInterval(async () => {
@@ -461,6 +517,13 @@ export default function Logger() {
   const ordered = doc.sections
     .slice()
     .sort((a, b) => SECTIONS.indexOf(a.key) - SECTIONS.indexOf(b.key));
+  // Parked (completed) groups collected across all sections, in completion
+  // order, rendered under the "Done" header. Real (si, gi) indices are kept so
+  // every mutation/handler works exactly as it does in-section.
+  const doneGroups = doc.sections
+    .flatMap((s, si) => s.groups.map((g, gi) => ({ si, gi, g })))
+    .filter(({ g }) => parked.has(g.id))
+    .sort((a, b) => (a.g.completedAt ?? '').localeCompare(b.g.completedAt ?? ''));
   const swapSuggestions = (movement: string) =>
     subs
       .filter((s) => s.original.toLowerCase() === movement.toLowerCase())
@@ -497,7 +560,9 @@ export default function Logger() {
   }
 
   function renderItem(si: number, gi: number, ii: number, grouped: boolean) {
-    const item = doc.sections[si].groups[gi].items[ii];
+    const group = doc.sections[si].groups[gi];
+    const groupId = group.id;
+    const item = group.items[ii];
     if (isSubroutine(item)) {
       return (
         <div key={item.id} className={grouped ? 'border-t border-border pt-3 first:border-0 first:pt-0' : ''}>
@@ -518,15 +583,22 @@ export default function Logger() {
       );
     }
     const allDone = item.sets.length > 0 && item.sets.every((s) => s.actual.completed);
-    const isCollapsed = collapsed.has(item.id);
+    // A single-movement group collapses via its own header (tap the movement
+    // name). Inside a superset the group header owns collapse, so items here
+    // always render their sets.
+    const collapsible = !grouped;
+    const isCollapsed = collapsible && collapsed.has(groupId);
     return (
       <div key={item.id} className={grouped ? 'border-t border-border pt-3 first:border-0 first:pt-0' : ''}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               type="button"
-              onClick={() => toggleItemComplete(si, gi, ii)}
-              className={`flex h-5 w-5 items-center justify-center border text-[0.6rem] ${
+              onClick={() => {
+                activate(groupId);
+                toggleItemComplete(si, gi, ii);
+              }}
+              className={`flex h-5 w-5 shrink-0 items-center justify-center border text-[0.6rem] ${
                 allDone ? 'border-accent bg-accent text-accent-fg' : 'border-border text-muted hover:text-fg'
               }`}
               aria-label="Complete movement"
@@ -534,22 +606,30 @@ export default function Logger() {
             >
               ✓
             </button>
-            <button
-              type="button"
-              onClick={() => toggleCollapse(item.id)}
-              className="flex h-6 w-6 items-center justify-center text-muted hover:text-fg"
-              aria-label={isCollapsed ? 'Expand movement' : 'Collapse movement'}
-              aria-expanded={!isCollapsed}
-            >
-              <span className={`inline-block text-[0.7rem] transition-transform ${isCollapsed ? '' : 'rotate-90'}`}>
-                ▸
-              </span>
-            </button>
-            <span className="capitalize text-fg">{item.movement}</span>
+            {collapsible ? (
+              <button
+                type="button"
+                onClick={() => {
+                  activate(groupId);
+                  toggleCollapse(groupId);
+                }}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left text-fg"
+                aria-label={isCollapsed ? 'Expand movement' : 'Collapse movement'}
+                aria-expanded={!isCollapsed}
+              >
+                <span className={`inline-block shrink-0 text-[0.7rem] transition-transform ${isCollapsed ? '' : 'rotate-90'}`}>
+                  ▸
+                </span>
+                <span className="truncate capitalize">{item.movement}</span>
+              </button>
+            ) : (
+              <span className="capitalize text-fg">{item.movement}</span>
+            )}
           </div>
           <div className="flex items-center gap-2 t-control text-muted">
             <button
               onClick={() => {
+                activate(groupId);
                 const nextMetric = METRIC_CYCLE[(METRIC_CYCLE.indexOf(item.primaryMetric) + 1) % METRIC_CYCLE.length];
                 setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric));
               }}
@@ -560,7 +640,10 @@ export default function Logger() {
             </button>
             {voice.supported && !editing ? (
               <button
-                onClick={() => listen(item.id, si, gi, ii)}
+                onClick={() => {
+                  activate(groupId);
+                  listen(item.id, si, gi, ii);
+                }}
                 aria-pressed={voiceTarget === item.id}
                 className={`hill-btn border bg-surface px-2 py-1 hover:text-fg ${
                   voiceTarget === item.id ? 'border-accent text-accent' : 'border-border'
@@ -615,12 +698,22 @@ export default function Logger() {
                   metric={item.primaryMetric}
                   set={set}
                   isPr={isPrSet(set.actual, bestByMovement.get(item.movement) ?? null)}
-                  onPatch={(patch) => setDoc((d) => patchSetActual(d, si, gi, ii, ki, patch))}
-                  onToggle={() =>
-                    setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: !set.actual.completed }))
-                  }
-                  onRemove={() => setDoc((d) => removeSet(d, si, gi, ii, ki))}
-                  onCloneForward={() => cloneForward(si, gi, ii, ki)}
+                  onPatch={(patch) => {
+                    activate(groupId);
+                    setDoc((d) => patchSetActual(d, si, gi, ii, ki, patch));
+                  }}
+                  onToggle={() => {
+                    activate(groupId);
+                    setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: !set.actual.completed }));
+                  }}
+                  onRemove={() => {
+                    activate(groupId);
+                    setDoc((d) => removeSet(d, si, gi, ii, ki));
+                  }}
+                  onCloneForward={() => {
+                    activate(groupId);
+                    cloneForward(si, gi, ii, ki);
+                  }}
                 />
                 {cliff ? (
                   <div className="pl-3 t-control text-accent">
@@ -632,13 +725,88 @@ export default function Logger() {
           })}
         </div>
         <button
-          onClick={() => setDoc((d) => addSet(d, si, gi, ii))}
+          onClick={() => {
+            activate(groupId);
+            setDoc((d) => addSet(d, si, gi, ii));
+          }}
           className="mt-3 t-control text-muted hover:text-fg"
         >
           + Add set
         </button>
         </>
         )}
+      </div>
+    );
+  }
+
+  // Render a whole group (single movement or superset). A superset collapses as
+  // one unit via its own header; single movements collapse through renderItem's
+  // header. Called with real (si, gi) so it works identically in a section and
+  // in the Done list.
+  function renderGroup(si: number, gi: number) {
+    const groups = doc.sections[si].groups;
+    const group = groups[gi];
+    if (group.items.length > 1) {
+      const isCollapsed = collapsed.has(group.id);
+      const groupDone = !!group.completedAt;
+      return (
+        <div key={group.id} className="border border-accent p-4">
+          <div className="mb-3 flex items-center justify-between gap-2 t-control">
+            <button
+              type="button"
+              onClick={() => {
+                activate(group.id);
+                toggleCollapse(group.id);
+              }}
+              className="flex min-w-0 flex-1 items-center gap-2 text-left text-muted"
+              aria-label={isCollapsed ? 'Expand superset' : 'Collapse superset'}
+              aria-expanded={!isCollapsed}
+            >
+              <span className={`inline-block shrink-0 text-[0.7rem] transition-transform ${isCollapsed ? '' : 'rotate-90'}`}>
+                ▸
+              </span>
+              <span className="truncate">
+                {group.items.length} movements{groupDone ? ' · done' : ''}
+              </span>
+            </button>
+            <div className="flex shrink-0 gap-2">
+              {(['superset', 'circuit'] as GroupKind[]).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => {
+                    activate(group.id);
+                    setDoc((d) => setGroupKind(d, si, gi, k));
+                  }}
+                  className={group.kind === k ? 'text-accent' : 'text-muted hover:text-fg'}
+                >
+                  {k}
+                </button>
+              ))}
+              <button onClick={() => setDoc((d) => ungroup(d, si, gi))} className="text-muted hover:text-fg">
+                Ungroup
+              </button>
+            </div>
+          </div>
+          {isCollapsed ? null : group.items.map((_, ii) => renderItem(si, gi, ii, true))}
+        </div>
+      );
+    }
+    return (
+      <div key={group.id} className="border border-border p-4">
+        {renderItem(si, gi, 0, false)}
+        <div className="mt-3 flex justify-end gap-3 t-control">
+          {gi < groups.length - 1 ? (
+            <button
+              onClick={() => setDoc((d) => mergeWithNext(d, si, gi, 'superset'))}
+              className="text-muted hover:text-fg"
+            >
+              Superset with next
+            </button>
+          ) : null}
+          <button onClick={() => setDoc((d) => removeGroup(d, si, gi))} className="text-muted hover:text-fg">
+            Remove
+          </button>
+        </div>
       </div>
     );
   }
@@ -748,55 +916,7 @@ export default function Logger() {
               </div>
             </div>
             <div className="flex flex-col gap-4">
-              {groups.map((group, gi) => {
-                if (group.items.length > 1) {
-                  return (
-                    <div key={group.id} className="border border-accent p-4">
-                      <div className="mb-3 flex items-center justify-between t-control">
-                        <div className="flex gap-2">
-                          {(['superset', 'circuit'] as GroupKind[]).map((k) => (
-                            <button
-                              key={k}
-                              onClick={() => setDoc((d) => setGroupKind(d, si, gi, k))}
-                              className={group.kind === k ? 'text-accent' : 'text-muted hover:text-fg'}
-                            >
-                              {k}
-                            </button>
-                          ))}
-                        </div>
-                        <button
-                          onClick={() => setDoc((d) => ungroup(d, si, gi))}
-                          className="text-muted hover:text-fg"
-                        >
-                          Ungroup
-                        </button>
-                      </div>
-                      {group.items.map((_, ii) => renderItem(si, gi, ii, true))}
-                    </div>
-                  );
-                }
-                return (
-                  <div key={group.id} className="border border-border p-4">
-                    {renderItem(si, gi, 0, false)}
-                    <div className="mt-3 flex justify-end gap-3 t-control">
-                      {gi < groups.length - 1 ? (
-                        <button
-                          onClick={() => setDoc((d) => mergeWithNext(d, si, gi, 'superset'))}
-                          className="text-muted hover:text-fg"
-                        >
-                          Superset with next
-                        </button>
-                      ) : null}
-                      <button
-                        onClick={() => setDoc((d) => removeGroup(d, si, gi))}
-                        className="text-muted hover:text-fg"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              {groups.map((group, gi) => (parked.has(group.id) ? null : renderGroup(si, gi)))}
               {groups.length === 0 ? (
                 <p className="text-sm text-muted">No movements yet.</p>
               ) : null}
@@ -804,6 +924,15 @@ export default function Logger() {
           </section>
         );
       })}
+
+      {doneGroups.length > 0 ? (
+        <section className="mb-6">
+          <SectionHeader>Done</SectionHeader>
+          <div className="mt-3 flex flex-col gap-4">
+            {doneGroups.map(({ si, gi }) => renderGroup(si, gi))}
+          </div>
+        </section>
+      ) : null}
 
       <AnimatePresence>
         {picker ? (
