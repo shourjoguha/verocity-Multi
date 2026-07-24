@@ -18,7 +18,29 @@ function mapSection(doc: LogDocument, si: number, fn: (s: LogDocument['sections'
 }
 
 function mapGroup(doc: LogDocument, si: number, gi: number, fn: (g: LogGroup) => LogGroup): LogDocument {
-  return mapSection(doc, si, (s) => ({ ...s, groups: s.groups.map((g, i) => (i === gi ? fn(g) : g)) }));
+  return mapSection(doc, si, (s) => ({ ...s, groups: s.groups.map((g, i) => (i === gi ? restampGroup(fn(g)) : g)) }));
+}
+
+// A group is fully complete when it has at least one set-bearing item and every
+// such item has all its sets completed. Subroutine items (no sets) are ignored,
+// so a subroutine-only group is never "complete".
+export function isGroupComplete(group: LogGroup): boolean {
+  const setItems = group.items.filter((it) => !isSubroutine(it));
+  if (setItems.length === 0) return false;
+  return setItems.every((it) => it.sets.length > 0 && it.sets.every((s) => s.actual.completed));
+}
+
+// Stamp completedAt the first time a group becomes fully complete (preserving
+// that first timestamp = completion order), and clear it when the group is no
+// longer complete. Idempotent — applied on every group mutation.
+function restampGroup(group: LogGroup): LogGroup {
+  const complete = isGroupComplete(group);
+  if (complete && !group.completedAt) return { ...group, completedAt: new Date().toISOString() };
+  if (!complete && group.completedAt) {
+    const { completedAt: _completedAt, ...rest } = group;
+    return rest;
+  }
+  return group;
 }
 
 function mapItem(doc: LogDocument, si: number, gi: number, ii: number, fn: (it: LogItem) => LogItem): LogDocument {
@@ -174,7 +196,7 @@ export function mergeWithNext(doc: LogDocument, si: number, gi: number, kind: Gr
     if (gi + 1 >= s.groups.length) return s;
     const a = s.groups[gi];
     const b = s.groups[gi + 1];
-    const merged: LogGroup = { id: a.id, kind, items: [...a.items, ...b.items] };
+    const merged: LogGroup = restampGroup({ id: a.id, kind, items: [...a.items, ...b.items] });
     return { ...s, groups: s.groups.flatMap((g, i) => (i === gi ? [merged] : i === gi + 1 ? [] : [g])) };
   });
 }
@@ -188,7 +210,9 @@ export function ungroup(doc: LogDocument, si: number, gi: number): LogDocument {
   return mapSection(doc, si, (s) => ({
     ...s,
     groups: s.groups.flatMap((g, i) =>
-      i !== gi ? [g] : g.items.map((it) => ({ id: newId(), kind: 'single' as GroupKind, items: [it] })),
+      i !== gi
+        ? [g]
+        : g.items.map((it) => restampGroup({ id: newId(), kind: 'single' as GroupKind, items: [it] })),
     ),
   }));
 }
@@ -238,7 +262,7 @@ export function groupWithAcrossSections(
   const dst = doc.sections[targetSi]?.groups[targetGi];
   if (!src || !dst) return doc;
   const merged: LogGroup = { id: src.id, kind, items: [...src.items, ...dst.items] };
-  const withMerged = mapGroup(doc, si, gi, () => merged);
+  const withMerged = mapGroup(doc, si, gi, () => merged); // mapGroup restamps
   return mapSection(withMerged, targetSi, (s) => ({
     ...s,
     groups: s.groups.filter((_, i) => i !== targetGi),
@@ -258,11 +282,11 @@ export function groupWith(
     if (gi === targetGi || gi >= s.groups.length || targetGi >= s.groups.length) return s;
     const lo = Math.min(gi, targetGi);
     const hi = Math.max(gi, targetGi);
-    const merged: LogGroup = {
+    const merged: LogGroup = restampGroup({
       id: s.groups[lo].id,
       kind,
       items: [...s.groups[lo].items, ...s.groups[hi].items],
-    };
+    });
     const groups: LogGroup[] = [];
     s.groups.forEach((g, i) => {
       if (i === lo) groups.push(merged);

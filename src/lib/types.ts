@@ -276,6 +276,9 @@ export interface LogGroup {
   kind: GroupKind;
   items: LogItem[];
   restSeconds?: number;
+  // ISO timestamp set when the group first became fully complete; cleared if it
+  // later goes incomplete. Drives the Logger's completion-ordered "Done" list.
+  completedAt?: string;
 }
 
 export interface LogItem {
