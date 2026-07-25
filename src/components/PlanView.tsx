@@ -38,15 +38,14 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           className="mb-6 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
         />
         <EmptyState>
-          No active plan.
+          <p>No active plan.</p>
           {showcase ? null : (
-            <>
-              {' '}
-              <a href="/app/plan/upload" className="text-fg underline hover:text-subtle">
-                Create one
-              </a>
-              .
-            </>
+            <a
+              href="/app/plan/upload"
+              className="hill-btn mt-4 inline-flex min-h-11 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+            >
+              Create one
+            </a>
           )}
         </EmptyState>
       </div>

@@ -162,18 +162,33 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
             const sessions = byDay.get(key) ?? [];
             const interactive = !showcase;
             const isToday = key === todayKey;
+            // A ~46px cell can't hold two 44px targets, so the cell carries one
+            // action: view the day's session if there is one, otherwise add a
+            // session. Adding to a day that already has one happens from inside
+            // the quick view.
+            const activate = () => {
+              if (sessions.length > 0) setQuickLog(sessions[0]);
+              else setAddDate(key);
+            };
             return (
               <div
                 key={key}
                 role={interactive ? 'button' : undefined}
                 tabIndex={interactive ? 0 : undefined}
-                onClick={interactive ? () => setAddDate(key) : undefined}
+                aria-label={
+                  interactive
+                    ? sessions.length > 0
+                      ? `${key} — view session`
+                      : `${key} — add session`
+                    : undefined
+                }
+                onClick={interactive ? activate : undefined}
                 onKeyDown={
                   interactive
                     ? (e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
-                          setAddDate(key);
+                          activate();
                         }
                       }
                     : undefined
@@ -192,33 +207,18 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
                   {day}
                 </div>
                 <div className="mt-1 flex flex-col gap-[2px]">
-                  {sessions.map((s) => {
-                    const segments = sessionTagColors(s.tags, s.activity_type).map((c, ci) => (
-                      <span key={ci} className="h-full flex-1" style={{ backgroundColor: c }} />
-                    ));
-                    return interactive ? (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setQuickLog(s);
-                        }}
-                        title={formatDuration(s.total_seconds)}
-                        className="flex h-1.5 w-full"
-                      >
-                        {segments}
-                      </button>
-                    ) : (
-                      <span
-                        key={s.id}
-                        title={formatDuration(s.total_seconds)}
-                        className="flex h-1.5 w-full"
-                      >
-                        {segments}
-                      </span>
-                    );
-                  })}
+                  {/* Purely a marker now — the cell owns the tap. */}
+                  {sessions.map((s) => (
+                    <span
+                      key={s.id}
+                      title={formatDuration(s.total_seconds)}
+                      className="flex h-1.5 w-full"
+                    >
+                      {sessionTagColors(s.tags, s.activity_type).map((c, ci) => (
+                        <span key={ci} className="h-full flex-1" style={{ backgroundColor: c }} />
+                      ))}
+                    </span>
+                  ))}
                 </div>
               </div>
             );
@@ -261,6 +261,10 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
               setQuickLog(updated);
             }}
             onDeleted={(id) => setLogs((ls) => ls.filter((l) => l.id !== id))}
+            onAddSession={(date) => {
+              setQuickLog(null);
+              setAddDate(date);
+            }}
           />
         </>
       )}

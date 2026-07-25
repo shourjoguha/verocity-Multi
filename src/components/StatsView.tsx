@@ -415,7 +415,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                       type="button"
                       onClick={() => setGroupBy(g)}
                       aria-pressed={groupBy === g}
-                      className={`hill-btn border bg-surface px-2 py-1 transition-colors ${
+                      className={`hill-btn flex min-h-11 items-center border bg-surface px-3 transition-colors ${
                         groupBy === g ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
                       }`}
                     >

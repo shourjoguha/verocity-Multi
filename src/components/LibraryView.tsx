@@ -292,13 +292,13 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
             <div className="flex shrink-0 gap-4 pb-1">
               <button
                 onClick={startAdd}
-                className="t-control text-muted transition-colors hover:text-fg"
+                className="flex min-h-11 items-center t-control text-muted transition-colors hover:text-fg"
               >
                 + Movement
               </button>
               <button
                 onClick={() => setSubEditing({ mode: 'add' })}
-                className="t-control text-muted transition-colors hover:text-fg"
+                className="flex min-h-11 items-center t-control text-muted transition-colors hover:text-fg"
               >
                 + Subroutine
               </button>
@@ -337,7 +337,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
           <div className="mb-5 flex flex-wrap gap-2">
             <button
               onClick={() => setCategory(null)}
-              className={`min-h-9 border px-3 t-control transition-colors ${
+              className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
                 category === null ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
               }`}
             >
@@ -347,7 +347,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
               <button
                 key={c}
                 onClick={() => setCategory(c)}
-                className={`min-h-9 border px-3 t-control transition-colors ${
+                className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
                   category === c ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
                 }`}
               >
