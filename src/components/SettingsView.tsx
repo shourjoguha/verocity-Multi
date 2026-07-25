@@ -118,7 +118,7 @@ export default function SettingsView() {
             </button>
             <a
               href="/app/shares"
-              className="t-control text-muted transition-colors hover:text-fg"
+              className="flex min-h-11 items-center t-control text-muted transition-colors hover:text-fg"
             >
               Share links →
             </a>

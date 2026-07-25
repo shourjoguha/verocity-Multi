@@ -121,7 +121,7 @@ export default function ActivityLogger() {
             key={t}
             type="button"
             onClick={() => setType(t)}
-            className={`min-h-9 border px-3 t-control transition-colors ${
+            className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
               type === t ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
             }`}
           >
@@ -172,7 +172,7 @@ export default function ActivityLogger() {
             key={key}
             type="button"
             onClick={() => toggleTag(key)}
-            className="min-h-9 border px-3 t-control transition-colors"
+            className="flex min-h-11 items-center border px-3 t-control transition-colors"
             style={
               tags.includes(key)
                 ? { borderColor: color, color }

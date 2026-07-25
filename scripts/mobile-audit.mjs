@@ -1,0 +1,254 @@
+// Mobile audit — the standing regression test for the two failure modes that
+// keep coming back on a phone-first app:
+//
+//   1. horizontal overflow (the document scrolls sideways), and
+//   2. tap targets below TOUCH.minTargetPx (44px, see app.config.ts).
+//
+// Loads every /app route at two phone widths and fails the process if either
+// regresses. Auth is seeded into localStorage and Supabase REST traffic is
+// stubbed with fixtures, so this needs no credentials and no live database —
+// and the Logger boots against a real LogDocument, so the set rows are
+// genuinely measured rather than skipped behind a redirect to /login.
+//
+// Usage:  npm run build && npm run preview &   then   npm run audit:mobile
+// Override the origin with BASE=http://localhost:4322 npm run audit:mobile
+import { chromium } from 'playwright';
+
+const BASE = process.env.BASE || 'http://localhost:4321';
+const LOG_ID = '11111111-1111-1111-1111-111111111111';
+
+const session = {
+  access_token: 'stub',
+  token_type: 'bearer',
+  expires_in: 3600,
+  expires_at: Math.floor(Date.now() / 1000) + 3600,
+  refresh_token: 'stub',
+  user: {
+    id: '22222222-2222-2222-2222-222222222222',
+    aud: 'authenticated',
+    role: 'authenticated',
+    email: 'demo@example.com',
+    app_metadata: {},
+    user_metadata: {},
+    created_at: new Date().toISOString(),
+  },
+};
+
+const set = (planned, weight, reps, rpe, completed) => ({
+  planned,
+  actual: { weight, reps, rpe, completed, prefilled: false },
+  notations: [],
+});
+
+// Deliberately hostile numbers: 3-digit weights and a planned label, which is
+// what pushed the old row past the viewport.
+const logDoc = {
+  sections: [
+    {
+      key: 'primary',
+      groups: [
+        {
+          id: 'g1',
+          kind: 'single',
+          items: [
+            {
+              id: 'i1',
+              movement: 'barbell back squat',
+              primaryMetric: 'weight',
+              sets: [
+                set('5 @70%', 142.5, 5, 8, true),
+                set('5 @75%', 145, 5, 8.5, true),
+                set('5 @80%', 100, 12, 9, false),
+              ],
+            },
+          ],
+        },
+        {
+          id: 'g2',
+          kind: 'superset',
+          items: [
+            {
+              id: 'i2',
+              movement: 'romanian deadlift',
+              primaryMetric: 'weight',
+              sets: [set('8', 120, 8, 7, false)],
+            },
+            {
+              id: 'i3',
+              movement: 'walking lunge',
+              primaryMetric: 'reps',
+              sets: [set('12/side', undefined, 12, 7, false)],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const workoutLog = {
+  id: LOG_ID,
+  owner_user_id: session.user.id,
+  plan_id: null,
+  day_key: null,
+  session_id: null,
+  week: null,
+  log_date: new Date().toISOString().slice(0, 10),
+  status: 'in_progress',
+  total_seconds: 1830,
+  tags: ['strength'],
+  started_at: new Date().toISOString(),
+  ended_at: null,
+  data: logDoc,
+  created_at: new Date().toISOString(),
+};
+
+const movements = [
+  { id: 'm1', owner_user_id: null, name: 'barbell back squat', category: 'squat' },
+  { id: 'm2', owner_user_id: null, name: 'bench press', category: 'press' },
+];
+
+function fixtureFor(url) {
+  const path = new URL(url).pathname;
+  if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog];
+  if (path.includes('/movements')) return movements;
+  if (path.includes('/profiles')) return url.includes('id=eq.') ? null : [];
+  return [];
+}
+
+const ROUTES = [
+  '/app',
+  '/app/calendar',
+  '/app/stats',
+  '/app/coach',
+  '/app/plan',
+  '/app/sessions',
+  '/app/library',
+  '/app/settings',
+  '/app/activity',
+  `/app/log?logId=${LOG_ID}`,
+];
+
+const VIEWPORTS = [
+  { name: '375x812 (iPhone SE/mini)', width: 375, height: 812 },
+  { name: '390x844 (iPhone 14)', width: 390, height: 844 },
+];
+
+// Glyph-scale controls that are deliberately small; the rule is about the
+// *target*, and these are either decorative or have a large parent target.
+// Deliberate exceptions. Keep this list short and justified — every entry is a
+// place the 44px rule is knowingly not met, not a place to silence a finding.
+const ALLOW = [
+  /^Skip to content$/, // skip link: visually hidden until keyboard-focused
+  /^Close$/, // sheet dismissal; the backdrop and Escape are the large targets
+  /^Skip$/, // rest-timer skip, inside a bar that is itself the affordance
+  /^\d{4}-\d{2}-\d{2}/, // Home progress ribbon: chart columns (width is
+  // BAR_HEIGHT-relative and scales with the scroller), not a control strip.
+  // Widening them to 44px would destroy the visualization; the same data is
+  // reachable from Calendar, where the cells are real targets.
+];
+
+const results = [];
+
+const browser = await chromium.launch(
+  process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
+);
+
+for (const vp of VIEWPORTS) {
+  const context = await browser.newContext({
+    viewport: { width: vp.width, height: vp.height },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+
+  await context.route('**/auth/v1/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(session) }),
+  );
+  await context.route('**/rest/v1/**', (route) => {
+    const body = fixtureFor(route.request().url());
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'content-range': '0-0/1' },
+      body: JSON.stringify(body),
+    });
+  });
+
+  await context.addInitScript(
+    ([key, value]) => window.localStorage.setItem(key, value),
+    ['sb-localhost-auth-token', JSON.stringify(session)],
+  );
+
+  const page = await context.newPage();
+
+  for (const route of ROUTES) {
+    await page.goto(BASE + route, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(600);
+
+    const report = await page.evaluate(({ allowSrc, deviceWidth }) => {
+      const allow = allowSrc.map((s) => new RegExp(s.slice(1, s.lastIndexOf('/')), 'i'));
+      const doc = document.documentElement;
+      // Compare against the DEVICE width, not innerWidth: when content
+      // overflows, mobile Chromium widens the layout viewport, so innerWidth
+      // grows with scrollWidth and their difference stays 0.
+      const overflow = Math.max(doc.scrollWidth, window.innerWidth) - deviceWidth;
+
+      // Which elements actually stick out past the viewport.
+      const culprits = [];
+      for (const el of document.querySelectorAll('body *')) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        if (r.right > deviceWidth + 1) {
+          culprits.push({
+            tag: el.tagName.toLowerCase(),
+            cls: (el.getAttribute('class') || '').slice(0, 90),
+            right: Math.round(r.right),
+          });
+        }
+      }
+
+      const small = [];
+      for (const el of document.querySelectorAll('button, a[href], [role="button"]')) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        const label = (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 40);
+        if (allow.some((re) => re.test(label))) continue;
+        if (r.height < 44) small.push({ label, h: Math.round(r.height), w: Math.round(r.width) });
+      }
+
+      return {
+        overflow,
+        scrollWidth: doc.scrollWidth,
+        innerWidth: window.innerWidth,
+        culprits: culprits.slice(0, 6),
+        small: small.slice(0, 10),
+        smallCount: small.length,
+        text: document.body.innerText.slice(0, 60).replace(/\s+/g, ' '),
+      };
+    }, { allowSrc: ALLOW.map(String), deviceWidth: vp.width });
+
+    results.push({ vp: vp.name, route, ...report });
+  }
+
+  await context.close();
+}
+
+await browser.close();
+
+let fail = 0;
+for (const r of results) {
+  const overflowBad = r.overflow > 0;
+  const targetsBad = r.smallCount > 0;
+  if (overflowBad || targetsBad) fail++;
+  const mark = overflowBad || targetsBad ? 'FAIL' : ' ok ';
+  console.log(
+    `[${mark}] ${r.vp}  ${r.route.padEnd(34)} scrollWidth=${r.scrollWidth} (vw ${r.innerWidth})  small-targets=${r.smallCount}`,
+  );
+  if (overflowBad) {
+    console.log(`         overflow +${r.overflow}px, e.g.`, JSON.stringify(r.culprits));
+  }
+  if (targetsBad) console.log('        ', JSON.stringify(r.small));
+}
+console.log(fail === 0 ? '\nAll checks passed.' : `\n${fail} route/viewport combos failed.`);
+process.exit(fail === 0 ? 0 : 1);

@@ -22,12 +22,16 @@ export function LogQuickView({
   onClose,
   onUpdated,
   onDeleted,
+  onAddSession,
 }: {
   log: WorkoutLog | null;
   open: boolean;
   onClose: () => void;
   onUpdated?: (log: WorkoutLog) => void;
   onDeleted?: (id: string) => void;
+  // Calendar only: a day cell that already has a session opens this view
+  // instead of the add menu, so adding a second session lives here.
+  onAddSession?: (date: string) => void;
 }) {
   const resumable = !!log && (log.status === 'in_progress' || log.status === 'paused');
 
@@ -86,6 +90,16 @@ export function LogQuickView({
                   </div>
                 ))}
               </div>
+            ) : null}
+
+            {onAddSession ? (
+              <button
+                type="button"
+                onClick={() => onAddSession(log.log_date)}
+                className="mt-5 flex min-h-11 w-full items-center justify-center border border-dashed border-border t-control text-muted transition-colors hover:border-fg hover:text-fg"
+              >
+                + Add another session
+              </button>
             ) : null}
           </div>
           <div className="flex items-center gap-2 border-t border-border p-4">

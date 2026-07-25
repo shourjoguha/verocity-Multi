@@ -6,7 +6,6 @@ import {
   getCurrentProfile,
   getRecentLogs,
 } from '@/lib/queries';
-import { signOut } from '@/lib/auth';
 import { getCached, setCached } from '@/lib/queryCache';
 import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
@@ -267,23 +266,35 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           <p className="t-eyebrow text-muted">
             {mode === 'showcase' ? 'Showcase' : 'Dashboard'}
           </p>
-          <div className="mt-2 flex items-end justify-between gap-4">
+          <div className="mt-2">
             <EchoText
               text={profile?.display_name ?? 'Athlete'}
               as="h1"
               className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
             />
-            {mode === 'app' ? (
-              <button
-                onClick={() => signOut().then(() => (window.location.href = '/login'))}
-                className="t-eyebrow shrink-0 pb-1 text-muted transition-colors hover:text-fg"
-              >
-                Sign out
-              </button>
-            ) : null}
           </div>
         </header>
       </Item>
+
+      {mode === 'app' ? (
+        <Item>
+          <section className="mb-6 flex gap-3">
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+            >
+              Start workout
+            </button>
+            <a
+              href="/app/activity"
+              className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+            >
+              Log activity
+            </a>
+          </section>
+        </Item>
+      ) : null}
 
       <Item>
         <section className="mb-6 grid grid-cols-3 gap-px bg-border">
@@ -303,26 +314,6 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             <span aria-hidden className="inline-block h-1.5 w-1.5 bg-teal" />
             {streak}-day streak
           </div>
-        </Item>
-      ) : null}
-
-      {mode === 'app' ? (
-        <Item>
-          <section className="mb-6 flex gap-3">
-            <button
-              type="button"
-              onClick={() => setAddOpen(true)}
-              className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
-            >
-              Start workout
-            </button>
-            <a
-              href="/app/activity"
-              className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
-            >
-              Log activity
-            </a>
-          </section>
         </Item>
       ) : null}
 

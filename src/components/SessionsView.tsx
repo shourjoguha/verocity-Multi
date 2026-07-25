@@ -432,7 +432,7 @@ export default function SessionsView() {
           {!adding ? (
             <button
               onClick={startAdd}
-              className="shrink-0 pb-1 t-control text-muted transition-colors hover:text-fg"
+              className="flex min-h-11 shrink-0 items-center t-control text-muted transition-colors hover:text-fg"
             >
               + Session
             </button>
@@ -466,7 +466,7 @@ export default function SessionsView() {
         <div className="mb-5 flex flex-wrap gap-2">
           <button
             onClick={() => setTagFilter(null)}
-            className={`min-h-9 border px-3 t-control transition-colors ${
+            className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
               tagFilter === null ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
             }`}
           >
@@ -476,7 +476,7 @@ export default function SessionsView() {
             <button
               key={key}
               onClick={() => setTagFilter(tagFilter === key ? null : key)}
-              className={`min-h-9 border px-3 t-control transition-colors ${
+              className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
                 tagFilter === key ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
               }`}
             >
