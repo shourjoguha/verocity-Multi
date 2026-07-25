@@ -22,6 +22,14 @@ export function Modal({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Every caller passes an inline arrow for onClose, so depending on it here
+  // would re-run this effect on EVERY render of the parent — releasing and
+  // re-taking the scroll lock and bouncing focus out to the trigger and back
+  // each time. That thrash is visible as a flicker. Hold it in a ref instead
+  // and key the effect purely on `open`.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   // Escape to close, Tab cycles inside the panel, focus returns to whatever
   // opened the sheet, and the page behind stops scrolling — on a phone an
   // unlocked body means the sheet drags the page with it.
@@ -31,7 +39,7 @@ export function Modal({
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -45,10 +53,10 @@ export function Modal({
       const last = items[items.length - 1];
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     };
 
@@ -57,16 +65,16 @@ export function Modal({
     document.body.style.overflow = 'hidden';
     // Let the enter animation mount before pulling focus in.
     const raf = requestAnimationFrame(() => {
-      panelRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+      panelRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: true });
     });
 
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
       cancelAnimationFrame(raf);
-      opener?.focus?.();
+      opener?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return (
     <MotionConfig reducedMotion="user">
