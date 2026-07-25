@@ -157,6 +157,9 @@ export default function Logger() {
     setCollapsed(addAll);
   };
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // The Done pile is open by default — you should see what you've finished —
+  // but it folds away as one unit when the remaining work needs the screen.
+  const [doneOpen, setDoneOpen] = useState(true);
   // Date + tags are correct on the common path, so they start folded away —
   // they were costing ~120px (three wrapped rows at 375px) above the first set.
   const [showDetails, setShowDetails] = useState(false);
@@ -679,6 +682,12 @@ export default function Logger() {
               <span className="capitalize text-fg">{item.movement}</span>
             )}
           </div>
+          {isCollapsed ? (
+            <span className="t-control shrink-0 text-muted">
+              {item.sets.length} {item.sets.length === 1 ? 'set' : 'sets'}
+              {allDone ? ' · done' : ''}
+            </span>
+          ) : (
           <div className="flex items-center gap-2 t-control text-muted">
             <button
               onClick={() => {
@@ -724,13 +733,9 @@ export default function Logger() {
               ⋯
             </button>
           </div>
+          )}
         </div>
-        {isCollapsed ? (
-          <div className="t-control text-muted">
-            {item.sets.length} {item.sets.length === 1 ? 'set' : 'sets'}
-            {allDone ? ' · done' : ''}
-          </div>
-        ) : (
+        {isCollapsed ? null : (
         <>
         <div className="flex flex-col gap-3">
           {item.sets.map((set, ki) => {
@@ -795,8 +800,8 @@ export default function Logger() {
       const isCollapsed = collapsed.has(group.id);
       const groupDone = !!group.completedAt;
       return (
-        <div key={group.id} className="border border-accent p-4">
-          <div className="mb-3 flex items-center justify-between gap-2 t-control">
+        <div key={group.id} className={`border border-accent ${isCollapsed ? 'px-4 py-1' : 'p-4'}`}>
+          <div className={`flex items-center justify-between gap-2 t-control ${isCollapsed ? '' : 'mb-3'}`}>
             <button
               type="button"
               onClick={() => {
@@ -814,6 +819,7 @@ export default function Logger() {
                 {group.items.length} movements{groupDone ? ' · done' : ''}
               </span>
             </button>
+            {isCollapsed ? null : (
             <div className="flex shrink-0 gap-1">
               {(['superset', 'circuit'] as GroupKind[]).map((k) => (
                 <button
@@ -837,14 +843,20 @@ export default function Logger() {
                 Ungroup
               </button>
             </div>
+            )}
           </div>
           {isCollapsed ? null : group.items.map((_, ii) => renderItem(si, gi, ii, true))}
         </div>
       );
     }
+    const singleCollapsed = collapsed.has(group.id);
     return (
-      <div key={group.id} className="border border-border p-4">
+      <div
+        key={group.id}
+        className={`border border-border ${singleCollapsed ? 'px-4 py-1' : 'p-4'}`}
+      >
         {renderItem(si, gi, 0, false)}
+        {singleCollapsed ? null : (
         <div className="mt-3 flex justify-end gap-1 t-control">
           {gi < groups.length - 1 ? (
             <button
@@ -861,6 +873,7 @@ export default function Logger() {
             Remove
           </button>
         </div>
+        )}
       </div>
     );
   }
@@ -1010,11 +1023,38 @@ export default function Logger() {
       })}
 
       {doneGroups.length > 0 ? (
-        <section className="mb-6">
-          <SectionHeader>Done</SectionHeader>
-          <div className="mt-3 flex flex-col gap-4">
-            {doneGroups.map(({ si, gi }) => renderGroup(si, gi))}
-          </div>
+        <section className="mb-6 border-t border-border pt-4">
+          {/* The whole Done pile folds as one unit, so what's left to do can be
+              the only thing on screen. Each group inside stays individually
+              expandable and fully editable. */}
+          <button
+            type="button"
+            onClick={() => setDoneOpen((v) => !v)}
+            aria-expanded={doneOpen}
+            className="flex min-h-11 w-full items-center justify-between gap-2 text-left"
+          >
+            <span className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className={`inline-block shrink-0 text-[0.7rem] text-muted transition-transform ${
+                  doneOpen ? 'rotate-90' : ''
+                }`}
+              >
+                ▸
+              </span>
+              <span className="font-display text-sm font-semibold uppercase tracking-[0.04em] text-fg">
+                Done
+              </span>
+            </span>
+            <span className="t-control text-muted">
+              {doneGroups.length} {doneGroups.length === 1 ? 'movement' : 'movements'}
+            </span>
+          </button>
+          {doneOpen ? (
+            <div className="mt-1 flex flex-col gap-2">
+              {doneGroups.map(({ si, gi }) => renderGroup(si, gi))}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
