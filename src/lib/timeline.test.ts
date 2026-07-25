@@ -75,33 +75,26 @@ function makeLog(opts: {
 }
 
 describe('buildTimeline', () => {
-  it('with no logs spans today ±30 days, all blank, exactly one today', () => {
+  it('with no logs spans today −30 … +14 days, all blank, exactly one today', () => {
     const points = buildTimeline(makePlan({ end_date: null, days: [] }), [], NOW);
-    expect(points).toHaveLength(61);
+    expect(points).toHaveLength(45);
     expect(points[0].date).toBe(ymd(addDays(NOW, -30)));
-    expect(points[points.length - 1].date).toBe(ymd(addDays(NOW, 30)));
+    expect(points[points.length - 1].date).toBe(ymd(addDays(NOW, 14)));
     expect(points.every((p) => p.state === 'blank')).toBe(true);
     const todays = points.filter((p) => p.isToday);
     expect(todays).toHaveLength(1);
     expect(todays[0].date).toBe(ymd(NOW));
   });
 
-  it('marks future days matching a scheduled weekday as "planned"', () => {
+  it('does not paint future days from the plan — blank until logged', () => {
     const weekday = DAY_NAMES[NOW.getDay()]; // today's weekday name
     const plan = makePlan({ end_date: null, days: [makeDay(`${weekday} — Lower A (Squat-Dominant)`)] });
     const points = buildTimeline(plan, [], NOW);
 
-    const today = points.find((p) => p.date === ymd(NOW))!;
-    expect(today.state).toBe('planned');
-    expect(today.isToday).toBe(true);
-    expect(today.fullLabel).toBe('Lower A (Squat-Dominant)');
-
-    // next week, same weekday → planned
-    expect(points.find((p) => p.date === ymd(addDays(NOW, 7)))!.state).toBe('planned');
-    // a different (non-scheduled) weekday tomorrow → blank
-    expect(points.find((p) => p.date === ymd(addDays(NOW, 1)))!.state).toBe('blank');
-    // same weekday in the PAST is not "planned" (only today/future are)
-    expect(points.find((p) => p.date === ymd(addDays(NOW, -7)))!.state).toBe('blank');
+    // Today and future days matching a scheduled weekday are no longer "planned".
+    expect(points.find((p) => p.date === ymd(NOW))!.state).toBe('blank');
+    expect(points.find((p) => p.date === ymd(addDays(NOW, 7)))!.state).toBe('blank');
+    expect(points.every((p) => p.state === 'blank')).toBe(true);
   });
 
   it('marks logged days as "done", colored by tag, labelled from the matching plan day', () => {
@@ -166,16 +159,19 @@ describe('buildTimeline', () => {
     expect(points.find((p) => p.date === ymd(addDays(NOW, -35)))).toBeUndefined();
   });
 
-  it('works with no plan: today ±30 days, all blank', () => {
+  it('works with no plan: today −30 … +14 days, all blank', () => {
     const points = buildTimeline(null, [], NOW);
-    expect(points).toHaveLength(61);
+    expect(points).toHaveLength(45);
     expect(points.every((p) => p.state === 'blank')).toBe(true);
     expect(points.filter((p) => p.isToday)).toHaveLength(1);
   });
 
-  it('uses plan.end_date as the window end when present', () => {
-    const end = ymd(addDays(NOW, 5));
-    const points = buildTimeline(makePlan({ end_date: end, days: [] }), [], NOW);
-    expect(points[points.length - 1].date).toBe(end);
+  it('keeps rolling ≥10 days into the future even when the plan has already ended', () => {
+    // A plan whose end_date is in the past must NOT truncate the window (the
+    // "stuck ribbon" bug) — it always runs through today + 14.
+    const points = buildTimeline(makePlan({ end_date: ymd(addDays(NOW, -3)), days: [] }), [], NOW);
+    expect(points[points.length - 1].date).toBe(ymd(addDays(NOW, 14)));
+    const futureDays = points.filter((p) => p.date > ymd(NOW));
+    expect(futureDays.length).toBeGreaterThanOrEqual(10);
   });
 });

@@ -95,15 +95,12 @@ function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[
 
   return (
     <div ref={containerRef} className="relative border-b border-border pb-3">
-      <div className="t-label mb-2 text-muted">Plan progress</div>
+      <div className="t-label mb-2 text-muted">Progress</div>
       <div ref={scrollRef} className="-mx-6 overflow-x-auto px-6" style={edgeFade}>
         <div className="relative flex items-end" style={{ gap: `${BAR_GAP}px`, minHeight: BAR_HEIGHT }}>
           {points.map((p, i) => {
             const columnStyle: CSSProperties = { width: barW, height: BAR_HEIGHT };
-            if (p.state === 'planned') {
-              columnStyle.border = `1px solid color-mix(in srgb, ${p.color} 55%, transparent)`;
-              columnStyle.backgroundColor = `color-mix(in srgb, ${p.color} 12%, transparent)`;
-            } else if (p.state === 'blank') {
+            if (p.state === 'blank') {
               columnStyle.backgroundImage =
                 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-muted) 40%, transparent) 0, color-mix(in srgb, var(--color-muted) 40%, transparent) 1.5px, transparent 1.5px, transparent 4px)';
               columnStyle.backgroundColor = 'color-mix(in srgb, var(--color-muted) 22%, transparent)';
