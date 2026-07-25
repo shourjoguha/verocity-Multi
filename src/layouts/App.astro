@@ -53,6 +53,11 @@ const tabs = showcase
       { href: '/app/log', label: 'Log', glyph: '+', primary: true },
       { href: '/app/stats', label: 'Stats', glyph: '◲' },
     ];
+
+// Settings, Sessions, Library, Coach, Plan, Shares and the detail pages are all
+// reached through "More", so none of the four tabs matches them and the bar
+// would show no current page at all. "More" stands in as the active tab there.
+const onTab = tabs.some((t) => isActive(t.href));
 ---
 
 <Base title={title}>
@@ -190,7 +195,11 @@ const tabs = showcase
         type="button"
         aria-expanded="false"
         aria-controls="nav-menu"
-        class="flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-muted transition-colors duration-150 hover:text-fg"
+        aria-current={onTab ? undefined : 'page'}
+        class:list={[
+          'flex min-h-14 flex-1 flex-col items-center justify-center gap-1 transition-colors duration-150',
+          onTab ? 'text-muted hover:text-fg' : 'text-fg',
+        ]}
       >
         <span class="flex h-6 w-6 flex-col items-center justify-center gap-[3px]" aria-hidden="true">
           <span class="block h-[2px] w-4 bg-current"></span>

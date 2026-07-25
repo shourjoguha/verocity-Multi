@@ -66,10 +66,17 @@ export function SetEntrySheet({
   const panelRef = useRef<HTMLDivElement>(null);
   const keyboardInset = useKeyboardInset(open);
 
+  // See Modal: onClose is an inline arrow at the call site, so depending on it
+  // would re-run this on every Logger render — and the Logger re-renders on
+  // every tap of +/− in this very sheet, releasing and re-taking the scroll
+  // lock each time.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
@@ -78,7 +85,7 @@ export function SetEntrySheet({
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   const a = set?.actual;
 
