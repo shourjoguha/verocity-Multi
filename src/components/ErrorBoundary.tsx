@@ -16,7 +16,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError
   render() {
     if (this.state.hasError) {
       return (
-        <div className="mx-auto max-w-3xl px-6 py-16 text-center">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 py-16 text-center">
           <p className="mb-3 font-display text-2xl font-semibold text-fg">Something broke</p>
           <p className="mb-6 text-sm text-muted">
             This screen hit an error. Reloading usually clears it.

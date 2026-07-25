@@ -116,7 +116,7 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
 
   return (
     <>
-    <PageStagger className="mx-auto max-w-3xl px-6 py-8">
+    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
       <Item>
         <header className="mb-6">
           <p className="t-eyebrow text-muted">{monthLabel}</p>
@@ -124,7 +124,7 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
             <EchoText
               text="CALENDAR"
               as="h1"
-              className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+              className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
             />
             <div className="flex shrink-0 gap-2 pb-1">
               <button

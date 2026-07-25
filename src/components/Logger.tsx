@@ -67,6 +67,7 @@ import { Button, LoadingScreen, SectionHeader } from '@/components/ui/primitives
 import { Modal } from '@/components/ui/Modal';
 import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
+import { SetEntrySheet } from '@/components/logger/SetEntrySheet';
 import { MovementPicker } from '@/components/logger/MovementPicker';
 import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
@@ -78,6 +79,10 @@ import { toast } from '@/lib/toast';
 const MAX_WORKOUT_SECONDS = 2 * 60 * 60;
 
 const METRIC_CYCLE: MetricKey[] = ['weight', 'reps', 'time', 'distance', 'rpe'];
+
+// Module-level so the identity is stable across renders (useCountdown takes it
+// as a dependency). The countdown also vibrates; this is the on-screen half.
+const onRestDone = () => toast('Rest complete');
 
 function clock(total: number): string {
   const h = Math.floor(total / 3600);
@@ -107,11 +112,18 @@ export default function Logger() {
   const [doc, setDoc] = useState<LogDocument>({ sections: [] });
   const [status, setStatus] = useState<LogStatus>('in_progress');
   const [saving, setSaving] = useState(false);
+  // Set when an autosave round-trip fails, cleared when one succeeds.
+  const [unsaved, setUnsaved] = useState(false);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [subs, setSubs] = useState<MovementSub[]>([]);
   const [picker, setPicker] = useState<Picker | null>(null);
   const [subEditor, setSubEditor] = useState<SubEditor | null>(null);
   const [optionsFor, setOptionsFor] = useState<{ si: number; gi: number; ii: number } | null>(null);
+  // Which set the entry sheet is editing. Set rows are read-only summaries;
+  // all numeric entry happens in SetEntrySheet.
+  const [entryFor, setEntryFor] = useState<{ si: number; gi: number; ii: number; ki: number } | null>(
+    null,
+  );
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggleCollapse = (id: string) =>
     setCollapsed((prev) => {
@@ -144,6 +156,10 @@ export default function Logger() {
     setParked(addAll);
     setCollapsed(addAll);
   };
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // Date + tags are correct on the common path, so they start folded away —
+  // they were costing ~120px (three wrapped rows at 375px) above the first set.
+  const [showDetails, setShowDetails] = useState(false);
   const [showVibe, setShowVibe] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
   const [logDate, setLogDate] = useState<string>(today());
@@ -156,7 +172,7 @@ export default function Logger() {
   const [editing, setEditing] = useState(false);
 
   const stopwatch = useStopwatch(0, false);
-  const rest = useCountdown();
+  const rest = useCountdown(onRestDone);
   const voice = useVoiceInput();
 
   const docRef = useRef(doc);
@@ -352,17 +368,18 @@ export default function Logger() {
       // of status, but never touch the recorded duration or status/ended_at.
       if (editingRef.current) {
         setSaving(true);
-        await updateLog(idRef.current, {
+        const ok = await updateLog(idRef.current, {
           data: docRef.current,
           log_date: logDateRef.current,
           tags: tagsRef.current,
         });
         setSaving(false);
+        setUnsaved(!ok);
         return;
       }
       if (statusRef.current === 'done' || statusRef.current === 'cancelled') return;
       setSaving(true);
-      await updateLog(idRef.current, {
+      const ok = await updateLog(idRef.current, {
         data: docRef.current,
         total_seconds: secondsRef.current,
         status: statusRef.current,
@@ -370,8 +387,23 @@ export default function Logger() {
         tags: tagsRef.current,
       });
       setSaving(false);
+      // A gym is exactly where the connection drops. updateLog's result was
+      // being thrown away, so a failed autosave looked identical to a good one.
+      setUnsaved(!ok);
     }, TIMERS.autosaveSeconds * 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // Warn before a tab close / back-navigation drops up to one autosave interval
+  // of entry. Only while a live session is actually in progress.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (editingRef.current) return;
+      if (statusRef.current === 'done' || statusRef.current === 'cancelled') return;
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
   // Auto-end an in-progress workout once it has been running over 2 hours
@@ -524,6 +556,15 @@ export default function Logger() {
     .flatMap((s, si) => s.groups.map((g, gi) => ({ si, gi, g })))
     .filter(({ g }) => parked.has(g.id))
     .sort((a, b) => (a.g.completedAt ?? '').localeCompare(b.g.completedAt ?? ''));
+  // The set the entry sheet is bound to, resolved fresh each render so the sheet
+  // always shows current values. Any index that no longer exists (set deleted,
+  // movement removed) resolves to null and closes the sheet.
+  const entryItem = entryFor
+    ? (doc.sections[entryFor.si]?.groups[entryFor.gi]?.items[entryFor.ii] ?? null)
+    : null;
+  const entrySet =
+    entryItem && !isSubroutine(entryItem) ? (entryItem.sets[entryFor!.ki] ?? null) : null;
+
   const swapSuggestions = (movement: string) =>
     subs
       .filter((s) => s.original.toLowerCase() === movement.toLowerCase())
@@ -591,20 +632,32 @@ export default function Logger() {
     return (
       <div key={item.id} className={grouped ? 'border-t border-border pt-3 first:border-0 first:pt-0' : ''}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          {/* A definite min-width is what makes the wrap actually happen: with
+              min-w-0 the name collapses to nothing so the controls always
+              "fit" on one line and cover it. */}
+          <div className="flex min-w-[8rem] flex-1 items-center gap-2">
             <button
               type="button"
               onClick={() => {
                 activate(groupId);
                 toggleItemComplete(si, gi, ii);
               }}
-              className={`flex h-5 w-5 shrink-0 items-center justify-center border text-[0.6rem] ${
-                allDone ? 'border-accent bg-accent text-accent-fg' : 'border-border text-muted hover:text-fg'
-              }`}
+              className="-ml-2 flex min-h-11 w-11 shrink-0 items-center justify-center"
               aria-label="Complete movement"
               aria-pressed={allDone}
             >
-              ✓
+              {/* The glyph stays 20px — the pillow doesn't read at that scale —
+                  but the tap target around it meets TOUCH.minTargetPx. */}
+              <span
+                aria-hidden
+                className={`flex h-5 w-5 items-center justify-center border text-[0.6rem] ${
+                  allDone
+                    ? 'border-accent bg-accent text-accent-fg'
+                    : 'border-border text-muted'
+                }`}
+              >
+                ✓
+              </span>
             </button>
             {collapsible ? (
               <button
@@ -613,7 +666,7 @@ export default function Logger() {
                   activate(groupId);
                   toggleCollapse(groupId);
                 }}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left text-fg"
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left text-fg"
                 aria-label={isCollapsed ? 'Expand movement' : 'Collapse movement'}
                 aria-expanded={!isCollapsed}
               >
@@ -633,7 +686,7 @@ export default function Logger() {
                 const nextMetric = METRIC_CYCLE[(METRIC_CYCLE.indexOf(item.primaryMetric) + 1) % METRIC_CYCLE.length];
                 setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric));
               }}
-              className="hill-btn border border-border bg-surface px-2 py-1 hover:text-fg"
+              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 hover:text-fg"
               aria-label="Change metric"
             >
               {item.primaryMetric}
@@ -645,7 +698,7 @@ export default function Logger() {
                   listen(item.id, si, gi, ii);
                 }}
                 aria-pressed={voiceTarget === item.id}
-                className={`hill-btn border bg-surface px-2 py-1 hover:text-fg ${
+                className={`hill-btn flex min-h-11 items-center border bg-surface px-3 hover:text-fg ${
                   voiceTarget === item.id ? 'border-accent text-accent' : 'border-border'
                 }`}
               >
@@ -658,14 +711,14 @@ export default function Logger() {
                   const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
                   if (restSeconds > 0) rest.start(restSeconds);
                 }}
-                className="hill-btn border border-border bg-surface px-2 py-1 hover:text-fg"
+                className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 hover:text-fg"
               >
                 Rest
               </button>
             ) : null}
             <button
               onClick={() => setOptionsFor({ si, gi, ii })}
-              className="hill-btn border border-border bg-surface px-2 py-1 hover:text-fg"
+              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 hover:text-fg"
               aria-label="Movement options"
             >
               ⋯
@@ -698,21 +751,13 @@ export default function Logger() {
                   metric={item.primaryMetric}
                   set={set}
                   isPr={isPrSet(set.actual, bestByMovement.get(item.movement) ?? null)}
-                  onPatch={(patch) => {
+                  onOpen={() => {
                     activate(groupId);
-                    setDoc((d) => patchSetActual(d, si, gi, ii, ki, patch));
+                    setEntryFor({ si, gi, ii, ki });
                   }}
                   onToggle={() => {
                     activate(groupId);
                     setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: !set.actual.completed }));
-                  }}
-                  onRemove={() => {
-                    activate(groupId);
-                    setDoc((d) => removeSet(d, si, gi, ii, ki));
-                  }}
-                  onCloneForward={() => {
-                    activate(groupId);
-                    cloneForward(si, gi, ii, ki);
                   }}
                 />
                 {cliff ? (
@@ -729,7 +774,7 @@ export default function Logger() {
             activate(groupId);
             setDoc((d) => addSet(d, si, gi, ii));
           }}
-          className="mt-3 t-control text-muted hover:text-fg"
+          className="mt-3 flex min-h-11 w-full items-center justify-center border border-dashed border-border t-control text-muted transition-colors hover:border-fg hover:text-fg"
         >
           + Add set
         </button>
@@ -758,7 +803,7 @@ export default function Logger() {
                 activate(group.id);
                 toggleCollapse(group.id);
               }}
-              className="flex min-w-0 flex-1 items-center gap-2 text-left text-muted"
+              className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left text-muted"
               aria-label={isCollapsed ? 'Expand superset' : 'Collapse superset'}
               aria-expanded={!isCollapsed}
             >
@@ -769,7 +814,7 @@ export default function Logger() {
                 {group.items.length} movements{groupDone ? ' · done' : ''}
               </span>
             </button>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0 gap-1">
               {(['superset', 'circuit'] as GroupKind[]).map((k) => (
                 <button
                   key={k}
@@ -777,12 +822,18 @@ export default function Logger() {
                     activate(group.id);
                     setDoc((d) => setGroupKind(d, si, gi, k));
                   }}
-                  className={group.kind === k ? 'text-accent' : 'text-muted hover:text-fg'}
+                  aria-pressed={group.kind === k}
+                  className={`flex min-h-11 items-center px-2 ${
+                    group.kind === k ? 'text-accent' : 'text-muted hover:text-fg'
+                  }`}
                 >
                   {k}
                 </button>
               ))}
-              <button onClick={() => setDoc((d) => ungroup(d, si, gi))} className="text-muted hover:text-fg">
+              <button
+                onClick={() => setDoc((d) => ungroup(d, si, gi))}
+                className="flex min-h-11 items-center px-2 text-muted hover:text-fg"
+              >
                 Ungroup
               </button>
             </div>
@@ -794,16 +845,19 @@ export default function Logger() {
     return (
       <div key={group.id} className="border border-border p-4">
         {renderItem(si, gi, 0, false)}
-        <div className="mt-3 flex justify-end gap-3 t-control">
+        <div className="mt-3 flex justify-end gap-1 t-control">
           {gi < groups.length - 1 ? (
             <button
               onClick={() => setDoc((d) => mergeWithNext(d, si, gi, 'superset'))}
-              className="text-muted hover:text-fg"
+              className="flex min-h-11 items-center px-3 text-muted hover:text-fg"
             >
               Superset with next
             </button>
           ) : null}
-          <button onClick={() => setDoc((d) => removeGroup(d, si, gi))} className="text-muted hover:text-fg">
+          <button
+            onClick={() => setDoc((d) => removeGroup(d, si, gi))}
+            className="flex min-h-11 items-center px-3 text-muted hover:text-fg"
+          >
             Remove
           </button>
         </div>
@@ -818,24 +872,26 @@ export default function Logger() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.4, ease: EASE }}
-        className="mx-auto max-w-2xl px-6 py-8 pb-32"
+        className="mx-auto max-w-2xl px-4 sm:px-6 py-8 pb-32"
       >
       <header className="mb-6 flex items-center justify-between">
         {editing ? (
           <div>
             <div className="font-display text-3xl uppercase tracking-tight text-fg">Editing</div>
-            <div className="t-control text-muted">
+            <div className={`t-control ${unsaved ? 'text-accent' : 'text-muted'}`}>
               {status}
               {saving ? ' · saving…' : ''}
+              {unsaved && !saving ? ' · not saved' : ''}
             </div>
           </div>
         ) : (
           <>
             <div>
               <div className="font-display text-5xl tabular-nums text-fg">{clock(stopwatch.seconds)}</div>
-              <div className="t-control text-muted">
+              <div className={`t-control ${unsaved ? 'text-accent' : 'text-muted'}`}>
                 {status}
                 {saving ? ' · saving…' : ''}
+                {unsaved && !saving ? ' · not saved' : ''}
               </div>
             </div>
             <Button variant="ghost" onClick={() => (stopwatch.running ? stopwatch.pause() : stopwatch.resume())}>
@@ -845,31 +901,56 @@ export default function Logger() {
         )}
       </header>
 
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <input
-          type="date"
-          value={logDate}
-          onChange={(e) => changeDate(e.target.value)}
-          className="min-h-9 border border-border bg-surface px-2 text-sm tabular-nums text-fg outline-none focus:border-subtle"
-          aria-label="Session date"
-        />
-        {Object.entries(ACTIVITY_TAGS).map(([key, v]) => {
-          const on = tags.includes(key);
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => toggleTag(key)}
-              className={`hill-btn border bg-surface px-2 py-1 t-control transition-colors ${
-                on ? '' : 'border-border text-muted hover:text-fg'
-              }`}
-              style={on ? { borderColor: v.color, color: v.color } : undefined}
-              aria-pressed={on}
+      <div className="mb-6">
+        <button
+          type="button"
+          onClick={() => setShowDetails((v) => !v)}
+          aria-expanded={showDetails}
+          className="flex min-h-11 w-full items-center justify-between border-y border-border t-control text-muted transition-colors hover:text-fg"
+        >
+          <span className="flex items-center gap-2">
+            <span
+              aria-hidden
+              className={`inline-block text-[0.7rem] transition-transform ${showDetails ? 'rotate-90' : ''}`}
             >
-              {v.label}
-            </button>
-          );
-        })}
+              ▸
+            </span>
+            Session details
+          </span>
+          <span className="tabular-nums">
+            {logDate}
+            {tags.length ? ` · ${tags.length}` : ''}
+          </span>
+        </button>
+
+        {showDetails ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              value={logDate}
+              onChange={(e) => changeDate(e.target.value)}
+              className="min-h-11 border border-border bg-surface px-3 text-base tabular-nums text-fg outline-none focus:border-subtle"
+              aria-label="Session date"
+            />
+            {Object.entries(ACTIVITY_TAGS).map(([key, v]) => {
+              const on = tags.includes(key);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleTag(key)}
+                  className={`hill-btn flex min-h-11 items-center border bg-surface px-3 t-control transition-colors ${
+                    on ? '' : 'border-border text-muted hover:text-fg'
+                  }`}
+                  style={on ? { borderColor: v.color, color: v.color } : undefined}
+                  aria-pressed={on}
+                >
+                  {v.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       {showVibe ? <VibeCheckCard onSave={saveVibe} onSkip={() => setShowVibe(false)} /> : null}
@@ -882,11 +963,14 @@ export default function Logger() {
             animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
             exit={{ opacity: 0, height: 0, marginBottom: 0 }}
             transition={{ duration: 0.3, ease: EASE }}
-            className="flex items-center justify-between overflow-hidden border border-accent px-4 py-2"
+            className="sticky top-12 z-30 flex items-center justify-between gap-3 overflow-hidden border border-accent bg-bg/95 px-4 backdrop-blur"
           >
             <span className="t-control text-accent">Rest</span>
             <span className="font-display text-2xl tabular-nums text-fg">{clock(rest.secondsLeft)}</span>
-            <button onClick={rest.stop} className="t-control text-muted">
+            <button
+              onClick={rest.stop}
+              className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
+            >
               Skip
             </button>
           </motion.div>
@@ -900,16 +984,16 @@ export default function Logger() {
           <section key={section.key} className="mb-6">
             <div className="mb-3 flex items-center justify-between">
               <SectionHeader>{sectionLabel(section.key)}</SectionHeader>
-              <div className="flex gap-4">
+              <div className="flex gap-1">
                 <button
                   onClick={() => setPicker({ mode: 'add', sectionKey: section.key })}
-                  className="t-control text-muted hover:text-fg"
+                  className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
                 >
                   + Movement
                 </button>
                 <button
                   onClick={() => setSubEditor({ mode: 'add', sectionKey: section.key })}
-                  className="t-control text-muted hover:text-fg"
+                  className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
                 >
                   + Subroutine
                 </button>
@@ -955,6 +1039,41 @@ export default function Logger() {
         ) : null}
       </AnimatePresence>
 
+      <SetEntrySheet
+        open={entrySet !== null}
+        metric={entryItem?.primaryMetric ?? 'weight'}
+        movement={entryItem?.movement ?? ''}
+        setIndex={entryFor?.ki ?? 0}
+        setCount={entryItem?.sets.length ?? 0}
+        set={entrySet}
+        onPatch={(patch) => {
+          if (!entryFor) return;
+          const { si, gi, ii, ki } = entryFor;
+          setDoc((d) => patchSetActual(d, si, gi, ii, ki, patch));
+        }}
+        onLog={() => {
+          if (!entryFor || !entryItem) return;
+          const { si, gi, ii, ki } = entryFor;
+          setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: true }));
+          const restSeconds = entryItem.restSeconds ?? TIMERS.defaultRestSeconds;
+          if (restSeconds > 0 && !editing) rest.start(restSeconds);
+          setEntryFor(null);
+        }}
+        onCloneForward={() => {
+          if (!entryFor) return;
+          const { si, gi, ii, ki } = entryFor;
+          cloneForward(si, gi, ii, ki);
+          setEntryFor(null);
+        }}
+        onRemove={() => {
+          if (!entryFor) return;
+          const { si, gi, ii, ki } = entryFor;
+          setDoc((d) => removeSet(d, si, gi, ii, ki));
+          setEntryFor(null);
+        }}
+        onClose={() => setEntryFor(null)}
+      />
+
       <Modal open={optionsFor !== null} onClose={() => setOptionsFor(null)} title="Movement">
         {optionsFor
           ? (() => {
@@ -993,7 +1112,10 @@ export default function Logger() {
                         disabled={gi === 0}
                         onClick={() => {
                           setDoc((d) => moveGroup(d, si, gi, -1));
-                          close();
+                          // Follow the group to its new index and stay open —
+                          // closing after every step made moving three places
+                          // cost nine taps.
+                          setOptionsFor({ si, gi: gi - 1, ii });
                         }}
                         className={`flex-1 ${rowClass}`}
                       >
@@ -1004,7 +1126,7 @@ export default function Logger() {
                         disabled={gi >= groups.length - 1}
                         onClick={() => {
                           setDoc((d) => moveGroup(d, si, gi, 1));
-                          close();
+                          setOptionsFor({ si, gi: gi + 1, ii });
                         }}
                         className={`flex-1 ${rowClass}`}
                       >
@@ -1159,24 +1281,53 @@ export default function Logger() {
           })()
         : null}
 
-      <div className="fixed inset-x-0 bottom-0 border-t border-border bg-bg/95 px-6 py-4 backdrop-blur">
-        <div className="mx-auto flex max-w-2xl gap-3">
+      <div className="pb-safe fixed inset-x-0 bottom-0 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur sm:px-6">
+        <div className="mx-auto flex max-w-2xl flex-col items-center gap-1">
           {editing ? (
-            <Button onClick={finishEdit} className="flex-1">
+            <Button onClick={finishEdit} className="w-full">
               Done
             </Button>
           ) : (
             <>
-              <Button onClick={() => finish('done')} className="flex-1">
+              {/* Finish owns the full width; discarding is a deliberate,
+                  confirmed act rather than a button 12px from the one you
+                  reach for with a shaking hand after a set. */}
+              <Button onClick={() => finish('done')} className="w-full">
                 Finish
               </Button>
-              <Button variant="ghost" onClick={() => finish('cancelled')}>
-                Cancel
-              </Button>
+              <button
+                type="button"
+                onClick={() => setConfirmDiscard(true)}
+                className="flex min-h-11 items-center px-3 t-control text-muted transition-colors hover:text-fg"
+              >
+                Discard session
+              </button>
             </>
           )}
         </div>
       </div>
+
+      <Modal open={confirmDiscard} onClose={() => setConfirmDiscard(false)} title="Discard session">
+        <div className="flex flex-col gap-4 p-4">
+          <p className="text-sm text-muted">
+            This deletes everything logged in this session. It can't be undone.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => {
+                setConfirmDiscard(false);
+                finish('cancelled');
+              }}
+              className="w-full"
+            >
+              Discard
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirmDiscard(false)} className="w-full">
+              Keep logging
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </motion.div>
     </MotionConfig>
     </ErrorBoundary>

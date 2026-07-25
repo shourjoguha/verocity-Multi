@@ -94,7 +94,7 @@ export default function Landing() {
         </motion.section>
 
         {/* Philosophy / narrative — scroll-revealed via Motion */}
-        <section className="mx-auto max-w-5xl px-6 pb-32">
+        <section className="mx-auto max-w-5xl px-4 sm:px-6 pb-32">
           <motion.div
             className="mx-auto mb-14 h-16 w-px bg-fg/15"
             aria-hidden="true"

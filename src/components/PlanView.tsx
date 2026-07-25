@@ -31,11 +31,11 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
 
   if (!plan) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-8">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
         <EchoText
           text="PLAN"
           as="h1"
-          className="mb-6 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+          className="mb-6 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
         />
         <EmptyState>
           No active plan.
@@ -86,7 +86,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   }
 
   return (
-    <PageStagger className="mx-auto max-w-5xl px-6 py-8">
+    <PageStagger className="mx-auto max-w-5xl px-4 sm:px-6 py-8">
       <Item>
         <header className="mb-6">
           <p className="t-eyebrow text-muted">Plan</p>

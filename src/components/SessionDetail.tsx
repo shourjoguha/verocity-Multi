@@ -61,7 +61,7 @@ export default function SessionDetail() {
 
   if (!log) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-8">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
         <EmptyState>Session not found.</EmptyState>
       </div>
     );
@@ -73,7 +73,7 @@ export default function SessionDetail() {
     .sort((a, b) => SECTIONS.indexOf(a.key) - SECTIONS.indexOf(b.key));
 
   return (
-    <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
       <Item>
         <header className="mb-8">
           <div className="flex items-center justify-between gap-4">
@@ -101,7 +101,7 @@ export default function SessionDetail() {
           <EchoText
             text={log.activity_type ?? 'Session'}
             as="h1"
-            className="mt-2 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+            className="mt-2 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
           />
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {log.tags.map((t) => (

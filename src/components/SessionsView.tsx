@@ -421,13 +421,13 @@ export default function SessionsView() {
   }
 
   return (
-    <PageStagger className="mx-auto max-w-3xl px-6 py-8">
+    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
       <Item>
         <div className="mb-6 flex items-end justify-between gap-4">
           <EchoText
             text="SESSIONS"
             as="h1"
-            className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+            className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
           />
           {!adding ? (
             <button

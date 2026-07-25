@@ -168,12 +168,12 @@ export default function PlanUpload() {
   }
 
   return (
-    <PageStagger className="mx-auto max-w-3xl px-6 py-10">
+    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
       <Item>
         <EchoText
           text="NEW PLAN"
           as="h1"
-          className="mb-8 font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+          className="mb-8 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
         />
       </Item>
 
