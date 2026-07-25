@@ -96,7 +96,7 @@ function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[
   return (
     <div ref={containerRef} className="relative border-b border-border pb-3">
       <div className="t-label mb-2 text-muted">Progress</div>
-      <div ref={scrollRef} className="-mx-6 overflow-x-auto px-6" style={edgeFade}>
+      <div ref={scrollRef} className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6" style={edgeFade}>
         <div className="relative flex items-end" style={{ gap: `${BAR_GAP}px`, minHeight: BAR_HEIGHT }}>
           {points.map((p, i) => {
             const columnStyle: CSSProperties = { width: barW, height: BAR_HEIGHT };
@@ -246,7 +246,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
 
   if (mode === 'showcase' && !profile) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-16">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 py-16">
         <EmptyState>No showcase profile is configured yet.</EmptyState>
       </div>
     );
@@ -261,7 +261,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
 
   return (
     <>
-    <PageStagger className="mx-auto max-w-3xl px-6 py-8">
+    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
       <Item>
         <header className="mb-6">
           <p className="t-eyebrow text-muted">
@@ -271,7 +271,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             <EchoText
               text={profile?.display_name ?? 'Athlete'}
               as="h1"
-              className="font-display text-5xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg md:text-7xl"
+              className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
             />
             {mode === 'app' ? (
               <button
@@ -350,7 +350,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                 Plan overview →
               </a>
             </div>
-            <div className="-mx-6 overflow-x-auto px-6" style={edgeFade}>
+            <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6" style={edgeFade}>
               <div className="flex gap-2 pb-2">
                 {plan.parsed.days.map((d) => {
                   const isToday = dayNameFromLabel(d.label).toLowerCase() === todayDayName.toLowerCase();

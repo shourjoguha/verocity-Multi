@@ -2,9 +2,13 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { EditableNumber } from '@/components/logger/EditableNumber';
 import { haptic } from '@/lib/haptics';
 
-// One condensed numeric field for a set row. The value sits inline; tapping it
-// opens a magnified (~2× the row) popover anchored to the field, holding the
-// −/+ targets and tap-to-type entry — so the steppers no longer cost a row each.
+// One numeric field, in two shapes:
+//
+// - `inline` — a full-width −/value/+ cluster with nothing hidden behind a tap.
+//   Used inside SetEntrySheet, where there is room to spend and the whole point
+//   is that every target is already on screen.
+// - default — a condensed field for a dense row: the value sits inline and
+//   tapping it opens a magnified popover holding the same −/+ and tap-to-type.
 export function StepperField({
   value,
   onChange,
@@ -13,6 +17,7 @@ export function StepperField({
   display,
   label,
   ariaLabel,
+  inline = false,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -22,6 +27,7 @@ export function StepperField({
   display?: (v: number) => ReactNode;
   label: string;
   ariaLabel: string;
+  inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<'top' | 'bottom'>('top');
@@ -56,6 +62,41 @@ export function StepperField({
     haptic(8);
     onChange(clamp(value + dir * step));
   };
+
+  if (inline) {
+    return (
+      <div className="flex items-stretch border border-border bg-surface">
+        <button
+          type="button"
+          onClick={() => bump(-1)}
+          className="hill-btn-flush flex h-16 w-16 shrink-0 items-center justify-center bg-surface text-3xl text-fg"
+          aria-label={`Decrease ${ariaLabel}`}
+        >
+          −
+        </button>
+        <div className="flex min-w-0 flex-1 flex-col items-center justify-center border-x border-border px-2">
+          <EditableNumber
+            value={value}
+            onCommit={(v) => onChange(clamp(v))}
+            clampParse={clamp}
+            ariaLabel={ariaLabel}
+            className="font-display text-4xl leading-none tabular-nums text-fg"
+          >
+            {display}
+          </EditableNumber>
+          <span className="t-label mt-1 text-muted">{label}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => bump(1)}
+          className="hill-btn-flush flex h-16 w-16 shrink-0 items-center justify-center bg-surface text-3xl text-fg"
+          aria-label={`Increase ${ariaLabel}`}
+        >
+          +
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div ref={wrapRef} className="relative flex flex-col items-center">

@@ -181,6 +181,18 @@ p {
   border: 1px solid var(--color-border);
 }
 
+/* ---- Safe area. Base.astro ships viewport-fit=cover (and the app installs as
+   a standalone PWA), so anything pinned to a viewport edge has to clear the
+   notch / home indicator itself. Single source of truth — no component
+   hand-rolls env(). Both are purely additive: they resolve to 0 on hardware
+   with no inset, so they stack on top of a component's own padding. ---- */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
 /* ---- Type scale — caps tier. The editorial micro-labels (eyebrows, section
    meta, pill/table captions) had drifted across screens into four sizes and
    seven tracking values for what are really two tiers. These collapse them into

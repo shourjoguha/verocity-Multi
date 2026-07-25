@@ -1,34 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { METRICS, RPE, type MetricKey } from '@/app.config';
-import type { LogSet, SetActual } from '@/lib/types';
-import { StepperField } from '@/components/logger/StepperField';
+import { METRICS, type MetricKey } from '@/app.config';
+import type { LogSet } from '@/lib/types';
 import { EASE } from '@/components/anim';
 import { haptic } from '@/lib/haptics';
 
-const snap = (step: number) => (n: number) => Math.max(0, Math.round(n / step) * step);
-const whole = (n: number) => Math.max(0, Math.round(n));
-const snapRpe = (n: number) => Math.min(RPE.max, Math.max(RPE.min, Math.round(n / RPE.step) * RPE.step));
-
-// One condensed set row: every metric is a tap-to-magnify field (see StepperField),
-// followed by delete + complete. The fields shown follow the item's primary metric,
-// with RPE always available as a secondary (and primary when the metric is RPE).
+// One set row: a read-only summary of what was logged, plus the complete
+// toggle. Tapping the summary opens SetEntrySheet, which owns all editing.
+//
+// Keeping the row read-only is what makes it fit a phone: the previous version
+// packed three 44px stepper fields and a three-button action cluster into a
+// ~283px content box and overflowed the viewport. Now it is
+// [planned][summary, flex-1, truncating][✓] and cannot overflow at any width.
 export function SetRow({
   metric,
   set,
   isPr = false,
-  onPatch,
+  onOpen,
   onToggle,
-  onRemove,
-  onCloneForward,
 }: {
   metric: MetricKey;
   set: LogSet;
   isPr?: boolean;
-  onPatch: (patch: Partial<SetActual>) => void;
+  onOpen: () => void;
   onToggle: () => void;
-  onRemove: () => void;
-  onCloneForward?: () => void;
 }) {
   const a = set.actual;
 
@@ -49,70 +44,30 @@ export function SetRow({
     wasComplete.current = a.completed;
   }, [a.completed, reduce, isPr]);
 
-  const fields = () => {
+  const value = () => {
     switch (metric) {
-      case 'weight':
-        return (
-          <>
-            <StepperField
-              value={a.weight ?? 0}
-              onChange={(v) => onPatch({ weight: v })}
-              step={METRICS.weight.step}
-              clamp={snap(METRICS.weight.step)}
-              label={METRICS.weight.unit}
-              ariaLabel="weight"
-            />
-            <StepperField
-              value={a.reps ?? 0}
-              onChange={(v) => onPatch({ reps: v })}
-              step={METRICS.reps.step}
-              clamp={whole}
-              label="reps"
-              ariaLabel="reps"
-            />
-          </>
-        );
+      case 'weight': {
+        const parts = [];
+        if (a.weight) parts.push(`${a.weight}${METRICS.weight.unit}`);
+        if (a.reps) parts.push(`× ${a.reps}`);
+        return parts.join(' ');
+      }
       case 'reps':
-        return (
-          <StepperField
-            value={a.reps ?? 0}
-            onChange={(v) => onPatch({ reps: v })}
-            step={METRICS.reps.step}
-            clamp={whole}
-            label="reps"
-            ariaLabel="reps"
-          />
-        );
+        return a.reps ? `${a.reps} reps` : '';
       case 'time':
-        return (
-          <StepperField
-            value={a.time ?? 0}
-            onChange={(v) => onPatch({ time: v })}
-            step={METRICS.time.step}
-            clamp={snap(METRICS.time.step)}
-            label={METRICS.time.unit}
-            ariaLabel="time"
-          />
-        );
+        return a.time ? `${a.time}${METRICS.time.unit}` : '';
       case 'distance':
-        return (
-          <StepperField
-            value={a.distance ?? 0}
-            onChange={(v) => onPatch({ distance: v })}
-            step={METRICS.distance.step}
-            clamp={snap(METRICS.distance.step)}
-            label={METRICS.distance.unit}
-            ariaLabel="distance"
-          />
-        );
+        return a.distance ? `${a.distance}${METRICS.distance.unit}` : '';
       case 'rpe':
-        return null;
+        return '';
     }
   };
 
+  const main = value();
+
   return (
     <div
-      className={`flex items-center gap-1 border-l-2 pl-2 ${
+      className={`flex items-center gap-2 border-l-2 pl-2 ${
         a.completed ? 'border-accent' : 'border-border'
       }`}
     >
@@ -122,87 +77,64 @@ export function SetRow({
         </span>
       ) : null}
 
-      <div className="flex min-w-0 items-center gap-0.5">
-        {fields()}
-        <StepperField
-          value={a.rpe ?? RPE.min}
-          onChange={(v) => onPatch({ rpe: v })}
-          step={RPE.step}
-          clamp={snapRpe}
-          display={() => a.rpe ?? '—'}
-          label="rpe"
-          ariaLabel="RPE"
-        />
-      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={main ? `Edit set — ${main}` : 'Log this set'}
+        className="flex min-h-11 min-w-0 flex-1 items-baseline gap-2 text-left"
+      >
+        {main ? (
+          <span className="truncate font-display text-2xl leading-none tabular-nums text-fg">
+            {main}
+          </span>
+        ) : (
+          <span className="t-control text-muted">Tap to log</span>
+        )}
+        {a.rpe != null ? (
+          <span className="shrink-0 text-sm tabular-nums text-muted">@{a.rpe}</span>
+        ) : null}
+      </button>
 
-      <div className="ml-auto flex shrink-0 items-center gap-0.5">
-        {a.completed && onCloneForward ? (
-          <button
-            type="button"
-            onClick={() => {
-              haptic(15);
-              onCloneForward?.();
-            }}
-            className="flex min-h-11 w-8 items-center justify-center text-lg text-muted hover:text-fg"
-            aria-label="Copy to next set"
-            title="Copy to next set"
+      <span className="relative inline-flex shrink-0">
+        {pop > 0 ? (
+          <motion.span
+            key={pop}
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-[4px] border-2 border-teal"
+            initial={{ opacity: 0.85, scale: 1 }}
+            animate={{ opacity: 0, scale: popPr ? 2.4 : 1.8 }}
+            transition={{ duration: popPr ? 0.65 : 0.5, ease: EASE }}
+          />
+        ) : null}
+        {pop > 0 && popPr ? (
+          <motion.span
+            key={`pr-${pop}`}
+            aria-hidden
+            className="pointer-events-none absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[0.55rem] font-bold uppercase tracking-[0.2em] text-teal"
+            initial={{ opacity: 0, y: 4, scale: 0.8 }}
+            animate={{ opacity: [0, 1, 1, 0], y: -6, scale: 1 }}
+            transition={{ duration: 1, ease: EASE }}
           >
-            ↓
-          </button>
+            PR
+          </motion.span>
         ) : null}
         <button
           type="button"
           onClick={() => {
-            haptic(15);
-            onRemove();
+            haptic();
+            onToggle();
           }}
-          className="flex min-h-11 w-8 items-center justify-center text-lg text-muted hover:text-fg"
-          aria-label="Delete set"
-          title="Delete set"
+          className={`hill-btn flex min-h-11 w-11 shrink-0 items-center justify-center border text-lg ${
+            a.completed
+              ? 'border-accent bg-accent text-accent-fg'
+              : 'border-border bg-surface text-muted hover:text-fg'
+          }`}
+          aria-label="Toggle completed"
+          aria-pressed={a.completed}
         >
-          ×
+          ✓
         </button>
-        <span className="relative inline-flex shrink-0">
-          {pop > 0 ? (
-            <motion.span
-              key={pop}
-              aria-hidden
-              className="pointer-events-none absolute inset-0 rounded-[4px] border-2 border-teal"
-              initial={{ opacity: 0.85, scale: 1 }}
-              animate={{ opacity: 0, scale: popPr ? 2.4 : 1.8 }}
-              transition={{ duration: popPr ? 0.65 : 0.5, ease: EASE }}
-            />
-          ) : null}
-          {pop > 0 && popPr ? (
-            <motion.span
-              key={`pr-${pop}`}
-              aria-hidden
-              className="pointer-events-none absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[0.55rem] font-bold uppercase tracking-[0.2em] text-teal"
-              initial={{ opacity: 0, y: 4, scale: 0.8 }}
-              animate={{ opacity: [0, 1, 1, 0], y: -6, scale: 1 }}
-              transition={{ duration: 1, ease: EASE }}
-            >
-              PR
-            </motion.span>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => {
-              haptic();
-              onToggle();
-            }}
-            className={`hill-btn flex min-h-11 w-10 shrink-0 items-center justify-center border text-lg ${
-              a.completed
-                ? 'border-accent bg-accent text-accent-fg'
-                : 'border-border bg-surface text-muted hover:text-fg'
-            }`}
-            aria-label="Toggle completed"
-            aria-pressed={a.completed}
-          >
-            ✓
-          </button>
-        </span>
-      </div>
+      </span>
     </div>
   );
 }
