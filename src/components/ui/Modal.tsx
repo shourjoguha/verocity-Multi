@@ -95,9 +95,17 @@ export function Modal({
               ref={panelRef}
               className="lift-fixed pb-safe flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface"
               onClick={(e) => e.stopPropagation()}
-              initial={{ opacity: 0, y: 24, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 24 }}
+              // Slide only. The panel is a child of the scrim, so it already
+              // fades with it — animating its own opacity as well meant the two
+              // multiplied: measured 12 frames mid-open at overlay 0.669 x panel
+              // 0.107, an effective 0.07. Nested opacity forces the panel onto
+              // its own offscreen layer, and the scale re-rasterised its border
+              // and shadow every frame on top of that. That combination is the
+              // flicker when the sheet appears. One animated property, no
+              // nesting — matching SetEntrySheet, which does not do this.
+              initial={{ y: 24 }}
+              animate={{ y: 0 }}
+              exit={{ y: 24 }}
               transition={{ duration: 0.3, ease: EASE }}
             >
               {title ? (
