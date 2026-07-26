@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import type { Movement } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
 import { EASE } from '@/components/anim';
+import { useScrollLock } from '@/lib/scrollLock';
 
 export interface Suggestion {
   id: string;
@@ -27,6 +28,17 @@ export function MovementPicker({
   onDismiss?: (id: string) => void;
   onClose: () => void;
 }) {
+  // This component IS the overlay — callers mount it inside an AnimatePresence,
+  // so being mounted means being on screen and the lock spans the exit too.
+  useScrollLock();
+
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    // One frame in, so the enter animation has mounted first.
+    const raf = requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   const [q, setQ] = useState('');
   const filtered = useMemo(
     () =>
@@ -38,7 +50,9 @@ export function MovementPicker({
 
   return (
     <motion.div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-bg/80 p-0 pointer-fine:backdrop-blur sm:items-center sm:p-6"
+      // overflow-hidden + overscroll-contain hold the page still on touch —
+      // see lib/scrollLock.ts. This overlay used to lock nothing at all.
+      className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain bg-bg/80 p-0 pointer-fine:backdrop-blur sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -105,8 +119,11 @@ export function MovementPicker({
           </div>
         ) : null}
 
+        {/* Focused via ref rather than autoFocus: React's autoFocus calls
+            focus() without `preventScroll`, which scrolls the page behind this
+            `fixed` sheet. This picker has no Modal wrapper to do it for it. */}
         <input
-          autoFocus
+          ref={searchRef}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search movements"

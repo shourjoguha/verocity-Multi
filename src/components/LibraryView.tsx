@@ -174,6 +174,9 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
     return true;
   });
 
+  const subEditItem =
+    subEditing?.mode === 'edit' ? movements.find((m) => m.id === subEditing.id) : undefined;
+
   const trimmed = (d: Draft): Draft => ({
     name: d.name.trim(),
     category: d.category && d.category.trim() ? d.category.trim() : null,
@@ -280,6 +283,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   }
 
   return (
+    <>
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
       <Item>
         <div className="mb-6 flex items-end justify-between gap-4">
@@ -434,24 +438,22 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
         </Item>
       )}
 
-      {subEditing
-        ? (() => {
-            const editItem =
-              subEditing.mode === 'edit' ? movements.find((m) => m.id === subEditing.id) : undefined;
-            return (
-              <SubroutineEditor
-                open
-                initial={{
-                  title: editItem?.name ?? '',
-                  description: editItem?.notes ?? '',
-                  url: editItem?.url ?? '',
-                }}
-                onSave={handleSaveSubroutine}
-                onClose={() => setSubEditing(null)}
-              />
-            );
-          })()
-        : null}
     </PageStagger>
+
+      {/* Outside PageStagger, like every other view's sheets, and mounted
+          permanently with `open`. Unmounting it instead destroyed the
+          AnimatePresence inside Modal along with the child it was supposed to
+          animate out, so the sheet vanished in a single frame. */}
+      <SubroutineEditor
+        open={subEditing !== null}
+        initial={{
+          title: subEditItem?.name ?? '',
+          description: subEditItem?.notes ?? '',
+          url: subEditItem?.url ?? '',
+        }}
+        onSave={handleSaveSubroutine}
+        onClose={() => setSubEditing(null)}
+      />
+    </>
   );
 }

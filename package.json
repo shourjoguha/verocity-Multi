@@ -10,7 +10,8 @@
     "check": "astro check",
     "test": "vitest run",
     "astro": "astro",
-    "audit:mobile": "node scripts/mobile-audit.mjs"
+    "audit:mobile": "node scripts/mobile-audit.mjs",
+    "audit:flicker": "node scripts/flicker-probe.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^5.0.5",

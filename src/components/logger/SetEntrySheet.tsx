@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { METRICS, RPE, type MetricKey } from '@/app.config';
 import type { LogSet, SetActual } from '@/lib/types';
 import { StepperField } from '@/components/logger/StepperField';
 import { EASE } from '@/components/anim';
 import { haptic } from '@/lib/haptics';
+import { useScrollLock } from '@/lib/scrollLock';
 
 const snap = (step: number) => (n: number) => Math.max(0, Math.round(n / step) * step);
 const whole = (n: number) => Math.max(0, Math.round(n));
@@ -14,11 +15,18 @@ const snapRpe = (n: number) => Math.min(RPE.max, Math.max(RPE.min, Math.round(n 
 // anchored to the layout viewport, so when iOS opens the keyboard it shrinks
 // the *visual* viewport and the sheet ends up underneath it. Tracking
 // visualViewport lets us lift the panel by exactly the occluded height.
-function useKeyboardInset(active: boolean) {
+//
+// The inset is applied to the SCRIM's padding, never the panel's margin: the
+// panel is the element Motion drives `y` on, and changing its layout box while
+// that animation runs is the same class of bug as the `.lift` transform fight
+// in docs/LESSONS.md. Nor does this reset to 0 on teardown — it used to, which
+// fired at the *start* of the exit and snapped the panel up by the keyboard
+// height before it slid down.
+function useKeyboardInset() {
   const [inset, setInset] = useState(0);
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!active || !vv) return;
+    if (!vv) return;
     const measure = () => setInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
     measure();
     vv.addEventListener('resize', measure);
@@ -26,10 +34,70 @@ function useKeyboardInset(active: boolean) {
     return () => {
       vv.removeEventListener('resize', measure);
       vv.removeEventListener('scroll', measure);
-      setInset(0);
     };
-  }, [active]);
+  }, []);
   return inset;
+}
+
+// The overlay itself, split out so that everything scoped to "the sheet is on
+// screen" — the scroll lock, Escape, the keyboard tracker — mounts and unmounts
+// with the DOM rather than with the `open` flag. AnimatePresence keeps this
+// mounted for the 300ms of the exit; keying those effects on `open` released
+// the page and zeroed the keyboard inset while the panel was still sliding out.
+function EntryOverlay({
+  label,
+  onClose,
+  children,
+}: {
+  label: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useScrollLock();
+  const keyboardInset = useKeyboardInset();
+
+  // See Modal: onClose is an inline arrow at the call site, so depending on it
+  // would re-run this on every Logger render — and the Logger re-renders on
+  // every tap of +/− in this very sheet.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return (
+    <motion.div
+      // overflow-hidden + overscroll-contain hold the page still on touch; see
+      // lib/scrollLock.ts. The keyboard inset is padding HERE rather than a
+      // margin on the panel, because the panel is the element Motion drives.
+      className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain bg-bg/80 pointer-fine:backdrop-blur"
+      style={{ paddingBottom: keyboardInset }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+      onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      <motion.div
+        className="lift-fixed pb-safe flex max-h-[85dvh] w-full max-w-lg flex-col overflow-y-auto border border-border bg-surface"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ duration: 0.3, ease: EASE }}
+      >
+        {children}
+      </motion.div>
+    </motion.div>
+  );
 }
 
 // Full-width entry sheet for one set — the in-gym editing surface.
@@ -63,30 +131,6 @@ export function SetEntrySheet({
   onCloneForward: () => void;
   onClose: () => void;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const keyboardInset = useKeyboardInset(open);
-
-  // See Modal: onClose is an inline arrow at the call site, so depending on it
-  // would re-run this on every Logger render — and the Logger re-renders on
-  // every tap of +/− in this very sheet, releasing and re-taking the scroll
-  // lock each time.
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCloseRef.current();
-    };
-    window.addEventListener('keydown', onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [open]);
-
   const a = set?.actual;
 
   const fields = () => {
@@ -163,27 +207,7 @@ export function SetEntrySheet({
     <MotionConfig reducedMotion="user">
       <AnimatePresence>
         {open && a ? (
-          <motion.div
-            className="fixed inset-0 z-[80] flex items-end justify-center bg-bg/80 pointer-fine:backdrop-blur"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Set ${setIndex + 1} — ${movement}`}
-            onClick={onClose}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <motion.div
-              ref={panelRef}
-              className="lift-fixed pb-safe flex max-h-[85dvh] w-full max-w-lg flex-col overflow-y-auto border border-border bg-surface"
-              style={{ marginBottom: keyboardInset }}
-              onClick={(e) => e.stopPropagation()}
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ duration: 0.3, ease: EASE }}
-            >
+          <EntryOverlay label={`Set ${setIndex + 1} — ${movement}`} onClose={onClose}>
               <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm text-fg">{movement}</div>
@@ -248,8 +272,7 @@ export function SetEntrySheet({
                   </button>
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
+          </EntryOverlay>
         ) : null}
       </AnimatePresence>
     </MotionConfig>
