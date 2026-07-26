@@ -113,19 +113,30 @@ const { title = 'Verocity', description = 'Strength & training logger.', noBackd
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(() => {});
-          // register() on an existing registration does not reliably re-check
-          // the script, so a deployed build can go unnoticed and the previous
-          // one keeps being served from cache. Poll the *active* registration
-          // explicitly on every in-app navigation — a conditional GET of a ~3KB
-          // no-cache file. The new worker calls skipWaiting/claim, drops the
-          // old cache and precaches the fresh shell, so the NEXT navigation is
-          // current. The current page is deliberately left alone: reloading it
-          // from under the user could interrupt a workout being logged.
+          // Nudge the browser to re-check the worker script: once shortly after
+          // load, and again whenever the app returns to the foreground, which is
+          // when someone would come back to a new deploy. A new worker calls
+          // skipWaiting/claim, drops the old cache and precaches the fresh
+          // shell, so the next navigation is current. The current page is left
+          // alone on purpose — reloading it out from under the user could
+          // interrupt a workout being logged.
+          //
+          // Deferred rather than fired at load because an update() issued
+          // during navigation coalesces into the check the navigation is
+          // already doing. NOTE: this is belt-and-braces, not a proven fix —
+          // in a headless harness update() was observed being called and never
+          // settling, and I could not establish whether that is real browser
+          // behaviour or an artifact of automation. The cache-name versioning
+          // and the waitUntil fix in sw.js are the parts that are actually
+          // load-bearing here; this only makes the browser's own check more
+          // likely to happen sooner. Harmless if it no-ops: a conditional GET
+          // of a ~3KB no-cache file.
           navigator.serviceWorker.ready
             .then(function (reg) {
-              reg.update();
-              document.addEventListener('astro:page-load', function () {
-                reg.update();
+              const check = () => reg.update().catch(() => {});
+              setTimeout(check, 2000);
+              document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') check();
               });
             })
             .catch(() => {});
