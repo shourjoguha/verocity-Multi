@@ -38,7 +38,7 @@ export function MovementPicker({
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-bg/80 p-0 backdrop-blur sm:items-center sm:p-6"
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-bg/80 p-0 pointer-fine:backdrop-blur sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-label={title}

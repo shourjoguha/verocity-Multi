@@ -6,7 +6,14 @@
 //   - navigations / HTML and other same-origin GETs → stale-while-revalidate
 //     (instant from cache, refreshed in the background while online).
 // Cross-origin requests (Supabase, fonts) are never intercepted.
-const CACHE = 'verocity-v2';
+// __BUILD_ID__ is replaced at build time with a hash of the emitted site (see
+// the swVersion integration in astro.config.mjs). A new cache name per deploy is
+// what makes the `activate` cleanup below actually fire: with a constant name
+// the old cache was never dropped, the SW never reinstalled, and every page was
+// served one build stale — forever, silently, because the hashed /_astro/*
+// bundles it referenced were still in cache. In `astro dev` the token is left
+// as-is, which is fine: one stable dev cache.
+const CACHE = 'verocity-__BUILD_ID__';
 const SHELL = [
   '/',
   '/app',
@@ -56,15 +63,22 @@ function cacheFirst(request) {
 // Stale-while-revalidate: respond from cache immediately when present, refresh
 // the cache from the network in the background. An offline + uncached
 // navigation falls back to the app shell.
-function staleWhileRevalidate(request, isNavigation) {
+//
+// The revalidation MUST be handed to event.waitUntil. Returning `cached`
+// settles respondWith immediately, and a service worker with no outstanding
+// waitUntil is free to be terminated — killing the background fetch before it
+// can write the fresh copy. That is how a page stayed stale across repeated
+// visits instead of correcting itself on the next one.
+function staleWhileRevalidate(event, request, isNavigation) {
   return caches.open(CACHE).then((cache) =>
     cache.match(request).then((cached) => {
       const network = fetch(request)
         .then((response) => {
-          if (response.ok) cache.put(request, response.clone());
+          if (response.ok) return cache.put(request, response.clone()).then(() => response);
           return response;
         })
         .catch(() => cached || (isNavigation ? cache.match('/app') : undefined));
+      event.waitUntil(network);
       return cached || network;
     }),
   );
@@ -80,5 +94,5 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(cacheFirst(request));
     return;
   }
-  event.respondWith(staleWhileRevalidate(request, request.mode === 'navigate'));
+  event.respondWith(staleWhileRevalidate(event, request, request.mode === 'navigate'));
 });

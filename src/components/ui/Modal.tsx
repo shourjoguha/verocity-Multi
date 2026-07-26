@@ -81,7 +81,7 @@ export function Modal({
       <AnimatePresence>
         {open ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-bg/80 p-0 backdrop-blur sm:items-center sm:p-6"
+            className="fixed inset-0 z-[80] flex items-end justify-center bg-bg/80 p-0 pointer-fine:backdrop-blur sm:items-center sm:p-6"
             role="dialog"
             aria-modal="true"
             aria-label={title}
@@ -93,7 +93,7 @@ export function Modal({
           >
             <motion.div
               ref={panelRef}
-              className="lift pb-safe flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface"
+              className="lift-fixed pb-safe flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface"
               onClick={(e) => e.stopPropagation()}
               initial={{ opacity: 0, y: 24, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
