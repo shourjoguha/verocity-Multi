@@ -31,6 +31,16 @@ fight.
 surface whose transform is driven by JS.
 → `src/styles/global.css`, `src/components/ui/Modal.tsx`, `logger/SetEntrySheet.tsx`
 
+### A sheet flickers as it opens
+Nested opacity. The panel is a child of the scrim, so it already fades with it —
+animating the panel's own opacity too means the two multiply, and the panel gets
+its own offscreen compositing layer. Measured mid-open: scrim 0.669 × panel
+0.107 = an effective 0.07, across 12 frames. A `scale` on the same panel makes
+it worse, re-rasterising its border and shadow every frame.
+**Animate one property on the panel — `y`. Let the scrim carry the fade.**
+Distinguishing symptom: only when a sheet opens, not on page load or scroll.
+→ `src/components/ui/Modal.tsx`, `logger/MovementPicker.tsx`
+
 ### Whole page flashes ~1s after load, while sitting still
 A JS entrance animation on server-rendered content. Astro paints the island's
 HTML immediately; Motion then mounts with `initial="hidden"` and snaps every
