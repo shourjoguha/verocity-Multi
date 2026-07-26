@@ -6,13 +6,13 @@
 //   - navigations / HTML and other same-origin GETs → stale-while-revalidate
 //     (instant from cache, refreshed in the background while online).
 // Cross-origin requests (Supabase, fonts) are never intercepted.
-// __BUILD_ID__ is replaced at build time with a hash of the emitted site (see
-// the swVersion integration in astro.config.mjs). A new cache name per deploy is
-// what makes the `activate` cleanup below actually fire: with a constant name
-// the old cache was never dropped, the SW never reinstalled, and every page was
-// served one build stale — forever, silently, because the hashed /_astro/*
-// bundles it referenced were still in cache. In `astro dev` the token is left
-// as-is, which is fine: one stable dev cache.
+// The token below is stamped at build time by src/pages/sw.js.ts, which emits
+// this file as the /sw.js route. A cache name that changes per deploy is what
+// makes the `activate` cleanup fire: with a constant name the old cache is
+// never dropped, the worker never reinstalls, and pages keep being served one
+// build stale — silently, because the hashed /_astro/* bundles they reference
+// are still cached. Do not inline a literal here; sw.test.ts asserts the token
+// is present on exactly this line.
 const CACHE = 'verocity-__BUILD_ID__';
 const SHELL = [
   '/',
