@@ -23,7 +23,9 @@ export function EditableNumber({
 
   useEffect(() => {
     if (editing && ref.current) {
-      ref.current.focus();
+      // preventScroll — this input lives inside a `fixed` sheet, and focusing it
+      // without the flag scrolls the page underneath. See docs/LESSONS.md.
+      ref.current.focus({ preventScroll: true });
       ref.current.select();
     }
   }, [editing]);

@@ -17,6 +17,7 @@ import { Button, EmptyState, LoadingScreen, Tag } from '@/components/ui/primitiv
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { MovementPicker } from '@/components/logger/MovementPicker';
+import { AnimatePresence } from 'motion/react';
 import { toast } from '@/lib/toast';
 
 const TAG_KEYS = Object.keys(ACTIVITY_TAGS) as ActivityTagKey[];
@@ -213,14 +214,19 @@ function SessionForm({
         </Button>
       </div>
 
-      {picking ? (
-        <MovementPicker
-          movements={movements}
-          title="Add movement"
-          onPick={addMovement}
-          onClose={() => setPicking(false)}
-        />
-      ) : null}
+      {/* MovementPicker is a bare motion.div — it declares `exit` but has no
+          AnimatePresence of its own, so without this wrapper (which Logger.tsx
+          already has) it popped out in one frame instead of sliding. */}
+      <AnimatePresence>
+        {picking ? (
+          <MovementPicker
+            movements={movements}
+            title="Add movement"
+            onPick={addMovement}
+            onClose={() => setPicking(false)}
+          />
+        ) : null}
+      </AnimatePresence>
     </form>
   );
 }

@@ -153,6 +153,11 @@ body {
    background would cover the backdrop and make every preset invisible. */
 html {
   background-color: var(--color-bg);
+  /* An open sheet takes `overflow: hidden` on a fine pointer (lib/scrollLock.ts).
+     Without a reserved gutter that removes the scrollbar, widening the viewport
+     and shifting every centred `mx-auto max-w-3xl` column sideways — on open,
+     and back again on close. */
+  scrollbar-gutter: stable;
 }
 body {
   background-color: transparent;

@@ -64,7 +64,7 @@ import type {
   VibeCheck,
 } from '@/lib/types';
 import { Button, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
-import { Modal } from '@/components/ui/Modal';
+import { Modal, SHEET_EXIT_MS } from '@/components/ui/Modal';
 import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
 import { SetEntrySheet } from '@/components/logger/SetEntrySheet';
@@ -878,6 +878,27 @@ export default function Logger() {
     );
   }
 
+  // Hand off from the options sheet to another sheet without stacking two
+  // scrims. Opening the next one in the same commit left both `fixed inset-0
+  // bg-bg/80` overlays on screen for the length of the exit, so the page behind
+  // darkened toward an effective 0.96 and lifted back to 0.8 — a visible pulse
+  // in the middle of editing a movement.
+  // The extra frame matters: AnimatePresence removes the node on the frame
+  // AFTER the animation ends, so firing at exactly SHEET_EXIT_MS still caught
+  // the outgoing scrim on screen.
+  const handoff = (openNext: () => void) => {
+    setOptionsFor(null);
+    window.setTimeout(openNext, SHEET_EXIT_MS + 32);
+  };
+
+  // The subroutine sheet stays mounted (see below), so its seed values have to
+  // survive `subEditor` going null while it slides out — hence a plain derived
+  // value rather than a lookup inside a conditional render.
+  const subEditItem =
+    subEditor?.mode === 'edit'
+      ? doc.sections[subEditor.si]?.groups[subEditor.gi]?.items[subEditor.ii]
+      : undefined;
+
   return (
     <ErrorBoundary>
     <MotionConfig reducedMotion="user">
@@ -1137,11 +1158,12 @@ export default function Logger() {
                   <div className="flex flex-col gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        if (sub) setSubEditor({ mode: 'edit', si, gi, ii });
-                        else setPicker({ mode: 'swap', si, gi, ii });
-                        close();
-                      }}
+                      onClick={() =>
+                        handoff(() => {
+                          if (sub) setSubEditor({ mode: 'edit', si, gi, ii });
+                          else setPicker({ mode: 'swap', si, gi, ii });
+                        })
+                      }
                       className={rowClass}
                     >
                       {sub ? 'Edit subroutine' : 'Swap movement'}
@@ -1292,34 +1314,28 @@ export default function Logger() {
           : null}
       </Modal>
 
-      {subEditor
-        ? (() => {
-            const editItem =
-              subEditor.mode === 'edit'
-                ? doc.sections[subEditor.si]?.groups[subEditor.gi]?.items[subEditor.ii]
-                : undefined;
-            return (
-              <SubroutineEditor
-                open
-                initial={{
-                  title: editItem?.movement ?? '',
-                  description: editItem?.description ?? '',
-                  url: editItem?.url ?? '',
-                }}
-                onSave={({ title, description, url }) => {
-                  if (subEditor.mode === 'add') {
-                    setDoc((d) => addSubroutine(d, subEditor.sectionKey, title, description, url));
-                  } else {
-                    const { si, gi, ii } = subEditor;
-                    setDoc((d) => setSubroutine(d, si, gi, ii, { title, description, url }));
-                  }
-                  setSubEditor(null);
-                }}
-                onClose={() => setSubEditor(null)}
-              />
-            );
-          })()
-        : null}
+      {/* Mounted permanently and toggled with `open`. Unmounting it instead
+          destroyed the AnimatePresence inside Modal along with the child it was
+          supposed to animate out, so the sheet vanished in a single frame. */}
+      <SubroutineEditor
+        open={subEditor !== null}
+        initial={{
+          title: subEditItem?.movement ?? '',
+          description: subEditItem?.description ?? '',
+          url: subEditItem?.url ?? '',
+        }}
+        onSave={({ title, description, url }) => {
+          if (!subEditor) return;
+          if (subEditor.mode === 'add') {
+            setDoc((d) => addSubroutine(d, subEditor.sectionKey, title, description, url));
+          } else {
+            const { si, gi, ii } = subEditor;
+            setDoc((d) => setSubroutine(d, si, gi, ii, { title, description, url }));
+          }
+          setSubEditor(null);
+        }}
+        onClose={() => setSubEditor(null)}
+      />
 
       <div className="pb-safe fixed inset-x-0 bottom-0 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur sm:px-6">
         <div className="mx-auto flex max-w-2xl flex-col items-center gap-1">

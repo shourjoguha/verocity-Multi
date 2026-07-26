@@ -41,6 +41,51 @@ it worse, re-rasterising its border and shadow every frame.
 Distinguishing symptom: only when a sheet opens, not on page load or scroll.
 → `src/components/ui/Modal.tsx`, `logger/MovementPicker.tsx`
 
+### A sheet flickers on open AND close, panel and background together (iOS)
+Distinguishing symptom: both edges of the interaction, on every sheet, phone
+only. The cause is the **scroll lock**, not the animation — `document.body.style
+.overflow = 'hidden'` propagates to the viewport, and making the document
+unscrollable is a viewport-state change in WebKit: the collapsed toolbar
+expands and scroll is clamped. Both move `dvh`, and every panel is
+`max-h-[85dvh]` over a `position: fixed` backdrop, so the panel resizes
+mid-slide and the backdrop repaints — once on open, again on close.
+**Lock structurally on touch** (`overflow-hidden overscroll-contain` on the
+scrim swallows scroll chaining) and keep `overflow: hidden` behind
+`(pointer: fine)`, where a wheel still needs it, with `scrollbar-gutter: stable`
+so the desktop lock stops shifting the centred layout sideways.
+Four earlier fixes chased the panel's own animation and verified clean because
+**`npm run audit:mobile` never opens a sheet.** `npm run audit:flicker` does.
+→ `src/lib/scrollLock.ts`, `ui/Modal.tsx`, `logger/SetEntrySheet.tsx`, `scripts/flicker-probe.mjs`
+
+### A sheet disappears instantly instead of animating out
+`AnimatePresence` lives *inside* `Modal`, so unmounting the component that
+renders the `Modal` (`{x ? <Sheet/> : null}`) destroys the `AnimatePresence`
+along with the child it was meant to animate out. The `exit` props are dead.
+**Mount sheets permanently and toggle `open`.** A sheet that stays mounted can
+no longer treat props as first-mount-only seeds — re-seed on the closed→open
+transition, or the second thing you edit shows the first one's values.
+→ `logger/SubroutineEditor.tsx`, `LibraryView.tsx`, `Logger.tsx`, `SessionsView.tsx`
+
+### Focus lands in a sheet, then jumps a frame later
+`panel.querySelector(FOCUSABLE)` returns the header's **Close** button — it is
+first in DOM order — so "focus the first focusable" yanked focus off an
+`autoFocus` input one frame after it arrived. On iOS that is the keyboard
+opening and immediately closing: a `visualViewport` resize, i.e. every `dvh`
+box and the fixed backdrop repainting.
+**Skip the close control, and leave focus alone if it is already in the panel.**
+Also: React's `autoFocus` calls `focus()` *without* `preventScroll`, which
+scrolls the page behind a `fixed` sheet — focus via a ref instead.
+→ `ui/Modal.tsx` (`data-modal-close`), `logger/SubroutineEditor.tsx`, `logger/MovementPicker.tsx`
+
+### The background darkens then lifts when one sheet opens another
+Closing sheet A and opening sheet B in the same commit leaves two
+`fixed inset-0 bg-bg/80` scrims stacked for the length of the exit — composited
+alpha peaks near 0.96 against an intended 0.8.
+**Open the next sheet after the current one has left** (`SHEET_EXIT_MS` + a
+frame; AnimatePresence removes the node on the frame *after* the animation
+ends, so firing at exactly the duration still catches it).
+→ `Logger.tsx` (`handoff`), `ui/Modal.tsx`
+
 ### Whole page flashes ~1s after load, while sitting still
 A JS entrance animation on server-rendered content. Astro paints the island's
 HTML immediately; Motion then mounts with `initial="hidden"` and snaps every
@@ -143,6 +188,17 @@ hardcoded back to a constant, because the token was sitting in a comment.
 **Pin assertions to the exact line that matters, then prove the test fails by
 breaking the code on purpose.** An unproven guard is worse than none.
 → `src/sw.test.ts`
+
+### Sheet open/close has a standing check
+`npm run audit:flicker` opens and closes every sheet at 390×844 with touch
+emulation and samples every frame: it fails on a scroll jump, any write to
+`html`/`body` style on a touch device, two scrims at once, a missing exit
+animation, focus moving after it settled, or the panel's box resizing
+mid-animation. Same credential-free fixtures as the mobile audit. Not in CI;
+run it after touching anything overlay-shaped.
+**Its blind spot is the engine:** only Chromium is installed here, so the
+WebKit-specific half (toolbar/`dvh`/scroll-clamp) is guarded, not demonstrated.
+→ `scripts/flicker-probe.mjs`
 
 ### Mobile regressions have a standing check
 `npm run audit:mobile` loads every `/app` route at 375×812 and 390×844 and fails
