@@ -64,7 +64,7 @@ const onTab = tabs.some((t) => isActive(t.href));
   <a href="#main" class="skip-link">Skip to content</a>
   <header
     id="app-header"
-    class="pt-safe sticky top-0 z-50 border-b border-border bg-bg/90 backdrop-blur-md transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)]"
+    class="pt-safe sticky top-0 z-50 border-b border-border bg-bg transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-md"
   >
     <div class="mx-auto flex h-12 max-w-3xl items-center justify-between px-4 sm:px-6">
       <a
@@ -96,7 +96,7 @@ const onTab = tabs.some((t) => isActive(t.href));
   <nav
     id="nav-menu"
     aria-label="Primary"
-    class="fixed left-0 top-0 z-[70] h-dvh w-64 -translate-x-full border-r border-border bg-bg/90 shadow-2xl backdrop-blur-xl transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)]"
+    class="fixed left-0 top-0 z-[70] h-dvh w-64 -translate-x-full border-r border-border bg-bg shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-xl"
   >
     <div class="flex h-16 items-center px-6">
       <span class="font-display text-lg font-semibold uppercase tracking-tight text-fg">Verocity</span>
@@ -162,7 +162,7 @@ const onTab = tabs.some((t) => isActive(t.href));
   <nav
     aria-label="Primary"
     class:list={[
-      'pb-safe fixed inset-x-0 bottom-0 z-50 border-t border-border bg-bg/95 backdrop-blur-md',
+      'pb-safe fixed inset-x-0 bottom-0 z-50 border-t border-border bg-bg pointer-fine:bg-bg/95 pointer-fine:backdrop-blur-md',
       immersive && 'hidden',
     ]}
   >
@@ -261,18 +261,51 @@ const onTab = tabs.some((t) => isActive(t.href));
     const header = document.getElementById('app-header');
     if (!header || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
+    // Hysteresis, and track the state rather than re-deriving it per frame.
+    // The naive version compared against the previous frame with a 4px
+    // deadzone, which momentum scrolling walks straight through: measured 18
+    // class flips in a single one-second scroll, each starting a 300ms
+    // transform transition. That churn is a repaint on every page.
+    //
+    // Now the header only moves after 24px of committed travel in one
+    // direction, and only when that would actually change its state.
+    const TRAVEL = 24;
     let lastY = window.scrollY;
+    let hidden = false;
+    let travel = 0;
     let ticking = false;
+
+    const setHidden = (next: boolean) => {
+      if (next === hidden) return;
+      hidden = next;
+      header.classList.toggle('-translate-y-full', next);
+    };
+
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
-        const y = window.scrollY;
-        // Ignore rubber-banding at either end, and never hide near the top.
-        if (y > 96 && y > lastY + 4) header.classList.add('-translate-y-full');
-        else if (y < lastY - 4 || y <= 96) header.classList.remove('-translate-y-full');
-        lastY = y;
         ticking = false;
+        const y = Math.max(0, window.scrollY);
+        const dy = y - lastY;
+        lastY = y;
+        if (dy === 0) return;
+        // Near the top the header is always shown, whatever the direction.
+        if (y <= 96) {
+          travel = 0;
+          setHidden(false);
+          return;
+        }
+        // A direction change restarts the count, so a wobble never accumulates.
+        if (dy > 0 !== travel > 0) travel = 0;
+        travel += dy;
+        if (travel > TRAVEL) {
+          setHidden(true);
+          travel = 0;
+        } else if (travel < -TRAVEL) {
+          setHidden(false);
+          travel = 0;
+        }
       });
     };
     window.addEventListener('scroll', onScroll, { passive: true, signal });
