@@ -30,7 +30,7 @@ export default function Toaster() {
     <MotionConfig reducedMotion="user">
       {/* Clears the bottom tab bar (App.astro) and the home indicator, so a
           toast never lands under either. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 p-4">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[90] flex flex-col items-center gap-2 p-4">
         <AnimatePresence>
           {items.map((t) => (
             <motion.div

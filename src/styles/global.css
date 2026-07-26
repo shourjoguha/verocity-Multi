@@ -232,6 +232,16 @@ p {
     transform 0.3s var(--ease-editorial);
   transform: perspective(900px) translateZ(0);
 }
+/* Depth for surfaces whose transform is driven by JS — the modal and sheet
+   panels, which Motion animates on `y`/`scale`. `.lift` sets `transition:
+   transform` AND its own `transform`, so every inline transform Motion writes
+   gets re-transitioned over 300ms on top of the animation already in flight.
+   The two fight each other and the sheet visibly stutters as it slides in.
+   Same resting shadow, no transform, no transition. */
+.lift-fixed {
+  box-shadow: var(--shadow-lift-rest);
+}
+
 .lift-interactive {
   cursor: pointer;
 }

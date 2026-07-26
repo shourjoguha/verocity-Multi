@@ -113,6 +113,22 @@ const { title = 'Verocity', description = 'Strength & training logger.', noBackd
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(() => {});
+          // register() on an existing registration does not reliably re-check
+          // the script, so a deployed build can go unnoticed and the previous
+          // one keeps being served from cache. Poll the *active* registration
+          // explicitly on every in-app navigation — a conditional GET of a ~3KB
+          // no-cache file. The new worker calls skipWaiting/claim, drops the
+          // old cache and precaches the fresh shell, so the NEXT navigation is
+          // current. The current page is deliberately left alone: reloading it
+          // from under the user could interrupt a workout being logged.
+          navigator.serviceWorker.ready
+            .then(function (reg) {
+              reg.update();
+              document.addEventListener('astro:page-load', function () {
+                reg.update();
+              });
+            })
+            .catch(() => {});
         });
       }
     </script>

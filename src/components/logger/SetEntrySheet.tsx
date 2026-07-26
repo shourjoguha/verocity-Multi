@@ -164,7 +164,7 @@ export function SetEntrySheet({
       <AnimatePresence>
         {open && a ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-bg/80 backdrop-blur"
+            className="fixed inset-0 z-[80] flex items-end justify-center bg-bg/80 pointer-fine:backdrop-blur"
             role="dialog"
             aria-modal="true"
             aria-label={`Set ${setIndex + 1} — ${movement}`}
@@ -176,7 +176,7 @@ export function SetEntrySheet({
           >
             <motion.div
               ref={panelRef}
-              className="lift pb-safe flex max-h-[85dvh] w-full max-w-lg flex-col overflow-y-auto border border-border bg-surface"
+              className="lift-fixed pb-safe flex max-h-[85dvh] w-full max-w-lg flex-col overflow-y-auto border border-border bg-surface"
               style={{ marginBottom: keyboardInset }}
               onClick={(e) => e.stopPropagation()}
               initial={{ y: '100%' }}
