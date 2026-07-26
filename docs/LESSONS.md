@@ -31,6 +31,17 @@ fight.
 surface whose transform is driven by JS.
 → `src/styles/global.css`, `src/components/ui/Modal.tsx`, `logger/SetEntrySheet.tsx`
 
+### Whole page flashes ~1s after load, while sitting still
+A JS entrance animation on server-rendered content. Astro paints the island's
+HTML immediately; Motion then mounts with `initial="hidden"` and snaps every
+block to `opacity: 0` before fading it back in — measured at **t=735ms** on a
+fast machine, later on a phone. The content was visible, then wasn't.
+**Entrance animations on SSR content must be CSS**, with `animation-fill-mode:
+both`, so the from-state holds from the first painted frame and there is nothing
+to yank. Never `initial="hidden"` on markup the server already rendered.
+Distinguishing symptom: happens while *not* scrolling, and on every page.
+→ `src/components/anim.tsx` (`PageStagger`/`Item`), `.stagger` in `global.css`
+
 ### Flicker on touch devices, fine on desktop
 `backdrop-filter` on an element that is opacity-animated, or fixed/sticky over
 scrolling content, makes touch Safari re-sample its backdrop every frame.

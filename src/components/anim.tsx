@@ -26,15 +26,19 @@ export const itemVariants: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
 };
 
-// Screen-entrance stagger — runs on mount.
+// Screen-entrance stagger — CSS-driven, deliberately.
+//
+// Astro server-renders this content, so a JS-driven entrance can only start
+// AFTER hydration. That meant painting the page fully, then snapping every
+// block to opacity 0 / y 18 the moment Motion mounted and fading it back in:
+// measured at t=735ms on a fast machine, later on a phone. That is the "flicker
+// about a second after load, on every page" — the entrance was fighting SSR.
+//
+// CSS animates from the very first painted frame instead (fill-mode `both`), so
+// there is no visible state to yank. It also runs without waiting on JS.
+// See docs/LESSONS.md.
 export function PageStagger({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <MotionConfig reducedMotion="user">
-      <motion.div className={className} initial="hidden" animate="show" variants={containerVariants}>
-        {children}
-      </motion.div>
-    </MotionConfig>
-  );
+  return <div className={`stagger ${className ?? ''}`}>{children}</div>;
 }
 
 // Scroll-triggered group reveal — runs once when it enters the viewport.
@@ -54,13 +58,10 @@ export function Reveal({ children, className }: { children: ReactNode; className
   );
 }
 
-// Staggered child — fades + rises in sequence inside a PageStagger/Reveal.
+// Staggered child — fades + rises in sequence inside a PageStagger. Its delay
+// comes from nth-child in global.css, so no index has to be threaded through.
 export function Item({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <motion.div className={className} variants={itemVariants}>
-      {children}
-    </motion.div>
-  );
+  return <div className={`stagger-item ${className ?? ''}`}>{children}</div>;
 }
 
 // Count-up numeral — rolls from 0 to `value` once it scrolls into view, on the

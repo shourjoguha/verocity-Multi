@@ -232,6 +232,41 @@ p {
     transform 0.3s var(--ease-editorial);
   transform: perspective(900px) translateZ(0);
 }
+/* ---- Screen-entrance stagger (PageStagger / Item in components/anim.tsx).
+   CSS rather than Motion because the content is server-rendered: a JS entrance
+   cannot start until hydration, which meant painting the page and then snapping
+   it back to invisible ~700ms later. `both` fill-mode holds the from-state from
+   the first painted frame, so nothing is ever visible-then-hidden.
+   Delays mirror the old variants: 50ms in, 60ms between children. ---- */
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stagger > .stagger-item {
+    animation: stagger-in 0.6s var(--ease-editorial) both;
+    /* Anything past the 10th lands together — a long page should not spend two
+       seconds revealing itself. */
+    animation-delay: 0.65s;
+  }
+  .stagger > .stagger-item:nth-child(1) { animation-delay: 0.05s; }
+  .stagger > .stagger-item:nth-child(2) { animation-delay: 0.11s; }
+  .stagger > .stagger-item:nth-child(3) { animation-delay: 0.17s; }
+  .stagger > .stagger-item:nth-child(4) { animation-delay: 0.23s; }
+  .stagger > .stagger-item:nth-child(5) { animation-delay: 0.29s; }
+  .stagger > .stagger-item:nth-child(6) { animation-delay: 0.35s; }
+  .stagger > .stagger-item:nth-child(7) { animation-delay: 0.41s; }
+  .stagger > .stagger-item:nth-child(8) { animation-delay: 0.47s; }
+  .stagger > .stagger-item:nth-child(9) { animation-delay: 0.53s; }
+  .stagger > .stagger-item:nth-child(10) { animation-delay: 0.59s; }
+}
+
 /* Depth for surfaces whose transform is driven by JS — the modal and sheet
    panels, which Motion animates on `y`/`scale`. `.lift` sets `transition:
    transform` AND its own `transform`, so every inline transform Motion writes
