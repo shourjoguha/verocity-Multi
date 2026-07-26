@@ -9,6 +9,7 @@ Full spec: `docs/SPEC.md`.
 
 | About to...                                       | Read first                           |
 |---------------------------------------------------|--------------------------------------|
+| **Debug flicker, staleness, overlap, a build step**| **`docs/LESSONS.md` — grep the symptom** |
 | Touch the data model, RLS, or sharing             | `docs/SPEC.md` §6 (auth), §8 (data)  |
 | Build the public showcase or share links          | `docs/SPEC.md` §7                    |
 | Edit plan/log JSONB or domain types               | `docs/SPEC.md` §8, `lib/types.ts`    |
@@ -16,6 +17,12 @@ Full spec: `docs/SPEC.md`.
 | Change visuals, tokens, or layout                 | `docs/SPEC.md` §11, `app.config.ts`  |
 | Scaffold, sequence work, or deploy                | `docs/SPEC.md` §4–5, §13 (roadmap)   |
 | Add anything AI / plan-parsing / "coach"          | `docs/SPEC.md` §12 — DEFERRED, ask   |
+
+**Record what bit you.** `docs/LESSONS.md` is the append-only log of traps and
+the decisions taken in response — entries lead with the observable *symptom* so
+they can be grepped mid-debug. If something cost you more than twenty minutes,
+or you were wrong before you were right, add it. Several entries exist because
+the same wrong diagnosis was reached twice.
 
 ## Hard rules
 
