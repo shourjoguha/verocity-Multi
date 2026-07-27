@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import type { Movement } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
 import { EASE } from '@/components/anim';
+import { SHEET_EXIT_MS } from '@/components/ui/Modal';
 import { useScrollLock } from '@/lib/scrollLock';
 
 export interface Suggestion {
@@ -49,29 +50,32 @@ export function MovementPicker({
   );
 
   return (
-    <motion.div
-      // overflow-hidden + overscroll-contain hold the page still on touch —
-      // see lib/scrollLock.ts. This overlay used to lock nothing at all.
-      className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain bg-bg/80 p-0 pointer-fine:backdrop-blur sm:items-center sm:p-6"
+    // A plain, un-animated root. overflow-hidden + overscroll-contain hold the
+    // page still on touch — see lib/scrollLock.ts.
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain p-0 sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      onClick={onClose}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
     >
+      {/* Scrim as a SIBLING of the panel, never its parent — see ui/Modal.tsx. */}
       <motion.div
-        className="flex max-h-[80dvh] w-full max-w-lg flex-col border border-border bg-surface"
-        onClick={(e) => e.stopPropagation()}
-        // Slide only — see Modal: the panel already fades with the scrim it
-        // sits inside, so its own opacity animation only multiplied, and the
-        // scale re-rasterised the border and shadow every frame.
+        data-sheet-scrim
+        className="absolute inset-0 bg-bg/80 pointer-fine:backdrop-blur"
+        onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
+      />
+      <motion.div
+        data-sheet-panel
+        className="relative flex max-h-[80dvh] w-full max-w-lg flex-col border border-border bg-surface"
+        // Slide only — one animated property.
         initial={{ y: 24 }}
         animate={{ y: 0 }}
         exit={{ y: 24 }}
-        transition={{ duration: 0.3, ease: EASE }}
+        transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <span className="t-eyebrow text-muted">{title}</span>
@@ -161,6 +165,6 @@ export function MovementPicker({
           ))}
         </ul>
       </motion.div>
-    </motion.div>
+    </div>
   );
 }

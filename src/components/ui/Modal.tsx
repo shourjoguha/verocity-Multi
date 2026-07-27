@@ -106,34 +106,45 @@ export function Modal({
     <MotionConfig reducedMotion="user">
       <AnimatePresence>
         {open ? (
-          <motion.div
-            // overflow-hidden + overscroll-contain make the scrim a scroll
-            // container that swallows scroll chaining, which is what holds the
-            // page still on touch now that nothing locks the document there.
-            // See lib/scrollLock.ts.
-            className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain bg-bg/80 p-0 pointer-fine:backdrop-blur sm:items-center sm:p-6"
+          // A plain, un-animated root. overflow-hidden + overscroll-contain make
+          // it a scroll container that swallows scroll chaining, which is what
+          // holds the page still on touch now that nothing locks the document
+          // there. See lib/scrollLock.ts.
+          <div
+            className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain p-0 sm:items-center sm:p-6"
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            onClick={onClose}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
           >
             <ModalBehavior panelRef={panelRef} onClose={onClose} />
+            {/* The scrim is a SIBLING of the panel, not its parent. As a parent
+                it was an opacity-animated element covering the whole viewport,
+                so every frame of the fade re-rendered the panel — border and
+                shadow included — into the scrim's offscreen buffer, and churned
+                the compositing layer that the fixed `.bg-backdrop` sits behind.
+                Side by side, each animates on its own and neither touches the
+                other. This is the structural difference between a sheet and an
+                ordinary in-flow form, which never flickered. */}
+            <motion.div
+              data-sheet-scrim
+              className="absolute inset-0 bg-bg/80 pointer-fine:backdrop-blur"
+              onClick={onClose}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              // Same duration as the panel. At 0.2s against the panel's 0.3s the
+              // wash was fully gone 100ms before the sheet had finished leaving,
+              // so the drawer spent its last frames against a bright, unscrimmed
+              // page — which reads as the drawer blinking as it closes.
+              transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
+            />
             <motion.div
               ref={panelRef}
-              className="lift-fixed pb-safe flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface"
-              onClick={(e) => e.stopPropagation()}
-              // Slide only. The panel is a child of the scrim, so it already
-              // fades with it — animating its own opacity as well meant the two
-              // multiplied: measured 12 frames mid-open at overlay 0.669 x panel
-              // 0.107, an effective 0.07. Nested opacity forces the panel onto
-              // its own offscreen layer, and the scale re-rasterised its border
-              // and shadow every frame on top of that. That combination is the
-              // flicker when the sheet appears. One animated property, no
-              // nesting — matching SetEntrySheet, which does not do this.
+              data-sheet-panel
+              className="lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface"
+              // Slide only — one animated property. Its own opacity animation
+              // used to multiply with the scrim's: measured 12 frames mid-open
+              // at overlay 0.669 x panel 0.107, an effective 0.07.
               initial={{ y: 24 }}
               animate={{ y: 0 }}
               exit={{ y: 24 }}
@@ -154,7 +165,7 @@ export function Modal({
               ) : null}
               {children}
             </motion.div>
-          </motion.div>
+          </div>
         ) : null}
       </AnimatePresence>
     </MotionConfig>
