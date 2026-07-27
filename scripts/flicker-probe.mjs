@@ -11,7 +11,8 @@
 //                 (that is a viewport-state change in WebKit: the toolbar
 //                 moves, `dvh` moves, and every dvh-sized box repaints)
 //   stacked       two full-viewport scrims on screen at once
-//   no-exit       the sheet vanished in one frame instead of animating out
+//   scrim-static  the full-viewport scrim animated its opacity
+//   slow-close    the sheet lingered after the close tap
 //   focus-jump    focus moved again after the sheet settled (on iOS that is
 //                 the keyboard opening and immediately closing)
 //   layout-churn  the panel's own box changed size while it was animating
@@ -187,6 +188,9 @@ function recorder() {
       scrollY: Math.round(w.scrollY),
       dialogs: dialogs.length,
       overflow: document.body.style.overflow || '',
+      // Which sheet this is. A handoff now swaps sheets within a single frame,
+      // so "a sheet is on screen" is not enough to delimit one sheet's life.
+      label: dialogs[0]?.getAttribute('aria-label') ?? '',
       scrimOpacity: dialogs[0]
         ? getComputedStyle(dialogs[0].querySelector('[data-sheet-scrim]') ?? dialogs[0]).opacity
         : '1',
@@ -333,24 +337,26 @@ for (const s of SCENARIOS) {
     result.failures.push(`nested-fade: panel inside an opacity-animated ancestor for ${n} frame(s)`);
   }
 
-  // scrim-gap: the wash must not lift before the panel has finished leaving,
-  // or the drawer spends its last frames against a bright, unscrimmed page.
-  const gap = closeFrames.filter((f) => f.dialogs > 0 && Number(f.scrimOpacity) === 0).length;
-  if (gap > 1) {
-    result.failures.push(`scrim-gap: panel still on screen for ${gap} frame(s) after the scrim hit 0`);
+  // scrim-static: the full-viewport scrim must not animate its opacity at all.
+  // That is the one thing an in-flow form never does, and in-flow forms are the
+  // only overlay-shaped thing in this app that never flickered on a phone.
+  const scrimOpacities = new Set(frames.filter((f) => f.dialogs > 0).map((f) => f.scrimOpacity));
+  if (scrimOpacities.size > 1) {
+    result.failures.push(`scrim-static: scrim opacity animated (${[...scrimOpacities].join(' -> ')})`);
   }
 
   // stacked: never two scrims at once.
   const maxDialogs = Math.max(...frames.map((f) => f.dialogs));
   if (maxDialogs > 1) result.failures.push(`stacked: ${maxDialogs} scrims on screen at once`);
 
-  // no-exit: the sheet must still be there mid-exit, and gone afterwards.
-  const midExit = closeFrames.find((f) => f.t - closeT0 >= 120 && f.t - closeT0 <= 200);
-  if (midExit && midExit.dialogs === 0) {
-    result.failures.push('no-exit: scrim gone 150ms after close (exit animation never ran)');
+  // slow-close: the sheet must be gone promptly. Sheets unmount on close now,
+  // so anything still on screen a few frames later is a deferred unmount.
+  const stillUp = closeFrames.filter((f) => f.t - closeT0 > 100 && f.dialogs > 0).length;
+  if (stillUp > 0) {
+    result.failures.push(`slow-close: sheet still on screen ${stillUp} frame(s) past 100ms after close`);
   }
   if ((closeFrames[closeFrames.length - 1]?.dialogs ?? 0) !== 0) {
-    result.failures.push('no-exit: scrim never left');
+    result.failures.push('slow-close: sheet never left');
   }
 
   // The remaining checks are per contiguous run of "a sheet is on screen". A
@@ -358,12 +364,18 @@ for (const s of SCENARIOS) {
   // to be different sizes and to hold focus in different places. What is not
   // allowed is either of those changing *within* one sheet's lifetime.
   const runs = [];
+  let runLabel = null;
   for (const f of frames) {
     if (f.dialogs === 0) {
       if (runs.length && runs[runs.length - 1].length) runs.push([]);
+      runLabel = null;
       continue;
     }
-    if (!runs.length) runs.push([]);
+    if (!runs.length || f.label !== runLabel) {
+      if (runs.length && runs[runs.length - 1].length) runs.push([]);
+      else if (!runs.length) runs.push([]);
+      runLabel = f.label;
+    }
     runs[runs.length - 1].push(f);
   }
 

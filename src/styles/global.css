@@ -243,6 +243,45 @@ p {
    it back to invisible ~700ms later. `both` fill-mode holds the from-state from
    the first painted frame, so nothing is ever visible-then-hidden.
    Delays mirror the old variants: 50ms in, 60ms between children. ---- */
+/* ---- Sheet entrance. Deliberately the same mechanism as `.stagger-item`
+   below: a CSS keyframe on a normal-sized element, nothing JS-driven and
+   nothing full-viewport.
+
+   Sheets used to animate through Motion, with AnimatePresence holding the node
+   ~300ms after close and a full-viewport scrim fading its opacity over the
+   fixed `.bg-backdrop`. Four rounds of fixes to that arrangement each removed a
+   real defect without settling it on an iPhone, while the in-flow forms on the
+   same screens — plain conditional render, CSS entrance, instant removal —
+   never flickered once. So the sheets now work the way the forms do.
+
+   The scrim does not animate at all: a full-viewport element changing opacity
+   is the one thing an in-flow form never does, and it is the last structural
+   difference left. Only the panel moves, and only on transform. ---- */
+@keyframes sheet-rise {
+  from {
+    transform: translateY(24px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes sheet-rise-full {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sheet-panel {
+    animation: sheet-rise 0.3s var(--ease-editorial) both;
+  }
+  .sheet-panel-full {
+    animation: sheet-rise-full 0.3s var(--ease-editorial) both;
+  }
+}
+
 @keyframes stagger-in {
   from {
     opacity: 0;

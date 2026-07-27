@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { METRICS, RPE, type MetricKey } from '@/app.config';
 import type { LogSet, SetActual } from '@/lib/types';
 import { StepperField } from '@/components/logger/StepperField';
-import { EASE } from '@/components/anim';
-import { SHEET_EXIT_MS } from '@/components/ui/Modal';
 import { haptic } from '@/lib/haptics';
 import { useScrollLock } from '@/lib/scrollLock';
 
@@ -42,9 +39,7 @@ function useKeyboardInset() {
 
 // The overlay itself, split out so that everything scoped to "the sheet is on
 // screen" — the scroll lock, Escape, the keyboard tracker — mounts and unmounts
-// with the DOM rather than with the `open` flag. AnimatePresence keeps this
-// mounted for the 300ms of the exit; keying those effects on `open` released
-// the page and zeroed the keyboard inset while the panel was still sliding out.
+// with the DOM rather than with the `open` flag.
 function EntryOverlay({
   label,
   onClose,
@@ -72,10 +67,9 @@ function EntryOverlay({
   }, []);
 
   return (
-    // A plain, un-animated root. overflow-hidden + overscroll-contain hold the
-    // page still on touch; see lib/scrollLock.ts. The keyboard inset is padding
-    // HERE rather than a margin on the panel, because the panel is the element
-    // Motion drives.
+    // overflow-hidden + overscroll-contain hold the page still on touch; see
+    // lib/scrollLock.ts. The keyboard inset is padding HERE rather than a
+    // margin on the panel, so it never disturbs the panel's own box.
     <div
       className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain"
       style={{ paddingBottom: keyboardInset }}
@@ -83,29 +77,18 @@ function EntryOverlay({
       aria-modal="true"
       aria-label={label}
     >
-      {/* Scrim as a SIBLING of the panel, never its parent — see ui/Modal.tsx. */}
-      <motion.div
+      {/* Static scrim, CSS-only panel entrance — see ui/Modal.tsx. */}
+      <div
         data-sheet-scrim
-        // will-change: one compositing layer for the scrim's whole life, so the
-        // fade never promotes/demotes a full-viewport layer over the fixed
-        // backdrop. See ui/Modal.tsx.
-        className="absolute inset-0 bg-bg/80 will-change-[opacity] pointer-fine:backdrop-blur"
+        className="absolute inset-0 bg-bg/80 pointer-fine:backdrop-blur"
         onClick={onClose}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
       />
-      <motion.div
+      <div
         data-sheet-panel
-        className="lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col overflow-y-auto border border-border bg-surface"
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
+        className="sheet-panel-full lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col overflow-y-auto border border-border bg-surface"
       >
         {children}
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -213,11 +196,10 @@ export function SetEntrySheet({
   const secondary =
     'hill-btn flex min-h-11 flex-1 items-center justify-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg';
 
+  if (!open || !a) return null;
+
   return (
-    <MotionConfig reducedMotion="user">
-      <AnimatePresence>
-        {open && a ? (
-          <EntryOverlay label={`Set ${setIndex + 1} — ${movement}`} onClose={onClose}>
+    <EntryOverlay label={`Set ${setIndex + 1} — ${movement}`} onClose={onClose}>
               <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm text-fg">{movement}</div>
@@ -282,9 +264,6 @@ export function SetEntrySheet({
                   </button>
                 </div>
               </div>
-          </EntryOverlay>
-        ) : null}
-      </AnimatePresence>
-    </MotionConfig>
+    </EntryOverlay>
   );
 }

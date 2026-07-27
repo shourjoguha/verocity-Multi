@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'motion/react';
 import type { Movement } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
-import { EASE } from '@/components/anim';
-import { SHEET_EXIT_MS } from '@/components/ui/Modal';
 import { useScrollLock } from '@/lib/scrollLock';
 
 export interface Suggestion {
@@ -29,8 +26,7 @@ export function MovementPicker({
   onDismiss?: (id: string) => void;
   onClose: () => void;
 }) {
-  // This component IS the overlay — callers mount it inside an AnimatePresence,
-  // so being mounted means being on screen and the lock spans the exit too.
+  // This component IS the overlay, so being mounted means being on screen.
   useScrollLock();
 
   const searchRef = useRef<HTMLInputElement>(null);
@@ -62,27 +58,15 @@ export function MovementPicker({
       aria-modal="true"
       aria-label={title}
     >
-      {/* Scrim as a SIBLING of the panel, never its parent — see ui/Modal.tsx. */}
-      <motion.div
+      {/* Static scrim, CSS-only panel entrance — see ui/Modal.tsx. */}
+      <div
         data-sheet-scrim
-        // will-change: one compositing layer for the scrim's whole life, so the
-        // fade never promotes/demotes a full-viewport layer over the fixed
-        // backdrop. See ui/Modal.tsx.
-        className="absolute inset-0 bg-bg/80 will-change-[opacity] pointer-fine:backdrop-blur"
+        className="absolute inset-0 bg-bg/80 pointer-fine:backdrop-blur"
         onClick={onClose}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
       />
-      <motion.div
+      <div
         data-sheet-panel
-        className="relative flex max-h-[80dvh] w-full max-w-lg flex-col border border-border bg-surface"
-        // Slide only — one animated property.
-        initial={{ y: 24 }}
-        animate={{ y: 0 }}
-        exit={{ y: 24 }}
-        transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
+        className="sheet-panel relative flex max-h-[80dvh] w-full max-w-lg flex-col border border-border bg-surface"
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <span className="t-eyebrow text-muted">{title}</span>
@@ -171,7 +155,7 @@ export function MovementPicker({
             </li>
           ))}
         </ul>
-      </motion.div>
+      </div>
     </div>
   );
 }

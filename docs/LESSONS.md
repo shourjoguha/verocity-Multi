@@ -41,6 +41,21 @@ it worse, re-rasterising its border and shadow every frame.
 Distinguishing symptom: only when a sheet opens, not on page load or scroll.
 → `src/components/ui/Modal.tsx`, `logger/MovementPicker.tsx`
 
+### Sheets flicker on a phone and in-flow forms on the same screen do not
+Five rounds of fixes to the sheets' Motion setup each removed a real defect and
+none of them settled it on an iPhone. What finally did: **stop animating the
+sheets with JS and make them work exactly like the in-flow forms** — mounted
+while open, one CSS keyframe on the panel's transform, removed immediately on
+close. No Motion, no AnimatePresence, no deferred unmount.
+The scrim does not animate at all. **A full-viewport element changing opacity is
+the one thing an in-flow form never does**, and it was the last structural
+difference between the two. Compositing a fading viewport-sized layer over the
+fixed `.bg-backdrop` is work no form ever asks for.
+Cost: no slide-out on close. The sheet goes when you tap, like the forms.
+**When two things on one screen do the same job and only one misbehaves, port
+the mechanism from the one that works instead of tuning the one that doesn't.**
+→ `ui/Modal.tsx`, `logger/SetEntrySheet.tsx`, `logger/MovementPicker.tsx`, `sheet-rise` in `global.css`
+
 ### The background moves as a sheet opens, and it hangs ~1s before closing
 Only on a phone, and only on sheets that contain a text field. The sheet was
 focusing its first input a frame after the tap, which **raises the software
