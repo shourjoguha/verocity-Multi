@@ -4,6 +4,7 @@ import { METRICS, RPE, type MetricKey } from '@/app.config';
 import type { LogSet, SetActual } from '@/lib/types';
 import { StepperField } from '@/components/logger/StepperField';
 import { EASE } from '@/components/anim';
+import { SHEET_EXIT_MS } from '@/components/ui/Modal';
 import { haptic } from '@/lib/haptics';
 import { useScrollLock } from '@/lib/scrollLock';
 
@@ -71,32 +72,38 @@ function EntryOverlay({
   }, []);
 
   return (
-    <motion.div
-      // overflow-hidden + overscroll-contain hold the page still on touch; see
-      // lib/scrollLock.ts. The keyboard inset is padding HERE rather than a
-      // margin on the panel, because the panel is the element Motion drives.
-      className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain bg-bg/80 pointer-fine:backdrop-blur"
+    // A plain, un-animated root. overflow-hidden + overscroll-contain hold the
+    // page still on touch; see lib/scrollLock.ts. The keyboard inset is padding
+    // HERE rather than a margin on the panel, because the panel is the element
+    // Motion drives.
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain"
       style={{ paddingBottom: keyboardInset }}
       role="dialog"
       aria-modal="true"
       aria-label={label}
-      onClick={onClose}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
     >
+      {/* Scrim as a SIBLING of the panel, never its parent — see ui/Modal.tsx. */}
       <motion.div
-        className="lift-fixed pb-safe flex max-h-[85dvh] w-full max-w-lg flex-col overflow-y-auto border border-border bg-surface"
-        onClick={(e) => e.stopPropagation()}
+        data-sheet-scrim
+        className="absolute inset-0 bg-bg/80 pointer-fine:backdrop-blur"
+        onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
+      />
+      <motion.div
+        data-sheet-panel
+        className="lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col overflow-y-auto border border-border bg-surface"
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
-        transition={{ duration: 0.3, ease: EASE }}
+        transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
       >
         {children}
       </motion.div>
-    </motion.div>
+    </div>
   );
 }
 

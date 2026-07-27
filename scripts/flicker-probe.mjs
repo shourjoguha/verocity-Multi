@@ -167,12 +167,29 @@ function recorder() {
   const tick = () => {
     if (p.stopped) return obs.disconnect();
     const dialogs = document.querySelectorAll('[role="dialog"]');
-    const panel = dialogs[0]?.firstElementChild;
+    // Fall back to the first element child so this still finds the panel in a
+    // build that predates the attribute — an assertion that can only pass
+    // because it found nothing is not an assertion.
+    const panel =
+      dialogs[0]?.querySelector('[data-sheet-panel]') ?? dialogs[0]?.firstElementChild ?? null;
+    // Is the panel rendered inside something that is mid-opacity-fade? That
+    // puts it in an offscreen buffer for every frame of the fade — border and
+    // shadow re-rasterised each time — and churns the layer the fixed backdrop
+    // sits behind. The scrim must be the panel's SIBLING, not its ancestor.
+    let nestedInFade = false;
+    for (let el = panel?.parentElement; el && el !== document.body; el = el.parentElement) {
+      const o = getComputedStyle(el).opacity;
+      if (o !== '' && Number(o) < 1) nestedInFade = true;
+    }
     p.frames.push({
+      nestedInFade,
       t: Math.round(performance.now()),
       scrollY: Math.round(w.scrollY),
       dialogs: dialogs.length,
       overflow: document.body.style.overflow || '',
+      scrimOpacity: dialogs[0]
+        ? getComputedStyle(dialogs[0].querySelector('[data-sheet-scrim]') ?? dialogs[0]).opacity
+        : '1',
       // The panel's own box. Motion drives `transform`; anything else changing
       // here mid-animation is layout churn on a composited element.
       panelH: panel ? Math.round(panel.getBoundingClientRect().height) : 0,
@@ -294,6 +311,19 @@ for (const s of SCENARIOS) {
   }
   if (frames.some((f) => f.overflow === 'hidden')) {
     result.failures.push('lock-writes: body overflow went hidden on a touch device');
+  }
+
+  // nested-fade: the panel must never be a descendant of a fading element.
+  if (frames.some((f) => f.nestedInFade)) {
+    const n = frames.filter((f) => f.nestedInFade).length;
+    result.failures.push(`nested-fade: panel inside an opacity-animated ancestor for ${n} frame(s)`);
+  }
+
+  // scrim-gap: the wash must not lift before the panel has finished leaving,
+  // or the drawer spends its last frames against a bright, unscrimmed page.
+  const gap = closeFrames.filter((f) => f.dialogs > 0 && Number(f.scrimOpacity) === 0).length;
+  if (gap > 1) {
+    result.failures.push(`scrim-gap: panel still on screen for ${gap} frame(s) after the scrim hit 0`);
   }
 
   // stacked: never two scrims at once.

@@ -41,6 +41,21 @@ it worse, re-rasterising its border and shadow every frame.
 Distinguishing symptom: only when a sheet opens, not on page load or scroll.
 → `src/components/ui/Modal.tsx`, `logger/MovementPicker.tsx`
 
+### The background blinks as a sheet opens, and the drawer blinks as it closes
+Two separate defects, both structural, both invisible to a still screenshot.
+**The panel was a child of the opacity-animated scrim.** A full-viewport element
+fading from 0 to 1 renders its entire subtree into an offscreen buffer every
+frame — panel, border, shadow — and churns the compositing layer that the fixed
+`.bg-backdrop` sits behind. Measured 30 frames per open/close cycle.
+**And the scrim faded in 0.2s while the panel slid for 0.3s**, so on close the
+wash was gone a measured 7 frames (~115ms) before the drawer had left: the
+drawer spent its last frames against a bright, unscrimmed page.
+**Make the scrim a SIBLING of the panel and give both the same duration.**
+The useful tell: an ordinary in-flow form on the same screen never flickered —
+if a sheet flickers and a plain form doesn't, suspect the overlay's structure,
+not its animation.
+→ `ui/Modal.tsx`, `logger/SetEntrySheet.tsx`, `logger/MovementPicker.tsx`
+
 ### A sheet flickers on open AND close, panel and background together (iOS)
 Distinguishing symptom: both edges of the interaction, on every sheet, phone
 only. The cause is the **scroll lock**, not the animation — `document.body.style
@@ -193,9 +208,14 @@ breaking the code on purpose.** An unproven guard is worse than none.
 `npm run audit:flicker` opens and closes every sheet at 390×844 with touch
 emulation and samples every frame: it fails on a scroll jump, any write to
 `html`/`body` style on a touch device, two scrims at once, a missing exit
-animation, focus moving after it settled, or the panel's box resizing
-mid-animation. Same credential-free fixtures as the mobile audit. Not in CI;
-run it after touching anything overlay-shaped.
+animation, focus moving after it settled, the panel's box resizing
+mid-animation, the panel sitting inside an opacity-animated ancestor, or the
+scrim clearing before the panel has left. Same credential-free fixtures as the
+mobile audit. Not in CI; run it after touching anything overlay-shaped.
+Every assertion has been shown to fail against the build that had the bug —
+including the fallback that finds the panel in a build predating
+`data-sheet-panel`, because an assertion that passes by finding nothing is not
+an assertion.
 **Its blind spot is the engine:** only Chromium is installed here, so the
 WebKit-specific half (toolbar/`dvh`/scroll-clamp) is guarded, not demonstrated.
 → `scripts/flicker-probe.mjs`
