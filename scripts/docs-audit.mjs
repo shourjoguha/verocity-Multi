@@ -25,7 +25,10 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 
 const DOCS = ['CLAUDE.md', 'docs/SPEC.md', 'docs/LESSONS.md', 'docs/HANDOVER.md', 'docs/ROADMAP.md'];
-const SEARCH_ROOTS = ['src', 'scripts', 'supabase', 'public'];
+// `.claude` holds the ui-change / db-change / docs-upkeep skills and the agent
+// definitions. The docs route to them by path, so those paths are claims like
+// any other and get checked like any other.
+const SEARCH_ROOTS = ['src', 'scripts', 'supabase', 'public', '.claude'];
 // Config files live at the repo root, outside the search roots.
 const ROOT_FILES = ['package.json', 'astro.config.mjs', 'postcss.config.mjs', 'tsconfig.json', 'vitest.config.ts'];
 
@@ -115,8 +118,12 @@ function classify(raw) {
   if (/^npm (test|install|ci)$/.test(t)) return null;
   // A URL route (`/sw.js`, `/app/coach`) — resolved against src/pages, not disk.
   if (/^\/[\w./-]*$/.test(t)) return { kind: 'route', key: t };
-  // A path: has a slash and a known extension.
-  if (/^[\w./@-]+\.(tsx?|astro|css|mjs|js|sql|json|webmanifest|svg)$/.test(t) && t.includes('/')) {
+  // A path: has a slash and a known extension. `md` is here so a route to a
+  // skill (`.claude/skills/ui-change/SKILL.md`) or a sibling doc is checked
+  // rather than silently skipped; the bare-filename rule below deliberately
+  // does NOT take `md`, since `CLAUDE.md` and friends live outside the search
+  // roots and a bare name is ambiguous anyway.
+  if (/^[\w./@-]+\.(tsx?|astro|css|mjs|js|sql|json|webmanifest|svg|md)$/.test(t) && t.includes('/')) {
     return { kind: 'path', key: t };
   }
   // A bare filename. Must start with a word char — `.test.ts` is a suffix
