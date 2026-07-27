@@ -346,7 +346,7 @@ p {
    pairing LESSONS § "Flicker on touch devices" warns about); and it would make
    the bar a containing block for any future fixed *descendant*. Its
    `transition: transform` also buys nothing on a bar that never changes
-   state. Note the transform would NOT break the bar's own fixed positioning —
+   state. Note the transform would NOT break the bar's own sticky positioning —
    only a transformed ancestor does that. */
 .ledge {
   box-shadow: var(--shadow-ledge);

@@ -127,10 +127,39 @@ Both theme blocks define it; a light-only value is a silent dark-mode break.
 `perspective(900px)` promotes a composited layer on the same element that
 carries `pointer-fine:backdrop-blur-md` (see the touch-flicker entry above), and
 it would make the bar a containing block for any future `fixed` **descendant**.
-It would *not* break the bar's own `position: fixed` — only a transformed
-*ancestor* does that, which is the plausible-sounding reason to avoid reaching
-for.
+It would *not* break the bar's own positioning — only a transformed *ancestor*
+does that, which is the plausible-sounding reason to avoid reaching for.
 → `src/styles/global.css` (`.ledge`), `src/layouts/App.astro`
+
+### The bottom bar detaches and floats mid-screen while scrolling down on iOS
+`[confirmed in the wild]` for the symptom; `[argued — not reproduced]` for the
+mechanism and the fix, neither of which any local harness can observe.
+Scrolling **down** on an iPhone left the tab bar stranded ~75px above the
+bottom edge with page content running on underneath it, on every route.
+Scrolling back **up** snapped it home, which is what makes it look like a paint
+bug rather than a layout one.
+
+`position: fixed` is resolved against iOS Safari's **layout** viewport. Scrolling
+down collapses the toolbar and grows the **visual** viewport immediately, but
+the layout viewport does not catch up until the gesture ends — so `bottom: 0`
+means the bottom of a box that is now shorter than what is on screen. The
+sticky header never had the problem, which is the tell.
+
+**Pin bottom bars with `sticky bottom-0`, not `fixed bottom-0`.** A sticky box
+is laid out in the document, so it tracks what is actually painted. It needs
+three things: a full-height flex column (`min-h-svh`, not `dvh` — the small
+unit does not move when the toolbar collapses), a `flex-1` sibling above it so
+short pages still push it to the edge, and to be the **last in-flow child**.
+Two consequences that look like bugs if you do not expect them: the column above
+drops the bottom padding it used to reserve for the bar (the bar now occupies
+real space at the document end), and `inset-x-0` must go — on a sticky box
+`left`/`right` are sticky *constraints*, not offsets; the flex column already
+stretches it full width.
+
+Not tried, and rejected on sight: reading `visualViewport` and translating the
+bar per frame. That is JS-driven motion on the scroll path — see "Something
+repaints constantly while scrolling".
+→ `src/layouts/App.astro`, `src/components/Logger.tsx` (the Finish bar, same fix)
 
 ### A stat tile is far taller than its font sizes predict
 `[measured in Chromium at 375px]`

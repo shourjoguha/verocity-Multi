@@ -62,6 +62,14 @@ const onTab = tabs.some((t) => isActive(t.href));
 
 <Base title={title}>
   <a href="#main" class="skip-link">Skip to content</a>
+  {/* The chrome is one full-height column so the bottom bar can be `sticky`
+      rather than `fixed` — see the bar below for why. `min-h-svh` (not dvh)
+      on purpose: the small-viewport unit does not change when iOS collapses
+      its toolbar, so the column's height is stable across a scroll. `main`
+      takes the slack, which keeps the bar on the bottom edge on short pages
+      too. Both fixed overlays below (#nav-backdrop, #nav-menu) are out of
+      flow, so they are not flex items. */}
+  <div class="flex min-h-svh flex-col">
   <header
     id="app-header"
     class="pt-safe sticky top-0 z-50 border-b border-border bg-bg transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-md"
@@ -153,16 +161,29 @@ const onTab = tabs.some((t) => isActive(t.href));
     }
   </nav>
 
-  <main id="main" class={immersive ? '' : 'pb-[calc(4.5rem+env(safe-area-inset-bottom))]'}>
+  <main id="main" class="flex-1">
     <slot />
   </main>
 
   {/* Thumb-reachable primary nav. The drawer above survives as "More" so the
-      full destination list stays one tap away. */}
+      full destination list stays one tap away.
+
+      `sticky`, NOT `fixed`. A `fixed bottom-0` bar is placed against iOS
+      Safari's LAYOUT viewport, which does not grow until the scroll gesture
+      ends — so scrolling down (where the toolbar collapses and the VISUAL
+      viewport gets ~75px taller) left the bar stranded mid-screen with page
+      content running on underneath it, and scrolling back up snapped it home.
+      A sticky box is laid out in the document, so it tracks what is actually
+      painted and never detaches — which is why the sticky header above was
+      always fine. It is the last in-flow child of the column, so it stays
+      pinned until the document ends and then settles in place; that is also
+      why `main` no longer reserves bottom padding for it. No `inset-x-0`:
+      on a sticky box `left`/`right` are sticky constraints, not offsets —
+      the flex column already stretches it full width. */}
   <nav
     aria-label="Primary"
     class:list={[
-      'pb-safe ledge fixed inset-x-0 bottom-0 z-50 border-t border-border bg-bg pointer-fine:bg-bg/95 pointer-fine:backdrop-blur-md',
+      'pb-safe ledge sticky bottom-0 z-50 border-t border-border bg-bg pointer-fine:bg-bg/95 pointer-fine:backdrop-blur-md',
       immersive && 'hidden',
     ]}
   >
@@ -210,6 +231,7 @@ const onTab = tabs.some((t) => isActive(t.href));
       </button>
     </div>
   </nav>
+  </div>
 </Base>
 
 <script>

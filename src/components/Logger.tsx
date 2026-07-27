@@ -901,8 +901,12 @@ export default function Logger() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.4, ease: EASE }}
-        className="mx-auto max-w-2xl px-4 sm:px-6 py-8 pb-32"
+        className="flex min-h-svh flex-col"
       >
+      {/* Full-height column so the Finish bar below can be `sticky` instead of
+          `fixed` — see the bar for the iOS reason. The reading column moved in
+          here; the outer div is now full-bleed so the bar can span the screen. */}
+      <div className="mx-auto w-full max-w-2xl flex-1 px-4 sm:px-6 py-8">
       <header className="mb-6 flex items-center justify-between">
         {editing ? (
           <div>
@@ -1329,8 +1333,15 @@ export default function Logger() {
         }}
         onClose={() => setSubEditor(null)}
       />
+      </div>
 
-      <div className="pb-safe fixed inset-x-0 bottom-0 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur sm:px-6">
+      {/* `sticky`, not `fixed`: a fixed bottom bar is placed against iOS
+          Safari's layout viewport, so scrolling down (toolbar collapsed,
+          visual viewport taller) stranded it mid-screen above the content.
+          Sticky is laid out in the document and tracks what is painted.
+          Last in-flow child of the column, so it pins until the page ends —
+          which is also why the column dropped its `pb-32` bar reserve. */}
+      <div className="pb-safe sticky bottom-0 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur sm:px-6">
         <div className="mx-auto flex max-w-2xl flex-col items-center gap-1">
           {editing ? (
             <Button onClick={finishEdit} className="w-full">

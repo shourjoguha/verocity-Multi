@@ -140,6 +140,13 @@ UI audit have both run.
   every other shadow token in the file casts downward and paints off-screen
   there. Use **`.ledge`** / `--shadow-ledge` — the one upward-casting member,
   shadow-only for the same reason as `.lift-fixed`. The bottom tab bar uses it.
+- **Bottom bars are `sticky bottom-0`, never `fixed bottom-0`.** A fixed bar
+  is placed against iOS Safari's layout viewport, which lags the visual
+  viewport while the toolbar collapses — it detaches and floats mid-screen on
+  every scroll down. Sticky needs a `min-h-svh` flex column, a `flex-1`
+  sibling above, and the bar as the last in-flow child. See `docs/LESSONS.md`
+  § "The bottom bar detaches". `src/layouts/App.astro` and the Logger's Finish
+  bar are the two.
 - **Buttons are 3D pillows.** The `Button` primitive (and most bespoke
   button-shaped surfaces) carries `.hill-btn`: 4px radius + outer drop
   shadow + inset highlight (top-left) + inset shadow (bottom-right). On
