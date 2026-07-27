@@ -7,22 +7,36 @@ Full spec: `docs/SPEC.md`.
 
 ## Routing
 
-| About to...                                       | Read first                           |
-|---------------------------------------------------|--------------------------------------|
-| **Debug flicker, staleness, overlap, a build step**| **`docs/LESSONS.md` — grep the symptom** |
-| Touch the data model, RLS, or sharing             | `docs/SPEC.md` §6 (auth), §8 (data)  |
-| Build the public showcase or share links          | `docs/SPEC.md` §7                    |
-| Edit plan/log JSONB or domain types               | `docs/SPEC.md` §8, `lib/types.ts`    |
-| Touch saved sessions (templates / frames)         | `docs/SPEC.md` §8, `SessionsView.tsx`|
-| Change visuals, tokens, or layout                 | `docs/SPEC.md` §11, `app.config.ts`  |
-| Scaffold, sequence work, or deploy                | `docs/SPEC.md` §4–5, §13 (roadmap)   |
-| Add anything AI / plan-parsing / "coach"          | `docs/SPEC.md` §12 — DEFERRED, ask   |
+Keyed on the symptom you can see, because that is how `docs/LESSONS.md` is
+indexed. Visual bugs go there **first** — this file and `docs/SPEC.md` describe
+intent, LESSONS describes what actually happened.
 
-**Record what bit you.** `docs/LESSONS.md` is the append-only log of traps and
-the decisions taken in response — entries lead with the observable *symptom* so
-they can be grepped mid-debug. If something cost you more than twenty minutes,
-or you were wrong before you were right, add it. Several entries exist because
-the same wrong diagnosis was reached twice.
+| About to...                                                              | Read first                                        |
+|--------------------------------------------------------------------------|---------------------------------------------------|
+| **Debug anything visual** — flicker, stutter, blink, hang, jump, flash, darken, repaint, overlap | **`docs/LESSONS.md` — grep the symptom**          |
+| Touch a sheet, modal, drawer or overlay                                  | `docs/LESSONS.md` § Rendering, then `ui/Modal.tsx` |
+| Debug stale content, or "my fix didn't work"                             | `docs/LESSONS.md` § Caching — it may not have shipped |
+| Change mobile / touch behaviour                                          | `docs/LESSONS.md`, then `npm run audit:mobile`    |
+| Claim something is verified                                              | `docs/LESSONS.md` § Testing — what each check *cannot* see |
+| Touch the data model, RLS, or sharing                                    | `docs/SPEC.md` §6 (auth), §8 (data)               |
+| Build the public showcase or share links                                 | `docs/SPEC.md` §7                                 |
+| Edit plan/log JSONB or domain types                                      | `docs/SPEC.md` §8, `lib/types.ts`                 |
+| Touch saved sessions (templates / frames)                                | `docs/SPEC.md` §8, `SessionsView.tsx`             |
+| Change visuals, tokens, or layout                                        | **Hard rules below** (canonical), then `app.config.ts` |
+| Touch the AI coach                                                       | `supabase/functions/coach/index.ts`, `lib/deepGovernors.ts` |
+| Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
+
+**Checks:** `npm run audit:mobile` · `npm run audit:flicker` · `npm run audit:docs`.
+Each is narrow, and `docs/LESSONS.md` § Testing states what each is blind to.
+
+**Record what bit you.** `docs/LESSONS.md` logs traps and the decisions taken in
+response, symptom first so it can be grepped mid-debug. Add to it if something
+cost you more than twenty minutes, or you were wrong before you were right.
+
+**And demote what you replace.** It is a log, not an append-only pile: when your
+fix supersedes an earlier one, move the old entry to `## Superseded` instead of
+leaving two live answers. One bug reached five merged PRs partly because five
+co-equal entries answered the same grep and four of them were wrong.
 
 ## Hard rules
 
@@ -51,19 +65,23 @@ the same wrong diagnosis was reached twice.
   its tests) so the downloadable template, the copyable prompt, and the
   compatibility checker in `PlanUpload` move together. `validateParsedPlan` is
   the gate before save — never bypass it.
-- **Design tokens only** (HSL); no raw colors in components. **Light editorial**
-  identity per the design spec + reference screenshots (these take precedence on
-  aesthetics): Clash Display + Satoshi, monochrome `#f2f2f2`/`#111111`, hairlines,
-  tabular numbers, the typographic Echo Stack, bold CSS-first motion.
+- **Design tokens only** (HSL); no raw colors in components — **this one MUST
+  hold**, because a three-way light/dark/system theme ships (`lib/theme.ts`,
+  `ThemeToggle.tsx`) and every dark override is a token value in `global.css`.
+  A hardcoded hex breaks dark mode silently. Identity per the design spec +
+  reference screenshots (these take precedence on aesthetics): Clash Display +
+  Satoshi, monochrome, hairlines, tabular numbers, the typographic Echo Stack,
+  **CSS-first motion** (see the sheet entry in LESSONS for why JS-driven
+  animation was removed from overlays).
 - **Backdrop & depth.** The full-viewport backdrop is `BackgroundLayer.astro`
-  mounted once in `Base.astro`. CSS presets paint via
+  mounted once in `Base.astro`. Six presets — `off`, `grain`, `dots`,
+  `hairlines`, `topography`, `aurora` — listed in `lib/background.ts`, which is
+  the single source of truth. CSS presets paint via
   `html[data-bg="<key>"] .bg-backdrop::before` rules in `global.css`; the
-  `aurora` 3D preset (labelled "Depth" in the UI) mounts
-  `BackgroundScene3DCanvas` — the monolith-on-paper scene with real cast
-  shadows and pointer parallax — lazy-loaded via `client:idle` + dynamic
-  import. New backdrops MUST stay monochrome and derived from the existing
-  `--color-*` tokens. The user toggle lives in `ProfileView` and goes through
-  `lib/background.ts` (single source of truth).
+  `aurora` preset (labelled "Depth" in the UI) mounts `BackgroundScene3DCanvas`,
+  lazy-loaded via `client:idle` + dynamic import. New backdrops stay monochrome
+  and derived from the existing `--color-*` tokens. The user toggle is
+  `BackgroundPicker.tsx`, rendered in `SettingsView.tsx`.
 - **Default backdrop is device-gated.** Base.astro's pre-paint script picks
   `aurora` only when `(min-width: 768px) and (pointer: fine)` AND no
   `prefers-reduced-motion`. Touch / narrow / reduced-motion devices default
@@ -71,14 +89,17 @@ the same wrong diagnosis was reached twice.
   unconditionally default to the 3D scene — the three.js chunk is
   ~170KB gzip and would tank LCP on mobile.
 - **Card depth** is the `.lift` / `.lift-interactive` utility built from
-  `--shadow-lift-rest` / `--shadow-lift-hover` — never inline a `box-shadow`
+  `--shadow-lift-rest` / `--shadow-lift-hover` — don't inline a `box-shadow`
   in a component. `.lift-interactive` adds a perspective tilt on hover
   (`rotateX(1.4deg) rotateY(-2.2deg) translateZ(6px)`) wrapped in
   `prefers-reduced-motion: no-preference`; reduced-motion users still get
-  the shadow bump but no rotation. Whole-container surfaces (lists, modal
-  panels) opt into `.lift`; individual rows inside a hairline-divider
-  container (e.g. `gap-px` grids, StatCard grids) MUST stay flat — shadow
-  would muddy the hairlines.
+  the shadow bump but no rotation. Lists and cards opt into `.lift`; rows
+  inside a hairline-divider container (`gap-px` grids, StatCard grids) stay
+  flat — shadow would muddy the hairlines.
+  **`.lift` is wrong for any surface whose transform is animated**: it sets a
+  `transform` *and* `transition: transform`, which fights the animation. Use
+  **`.lift-fixed`** — same resting shadow, no transform, no transition. Sheet
+  panels use it.
 - **Buttons are 3D pillows.** The `Button` primitive (and most bespoke
   button-shaped surfaces) carries `.hill-btn`: 4px radius + outer drop
   shadow + inset highlight (top-left) + inset shadow (bottom-right). On
@@ -96,8 +117,24 @@ the same wrong diagnosis was reached twice.
   behind the foreground (`--echo-tz`, -8px increments) and the parent
   `.echo` carries `perspective(800px)`. Any new echo layers MUST set both
   `--echo-dx` and `--echo-tz` so the stack stays coherent.
-- **Signup is invite-gated** (caps < 100), redeemed server-side. **AI is deferred** —
-  don't build it without an explicit go-ahead.
+- **Signup is invite-gated** (caps < 100), redeemed server-side.
+- **The AI coach ships.** `supabase/functions/coach/index.ts` calls the Anthropic
+  API with the caller's own logs and writes to `recommendations`; the UI is
+  `CoachView.tsx` at `/app/coach`. It degrades to `{ok:false,error:'no_key'}`
+  when `ANTHROPIC_API_KEY` is unset. Governors that bound what it may claim live
+  in `lib/deepGovernors.ts` — enforce them in the UI, don't trust the model's
+  output shape. (This surface was documented as "deferred" for weeks after it
+  shipped, which made agents refuse to touch working code. If you defer
+  something, say where.)
+- **Mobile is the primary target.** 44px minimum tap targets
+  (`TOUCH.minTargetPx`); no horizontal overflow at 375px; `pointer: coarse` and
+  `pointer: fine` get different behaviour in several places (blur, the 3D
+  backdrop, sheet focus, the scroll lock) — check both before assuming a fix
+  applies. `npm run audit:mobile` guards the first two only.
+- **"Verified" means the symptom was observed to stop.** Naming a check that
+  cannot see the bug is not evidence: unit-test counts and an overflow/tap-target
+  audit say nothing about a flicker. Cite the check that observes the *symptom*,
+  or say plainly that it was not observed and what you measured instead.
 - **TypeScript strict.** Domain config in `app.config.ts`; types in `lib/types.ts`.
   No hardcoded constants in components.
 
