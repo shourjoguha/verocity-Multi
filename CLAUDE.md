@@ -25,6 +25,9 @@ intent, LESSONS describes what actually happened.
 | Change visuals, tokens, or layout                                        | **Hard rules below** (canonical), then `app.config.ts` |
 | Touch the AI coach                                                       | `supabase/functions/coach/index.ts`, `lib/deepGovernors.ts` |
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
+| **Change a component, sheet, token or layout**                           | skill ui-change — `.claude/skills/ui-change/SKILL.md` |
+| **Add a migration, RLS policy, edge function or query helper**           | skill db-change — `.claude/skills/db-change/SKILL.md` |
+| Record a lesson, or reconcile the guidance docs                          | skill docs-upkeep — `.claude/skills/docs-upkeep/SKILL.md` |
 
 **Checks:** `npm run audit:mobile` · `npm run audit:flicker` · `npm run audit:docs`.
 Each is narrow, and `docs/LESSONS.md` § Testing states what each is blind to.
@@ -37,6 +40,39 @@ cost you more than twenty minutes, or you were wrong before you were right.
 fix supersedes an earlier one, move the old entry to `## Superseded` instead of
 leaving two live answers. One bug reached five merged PRs partly because five
 co-equal entries answered the same grep and four of them were wrong.
+
+## Ownership
+
+Three skills split the rules by surface, so a CSS tweak stops carrying the
+migration discipline and a migration stops carrying the `.lift` rules. Each
+one names the check that can observe *its own* symptom — the asymmetry matters,
+because `npm run audit:flicker` cannot see a broken policy and `get_advisors`
+cannot see a flicker.
+
+- **skill ui-change** — `src/components/**`, `src/layouts/**`, `src/pages/**`
+  markup, `src/styles/global.css`, `src/lib/theme.ts`, `src/lib/background.ts`,
+  `src/lib/scrollLock.ts`. Verified by `npm run audit:mobile` and
+  `npm run audit:flicker`.
+- **skill db-change** — `supabase/migrations/**`, `supabase/functions/**`,
+  `src/lib/queries.ts`, `src/lib/supabase.ts`, `src/lib/auth.ts`,
+  `src/lib/share.ts`, DB row types. Verified by `npm test`, `npm run check`
+  and the Supabase advisors.
+- **skill docs-upkeep** — the five guidance documents. Verified by
+  `npm run audit:docs`.
+
+Two agents delegate the first two with the same boundary: **ui-engineer** and
+**backend-engineer** (`.claude/agents/`). ui-engineer holds no database tools
+at all, so the boundary is enforced and not merely stated; backend-engineer is
+unrestricted because the Supabase MCP tool names are not stable enough to pin,
+and observes its half of the boundary by rule.
+
+**Four files are shared, and backend leads on all four:** `lib/types.ts`
+(DB rows and the frozen JSONB contracts), `src/lib/queries.ts` (signatures),
+`app.config.ts` (domain truth), and `src/lib/planTemplate.ts` — the hard
+handoff, where the wireframe, the authoring prompt, the checker in
+`PlanUpload.tsx` and the tests must all move together. A change touching any
+of them is a two-owner change: not done until `npm test` **and** the relevant
+UI audit have both run.
 
 ## Hard rules
 
