@@ -64,7 +64,7 @@ import type {
   VibeCheck,
 } from '@/lib/types';
 import { Button, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
-import { Modal, SHEET_EXIT_MS } from '@/components/ui/Modal';
+import { Modal } from '@/components/ui/Modal';
 import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
 import { SetEntrySheet } from '@/components/logger/SetEntrySheet';
@@ -878,17 +878,12 @@ export default function Logger() {
     );
   }
 
-  // Hand off from the options sheet to another sheet without stacking two
-  // scrims. Opening the next one in the same commit left both `fixed inset-0
-  // bg-bg/80` overlays on screen for the length of the exit, so the page behind
-  // darkened toward an effective 0.96 and lifted back to 0.8 — a visible pulse
-  // in the middle of editing a movement.
-  // The extra frame matters: AnimatePresence removes the node on the frame
-  // AFTER the animation ends, so firing at exactly SHEET_EXIT_MS still caught
-  // the outgoing scrim on screen.
+  // Hand off from the options sheet to another sheet. Sheets now unmount the
+  // moment they close, so closing this one and opening the next in the same
+  // commit leaves no overlap — no two scrims stacked, and no delay to wait out.
   const handoff = (openNext: () => void) => {
     setOptionsFor(null);
-    window.setTimeout(openNext, SHEET_EXIT_MS + 32);
+    openNext();
   };
 
   // The subroutine sheet stays mounted (see below), so its seed values have to
@@ -1079,9 +1074,8 @@ export default function Logger() {
         </section>
       ) : null}
 
-      <AnimatePresence>
-        {picker ? (
-          <MovementPicker
+      {picker ? (
+        <MovementPicker
             movements={movements}
             title={picker.mode === 'add' ? 'Add movement' : 'Swap movement'}
             suggestions={
@@ -1095,10 +1089,9 @@ export default function Logger() {
                 if (planId) getMovementSubs(planId).then(setSubs);
               });
             }}
-            onClose={() => setPicker(null)}
-          />
-        ) : null}
-      </AnimatePresence>
+          onClose={() => setPicker(null)}
+        />
+      ) : null}
 
       <SetEntrySheet
         open={entrySet !== null}

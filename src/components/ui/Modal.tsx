@@ -1,21 +1,11 @@
-import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
-import { EASE } from '@/components/anim';
 import { useScrollLock } from '@/lib/scrollLock';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-// How long the panel takes to slide out. Exported so a caller handing off from
-// one sheet to another can wait for this one to leave instead of stacking two
-// scrims — see Logger's `handoff`.
-export const SHEET_EXIT_MS = 300;
-
-// Keyboard, focus and the scroll lock, as a null-rendering child of the scrim.
-// It lives inside AnimatePresence deliberately: mounted means "the sheet is on
-// screen", which is 300ms longer than `open` is true. The previous version keyed
-// this on `open`, so closing released the page and threw focus back to the
-// trigger while the panel was still sliding out.
+// Keyboard, focus and the scroll lock, as a null-rendering child of the sheet,
+// so they mount and unmount with the DOM rather than with the `open` flag.
 function ModalBehavior({
   panelRef,
   onClose,
@@ -100,9 +90,14 @@ function ModalBehavior({
 }
 
 // One consistent modal/sheet for the app: bottom sheet on mobile, centered card
-// on desktop, Motion enter/exit, backdrop + Escape to close, reduced-motion-safe.
-// The panel is a flex column capped at 85dvh — callers add their own scroll body
-// and pinned footer.
+// on desktop, backdrop + Escape to close, reduced-motion-safe. The panel is a
+// flex column capped at 85dvh — callers add their own scroll body and pinned
+// footer.
+//
+// Open and close work exactly like the in-flow forms elsewhere in the app:
+// mounted while `open`, a CSS keyframe on entrance, removed immediately on
+// close. No JS-driven animation and no deferred unmount — see the `sheet-rise`
+// block in global.css for why.
 export function Modal({
   open,
   onClose,
@@ -116,79 +111,49 @@ export function Modal({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  if (!open) return null;
+
   return (
-    <MotionConfig reducedMotion="user">
-      <AnimatePresence>
-        {open ? (
-          // A plain, un-animated root. overflow-hidden + overscroll-contain make
-          // it a scroll container that swallows scroll chaining, which is what
-          // holds the page still on touch now that nothing locks the document
-          // there. See lib/scrollLock.ts.
-          <div
-            className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain p-0 sm:items-center sm:p-6"
-            role="dialog"
-            aria-modal="true"
-            aria-label={title}
-          >
-            <ModalBehavior panelRef={panelRef} onClose={onClose} />
-            {/* The scrim is a SIBLING of the panel, not its parent. As a parent
-                it was an opacity-animated element covering the whole viewport,
-                so every frame of the fade re-rendered the panel — border and
-                shadow included — into the scrim's offscreen buffer, and churned
-                the compositing layer that the fixed `.bg-backdrop` sits behind.
-                Side by side, each animates on its own and neither touches the
-                other. This is the structural difference between a sheet and an
-                ordinary in-flow form, which never flickered. */}
-            <motion.div
-              data-sheet-scrim
-              // will-change gives the scrim its own compositing layer for its
-              // whole life, so the fade is a compositor-only operation. Without
-              // it the layer is promoted when the animation starts and demoted
-              // when it ends, and each of those re-composites the full-viewport
-              // fixed `.bg-backdrop` sitting behind it — the background blinking
-              // as the drawer opens. One layer, created once, destroyed once.
-              className="absolute inset-0 bg-bg/80 will-change-[opacity] pointer-fine:backdrop-blur"
+    // overflow-hidden + overscroll-contain make this a scroll container that
+    // swallows scroll chaining, which is what holds the page still on touch
+    // now that nothing locks the document there. See lib/scrollLock.ts.
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain p-0 sm:items-center sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <ModalBehavior panelRef={panelRef} onClose={onClose} />
+      {/* The scrim does not animate. A full-viewport element changing opacity
+          is the one thing an in-flow form never does, and it was the last
+          structural difference between a sheet and the forms on the same
+          screens that never flickered. It appears and goes with the sheet. */}
+      <div
+        data-sheet-scrim
+        className="absolute inset-0 bg-bg/80 pointer-fine:backdrop-blur"
+        onClick={onClose}
+      />
+      <div
+        ref={panelRef}
+        data-sheet-panel
+        tabIndex={-1}
+        className="sheet-panel lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface outline-none"
+      >
+        {title ? (
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <span className="t-eyebrow text-muted">{title}</span>
+            <button
+              type="button"
+              data-modal-close
               onClick={onClose}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              // Same duration as the panel. At 0.2s against the panel's 0.3s the
-              // wash was fully gone 100ms before the sheet had finished leaving,
-              // so the drawer spent its last frames against a bright, unscrimmed
-              // page — which reads as the drawer blinking as it closes.
-              transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
-            />
-            <motion.div
-              ref={panelRef}
-              data-sheet-panel
-              tabIndex={-1}
-              className="lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface outline-none"
-              // Slide only — one animated property. Its own opacity animation
-              // used to multiply with the scrim's: measured 12 frames mid-open
-              // at overlay 0.669 x panel 0.107, an effective 0.07.
-              initial={{ y: 24 }}
-              animate={{ y: 0 }}
-              exit={{ y: 24 }}
-              transition={{ duration: SHEET_EXIT_MS / 1000, ease: EASE }}
+              className="t-control text-muted transition-colors hover:text-fg"
             >
-              {title ? (
-                <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                  <span className="t-eyebrow text-muted">{title}</span>
-                  <button
-                    type="button"
-                    data-modal-close
-                    onClick={onClose}
-                    className="t-control text-muted transition-colors hover:text-fg"
-                  >
-                    Close
-                  </button>
-                </div>
-              ) : null}
-              {children}
-            </motion.div>
+              Close
+            </button>
           </div>
         ) : null}
-      </AnimatePresence>
-    </MotionConfig>
+        {children}
+      </div>
+    </div>
   );
 }
