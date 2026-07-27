@@ -113,6 +113,41 @@ Layer order: tab bar 50 · nav backdrop 60 · drawer 70 · sheets 80 · toasts 9
 Check with `elementFromPoint` at each control's centre, not by eye.
 → `src/layouts/App.astro`, `ui/Modal.tsx`
 
+### A shadow applied to the bottom bar renders nothing at all
+`[measured in Chromium]`
+Every depth token in `global.css` casts **downward** — `--shadow-lift-rest`,
+`--shadow-lift-hover` and all six `--hill-btn-*` values have positive Y. The tab
+bar is pinned to `bottom-0`, so a downward cast paints below the viewport and is
+simply not there. Adding `.lift` or `.lift-fixed` to it looks like a no-op.
+**Use `.ledge` / `--shadow-ledge`** — the one upward-casting member, layers 1-2
+being `--shadow-lift-rest` with Y negated, plus a top inset highlight so the bar
+reads as a raised slab rather than a card that happens to sit at the bottom.
+Both theme blocks define it; a light-only value is a silent dark-mode break.
+`.lift` is doubly wrong here even after fixing the direction: its
+`perspective(900px)` promotes a composited layer on the same element that
+carries `pointer-fine:backdrop-blur-md` (see the touch-flicker entry above), and
+it would make the bar a containing block for any future `fixed` **descendant**.
+It would *not* break the bar's own `position: fixed` — only a transformed
+*ancestor* does that, which is the plausible-sounding reason to avoid reaching
+for.
+→ `src/styles/global.css` (`.ledge`), `src/layouts/App.astro`
+
+### A stat tile is far taller than its font sizes predict
+`[measured in Chromium at 375px]`
+`StatCard` in a `grid-cols-3` gives each value ~88px of inner width at 375px. A
+duration like `3h 52m` needs **120px** at the old `text-3xl`, so the value
+silently wrapped to a second line and the tile stood at **125px** — 36px of that
+was a wrap nobody designed. Shrinking the font alone does not fix it: at
+`text-2xl` the same string still needs 96px and still wraps.
+**Size a value to the width it actually has, not to how big it looks.** Measure
+with a hidden `white-space: nowrap` probe in the real page (the loaded Clash
+Display, not a fallback) before choosing a tier. `text-xl` + `px-2` on phones
+fits a 2-digit-hour duration (93.5px in 95.7px) on one line, and both step back
+up at `sm:` where nothing constrains the column.
+Neither audit can see this: a wrap is not overflow and not a tap target, so
+`audit:mobile` passes with the tile at either height.
+→ `src/components/ui/primitives.tsx` (`StatCard`)
+
 ## Build & deploy
 
 ### A build step works locally and silently does nothing on Vercel
