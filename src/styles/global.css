@@ -59,6 +59,16 @@
     0 1px 0 hsl(0 0% 7% / 0.10), 0 2px 4px hsl(0 0% 7% / 0.13), 0 8px 18px hsl(0 0% 7% / 0.11);
   --shadow-lift-hover:
     0 3px 0 hsl(0 0% 7% / 0.12), 0 4px 8px hsl(0 0% 7% / 0.17), 0 16px 34px hsl(0 0% 7% / 0.20);
+  /* Upward cast — for a surface pinned to the bottom viewport edge (the tab
+     bar), where every other shadow token above points off-screen and renders
+     nothing at all. Same three-tier structure as --shadow-lift-rest, mirrored
+     in y, plus a top inset highlight so the bar reads as a raised ledge lit
+     from above rather than a card that happens to sit at the bottom. */
+  --shadow-ledge:
+    0 -1px 0 hsl(0 0% 7% / 0.1),
+    0 -2px 6px hsl(0 0% 7% / 0.13),
+    0 -10px 24px hsl(0 0% 7% / 0.11),
+    inset 0 1.5px 0 hsl(0 0% 100% / 0.55);
 }
 
 /* Pillow (.hill*) shadow tokens — light defaults. Tokenized so the dark theme
@@ -112,6 +122,11 @@ html[data-theme='dark'] {
     0 1px 0 hsl(0 0% 0% / 0.5), 0 2px 4px hsl(0 0% 0% / 0.5), 0 10px 22px hsl(0 0% 0% / 0.55);
   --shadow-lift-hover:
     0 3px 0 hsl(0 0% 0% / 0.55), 0 6px 12px hsl(0 0% 0% / 0.55), 0 18px 38px hsl(0 0% 0% / 0.6);
+  --shadow-ledge:
+    0 -1px 0 hsl(0 0% 0% / 0.5),
+    0 -2px 6px hsl(0 0% 0% / 0.5),
+    0 -12px 28px hsl(0 0% 0% / 0.55),
+    inset 0 1.5px 0 hsl(0 0% 100% / 0.08);
   --hill:
     inset 1.5px 1.5px 3px hsl(0 0% 100% / 0.1),
     inset -1.5px -1.5px 3px hsl(0 0% 0% / 0.5);
@@ -319,6 +334,22 @@ p {
    Same resting shadow, no transform, no transition. */
 .lift-fixed {
   box-shadow: var(--shadow-lift-rest);
+}
+
+/* Ledge — the one upward-casting member of the depth family, for a surface
+   pinned to the bottom viewport edge (the tab bar). Everything else in this
+   file casts DOWN, which on a bottom-0 element paints off-screen and shows
+   nothing at all.
+   Box-shadow only, deliberately. `.lift` is wrong here on three counts: it
+   casts the wrong way; its perspective(900px) would promote a composited layer
+   on the same element that already carries pointer-fine:backdrop-blur-md (the
+   pairing LESSONS § "Flicker on touch devices" warns about); and it would make
+   the bar a containing block for any future fixed *descendant*. Its
+   `transition: transform` also buys nothing on a bar that never changes
+   state. Note the transform would NOT break the bar's own fixed positioning —
+   only a transformed ancestor does that. */
+.ledge {
+  box-shadow: var(--shadow-ledge);
 }
 
 .lift-interactive {

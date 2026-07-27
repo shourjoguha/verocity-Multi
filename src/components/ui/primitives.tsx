@@ -40,12 +40,23 @@ export function StatCard({
   value: string | number;
   unit?: string;
 }) {
+  // px-2 on phones is not stinginess — it is the 8px that lets a 2-digit-hour
+  // duration ("13h 28m", 93.5px) stay on one line in a 375px 3-up column.
+  // Restored to px-4 at sm:, where the column is ~171px+ and nothing competes.
   return (
-    <div className="border border-border bg-surface px-4 py-4">
+    <div className="border border-border bg-surface px-2 py-3 sm:px-4">
       <div className="t-label text-muted">{label}</div>
-      <div className="mt-2 font-display text-3xl font-semibold tabular-nums tracking-[-0.03em] text-fg">
+      {/* Sized to fit on ONE line, which is the whole point: in a 3-up grid at
+          375px each value gets 87.7px, and a duration like "3h 52m" needs
+          120px at the old text-3xl and 96px at text-2xl — so it always wrapped
+          to a second line and the tile cost 125px. At text-xl it measures
+          80.2px and fits. The sm: step back up is not decoration: nothing
+          constrains the width above 640px, where the column is ~171px+.
+          leading-[1.1] rather than leading-none because the unit renders "kg"
+          and the descender clips at a 1.0 line box. */}
+      <div className="mt-1.5 font-display text-xl font-semibold leading-[1.1] tabular-nums tracking-[-0.03em] text-fg sm:text-2xl">
         {typeof value === 'number' ? <AnimatedNumber value={value} /> : value}
-        {unit ? <span className="ml-1 text-base font-medium text-muted">{unit}</span> : null}
+        {unit ? <span className="ml-1 text-sm font-medium text-muted">{unit}</span> : null}
       </div>
     </div>
   );

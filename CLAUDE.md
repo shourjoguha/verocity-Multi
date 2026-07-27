@@ -136,6 +136,10 @@ UI audit have both run.
   `transform` *and* `transition: transform`, which fights the animation. Use
   **`.lift-fixed`** — same resting shadow, no transform, no transition. Sheet
   panels use it.
+  **`.lift` is also wrong for anything pinned to the bottom edge**, because
+  every other shadow token in the file casts downward and paints off-screen
+  there. Use **`.ledge`** / `--shadow-ledge` — the one upward-casting member,
+  shadow-only for the same reason as `.lift-fixed`. The bottom tab bar uses it.
 - **Buttons are 3D pillows.** The `Button` primitive (and most bespoke
   button-shaped surfaces) carries `.hill-btn`: 4px radius + outer drop
   shadow + inset highlight (top-left) + inset shadow (bottom-right). On
