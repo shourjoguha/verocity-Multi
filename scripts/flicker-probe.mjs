@@ -200,6 +200,13 @@ function recorder() {
       // Focus legitimately moves from the trigger into the panel once. What it
       // must not do is move again once it is inside.
       inPanel: !!(document.activeElement && dialogs[0]?.contains(document.activeElement)),
+      // A focused text field on a touch device means the software keyboard is
+      // coming up — which resizes the visual viewport and relayouts every
+      // dvh-sized box and the fixed backdrop, mid-animation.
+      typing:
+        dialogs.length > 0 &&
+        ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName ?? '') &&
+        !['button', 'checkbox', 'radio', 'submit'].includes(document.activeElement?.type ?? ''),
     });
     requestAnimationFrame(tick);
   };
@@ -311,6 +318,13 @@ for (const s of SCENARIOS) {
   }
   if (frames.some((f) => f.overflow === 'hidden')) {
     result.failures.push('lock-writes: body overflow went hidden on a touch device');
+  }
+
+  // keyboard: nothing may focus a text field as the sheet opens. This context
+  // is touch-emulated, so a focused input here is the iOS keyboard rising
+  // mid-animation on a real phone.
+  if (frames.slice(0, afterOpen).some((f) => f.typing)) {
+    result.failures.push('keyboard: a text field was focused on open (raises the software keyboard)');
   }
 
   // nested-fade: the panel must never be a descendant of a fading element.

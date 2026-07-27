@@ -86,7 +86,10 @@ function EntryOverlay({
       {/* Scrim as a SIBLING of the panel, never its parent — see ui/Modal.tsx. */}
       <motion.div
         data-sheet-scrim
-        className="absolute inset-0 bg-bg/80 pointer-fine:backdrop-blur"
+        // will-change: one compositing layer for the scrim's whole life, so the
+        // fade never promotes/demotes a full-viewport layer over the fixed
+        // backdrop. See ui/Modal.tsx.
+        className="absolute inset-0 bg-bg/80 will-change-[opacity] pointer-fine:backdrop-blur"
         onClick={onClose}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

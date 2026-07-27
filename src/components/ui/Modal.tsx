@@ -60,16 +60,30 @@ function ModalBehavior({
     };
 
     window.addEventListener('keydown', onKey);
-    // Let the enter animation mount before pulling focus in — and leave focus
-    // alone if a child with autoFocus already has it. Skipping the header's
-    // Close button matters: it is the first focusable in DOM order, so
-    // "focus the first focusable" used to yank focus off an autoFocus input one
-    // frame after it landed, which on iOS is the keyboard opening and
-    // immediately closing again — a visualViewport resize, i.e. every dvh box
-    // and the fixed backdrop repainting.
+    // Move focus into the panel a frame after it mounts — but on a touch device,
+    // only as far as the panel itself.
+    //
+    // Focusing a text field here raises the software keyboard, and this fires
+    // one frame after the tap rather than inside it, so the keyboard comes up
+    // *while* the sheet is still sliding in. On iOS every keyboard transition
+    // resizes the visual viewport, which relayouts every dvh-sized box and the
+    // fixed backdrop behind the sheet — the background moving as the drawer
+    // opens — and dismissing it on close overlaps the exit animation, so the
+    // sheet appears to hang before it goes. It is also poor UX in its own
+    // right: the keyboard covers most of the sheet you just opened.
+    // Desktop keeps the convenience; touch users tap the field they want.
+    const wantsKeyboard = window.matchMedia('(pointer: fine)').matches;
     const raf = requestAnimationFrame(() => {
       const panel = panelRef.current;
       if (!panel || panel.contains(document.activeElement)) return;
+      if (!wantsKeyboard) {
+        // tabIndex -1 on the panel: screen readers still land inside the dialog,
+        // and Tab from here walks its contents. No keyboard, no viewport resize.
+        panel.focus({ preventScroll: true });
+        return;
+      }
+      // Skip the header's Close button — it is first in DOM order, so "focus
+      // the first focusable" would land there rather than on the real content.
       const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
       const target = items.find((el) => !el.hasAttribute('data-modal-close')) ?? items[0];
       target?.focus({ preventScroll: true });
@@ -127,7 +141,13 @@ export function Modal({
                 ordinary in-flow form, which never flickered. */}
             <motion.div
               data-sheet-scrim
-              className="absolute inset-0 bg-bg/80 pointer-fine:backdrop-blur"
+              // will-change gives the scrim its own compositing layer for its
+              // whole life, so the fade is a compositor-only operation. Without
+              // it the layer is promoted when the animation starts and demoted
+              // when it ends, and each of those re-composites the full-viewport
+              // fixed `.bg-backdrop` sitting behind it — the background blinking
+              // as the drawer opens. One layer, created once, destroyed once.
+              className="absolute inset-0 bg-bg/80 will-change-[opacity] pointer-fine:backdrop-blur"
               onClick={onClose}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -141,7 +161,8 @@ export function Modal({
             <motion.div
               ref={panelRef}
               data-sheet-panel
-              className="lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface"
+              tabIndex={-1}
+              className="lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface outline-none"
               // Slide only — one animated property. Its own opacity animation
               // used to multiply with the scrim's: measured 12 frames mid-open
               // at overlay 0.669 x panel 0.107, an effective 0.07.
