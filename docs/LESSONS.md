@@ -41,6 +41,29 @@ it worse, re-rasterising its border and shadow every frame.
 Distinguishing symptom: only when a sheet opens, not on page load or scroll.
 → `src/components/ui/Modal.tsx`, `logger/MovementPicker.tsx`
 
+### The background moves as a sheet opens, and it hangs ~1s before closing
+Only on a phone, and only on sheets that contain a text field. The sheet was
+focusing its first input a frame after the tap, which **raises the software
+keyboard** — and every iOS keyboard transition resizes the visual viewport,
+relayouting every `dvh` box and the fixed backdrop behind the sheet. Coming up
+it moves the background mid-enter; going down on close it overlaps the 300ms
+exit, so the sheet appears to hang. An in-flow form with `autoFocus` raises the
+keyboard too and looks fine, because nothing there is `fixed`, animating, or
+waiting on an exit — so the two never compound.
+**Do not move focus to a text field when a sheet opens on `(pointer: coarse)`.**
+Focus the panel itself (`tabIndex={-1}`) so screen readers still land inside.
+It is better mobile UX regardless: the keyboard covers the sheet you just
+opened. Desktop keeps the convenience.
+→ `ui/Modal.tsx`, `logger/MovementPicker.tsx`, probe assertion `keyboard`
+
+### The scrim's fade re-composites the fixed backdrop
+An opacity animation on a full-viewport element promotes a compositing layer
+when it starts and demotes it when it ends, and both re-composite the fixed
+`.bg-backdrop` underneath.
+**Give the scrim `will-change: opacity`** so the layer is created once at mount
+and destroyed once at unmount, and the fade itself is compositor-only.
+→ `ui/Modal.tsx`, `logger/SetEntrySheet.tsx`, `logger/MovementPicker.tsx`
+
 ### The background blinks as a sheet opens, and the drawer blinks as it closes
 Two separate defects, both structural, both invisible to a still screenshot.
 **The panel was a child of the opacity-animated scrim.** A full-viewport element

@@ -35,7 +35,11 @@ export function MovementPicker({
 
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    // One frame in, so the enter animation has mounted first.
+    // Desktop only — see ui/Modal.tsx. Focusing the search field a frame after
+    // the tap raises the iOS keyboard mid-animation, which resizes the visual
+    // viewport and relayouts the fixed backdrop behind the sheet. On a phone
+    // the keyboard would also cover the list you opened this to browse.
+    if (!window.matchMedia('(pointer: fine)').matches) return;
     const raf = requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
     return () => cancelAnimationFrame(raf);
   }, []);
@@ -61,7 +65,10 @@ export function MovementPicker({
       {/* Scrim as a SIBLING of the panel, never its parent — see ui/Modal.tsx. */}
       <motion.div
         data-sheet-scrim
-        className="absolute inset-0 bg-bg/80 pointer-fine:backdrop-blur"
+        // will-change: one compositing layer for the scrim's whole life, so the
+        // fade never promotes/demotes a full-viewport layer over the fixed
+        // backdrop. See ui/Modal.tsx.
+        className="absolute inset-0 bg-bg/80 will-change-[opacity] pointer-fine:backdrop-blur"
         onClick={onClose}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
