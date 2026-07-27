@@ -16,14 +16,11 @@ while building. Update as work lands.
 > Note: no original codebase is present in this repo. Everything is built from
 > `docs/SPEC.md` descriptions, not ported from source.
 
-## External blockers (need the user)
+## External blockers
 
-- [x] Supabase project provisioned (`zwuaieavvmjacqtbzowm`); `PUBLIC_*` keys supplied. Service-role key is auto-injected into Edge Functions.
-- [x] Migrations applied to the Supabase project — `0001`–`0005` applied via MCP; RLS boundary verified; edge functions deployed; shared library seeded; authed data paths verified with a (since-deleted) test user. `0005` makes the shared-library write-lock explicit.
-- [x] Original Lovable (v1) data imported — created a v2 auth account (profile `8a8078c4…`, "Shourjo"), transformed the v1 dump into the v2 JSONB contracts, and loaded 82 movements (77 shared + 5 custom), 1 active plan, 20 logs (302 sets). Verified by aggregate counts.
-- [ ] `SHOWCASE_PROFILE_ID` chosen and set once a showcase profile exists.
-- [ ] Invite code(s) inserted (sha-256 `code_hash`) so signup is usable.
-- [ ] Vercel project linked for deploy (`PUBLIC_SUPABASE_URL` + `PUBLIC_SUPABASE_ANON_KEY` as build env).
+**None.** All cleared: Supabase provisioned and migrated, v1 data imported, the
+showcase profile flagged, and Vercel deploying `main` to `lift.shourjoguha.com`.
+Operational detail lives in `docs/HANDOVER.md`.
 
 
 ## Phases
@@ -77,13 +74,31 @@ while building. Update as work lands.
 - verify: ✓ parser + planEdits unit-tested; check/build clean. updatePlan save path
   verified against the live DB.
 
-### Phase 4 — Polish  `[in progress]`
+### Phase 4 — Polish  `[done]`
 - [x] Astro View Transitions (ClientRouter)
 - [x] PWA install shell (manifest, SVG icons, network-first app-shell service worker) + a11y/perf pass (skip link, `<main>`, nav `aria-current`, focus-visible, `prefers-reduced-motion`, font preconnects)
 - [x] Enhancements from SPEC §10: custom-movement CRUD in Library (shared library read-only), data export (JSON full backup + flattened CSV), share-link UI (`/app/shares` mint/revoke + public read-only `/share?token=`)
-- [ ] Remaining enhancements: self-host fonts (needs licensed font files); client realtime subscription on `workout_logs` (DB is realtime-enabled, client not yet subscribing)
-- verify: ✓ check/build clean; dev server serves all routes 200. Lighthouse/a11y +
-  install + offline shell need a real browser/deploy to confirm.
+- [x] Client realtime subscription on `workout_logs` (Home re-fetches on change)
+- [ ] Self-host fonts — still outstanding, needs licensed font files
+- verify: ✓ check/build clean; deployed and in daily use on a phone.
 
-### Phase 5 — AI  `[DEFERRED — do not build without explicit go-ahead]`
-- parse-plan Edge Function; recommendations coach (Railway). See SPEC §12.
+### Phase 5 — AI  `[partly done]`
+- [x] **Coach** — on-demand Supabase Edge Function (`supabase/functions/coach`),
+  not the scheduled Railway service originally planned. Drift signals from the
+  caller's own logs → Claude → `recommendations`. UI at `/app/coach`; claim
+  bounds in `lib/deepGovernors.ts`. See SPEC §12.
+- [ ] parse-plan Edge Function — not built. `lib/planTemplate.ts` gives the user
+  a copyable authoring prompt instead, and the strict local parser stays the
+  only ingest path.
+
+### Phase 6 — Beyond the original  `[shipped, unplanned]`
+Built after the roadmap above was written, so it has no phase entry of its own:
+Garmin integration (`garmin-connect` / `garmin-ingest`, `GarminPanel`), heart
+rate and fitness assessments, library subroutines, PR detection, the three-way
+theme toggle, `/app/settings`, and the mobile UX pass (bottom tab bar, set-entry
+sheet, 44px targets) with its two standing audits.
+
+### Phase 7 — Guidance upkeep  `[ongoing]`
+`npm run audit:docs` fails if the docs name code that no longer exists. It was
+added after a five-PR bug hunt that these documents actively misdirected; see
+`docs/LESSONS.md` § Superseded for the full account.

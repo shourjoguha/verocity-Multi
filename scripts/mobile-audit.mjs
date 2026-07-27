@@ -10,6 +10,15 @@
 // and the Logger boots against a real LogDocument, so the set rows are
 // genuinely measured rather than skipped behind a redirect to /login.
 //
+// WHAT IT CANNOT SEE — read this before citing a green run as evidence:
+//   - It LOADS routes. It clicks nothing, opens no sheet, and triggers no
+//     interaction. A bug that only appears on open/close is invisible to it.
+//     Four sheet-flicker fixes shipped citing "all 20 audit combinations pass"
+//     while the bug was live. Use `npm run audit:flicker` for overlays.
+//   - Anything that is not overflow or a tap-target size: colour, contrast,
+//     z-order, animation, jank, scroll behaviour.
+//   - Chromium in mobile emulation, not a real phone and not WebKit.
+//
 // Usage:  npm run build && npm run preview &   then   npm run audit:mobile
 // Override the origin with BASE=http://localhost:4322 npm run audit:mobile
 import { chromium } from 'playwright';

@@ -1,7 +1,9 @@
-# Verocity v2 — Build Specification (Starting Draft)
+# Verocity v2 — Build Specification
 
-> Status: **starting spec for review.** Decisions marked **LOCKED** were confirmed;
-> items under *Open questions* still need a call.
+> Status: **built and shipped.** This is the design record, not a plan. Where it
+> describes intent and the code disagrees, the code wins — check
+> `docs/LESSONS.md` before assuming a section here is current.
+> Hard rules live in `CLAUDE.md` and are not restated here.
 
 ---
 
@@ -281,7 +283,15 @@ Function, which validates the token and performs scoped read-only queries.
 
 ## 9. Feature Inventory (parity baseline)
 
-From the original app. v2 must reach parity on these before enhancing.
+> **Historical.** This is the parity target taken from the original app, kept as
+> the record of what v2 set out to match. **It is not a list of what ships** —
+> roughly a third of the current app was built after it and never added here.
+> For what exists now, read the source: `src/pages/` for routes,
+> `src/components/` for surfaces. Shipped since and absent below: the AI coach
+> (`/app/coach`, `supabase/functions/coach`), Garmin integration
+> (`garmin-connect` / `garmin-ingest` + `GarminPanel`), heart-rate and fitness
+> assessments, library subroutines, PR detection, the three-way theme toggle,
+> and `/app/settings`.
 
 ### Pages
 - **Home** — dashboard: 30-day plan-progress timeline, day rail + day-preview,
@@ -321,8 +331,9 @@ From the original app. v2 must reach parity on these before enhancing.
 ### Cross-cutting
 - Activity tagging + per-tag colors; movement families roll-up; notation glossary
   ((p),(t),+5%,/side,→); e1RM (Brzycki); week-from-date derivation; prefill from
-  last performance; realtime log sync; mobile-PWA touch model (long-press, scrub,
-  haptics, 44px targets, 16px inputs).
+  last performance; realtime log sync; mobile-PWA touch model (haptics, 44px
+  targets, 16px inputs — long-press and scrub were dropped in the mobile pass in
+  favour of tap-to-open sheets).
 
 ### Domain config (port `app.config.ts`)
 Single source of truth for blocks/sections, metrics, RPE, timers, activity tags
@@ -382,45 +393,34 @@ no explicit preference is stored: `aurora` on `(min-width: 768px) and
 This keeps WebGL off mobile / touch / reduced-motion devices while still
 giving every user a depth cue out of the box.
 
-Cards ship a resting elevation via the `.lift` utility (CSS-only,
-token-derived shadows at ~10% / ~18% rest/hover) so the UI reads as paper
-floating above the canvas. `.lift-interactive` adds a perspective tilt on
-hover (`rotateX(1.4deg) rotateY(-2.2deg) translateZ(6px)`) gated on
-`prefers-reduced-motion: no-preference`; reduced-motion users still get the
-shadow bump but no rotation. Whole-container surfaces (lists, modal panels)
-opt into `.lift` as a unit. Rows inside a hairline-divider container
-(`gap-px` grids, StatCard grids) MUST stay flat — adding shadow would muddy
-the hairline separators.
-
-Buttons carry `.hill-btn` (an extension of the `.hill` pillow used on the
-consistency-heatmap cells): 4px radius + outer drop shadow + inset highlight
-on top-left + inset shadow on bottom-right. `:active` and
-`[aria-pressed="true"]` invert both insets and drop the button 1px — it
-reads as pressed in, the way a physical switch does. Toggle buttons MUST
-set `aria-pressed` so the state lands. `.hill-btn-flush` drops the outer
-drop shadow for buttons that live inside an already-elevated container
-(popovers, modals). Tiny icon-only buttons (h-5 / h-6) and text-only links
-stay flat — the pillow doesn't read at that scale.
-
-`EchoText` layers each carry a real `translateZ` offset (-8px increments)
-inside a parent `perspective(800px)`, so the typographic Echo Stack is a
-literal receding stack of cards rather than a 2D shadow simulation. Any new
-echo layer MUST set both `--echo-dx` and `--echo-tz`.
+**The `.lift` / `.hill-btn` / `EchoText` depth rules are stated once, in
+`CLAUDE.md`.** They used to be duplicated here in full; the two copies drifted
+(the flat-button size threshold said `h-5 / h-6` here and `h-5 to h-8` there,
+with nothing saying which won) and the copy here went on recommending `.lift`
+for modal panels long after `docs/LESSONS.md` recorded that it fights an
+animated transform. One owner, one place to change.
 
 > Open Q: keep the existing identity (recommended) vs. a fresh visual language.
 
 ---
 
-## 12. AI Features (deferred — future design)
+## 12. AI Features (shipped — Coach)
 
-Not in the first build. When we get there:
-- **parse-plan** → Supabase Edge Function (Deno), swapping the old Lovable AI
-  gateway for the **Anthropic/Claude API** (or pluggable provider). Tool-calling to
-  emit a structured `ParsedPlan`. Strict local parser remains the first attempt;
-  AI is the fallback.
-- **Recommendations "coach"** → likely a **Railway** scheduled service (drift
-  detection over logs → writes `recommendations` via service-role). Long-running /
-  cron makes Railway a better home than an edge function.
+**What shipped**, and it is not what this section originally predicted:
+- **The coach is a Supabase Edge Function, not Railway.** On-demand rather than
+  scheduled: `supabase/functions/coach/index.ts` computes training-drift signals
+  from the caller's own logs, asks Claude for recommendations, and writes them
+  back to `recommendations` (see `supabase/migrations/0007_recs_owner_writes.sql`).
+  It returns `{ok:false,error:'no_key'}` when `ANTHROPIC_API_KEY` is unset, so the
+  UI degrades instead of erroring.
+- **The UI** is `CoachView.tsx` at `/app/coach`, with `lib/coach.ts` and
+  `DeepEnrichment.tsx`. Claims the model may make are bounded deterministically
+  in `lib/deepGovernors.ts` — enforce those in the UI rather than trusting the
+  model's output.
+- **parse-plan is still not built.** `lib/planTemplate.ts` gives the user a
+  copyable authoring prompt instead, so the strict local parser in `PlanUpload`
+  stays the only ingest path. That trade has held well; revisit only with a
+  reason.
 
 ---
 
@@ -433,8 +433,9 @@ Not in the first build. When we get there:
   (read), Plan view, session detail. Build the **view-only showcase** here (it's
   read-only, so it validates the data + RLS + visuals early).
 - **Phase 2 — Logger (core write path).** Full logging engine, autosave, timers,
-  pickers, grouping, substitutions, custom workouts. Port `logBuilder`,
-  `lastPerformance`, `weekPicker`, `useTimer`, `useLongPress`, `useVoiceInput`.
+  pickers, grouping, substitutions, custom workouts. Shipped as `logBuilder.ts`,
+  `lastPerformance.ts`, `week.ts`, `useTimer.ts`, `voice.ts` — long-press was
+  dropped in the mobile pass (rows became tap-to-open sheets instead).
 - **Phase 3 — Plan authoring.** PlanUpload (strict parser), Plan edit mode, adopt.
 - **Phase 4 — Polish.** View Transitions, PWA/offline, perf pass, accessibility,
   enhancements from §10.
@@ -460,14 +461,10 @@ Each phase is independently shippable; the showcase is usable after Phase 1.
 ```
 
 
-- **CLAUDE.md** — follows the agreed template: a **Routing** table → project
-  **Hard rules** (RLS is the boundary, private-by-default, never expose the
-  service-role key, keep Vercel light, islands-not-SPA, preserve JSONB contracts,
-  design-tokens-only, invite-gated, AI deferred) → four numbered working principles
-  (Think Before Coding · Simplicity First · Surgical Changes · Goal-Driven
-  Execution).
-- **`.claude/`** — project agents/commands (e.g. a "port a page" workflow), shared
-  settings, allowed-tools.
+- **CLAUDE.md** — the entry point: a **Routing** table → project **Hard rules**
+  → four numbered working principles. It is the single owner of those rules;
+  this document deliberately does not restate them, because the copy that used
+  to live here drifted from the original and nothing caught it.
 
 ---
 
@@ -478,14 +475,11 @@ links · reads = private by default · signup = invite codes · visuals = keep &
 elevate current identity · **repo = `shourjoguha/verocity-Multi`** · **CLAUDE.md =
 modeled on the routing / hard-rules / numbered-principles template**.
 
-**Still open:**
-1. **Showcase rendering:** static + client-fetch (zero Vercel compute, no SEO) vs.
-   edge SSR for the public showcase (SEO/social previews, some edge invocations)?
-2. **Plan adoption:** share-link-only, or also a `is_public` plan flag for a small
-   adoption marketplace?
-3. **PWA/offline:** how important is offline logging? (Affects island/state design.)
-4. **Units:** kg-only (as today) or kg/lb toggle?
-5. **Auth method:** magic-link, email+password, or both for the per-profile login?
+**All five originally-open questions are settled** — the decisions table in
+`docs/ROADMAP.md` is the canonical record. In short: showcase is static +
+client-fetch; plan adoption is share-link-only; the PWA ships with a
+stale-while-revalidate shell (see the Caching entry in `docs/LESSONS.md`);
+units are kg-only; auth is email + password.
 
 ---
 

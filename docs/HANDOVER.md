@@ -1,67 +1,44 @@
-# Session Handover — Verocity v2
+# Operations — Verocity v2
 
-Fresh session? Read this first, then `CLAUDE.md`, `docs/SPEC.md`, `docs/ROADMAP.md`.
+Environment, backend and deploy facts. **Start at `CLAUDE.md`**, not here — this
+document used to open with "Fresh session? Read this first" and a task list that
+was two months stale, which meant a fresh agent's first instruction was to
+redo a deploy that had already happened.
 
-## Status: the app is built, live-backed, and merged to `main`
+Nothing in this file describes *current work*. Sequence and status live in
+`docs/ROADMAP.md`; traps live in `docs/LESSONS.md`.
 
-PR #3 merged the **full application** to `main`. The backend is live on Supabase and
-the original v1 data is imported. **The next job is the Vercel deploy** (below) — the
-user is installing the **Vercel MCP** so you can do it directly.
+## Commands
 
-## YOUR NEXT TASK — deploy to Vercel + custom domain
+| | |
+|---|---|
+| `npm run dev` | Astro dev server |
+| `npm run build` | static build to `dist` |
+| `npm run check` | `astro check` (types) |
+| `npm test` | vitest |
+| `npm run audit:mobile` | overflow + tap targets, every `/app` route |
+| `npm run audit:flicker` | sheet open/close behaviour |
+| `npm run audit:docs` | code identifiers in the docs still resolve |
 
-Use the **Vercel MCP** (the user is installing it; look for `mcp__*vercel*` tools via
-ToolSearch). Goal: deploy `main` and serve it at **`lift.shourjoguha.com`**.
+The three audits need a build and a running preview:
+`npm run build && npm run preview &`. **Restart preview after every rebuild** —
+`astro preview` serves a startup snapshot (see `docs/LESSONS.md` § Testing).
 
-1. Create/import a Vercel project from `shourjoguha/verocity-Multi`; Production Branch
-   = `main`. Framework: **Astro** (static output). Build: `npm run build`. Output dir:
-   `dist`. (No adapter — it builds to static; Vercel just serves `dist/`.)
-2. Set env vars (Production + Preview). Public-safe — RLS is the security boundary:
-   ```
-   PUBLIC_SUPABASE_URL        = https://zwuaieavvmjacqtbzowm.supabase.co
-   PUBLIC_SUPABASE_ANON_KEY   = sb_publishable_8BKfMv2rb4T52RRnzmzMyQ_Wi8-qjhp
-   PUBLIC_SHOWCASE_PROFILE_ID = 8a8078c4-2aa8-4136-9e0d-5c2620b4614c
-   ```
-3. Deploy; confirm the build is green and `/` (landing), `/login`, `/showcase`
-   (imported data, read-only) render on the `*.vercel.app` URL.
-4. Add domain **`lift.shourjoguha.com`**: create a **CNAME** record `lift` →
-   `cname.vercel-dns.com` at the `shourjoguha.com` DNS host (if on Cloudflare, set it
-   to "DNS only"/grey-cloud so Vercel can verify). Vercel auto-issues HTTPS once DNS
-   resolves.
-   - Routing note: `/` is the marketing landing; `/showcase` is the public portfolio.
-     If the user wants the domain to open directly on the showcase, redirect
-     `/`→`/showcase` (small change in `src/pages/index.astro`).
+## Deploy
 
-## Already done
+Vercel, production branch `main`, framework Astro, static output to `dist`, no
+adapter. Served at `lift.shourjoguha.com`. Pushing to `main` deploys; every PR
+gets a preview URL.
 
-- **Code:** full Astro 6 + React 19 island app on `main`. Green: `npm run build`
-  (15 static pages), `npm run check` (0 errors), `npm test` (56 passing). Tailwind via
-  PostCSS (`postcss.config.mjs`, not the Vite plugin). `@/*` → `src/*`.
-- **Backend (Supabase `zwuaieavvmjacqtbzowm`):** migrations `0001`–`0005` applied
-  (`0005` = explicit shared-library write-lock). Edge functions `signup` + `share-read`
-  deployed (`share-read` is public — `verify_jwt` off — and validates the token itself).
-- **Data:** the v1 Lovable dump (different JSONB shape) was transformed into the v2
-  `ParsedPlan` / `LogDocument` contracts and imported under a real auth account —
-  82 movements (77 shared + 5 custom), 1 active plan ("16-Week Program"), 20 logs
-  (302 sets). The showcase profile flag is set.
-  - **Account:** email `guha.shourjo@gmail.com`, profile id
-    `8a8078c4-2aa8-4136-9e0d-5c2620b4614c` ("Shourjo"). The temporary login password
-    was shared with the user in chat (kept out of git on purpose) — reset after first
-    login.
+**Test an installed-PWA bug on the preview URL, not the installed app.** A fresh
+origin has no service worker, so it cannot serve you a stale build — which is
+otherwise a real way to conclude a fix failed when it simply never shipped
+(`docs/LESSONS.md` § Caching).
 
-## Supabase MCP
+## Supabase
 
-`mcp__*` tools (`execute_sql`, `apply_migration`, `list_migrations`, `get_advisors`,
-`deploy_edge_function`…), `project_id` = `zwuaieavvmjacqtbzowm`. New schema changes go
-in a new `00NN_*.sql` via `apply_migration` (migrations are NOT idempotent). Run
-`get_advisors` after any DDL.
-
-> Pre-existing advisors (not blockers): `invites` has RLS enabled with no policies
-> (intentional — service-role only); `public.rls_auto_enable()` SECURITY DEFINER is
-> callable by anon/authenticated (added out-of-band, not in our migrations — review
-> before relying on it); Auth leaked-password protection is off (optional toggle).
-
-## Local `.env` (gitignored — recreate on a fresh clone)
+Project `zwuaieavvmjacqtbzowm`. Public-safe env vars — RLS is the security
+boundary, so these are meant to be in the client bundle:
 
 ```
 PUBLIC_SUPABASE_URL=https://zwuaieavvmjacqtbzowm.supabase.co
@@ -69,30 +46,25 @@ PUBLIC_SUPABASE_ANON_KEY=sb_publishable_8BKfMv2rb4T52RRnzmzMyQ_Wi8-qjhp
 PUBLIC_SHOWCASE_PROFILE_ID=8a8078c4-2aa8-4136-9e0d-5c2620b4614c
 ```
 
-(DB password and service-role key are not in the repo; the service-role key is
-auto-injected into edge functions.)
+Recreate these in a local `.env` on a fresh clone (gitignored). The DB password
+and service-role key are not in the repo; the service-role key is auto-injected
+into edge functions.
 
-## Still open (optional)
+**Schema changes:** a new numbered file in `supabase/migrations/`, applied via
+the Supabase MCP's migration tool. **Migrations are NOT idempotent** — never
+edit one that has been applied. Run the advisors check after any DDL.
 
-- **Apply migration `0008_sessions.sql`:** the Sessions library (saved workout
-  templates) needs this migration applied to the live DB — it adds the
-  `sessions` table (+ owner/anon-showcase RLS) and `workout_logs.session_id`.
-  Additive and non-destructive. Apply via `apply_migration`, then run
-  `get_advisors`. Until applied, `/app/sessions` and the "Saved sessions" group
-  read an empty list and saving fails.
-- **Browser click-through:** the interactive flows (Logger, plan editor, export, share
-  links) are typecheck/test/build-verified only — exercise them once on the live URL.
-- **Invites:** insert sha-256 `code_hash` rows into `invites` if other people should be
-  able to sign up (the owner already has an account).
-- **AI (Phase 5):** DEFERRED — do not build without an explicit go-ahead (CLAUDE.md).
+Edge functions: `signup`, `share-read` (public, `verify_jwt` off, validates its
+own token), `coach`, `garmin-connect`, `garmin-ingest`.
 
-## Environment note
+Known advisors, none blocking: `invites` has RLS on with no policies
+(intentional — service-role only); `public.rls_auto_enable()` is SECURITY
+DEFINER and callable by anon/authenticated (added out-of-band, review before
+relying on it); auth leaked-password protection is off.
 
-This cloud session's network policy blocks direct egress (Supabase REST/functions and
-the general internet return "Host not in allowlist"); the **only** path to Supabase is
-the MCP, and the Vercel MCP will be the path for deploy. Browser-based UI testing is
-not possible from inside this environment.
+## Account
 
-## Commands
-
-`npm run dev` · `npm run build` · `npm run check` (astro check) · `npm test` (vitest).
+Owner profile `8a8078c4-2aa8-4136-9e0d-5c2620b4614c` ("Shourjo"), email
+`guha.shourjo@gmail.com`, flagged as the showcase profile. Signup is
+invite-gated: insert sha-256 `code_hash` rows into `invites` to let anyone else
+register.

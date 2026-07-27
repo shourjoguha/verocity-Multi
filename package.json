@@ -11,7 +11,8 @@
     "test": "vitest run",
     "astro": "astro",
     "audit:mobile": "node scripts/mobile-audit.mjs",
-    "audit:flicker": "node scripts/flicker-probe.mjs"
+    "audit:flicker": "node scripts/flicker-probe.mjs",
+    "audit:docs": "node scripts/docs-audit.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^5.0.5",

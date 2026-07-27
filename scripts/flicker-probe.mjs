@@ -20,6 +20,17 @@
 // Auth is seeded into localStorage and Supabase REST is stubbed, same as the
 // mobile audit, so this needs no credentials and no live database.
 //
+// WHAT IT CANNOT SEE — read this before citing a green run as evidence:
+//   - THE ENGINE. Only Chromium is available here. The bug this was built for
+//     lived in WebKit compositing and iOS keyboard/viewport behaviour, and
+//     Chromium rendered every broken version of it smoothly. A green run does
+//     not mean an iPhone is happy; it means the structural traps below are
+//     absent.
+//   - Anything it does not assert: colour, contrast, layout correctness,
+//     whether the sheet shows the right content.
+//   - Sheets not listed in SCENARIOS, and any flow reached differently from
+//     the scripted taps.
+//
 // Usage:  npm run build && npm run preview &   then   node scripts/flicker-probe.mjs
 // Override the origin with BASE=http://localhost:4322
 import { chromium } from 'playwright';
