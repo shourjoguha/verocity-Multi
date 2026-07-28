@@ -27,6 +27,7 @@ intent, LESSONS describes what actually happened.
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
 | **Change a component, sheet, token or layout**                           | skill ui-change — `.claude/skills/ui-change/SKILL.md` |
 | **Add a migration, RLS policy, edge function or query helper**           | skill db-change — `.claude/skills/db-change/SKILL.md` |
+| **Map a movement to a region/modality/plane, or edit the body map**      | skill movement-taxonomy — `.claude/skills/movement-taxonomy/SKILL.md` |
 | Record a lesson, or reconcile the guidance docs                          | skill docs-upkeep — `.claude/skills/docs-upkeep/SKILL.md` |
 
 **Checks:** `npm run audit:mobile` · `npm run audit:flicker` · `npm run audit:docs`.
@@ -57,6 +58,11 @@ cannot see a flicker.
   `src/lib/queries.ts`, `src/lib/supabase.ts`, `src/lib/auth.ts`,
   `src/lib/share.ts`, DB row types. Verified by `npm test`, `npm run check`
   and the Supabase advisors.
+- **skill movement-taxonomy** — the region/modality/plane vocabulary in
+  `app.config.ts`, `src/lib/movementTaxonomy.ts`, `src/lib/bodyLoad.ts`,
+  `src/lib/bodyRegions.ts` and their tests. Verified by `npm test` — which
+  cannot see whether a mapping is anatomically *right*, only that the rules
+  fire in the intended order.
 - **skill docs-upkeep** — the five guidance documents. Verified by
   `npm run audit:docs`.
 

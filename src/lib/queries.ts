@@ -10,6 +10,7 @@ import type {
   ItemKind,
   Movement,
   MovementSub,
+  MovementTaxonomyOverride,
   ParsedPlan,
   Plan,
   Profile,
@@ -111,6 +112,8 @@ export type MovementInput = {
   kind?: ItemKind;
   notes?: string | null;
   url?: string | null;
+  // Optional so every existing call site compiles unchanged.
+  taxonomy?: MovementTaxonomyOverride | null;
 };
 
 export async function createMovement(input: MovementInput): Promise<Movement | null> {

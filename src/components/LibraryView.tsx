@@ -16,6 +16,8 @@ import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
+import { TaxonomyEditor } from '@/components/TaxonomyEditor';
+import type { MovementProfile } from '@/app.config';
 
 const METRIC_KEYS = Object.keys(METRICS) as MetricKey[];
 const inputClass =
@@ -157,6 +159,9 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   const [subEditing, setSubEditing] = useState<
     { mode: 'add' } | { mode: 'edit'; id: string } | null
   >(null);
+  // Muscle-map override for one owned movement. Corrects what the static rules
+  // in lib/movementTaxonomy.ts got wrong; feeds the /app/body map.
+  const [mapEditingId, setMapEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (data) setItems(data);
@@ -266,6 +271,27 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
         );
         setSubEditing(null);
       }
+    }
+  }
+
+  // Persist a muscle-map override. Only ever written to an owned row —
+  // 0005_lock_shared_library.sql blocks writes to shared rows, so the control
+  // is not offered on them.
+  async function handleSaveTaxonomy(id: string, taxonomy: MovementProfile) {
+    const m = movements.find((x) => x.id === id);
+    if (busy || !m) return;
+    setBusy(true);
+    const ok = await updateMovement(id, {
+      name: m.name,
+      category: m.category,
+      primary_metric: m.primary_metric,
+      default_rest_seconds: m.default_rest_seconds,
+      taxonomy,
+    });
+    setBusy(false);
+    if (ok) {
+      setItems((prev) => (prev ?? []).map((x) => (x.id === id ? { ...x, taxonomy } : x)));
+      setMapEditingId(null);
     }
   }
 
@@ -404,6 +430,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
                     <div className="t-control text-muted">
                       {m.category ?? 'uncategorized'}
                       {custom ? ' · custom' : ' · shared'}
+                      {m.taxonomy ? ' · mapped' : ''}
                     </div>
                   )}
                 </div>
@@ -415,6 +442,15 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
                 )}
                 {custom && !showcase ? (
                   <div className="flex shrink-0 items-center gap-1">
+                    {sub ? null : (
+                      <button
+                        onClick={() => setMapEditingId(m.id)}
+                        className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
+                        aria-label={`Muscle map for ${m.name}`}
+                      >
+                        Map
+                      </button>
+                    )}
                     <button
                       onClick={() => (sub ? setSubEditing({ mode: 'edit', id: m.id }) : startEdit(m))}
                       className="px-2 t-control text-muted hover:text-fg"
@@ -453,6 +489,15 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
         }}
         onSave={handleSaveSubroutine}
         onClose={() => setSubEditing(null)}
+      />
+
+      <TaxonomyEditor
+        open={mapEditingId !== null}
+        movementName={movements.find((m) => m.id === mapEditingId)?.name ?? ''}
+        initial={movements.find((m) => m.id === mapEditingId)?.taxonomy}
+        busy={busy}
+        onSave={(profile) => mapEditingId && handleSaveTaxonomy(mapEditingId, profile)}
+        onClose={() => setMapEditingId(null)}
       />
     </>
   );
