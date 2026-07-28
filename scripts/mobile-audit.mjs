@@ -112,9 +112,27 @@ const workoutLog = {
   created_at: new Date().toISOString(),
 };
 
+// m3 is OWNED (owner_user_id set), and that is load-bearing: Library renders
+// its per-row controls (Map / Edit / ×) only for rows the user owns, so a
+// fixture of purely shared rows meant this audit never measured them at all.
+// Three sub-44px targets shipped behind that gap. Keep an owned row here.
 const movements = [
   { id: 'm1', owner_user_id: null, name: 'barbell back squat', category: 'squat' },
   { id: 'm2', owner_user_id: null, name: 'bench press', category: 'press' },
+  {
+    id: 'm3',
+    owner_user_id: session.user.id,
+    name: 'weighted pull-up',
+    category: 'pull',
+    tags: [],
+    default_metrics: ['reps'],
+    primary_metric: 'reps',
+    default_rest_seconds: 120,
+    notes: null,
+    kind: 'movement',
+    url: null,
+    taxonomy: null,
+  },
 ];
 
 function fixtureFor(url) {

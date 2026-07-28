@@ -160,8 +160,11 @@ const VERTICAL_PULL: RegionWeights = { back: 0.7, arms: 0.3 };
 
 export const EXACT: Record<string, MovementProfile> = {
   // --- lower, knee-dominant
-  'back squat': p({ quads: 0.5, posteriorChain: 0.35, core: 0.15 }, 'resistance', 'sagittal'),
-  'front squat': p({ quads: 0.55, posteriorChain: 0.25, core: 0.2 }, 'resistance', 'sagittal'),
+  // Bilateral squats are anterior-leg dominant. The front squat most of all:
+  // the upright torso shifts demand off the hips and onto the quads, and the
+  // rack position taxes the trunk more than a back squat does.
+  'back squat': p({ quads: 0.6, posteriorChain: 0.28, core: 0.12 }, 'resistance', 'sagittal'),
+  'front squat': p({ quads: 0.7, posteriorChain: 0.1, core: 0.2 }, 'resistance', 'sagittal'),
   'leg extension': p({ quads: 1 }, 'resistance', 'sagittal'),
   'leg press': p({ quads: 0.65, posteriorChain: 0.35 }, 'resistance', 'sagittal'),
   pistol: p({ quads: 0.6, posteriorChain: 0.3, core: 0.1 }, 'resistance', 'sagittal'),
@@ -171,8 +174,11 @@ export const EXACT: Record<string, MovementProfile> = {
     'resistance',
     'sagittal',
   ),
+  // Cossack: the loaded leg is deep-flexed quad work and the trailing leg is
+  // adductor — and adductors fold into `quads` at this granularity, so it is
+  // strongly anterior despite the lateral shape.
   'cossack squat': p(
-    { quads: 0.6, posteriorChain: 0.25, core: 0.15 },
+    { quads: 0.75, posteriorChain: 0.15, core: 0.1 },
     'resistance',
     { frontal: 0.7, sagittal: 0.3 },
   ),
@@ -369,8 +375,16 @@ export const RULES: MovementRule[] = [
   },
   {
     id: 'squat-pattern',
-    match: ['squat', 'leg press', 'step up', 'lunge', 'split squat'],
-    profile: p({ quads: 0.5, posteriorChain: 0.35, core: 0.15 }, 'resistance', 'sagittal'),
+    // Bilateral squatting only — anterior-leg dominant. Unilateral/step
+    // patterns are a separate rule below with a more posterior split, and
+    // longest-fragment-wins routes 'split squat' there without any ordering.
+    match: ['squat', 'leg press'],
+    profile: p({ quads: 0.6, posteriorChain: 0.28, core: 0.12 }, 'resistance', 'sagittal'),
+  },
+  {
+    id: 'lunge-pattern',
+    match: ['lunge', 'split squat', 'step up'],
+    profile: p({ quads: 0.5, posteriorChain: 0.4, core: 0.1 }, 'resistance', 'sagittal'),
   },
   {
     id: 'hinge-pattern',

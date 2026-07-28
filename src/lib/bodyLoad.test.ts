@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { regionIntensities, setMinutes, summarizeBodyLoad } from '@/lib/bodyLoad';
+import { classifyMovement } from '@/lib/movementTaxonomy';
 import { LOAD, type SectionKey } from '@/app.config';
 import type { LogItem, LogSet, WorkoutLog } from '@/lib/types';
 
@@ -82,7 +83,14 @@ describe('summarizeBodyLoad', () => {
     const s = summarizeBodyLoad([mixed]);
     const squatMinutes = (10 * LOAD.repSeconds) / 60; // 2 sets × 5 reps
     const jumpMinutes = (5 * LOAD.repSeconds) / 60;
-    expect(s.regionMinutes.quads).toBeCloseTo(squatMinutes * 0.5 + jumpMinutes * 0.5, 3);
+    // Read the weights from the taxonomy rather than restating them: this test
+    // is about the distribution mechanics, not about what a squat works, and
+    // hardcoding the split makes every weight tune look like a broken test.
+    const wQuads = (n: string) => classifyMovement(n).profile.regions.quads ?? 0;
+    expect(s.regionMinutes.quads).toBeCloseTo(
+      squatMinutes * wQuads('Back Squat') + jumpMinutes * wQuads('Box Jump'),
+      3,
+    );
   });
 
   it('routes an unclassifiable movement to unmapped and to no region', () => {
