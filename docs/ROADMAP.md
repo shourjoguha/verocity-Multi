@@ -46,6 +46,8 @@ Operational detail lives in `docs/HANDOVER.md`.
 - [x] Public showcase route (`/showcase`) via session-less anon client
 - [x] Calendar (month grid + per-session bars, click → session detail)
 - [x] Stats (summary, consistency heatmap, weekly table, RPE-by-family, top movements e1RM)
+- [x] Body map (`/app/body`): movement → region/modality/plane taxonomy, working-minutes
+  roll-up, CSS-3D rotating silhouette, per-user overrides. Additive — `familyOf` untouched.
 - [x] Library (browse/search/filter movements)
 - [x] Plan view (week-by-week progression table with block markers)
 - [x] Session detail page (`/app/session?id=`)

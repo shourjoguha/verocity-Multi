@@ -1,4 +1,4 @@
-import type { AspectKey, BlockKey, MetricKey, SectionKey } from '@/app.config';
+import type { AspectKey, BlockKey, MetricKey, MovementProfile, SectionKey } from '@/app.config';
 
 // ---- DB row types (mirror supabase/migrations) ----
 
@@ -27,7 +27,18 @@ export interface Movement {
   // ≤300-char description, url an optional link. Absent kind ⇒ a normal movement.
   kind: ItemKind;
   url: string | null;
+  // Per-user taxonomy correction (movements.taxonomy jsonb), matched to logged
+  // movements by NORMALISED NAME because logs carry no FK to this table. Null
+  // for the vast majority of rows — the static rules in lib/movementTaxonomy.ts
+  // are the main road; this is the escape hatch for names they cannot resolve
+  // (e.g. the truncated "Wtd"). Nullable and optional so a client reading a
+  // database without the column still typechecks.
+  taxonomy?: MovementTaxonomyOverride | null;
 }
+
+// A partial profile: setting only `modality` leaves the rule-derived regions in
+// place, which is what the classifier's shallow merge relies on.
+export type MovementTaxonomyOverride = Partial<MovementProfile>;
 
 export interface Plan {
   id: string;

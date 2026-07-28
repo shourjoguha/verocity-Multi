@@ -133,6 +133,67 @@ export const MOVEMENT_FAMILIES = {
   carry: ['farmer carry', 'suitcase carry'],
 } as const;
 
+// ---- Movement taxonomy (region / modality / plane) ------------------------
+// Deliberately SEPARATE from MOVEMENT_FAMILIES above. That map is the Stats
+// RPE-fingerprint roll-up, it is matched by substring in lib/stats.ts, and it
+// carries known misfires on real data ("Med-Ball Throw" → pull, because
+// "th-row" contains "row"). Those misfires are pinned by test on purpose:
+// correcting them would change rendered Stats output for existing logs. The
+// taxonomy below is the additive replacement for NEW surfaces only.
+// Matching rules live in lib/movementTaxonomy.ts — same split as
+// GARMIN_ACTIVITY_TAG_MAP (config) vs lib/garmin/normalize.ts (matcher).
+
+// Eight coarse regions. Deliberately not muscle-level: much of the logged
+// vocabulary is whole-region or full-body work, and a finer grain would force
+// guesses (Gorilla Row vs Face Pull vs Band pull-apart all land in `back`).
+export const MUSCLE_REGIONS = {
+  chest: { label: 'Chest', short: 'Chest' },
+  back: { label: 'Back', short: 'Back' },
+  shoulders: { label: 'Shoulders', short: 'Delts' },
+  arms: { label: 'Arms', short: 'Arms' },
+  core: { label: 'Trunk', short: 'Core' },
+  posteriorChain: { label: 'Posterior chain', short: 'P-Chain' },
+  quads: { label: 'Quads', short: 'Quads' },
+  calves: { label: 'Calves', short: 'Calves' },
+} as const;
+
+// How the work was performed. `mobility` and `isometric` are separate from
+// `resistance` because ~9 logged entries are pure prep/stretch work and would
+// otherwise inflate resistance and skew the load metric; and because Pallof
+// Press (the canonical anti-rotation movement) filed under "mobility" would
+// bury the rotary axis.
+export const MOVEMENT_MODALITIES = {
+  resistance: { label: 'Resistance' },
+  endurance: { label: 'Endurance' },
+  plyometric: { label: 'Plyometric' },
+  isometric: { label: 'Isometric' },
+  mobility: { label: 'Mobility' },
+} as const;
+
+// Anatomical planes. Rotation is NOT a fourth plane — see ROTARY_ROLES.
+export const MOVEMENT_PLANES = {
+  sagittal: { label: 'Sagittal' },
+  frontal: { label: 'Frontal' },
+  transverse: { label: 'Transverse' },
+} as const;
+
+// Rotary role is orthogonal to plane, not a member of it. Landmine Twist
+// (produces transverse torque) and Pallof Press (resists it) are BOTH
+// transverse-plane; collapsing the five into one enum would make them mutually
+// exclusive with "transverse" and destroy the distinction.
+export const ROTARY_ROLES = {
+  rotational: { label: 'Rotational' },
+  antiRotational: { label: 'Anti-rotational' },
+} as const;
+
+// Working-minutes model (lib/bodyLoad.ts). Tonnage is deliberately not the
+// primary currency: weight × reps is zero for Ski-Erg, Box Jump and Side Plank.
+export const LOAD = {
+  repSeconds: 3,
+  metersPerMinute: 150,
+  fallbackSetMinutes: 0.5,
+} as const;
+
 // Mobile-PWA touch model tunables (SPEC §9 cross-cutting).
 export const TOUCH = {
   longPressMs: 450,
@@ -182,6 +243,11 @@ export const appConfig = {
   garminActivityTagMap: GARMIN_ACTIVITY_TAG_MAP,
   garminDefaultTag: GARMIN_DEFAULT_TAG,
   movementFamilies: MOVEMENT_FAMILIES,
+  muscleRegions: MUSCLE_REGIONS,
+  movementModalities: MOVEMENT_MODALITIES,
+  movementPlanes: MOVEMENT_PLANES,
+  rotaryRoles: ROTARY_ROLES,
+  load: LOAD,
   touch: TOUCH,
   notations: NOTATIONS,
   e1rm: E1RM,
@@ -192,3 +258,26 @@ export type SectionKey = (typeof SECTIONS)[number];
 export type BlockKey = keyof typeof BLOCKS;
 export type ActivityTagKey = keyof typeof ACTIVITY_TAGS;
 export type AspectKey = (typeof FITNESS_ASPECTS)[number]['key'];
+export type RegionKey = keyof typeof MUSCLE_REGIONS;
+export type ModalityKey = keyof typeof MOVEMENT_MODALITIES;
+export type PlaneKey = keyof typeof MOVEMENT_PLANES;
+export type RotaryRole = keyof typeof ROTARY_ROLES;
+
+export const MUSCLE_REGION_KEYS = Object.keys(MUSCLE_REGIONS) as RegionKey[];
+export const MODALITY_KEYS = Object.keys(MOVEMENT_MODALITIES) as ModalityKey[];
+export const PLANE_KEYS = Object.keys(MOVEMENT_PLANES) as PlaneKey[];
+
+// Normalised weight maps. Values are ≥0 and sum to 1, so a set's load
+// distributes across regions rather than double-counting.
+export type RegionWeights = Partial<Record<RegionKey, number>>;
+export type PlaneWeights = Partial<Record<PlaneKey, number>>;
+
+export interface MovementProfile {
+  regions: RegionWeights;
+  modality: ModalityKey | null;
+  planes: PlaneWeights;
+  rotary: RotaryRole | null;
+  // Whole-organism demand. Additive to the region weights, never a substitute:
+  // Run is systemic AND posteriorChain/quads/calves.
+  systemic: boolean;
+}

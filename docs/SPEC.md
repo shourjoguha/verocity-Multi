@@ -180,7 +180,10 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   original `app_users`.
 - **`movements`** — shared (null owner) + per-profile custom. Same shape as today:
   `name, category, tags[], default_metrics[], primary_metric, default_rest_seconds,
-  notes, owner_user_id → profiles.id`.
+  notes, owner_user_id → profiles.id`, plus `kind`/`url` for library subroutines
+  and `taxonomy jsonb` (nullable) — a per-user muscle-region/modality/plane
+  override, matched to logged movements by **normalised name** because logs
+  carry no FK here. See §8.1.
 - **`plans`** — `owner_user_id, name, start_date, end_date, source_markdown,
   parsed jsonb, is_active`. (Multi-week structured program.)
 - **`workout_logs`** — `owner_user_id, plan_id, log_date, day_key, week_number,
@@ -203,6 +206,29 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
 - **`shares`** *(new)* — read-only share tokens: `id, token_hash, owner_user_id,
   scope (profile|plan|log), resource_id (nullable), label, created_at, expires_at,
   revoked boolean`. Backs §7B share links and plan adoption.
+
+### 8.1 Movement taxonomy (region · modality · plane)
+
+Classifies a logged movement for the body map at `/app/body`. **Additive** — it
+sits alongside `MOVEMENT_FAMILIES`/`familyOf`, which keep their existing (and
+in three cases wrong) answers so Stats output for existing logs is unchanged.
+
+- **Vocabulary** in `src/app.config.ts`: eight coarse `MUSCLE_REGIONS`
+  (chest, back, shoulders, arms, core, posteriorChain, quads, calves) with a
+  separate `systemic` flag; five `MOVEMENT_MODALITIES`; three
+  `MOVEMENT_PLANES`; and `ROTARY_ROLES` (rotational / anti-rotational) modelled
+  **orthogonally** to plane, since both are transverse-plane.
+- **Matching** in `src/lib/movementTaxonomy.ts`: normalise → exact table →
+  rules (longest matched fragment wins) → `unknown`. Never falls back to a
+  bucket; unresolvable names surface in the UI's unmapped list.
+- **Aggregation** in `src/lib/bodyLoad.ts`, in **working minutes** — `weight ×
+  reps` is zero for erg intervals, jumps and planks, so tonnage cannot be the
+  unit. Tonnage and hard sets remain as resistance-only secondary readouts.
+- **Geometry** in `src/lib/bodyRegions.ts`, renderer-agnostic path data.
+- **Overrides** on `movements.taxonomy`, matched by normalised name.
+
+Owned by the `movement-taxonomy` skill; `npm test` is the only check that can
+see a regression, and it cannot see whether a mapping is anatomically correct.
 
 ### JSONB documents (unchanged contract)
 - `plans.parsed` → `ParsedPlan` (title, dates, blocks, weeklyTemplate, days[] with

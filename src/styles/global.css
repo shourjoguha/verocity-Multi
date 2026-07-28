@@ -550,6 +550,81 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   left: 0;
 }
 
+/* ---- Body map slab (see BodyMap.tsx) ----
+   The Echo Stack idiom applied to a silhouette instead of type: a parent
+   perspective, a preserve-3d child that rotates on ONE axis, and a set of
+   ribs at real translateZ offsets that read as an extruded edge when the
+   slab turns. No three.js — CLAUDE.md forbids defaulting to the 3D scene on
+   mobile (~170KB gzip), and /app/body is a phone-first route.
+
+   THE TRAP: any grouping property between .bodymap-stage and the faces —
+   overflow:hidden, opacity<1, filter, backdrop-filter, mask, clip-path,
+   contain:paint — forces transform-style:flat and silently collapses the
+   slab into a flat sprite. Nothing here may set one. That is also why the
+   stage never takes `.lift`: .lift sets its own perspective() transform AND
+   a transition:transform, which would both nest a second perspective and
+   fight the rotation. The wrapping Card gets .lift; the stage does not. */
+.bodymap-stage {
+  perspective: 900px;
+  perspective-origin: 50% 42%;
+  /* Claim horizontal drags only, so vertical page scroll still works on
+     touch. Without this the drag either never fires or eats the scroll. */
+  touch-action: pan-y;
+  cursor: grab;
+}
+.bodymap-stage:active {
+  cursor: grabbing;
+}
+.bodymap-slab {
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateY(var(--spin, 0deg));
+  will-change: transform;
+}
+/* Applied only for the release snap, so it never fights the drag. */
+.bodymap-slab.bodymap-snapping {
+  transition: transform 0.4s var(--ease-editorial);
+}
+.bodymap-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Past |spin| > 90deg the front hides and the back becomes readable —
+     the rotation IS the front/back toggle. */
+  backface-visibility: hidden;
+}
+.bodymap-face[data-face='front'] {
+  transform: translateZ(15px);
+}
+.bodymap-face[data-face='back'] {
+  transform: rotateY(180deg) translateZ(15px);
+}
+/* Ribs deliberately do NOT set backface-visibility: they are symmetric
+   slabs that must read from both sides. */
+.bodymap-rib {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* The first face is in flow so the stage gets its height from the aspect
+   box; everything else is absolutely positioned over it. */
+.bodymap-slab > .bodymap-sizer {
+  position: relative;
+  width: 100%;
+  visibility: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bodymap-stage {
+    touch-action: auto;
+    cursor: default;
+  }
+  .bodymap-slab.bodymap-snapping {
+    transition: none;
+  }
+}
+
 /* ---- Typographic Echo Stack (see EchoText.tsx) ----
    Each shadow layer now sits at a real Z offset behind the foreground so
    the stack reads as a physical stack of cards receding into space. The
