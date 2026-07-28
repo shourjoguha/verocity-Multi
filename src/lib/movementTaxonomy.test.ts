@@ -214,6 +214,33 @@ describe('the misfires this taxonomy exists to avoid', () => {
   });
 });
 
+// Bilateral squatting is anterior-leg work. Pinned because the naive reading —
+// "a squat is a leg exercise, split it evenly" — is exactly what drifts back in.
+describe('squat patterns are anterior-leg dominant', () => {
+  it.each(['Back Squat', 'Front Squat', 'Cossack Squat'])(
+    '%s puts quads well ahead of the posterior chain',
+    (name) => {
+      const { regions } = classifyMovement(name).profile;
+      expect(regions.quads ?? 0).toBeGreaterThan(0.55);
+      expect(regions.quads ?? 0).toBeGreaterThan(2 * (regions.posteriorChain ?? 0));
+    },
+  );
+
+  it('makes the front squat the most quad-dominant of the three', () => {
+    const q = (n: string) => classifyMovement(n).profile.regions.quads ?? 0;
+    expect(q('Front Squat')).toBeGreaterThan(q('Back Squat'));
+  });
+
+  it('keeps unilateral patterns more posterior than bilateral squats', () => {
+    const pc = (n: string) => classifyMovement(n).profile.regions.posteriorChain ?? 0;
+    expect(pc('Bulgarian Split Squat')).toBeGreaterThan(pc('Back Squat'));
+    expect(pc('Reverse Lunge')).toBeGreaterThan(pc('Back Squat'));
+    // 'split squat' (11 chars) must beat 'squat' (5) on fragment length —
+    // this is the order-independence guarantee doing real work.
+    expect(classifyMovement('Hatfield Split Squat').matchedIds[0]).toBe('lunge-pattern');
+  });
+});
+
 describe('plane and rotary axis', () => {
   it('distinguishes producing torque from resisting it', () => {
     const pallof = classifyMovement('Pallof Press').profile;
@@ -300,7 +327,12 @@ describe('overrides', () => {
       overrides: { 'back squat': { modality: 'plyometric' } },
     });
     expect(c.profile.modality).toBe('plyometric');
-    expect(c.profile.regions.quads).toBeCloseTo(0.5, 3);
+    // Whatever the squat's quad weight currently is, the override must not
+    // have disturbed it — that is the point of the partial merge.
+    expect(c.profile.regions.quads).toBeCloseTo(
+      classifyMovement('Back Squat').profile.regions.quads ?? 0,
+      3,
+    );
   });
 });
 

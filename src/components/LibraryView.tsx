@@ -453,14 +453,14 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
                     )}
                     <button
                       onClick={() => (sub ? setSubEditing({ mode: 'edit', id: m.id }) : startEdit(m))}
-                      className="px-2 t-control text-muted hover:text-fg"
+                      className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
                       aria-label={`Edit ${m.name}`}
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDelete(m)}
-                      className="px-2 text-muted hover:text-accent"
+                      className="flex min-h-11 items-center px-2 text-muted hover:text-accent"
                       aria-label={`Delete ${m.name}`}
                     >
                       ×
