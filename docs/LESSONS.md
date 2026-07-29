@@ -204,6 +204,43 @@ anything needing prefixes.
 
 ## Caching
 
+### A stat is stuck on a round number
+`[measured in Chromium]`
+Home's "Sessions" tile sat at exactly **30** and no new workout moved it. Not a
+cache: the tiles were derived from `getRecentLogs(30)`, so `logs.length` was
+reporting the page size. Total time and Top e1RM shared that window, which is
+worse than frozen — both could go **down** after a workout as an old row fell
+out. The streak and the ribbon read the unbounded `getAllLogs()`, so they kept
+moving, which is what made it read as a caching bug rather than a query bug.
+**A round, unmoving number is a `limit`, not a cache.** Check the query's page
+size before clearing anything. Tiles that mean "all time" must read an
+unbounded source; keep the windowed fetch for the list that wants a window.
+→ `ProfileView.tsx`, `completedLogs` in `src/lib/stats.ts`
+
+### A write lands in the database but not on the screen
+`[argued — not reproduced]`
+`queryCache.ts` is a module-level `Map`, and under ClientRouter the JS realm
+survives every tab navigation — so it is only as fresh as its invalidation. Its
+sole caller was `signOut()`. Writes were masked by the Logger finishing with
+`window.location.href` (a new realm, empty Map), so the hole only opened when a
+screen was reached **by link**. `createLog` / `updateLog` / `deleteLog` now
+clear it. **Any island holding data in a module Map must be invalidated by the
+write path, not by luck of a full page load.** A component that patches its own
+state after an edit must write the cache too, or the edit reverts on the next
+navigation.
+→ `src/lib/queries.ts`, `src/lib/queryCache.ts`, `ProfileView.tsx`
+
+### A loader that fails leaves stale numbers looking current
+`[argued — not reproduced]`
+`ProfileView`'s loader was an un-caught async IIFE. One rejected query and none
+of its setters ran — including `setLoading(false)` — so a revisit seeded from
+the cache kept painting last-known values with no spinner and no error, for as
+long as the tab stayed open. Indistinguishable from "the stats are frozen".
+**A seeded stale-while-revalidate view needs `try/catch/finally` and a visible
+failure state**; silent staleness is the one outcome the SWR pattern must never
+have.
+→ `ProfileView.tsx`
+
 ### Users are stuck on a previous build
 `[confirmed in the wild]`
 The service worker serves HTML **stale-while-revalidate**, so the first view
@@ -243,6 +280,19 @@ vouched for exactly what it was built to catch.
 **Pin assertions to the exact line that matters, then prove the test fails by
 breaking the code on purpose.** An unproven guard is worse than none.
 → `src/sw.test.ts`, `scripts/docs-audit.mjs`
+
+### A probe selector silently grabs the wrong nav
+`[measured in Chromium]`
+`App.astro` mounts **two** `<nav aria-label="Primary">` — the drawer and the
+bottom tab bar. `querySelector('nav[aria-label="Primary"]')` returns the
+drawer, so a probe asserting on the tab bar measured nine 44px drawer links and
+reported the bar's active-tab marker missing when it was rendering correctly.
+**Target the bar by `nav.ledge`.** More generally: when an assertion says an
+element is absent, prove the selector matched the intended node before
+believing it — an assertion that passes or fails by finding the wrong thing is
+no assertion. (The duplicate landmark label is a real a11y smell in its own
+right; two same-named landmarks are ambiguous to a screen reader.)
+→ `src/layouts/App.astro`
 
 ### What a standing check covers — and what it cannot
 The three checks are deliberately narrow. **A green run means only what the

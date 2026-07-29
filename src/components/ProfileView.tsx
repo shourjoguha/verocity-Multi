@@ -11,6 +11,7 @@ import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
 import { bestE1rm } from '@/lib/e1rm';
 import { currentProgramWeek, planWeekCount } from '@/lib/progression';
+import { completedLogs } from '@/lib/stats';
 import { formatDuration, formatRound } from '@/lib/format';
 import { buildTimeline, DAY_NAMES, dayNameFromLabel, typeFromLabel } from '@/lib/timeline';
 import { Card, EmptyState, LoadingScreen, SectionHeader, StatCard } from '@/components/ui/primitives';
@@ -173,40 +174,53 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const [addOpen, setAddOpen] = useState(false);
   const [previewDay, setPreviewDay] = useState<PlanDay | null>(null);
   const [quickLog, setQuickLog] = useState<WorkoutLog | null>(null);
+  const [failed, setFailed] = useState(false);
+  // Bumped by the retry button to re-run the loader below.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      if (mode === 'app') {
-        const { data } = await supabase.auth.getSession();
-        if (!data.session) {
-          window.location.href = '/login';
-          return;
+      try {
+        if (mode === 'app') {
+          const { data } = await supabase.auth.getSession();
+          if (!data.session) {
+            window.location.href = '/login';
+            return;
+          }
         }
+        const [p, pl, lg, all] = await Promise.all([
+          getCurrentProfile(client),
+          getActivePlan(client),
+          getRecentLogs(30, client),
+          getAllLogs(client),
+        ]);
+        if (!active) return;
+        if (mode === 'app') {
+          setCached('profile', p);
+          setCached('plan:active', pl);
+          setCached('logs:recent30', lg);
+          setCached('logs:all', all);
+        }
+        setProfile(p);
+        setPlan(pl);
+        setLogs(lg);
+        setAllLogs(all);
+        setFailed(false);
+      } catch {
+        // Without this the rejection escaped the async IIFE unhandled and none
+        // of the setters ran — so a revisit seeded from the cache sat on stale
+        // numbers forever, with no spinner and no error. Silent staleness is
+        // exactly what "the stats are stuck" looked like.
+        if (active) setFailed(true);
+      } finally {
+        if (active) setLoading(false);
       }
-      const [p, pl, lg, all] = await Promise.all([
-        getCurrentProfile(client),
-        getActivePlan(client),
-        getRecentLogs(30, client),
-        getAllLogs(client),
-      ]);
-      if (!active) return;
-      if (mode === 'app') {
-        setCached('profile', p);
-        setCached('plan:active', pl);
-        setCached('logs:recent30', lg);
-        setCached('logs:all', all);
-      }
-      setProfile(p);
-      setPlan(pl);
-      setLogs(lg);
-      setAllLogs(all);
-      setLoading(false);
     })();
     return () => {
       active = false;
     };
-  }, [mode]);
+  }, [mode, reloadKey]);
 
   // Live-refresh recents when this user's logs change (e.g. finishing a session
   // on another device/tab). App mode only; the showcase is read-only.
@@ -239,6 +253,15 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
     };
   }, [mode, profile]);
 
+  // The headline tiles read the FULL history, not the recent-30 window that
+  // feeds "Recent sessions" below. Off that window "Sessions" was pinned at 30
+  // once you had 30 logs, total time was a sliding sum that could fall after a
+  // workout, and a PR dropped out of Top e1RM as soon as 30 newer sessions
+  // existed. Memoised because topE1rm walks every set in every log, and this
+  // component re-renders whenever a sheet opens. Must sit above the early
+  // returns below — hooks cannot run conditionally.
+  const done = useMemo(() => completedLogs(allLogs), [allLogs]);
+
   if (loading) {
     return <LoadingScreen />;
   }
@@ -251,9 +274,22 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
     );
   }
 
-  const sessionCount = logs.length;
-  const totalSeconds = logs.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0);
-  const top = topE1rm(logs);
+  // An edit from LogQuickView has to land in BOTH arrays and BOTH cache entries.
+  // The tiles read `allLogs`, so touching only `logs` left them showing the
+  // pre-edit value; and a ClientRouter return to /app re-seeds from the module
+  // cache, which would repaint the old row over a correct on-screen one.
+  const applyLogChange = (fn: (ls: WorkoutLog[]) => WorkoutLog[]) => {
+    const nextRecent = fn(logs);
+    const nextAll = fn(allLogs);
+    setLogs(nextRecent);
+    setAllLogs(nextAll);
+    setCached('logs:recent30', nextRecent);
+    setCached('logs:all', nextAll);
+  };
+
+  const sessionCount = done.length;
+  const totalSeconds = done.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0);
+  const top = topE1rm(done);
   const streak = currentStreak(allLogs);
   const week = plan ? currentProgramWeek(plan.id, allLogs, planWeekCount(plan.parsed)) : null;
   const todayDayName = DAY_NAMES[new Date().getDay()];
@@ -293,6 +329,23 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
               Log activity
             </a>
           </section>
+        </Item>
+      ) : null}
+
+      {failed ? (
+        <Item>
+          {/* Say so, rather than leaving last-known numbers on screen looking
+              current. Everything below this is whatever the cache still holds. */}
+          <div className="mb-6 flex items-center justify-between gap-3 border border-border bg-surface px-4 py-3">
+            <span className="text-sm text-muted">Couldn't refresh — showing the last known numbers.</span>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="hill-btn shrink-0 border border-border bg-surface px-3 py-1.5 t-control text-fg transition-colors hover:border-fg"
+            >
+              Retry
+            </button>
+          </div>
         </Item>
       ) : null}
 
@@ -427,10 +480,10 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             open={quickLog !== null}
             onClose={() => setQuickLog(null)}
             onUpdated={(updated) => {
-              setLogs((ls) => ls.map((l) => (l.id === updated.id ? updated : l)));
+              applyLogChange((ls) => ls.map((l) => (l.id === updated.id ? updated : l)));
               setQuickLog(updated);
             }}
-            onDeleted={(id) => setLogs((ls) => ls.filter((l) => l.id !== id))}
+            onDeleted={(id) => applyLogChange((ls) => ls.filter((l) => l.id !== id))}
           />
         </>
       ) : null}

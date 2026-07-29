@@ -53,7 +53,13 @@ export default function ActivityLogger() {
   const [error, setError] = useState<string | null>(null);
 
   const [type, setType] = useState<string>(ACTIVITY_TYPES[0]);
-  const [date, setDate] = useState(today());
+  // AddSessionMenu forwards the calendar's chosen day as ?date=; without this
+  // an activity logged onto a past day silently landed on today. Lazy initial
+  // state — window is not available when this module is evaluated on the server.
+  const [date, setDate] = useState(() => {
+    if (typeof window === 'undefined') return today();
+    return new URLSearchParams(window.location.search).get('date') ?? today();
+  });
   const [minutes, setMinutes] = useState('');
   const [distance, setDistance] = useState('');
   const [tags, setTags] = useState<string[]>([]);

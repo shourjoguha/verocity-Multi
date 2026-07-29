@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { familyOf, flattenSets, sessionVolume } from '@/lib/stats';
+import { completedLogs, familyOf, flattenSets, sessionVolume } from '@/lib/stats';
 import type { WorkoutLog } from '@/lib/types';
 
 function log(sets: { weight?: number; reps?: number; rpe?: number; completed?: boolean }[]): WorkoutLog {
@@ -57,6 +57,26 @@ describe('sessionVolume', () => {
 
   it('treats missing weight or reps as zero contribution', () => {
     expect(sessionVolume(log([{ reps: 5 }, { weight: 100, reps: 3 }]))).toBe(300);
+  });
+});
+
+describe('completedLogs', () => {
+  const statusLog = (status: string) => ({ status }) as unknown as WorkoutLog;
+
+  // The regression: Home derived its tiles from getRecentLogs(30), so "Sessions"
+  // was pinned at 30 and no new workout could move it.
+  it('counts every finished session, past any 30-row window', () => {
+    const logs = Array.from({ length: 40 }, () => statusLog('done'));
+    expect(completedLogs(logs)).toHaveLength(40);
+  });
+
+  it('excludes sessions that were never finished', () => {
+    const logs = ['done', 'in_progress', 'planned', 'paused', 'cancelled', 'done'].map(statusLog);
+    expect(completedLogs(logs)).toHaveLength(2);
+  });
+
+  it('returns an empty array when nothing is finished', () => {
+    expect(completedLogs([statusLog('in_progress')])).toEqual([]);
   });
 });
 

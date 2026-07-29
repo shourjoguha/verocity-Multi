@@ -1,5 +1,6 @@
 ---
 import Base from './Base.astro';
+import LogTabButton from '@/components/LogTabButton';
 
 interface Props {
   title?: string;
@@ -41,7 +42,16 @@ const immersive = path === '/app/log';
 // centre action. Everything else stays one tap away behind "More" (the drawer),
 // so no destination is lost. Showcase has no write surface, so its centre slot
 // is Plan rather than Log.
-const tabs = showcase
+type Tab = {
+  href: string;
+  label: string;
+  glyph: string;
+  // Inverted chip treatment for the centre slot.
+  primary?: boolean;
+  // Set when the slot opens a sheet instead of navigating.
+  action?: 'log';
+};
+const tabs: Tab[] = showcase
   ? [
       { href: '/showcase', label: 'Home', glyph: '◫' },
       { href: '/showcase/calendar', label: 'Calendar', glyph: '▤' },
@@ -51,7 +61,9 @@ const tabs = showcase
   : [
       { href: '/app', label: 'Home', glyph: '◫' },
       { href: '/app/calendar', label: 'Calendar', glyph: '▤' },
-      { href: '/app/log', label: 'Log', glyph: '+', primary: true },
+      // Not a destination: opens the "what are you logging?" sheet. Kept in the
+      // tabs array so `onTab` below still accounts for the slot.
+      { href: '/app/log', label: 'Log', glyph: '+', primary: true, action: 'log' },
       { href: '/app/stats', label: 'Stats', glyph: '◲' },
     ];
 
@@ -190,27 +202,45 @@ const onTab = tabs.some((t) => isActive(t.href));
   >
     <div class="mx-auto flex max-w-3xl items-stretch justify-around px-2">
       {
-        tabs.map((t) => (
-          <a
-            href={t.href}
-            aria-current={isActive(t.href) ? 'page' : undefined}
-            class:list={[
-              'flex min-h-13 flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-150',
-              isActive(t.href) ? 'text-fg' : 'text-muted hover:text-fg',
-            ]}
-          >
-            <span
-              aria-hidden="true"
+        tabs.map((t) =>
+          /* The app-mode centre slot asks what you are logging instead of
+             navigating, so it is the one island in this otherwise static bar.
+             Showcase keeps a plain link: its centre slot is Plan, a real
+             destination, and the showcase mounts no write surfaces. */
+          t.action === 'log' ? (
+            <LogTabButton label={t.label} glyph={t.glyph} client:load />
+          ) : (
+            <a
+              href={t.href}
+              aria-current={isActive(t.href) ? 'page' : undefined}
               class:list={[
-                'flex h-7 w-7 items-center justify-center text-xl leading-none',
-                t.primary ? 'border border-fg bg-fg text-bg' : '',
+                'flex min-h-13 flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-150',
+                isActive(t.href) ? 'text-fg' : 'text-muted hover:text-fg',
               ]}
             >
-              {t.glyph}
-            </span>
-            <span class="t-control">{t.label}</span>
-          </a>
-        ))
+              {/* Every tab carries the same h-8 w-12 box so only the shadow
+                  changes between pages and nothing shifts vertically. The
+                  glyph keeps its own square inside it. */}
+              <span
+                aria-hidden="true"
+                class:list={[
+                  'flex h-8 w-12 items-center justify-center',
+                  isActive(t.href) && 'tab-bubble',
+                ]}
+              >
+                <span
+                  class:list={[
+                    'flex h-7 w-7 items-center justify-center text-xl leading-none',
+                    t.primary ? 'border border-fg bg-fg text-bg' : '',
+                  ]}
+                >
+                  {t.glyph}
+                </span>
+              </span>
+              <span class="t-control">{t.label}</span>
+            </a>
+          ),
+        )
       }
       <button
         id="nav-toggle"
@@ -223,7 +253,10 @@ const onTab = tabs.some((t) => isActive(t.href));
           onTab ? 'text-muted hover:text-fg' : 'text-fg',
         ]}
       >
-        <span class="flex h-7 w-7 flex-col items-center justify-center gap-[4px]" aria-hidden="true">
+        <span
+          aria-hidden="true"
+          class:list={['flex h-8 w-12 flex-col items-center justify-center gap-[4px]', !onTab && 'tab-bubble']}
+        >
           <span class="block h-[2px] w-5 bg-current"></span>
           <span class="block h-[2px] w-5 bg-current"></span>
           <span class="block h-[2px] w-5 bg-current"></span>
