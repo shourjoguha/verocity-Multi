@@ -352,6 +352,25 @@ p {
   box-shadow: var(--shadow-ledge);
 }
 
+/* Active tab — the current destination's icon rides a raised pillow, so the
+   ribbon says where you are without leaning entirely on fg-vs-muted contrast.
+   Reuses --hill-btn-rest (already re-lit for dark below) rather than .hill-btn:
+   that class's :hover / :active / [aria-pressed] rules are toggle semantics,
+   and this is a static current-page marker that must not react to touch.
+   Its downward cast is fine here — this sits INSIDE the bar with the label
+   under it, not on the bottom viewport edge, so the --shadow-ledge problem
+   above does not apply.
+   Shadow and token fill only, no transform: this lives inside the nav's
+   pointer-fine:backdrop-blur-md, which is the pairing LESSONS § "Flicker on
+   touch devices" warns about. Nothing animates either, so ClientRouter's DOM
+   swap between pages needs no re-trigger. The box it paints is sized
+   identically on every tab, so only the shadow changes and no tab moves. */
+.tab-bubble {
+  border-radius: 4px;
+  background: var(--color-elevated);
+  box-shadow: var(--hill-btn-rest);
+}
+
 .lift-interactive {
   cursor: pointer;
 }

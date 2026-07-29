@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { clearQueryCache } from '@/lib/queryCache';
 import type { MetricKey } from '@/app.config';
 import type {
   AspectScores,
@@ -231,6 +232,13 @@ export async function createAssessment(scores: AspectScores): Promise<FitnessAss
 
 // ---- write paths (authenticated only; owner_user_id is set from the session) ----
 
+// The three log writers below clear the read-path cache in queryCache.ts. That
+// Map survives every ClientRouter navigation, and until this was added its only
+// invalidation was signOut() — so a log written here stayed invisible on any
+// screen reached by link rather than by reload, which is one of the ways Home's
+// stats appeared frozen. Clearing wholesale is deliberate: a log write also
+// moves the streak, the program week and the timeline, so evicting by key would
+// just be a list to forget to update.
 export async function createLog(
   row: Partial<WorkoutLog> & { log_date: string },
 ): Promise<WorkoutLog | null> {
@@ -244,16 +252,19 @@ export async function createLog(
     .select('*')
     .single();
   if (error) return null;
+  clearQueryCache();
   return data as WorkoutLog;
 }
 
 export async function updateLog(id: string, patch: Partial<WorkoutLog>): Promise<boolean> {
   const { error } = await supabase.from('workout_logs').update(patch).eq('id', id);
+  if (!error) clearQueryCache();
   return !error;
 }
 
 export async function deleteLog(id: string): Promise<boolean> {
   const { error } = await supabase.from('workout_logs').delete().eq('id', id);
+  if (!error) clearQueryCache();
   return !error;
 }
 

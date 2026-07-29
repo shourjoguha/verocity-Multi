@@ -133,6 +133,16 @@ const SCENARIOS = [
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
+    // The ribbon's Log button is the one island in an otherwise static bar, and
+    // it opens its sheet from inside the nav's own backdrop-blur/sticky context
+    // — so it gets held to the same open/close contract as the rest. Run from
+    // /app/calendar because the bar is hidden on /app/log.
+    name: 'Ribbon · Log tab (AddSessionMenu)',
+    route: '/app/calendar',
+    open: 'nav[aria-label="Primary"] button:has-text("Log")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
     name: 'Library · + Subroutine (SubroutineEditor)',
     route: '/app/library',
     open: 'button:has-text("+ Subroutine")',
