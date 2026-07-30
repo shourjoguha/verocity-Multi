@@ -248,7 +248,10 @@ const onTab = tabs.some((t) => isActive(t.href));
       immersive && 'hidden',
     ]}
   >
-    <div class="mx-auto flex max-w-3xl items-stretch justify-around px-2">
+    {/* `gap-1` keeps the full-width cells from butting together: each tab's
+        highlight now paints the whole cell, so without it the Log slot's ink
+        would touch an active neighbour's pillow and the two would merge. */}
+    <div class="mx-auto flex max-w-3xl items-stretch justify-around gap-1 px-2">
       {
         tabs.map((t) =>
           /* The app-mode centre slot asks what you are logging instead of
@@ -263,27 +266,18 @@ const onTab = tabs.some((t) => isActive(t.href));
               aria-current={isActive(t.href) ? 'page' : undefined}
               class:list={[
                 'flex min-h-13 flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-150',
-                isActive(t.href) ? 'text-fg' : 'text-muted hover:text-fg',
+                /* Primary beats active: the centre slot stays ink even when it
+                   is also the current route (the showcase's Plan tab), and it
+                   paints its own fg/bg pair, so no colour utility here. */
+                t.primary
+                  ? 'tab-bubble-primary'
+                  : [isActive(t.href) ? 'tab-bubble text-fg' : 'text-muted hover:text-fg'],
               ]}
             >
-              {/* Every tab carries the same h-8 w-12 box so only the shadow
-                  changes between pages and nothing shifts vertically. The
-                  glyph keeps its own square inside it. */}
-              <span
-                aria-hidden="true"
-                class:list={[
-                  'flex h-8 w-12 items-center justify-center',
-                  isActive(t.href) && 'tab-bubble',
-                ]}
-              >
-                <span
-                  class:list={[
-                    'flex h-7 w-7 items-center justify-center text-xl leading-none',
-                    t.primary ? 'border border-fg bg-fg text-bg' : '',
-                  ]}
-                >
-                  {t.glyph}
-                </span>
+              {/* Fixed h-8 glyph row on every tab so baselines stay aligned and
+                  nothing shifts vertically between pages. */}
+              <span aria-hidden="true" class="flex h-8 items-center justify-center text-[1.75rem] leading-none">
+                {t.glyph}
               </span>
               <span class="t-control">{t.label}</span>
             </a>
@@ -298,16 +292,15 @@ const onTab = tabs.some((t) => isActive(t.href));
         aria-current={onTab ? undefined : 'page'}
         class:list={[
           'flex min-h-13 flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-150',
-          onTab ? 'text-muted hover:text-fg' : 'text-fg',
+          onTab ? 'text-muted hover:text-fg' : 'tab-bubble text-fg',
         ]}
       >
-        <span
-          aria-hidden="true"
-          class:list={['flex h-8 w-12 flex-col items-center justify-center gap-[4px]', !onTab && 'tab-bubble']}
-        >
-          <span class="block h-[2px] w-5 bg-current"></span>
-          <span class="block h-[2px] w-5 bg-current"></span>
-          <span class="block h-[2px] w-5 bg-current"></span>
+        {/* The bars go up one step, not two: burger ink reads wider than the
+            box-drawing glyphs at the same nominal size. */}
+        <span aria-hidden="true" class="flex h-8 flex-col items-center justify-center gap-[5px]">
+          <span class="block h-[2px] w-6 bg-current"></span>
+          <span class="block h-[2px] w-6 bg-current"></span>
+          <span class="block h-[2px] w-6 bg-current"></span>
         </span>
         <span class="t-control">More</span>
       </button>
