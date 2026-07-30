@@ -12,25 +12,71 @@ interface Props {
 const { title = 'Verocity', showcase = false } = Astro.props;
 const path = Astro.url.pathname.replace(/\/+$/, '') || '/';
 const home = showcase ? '/showcase' : '/app';
-const links = showcase
+
+// The drawer is a map of the app, not a list of routes. Four themed groups,
+// each under a caps eyebrow that goes ink while you are inside it — so the
+// panel says both where you are and what neighbourhood it belongs to. A flat
+// list of nine gave every destination the same volume and buried Settings
+// under a lone hairline.
+//
+// /app/shares lives in "You": it is a real page that was otherwise reachable
+// only through a text link inside Settings' Data section.
+// /app/activity does NOT belong here — it is an action (log a non-lifting
+// activity), already offered by AddSessionMenu from the ribbon's centre slot
+// and from Home, and this panel lists places.
+type NavGroup = { label: string; items: { href: string; label: string }[] };
+const groups: NavGroup[] = showcase
   ? [
-      { href: '/showcase', label: 'Home' },
-      { href: '/showcase/calendar', label: 'Calendar' },
-      { href: '/showcase/stats', label: 'Stats' },
-      { href: '/showcase/plan', label: 'Plan' },
-      { href: '/showcase/library', label: 'Library' },
+      {
+        label: 'Today',
+        items: [
+          { href: '/showcase', label: 'Home' },
+          { href: '/showcase/calendar', label: 'Calendar' },
+        ],
+      },
+      {
+        label: 'Training',
+        items: [
+          { href: '/showcase/plan', label: 'Plan' },
+          { href: '/showcase/library', label: 'Library' },
+        ],
+      },
+      { label: 'Progress', items: [{ href: '/showcase/stats', label: 'Stats' }] },
     ]
   : [
-      { href: '/app', label: 'Home' },
-      { href: '/app/calendar', label: 'Calendar' },
-      { href: '/app/stats', label: 'Stats' },
-      { href: '/app/body', label: 'Body' },
-      { href: '/app/coach', label: 'Coach' },
-      { href: '/app/plan', label: 'Plan' },
-      { href: '/app/sessions', label: 'Sessions' },
-      { href: '/app/library', label: 'Library' },
+      {
+        label: 'Today',
+        items: [
+          { href: '/app', label: 'Home' },
+          { href: '/app/calendar', label: 'Calendar' },
+        ],
+      },
+      {
+        label: 'Training',
+        items: [
+          { href: '/app/plan', label: 'Plan' },
+          { href: '/app/sessions', label: 'Sessions' },
+          { href: '/app/library', label: 'Library' },
+        ],
+      },
+      {
+        label: 'Progress',
+        items: [
+          { href: '/app/stats', label: 'Stats' },
+          { href: '/app/body', label: 'Body' },
+          { href: '/app/coach', label: 'Coach' },
+        ],
+      },
+      {
+        label: 'You',
+        items: [
+          { href: '/app/settings', label: 'Settings' },
+          { href: '/app/shares', label: 'Share links' },
+        ],
+      },
     ];
 const isActive = (href: string) => (href === home ? path === home : path.startsWith(href));
+const groupActive = (g: NavGroup) => g.items.some((i) => isActive(i.href));
 
 // The Logger owns the bottom of the screen — it has its own Finish bar, and
 // stacking a tab bar under it would put two fixed bars in the thumb zone. It
@@ -117,49 +163,51 @@ const onTab = tabs.some((t) => isActive(t.href));
   <nav
     id="nav-menu"
     aria-label="Primary"
-    class="fixed left-0 top-0 z-[70] h-dvh w-64 -translate-x-full border-r border-border bg-bg shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-xl"
+    class="fixed left-0 top-0 z-[70] flex h-dvh w-64 -translate-x-full flex-col border-r border-border bg-bg shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-xl"
   >
-    <div class="flex h-16 items-center px-6">
+    <div class="flex h-16 shrink-0 items-center px-6">
       <span class="font-display text-lg font-semibold uppercase tracking-tight text-fg">Verocity</span>
     </div>
-    <div class="px-3 py-2">
+    {/* Grouped, so it scrolls: ten 44px rows plus four eyebrows measure ~648px
+        against 667px of dvh on a 375-wide phone, and this panel carries no
+        pb-safe of its own — on a home-indicator device the last row would sit
+        under the indicator with no way to reach it. `overscroll-contain` keeps
+        a flick at either end from chaining to the page underneath. */}
+    <div class="pb-safe min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
       {
-        links.map((l) => (
-          <a
-            href={l.href}
-            data-nav-link
-            aria-current={isActive(l.href) ? 'page' : undefined}
-            class:list={[
-              'flex min-h-11 items-center px-3 text-sm uppercase tracking-wider transition-colors duration-150 hover:text-fg',
-              isActive(l.href) ? 'text-fg' : 'text-muted',
-            ]}
-          >
-            {l.label}
-          </a>
-        ))
-      }
-      {
-        !showcase && (
-          <>
-            <div class="my-2 border-t border-border" />
-            <a
-              href="/app/settings"
-              data-nav-link
-              aria-current={isActive('/app/settings') ? 'page' : undefined}
-              class:list={[
-                'flex min-h-11 items-center px-3 text-sm uppercase tracking-wider transition-colors duration-150 hover:text-fg',
-                isActive('/app/settings') ? 'text-fg' : 'text-muted',
-              ]}
+        groups.map((g, i) => (
+          <div class:list={[i > 0 && 'mt-2 border-t border-border pt-2']}>
+            <div
+              class:list={['t-eyebrow px-3 py-2', groupActive(g) ? 'text-fg' : 'text-muted']}
             >
-              Settings
-            </a>
-          </>
-        )
+              {g.label}
+            </div>
+            {g.items.map((l) => (
+              <a
+                href={l.href}
+                data-nav-link
+                aria-current={isActive(l.href) ? 'page' : undefined}
+                class:list={[
+                  'flex min-h-11 items-center gap-2 px-3 text-sm uppercase tracking-wider transition-colors duration-150 hover:text-fg',
+                  isActive(l.href) ? 'text-fg' : 'text-muted',
+                ]}
+              >
+                {/* The gutter is always present and always this wide, so the
+                    marker appearing on the current row shifts nothing. It also
+                    indents the items under their eyebrow. */}
+                <span aria-hidden="true" class="flex w-3 shrink-0 items-center">
+                  {isActive(l.href) && <span class="block h-[3px] w-[3px] bg-fg" />}
+                </span>
+                {l.label}
+              </a>
+            ))}
+          </div>
+        ))
       }
     </div>
     {
       showcase && (
-        <div class="mt-2 border-t border-border px-6 py-4">
+        <div class="shrink-0 border-t border-border px-6 py-4">
           <p class="text-[0.7rem] leading-relaxed text-muted">
             You're viewing a read-only demo profile. Nothing here can be edited.
           </p>
