@@ -217,6 +217,18 @@ size before clearing anything. Tiles that mean "all time" must read an
 unbounded source; keep the windowed fetch for the list that wants a window.
 → `ProfileView.tsx`, `completedLogs` in `src/lib/stats.ts`
 
+### A widened query window paints the old window first
+`[argued — not reproduced]`
+`useAuthedQuery` seeds `useState` synchronously from `getCached(key)`, so the
+first frame is whatever the last visit stored under that key. Widening a fetch
+without renaming the key therefore paints the **old** span and computes anything
+derived from it — legend dates, window-scoped scores — against the wrong range
+until revalidation lands, which reads as "my window change did nothing".
+**The SWR key must name the window it holds** (`stats:logs:120d`, not
+`stats:logs:8w`), so changing the span changes the key and the stale entry is
+simply never read. Stats builds its key from `ASPECT_WINDOW_DAYS` for that reason.
+→ `src/lib/useAuthedQuery.ts`, `StatsView.tsx`, `ASPECT_WINDOW_DAYS` in `src/app.config.ts`
+
 ### A write lands in the database but not on the screen
 `[argued — not reproduced]`
 `queryCache.ts` is a module-level `Map`, and under ClientRouter the JS realm
@@ -293,6 +305,20 @@ believing it — an assertion that passes or fails by finding the wrong thing is
 no assertion. (The duplicate landmark label is a real a11y smell in its own
 right; two same-named landmarks are ambiguous to a screen reader.)
 → `src/layouts/App.astro`
+
+### A fixture that saturates a clamped score can't show the score changing
+`[measured in Chromium]`
+A probe meant to prove the radar is data-driven added two much heavier sessions
+and asserted the polygon moved. It didn't. `clampScore` caps every aspect at
+`ASPECT_SCALE.max`, and the fixture was already at 10 on every axis the data
+could reach — so the assertion was measuring the ceiling, not the wiring. The
+same fixture also made the striped day the volume maximum, where `opacity` is
+1.0 by design, and an "intensity is applied" check failed on correct code.
+**Seed a fixture that sits mid-scale, then perturb an input the metric responds
+to linearly** — here, marking sets incomplete moves the consistency ratio at
+once. A clamped or maxed-out fixture makes a passing assertion meaningless and a
+failing one a false alarm.
+→ `computeAspectSuggestions` in `src/lib/aspects.ts`, `scripts/mobile-audit.mjs`
 
 ### audit:mobile is green on a surface it never rendered
 `[measured in Chromium]`

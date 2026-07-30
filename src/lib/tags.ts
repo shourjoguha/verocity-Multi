@@ -21,6 +21,18 @@ export function sessionTagColors(tags: string[], activityType?: string | null): 
   return out.length ? out : [tagColor(activityType ?? 'strength')];
 }
 
+// 45° stripes for a day that mixed activities (the consistency heatmap). Returns
+// undefined below two colors so the caller keeps its solid `backgroundColor`
+// path — a one-color "gradient" would paint the same fill at extra cost, and the
+// caption only promises stripes where there really was more than one activity.
+export function stripeBackground(colors: string[], bandPx = 4): string | undefined {
+  if (colors.length < 2) return undefined;
+  const stops = colors
+    .map((c, i) => `${c} ${i * bandPx}px ${(i + 1) * bandPx}px`)
+    .join(', ');
+  return `repeating-linear-gradient(45deg, ${stops})`;
+}
+
 // Classify a plan day's label into an activity tag — used to tint upcoming
 // ("planned") days on the plan-progress ribbon, where there is no log to color by.
 export function dayTagFromLabel(label: string): ActivityTagKey {
