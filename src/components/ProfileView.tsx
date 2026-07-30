@@ -42,6 +42,12 @@ const edgeFade: CSSProperties = {
     'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
 };
 
+// A collapsed day card shows its position, not its name: A, B, C… Past Z (no
+// real plan gets there) it falls back to the 1-based index.
+function dayBadge(i: number): string {
+  return i < 26 ? String.fromCharCode(65 + i) : String(i + 1);
+}
+
 // Ribbon sizing: thin day-bars, ~36 visible at once; the rest scroll.
 const VISIBLE_BARS = 36;
 const BAR_GAP = 2;
@@ -173,6 +179,11 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   );
   const [addOpen, setAddOpen] = useState(false);
   const [previewDay, setPreviewDay] = useState<PlanDay | null>(null);
+  // Which day in the rail is expanded. null = "not chosen yet", which resolves
+  // to today (or the first day) below — deliberately derived rather than set in
+  // an effect, because the plan arrives async and an effect-set default would
+  // paint the wrong card expanded for one frame.
+  const [activeDayKey, setActiveDayKey] = useState<string | null>(null);
   const [quickLog, setQuickLog] = useState<WorkoutLog | null>(null);
   const [failed, setFailed] = useState(false);
   // Bumped by the retry button to re-run the loader below.
@@ -294,6 +305,14 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const week = plan ? currentProgramWeek(plan.id, allLogs, planWeekCount(plan.parsed)) : null;
   const todayDayName = DAY_NAMES[new Date().getDay()];
 
+  const days = plan?.parsed.days ?? [];
+  const activeKey =
+    activeDayKey ??
+    days.find((d) => dayNameFromLabel(d.label).toLowerCase() === todayDayName.toLowerCase())
+      ?.dayKey ??
+    days[0]?.dayKey ??
+    null;
+
   return (
     <>
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
@@ -323,10 +342,10 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
               Start workout
             </button>
             <a
-              href="/app/activity"
+              href="/app/coach"
               className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
             >
-              Log activity
+              Coach
             </a>
           </section>
         </Item>
@@ -382,71 +401,78 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </Item>
       ) : null}
 
-      {mode === 'app' && plan && plan.parsed.days.length > 0 ? (
-        <Item>
-          <section className="mb-6">
-            <div className="mb-3 flex items-baseline justify-between">
-              <div className="t-label text-muted">Pick a day</div>
-              <a
-                href="/app/plan"
-                className="t-label text-muted transition-colors hover:text-fg"
-              >
-                Plan overview →
-              </a>
-            </div>
-            <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6" style={edgeFade}>
-              <div className="flex gap-2 pb-2">
-                {plan.parsed.days.map((d) => {
-                  const isToday = dayNameFromLabel(d.label).toLowerCase() === todayDayName.toLowerCase();
-                  return (
-                    <button
-                      key={d.dayKey}
-                      type="button"
-                      onClick={() => setPreviewDay(d)}
-                      className={`min-w-[140px] shrink-0 border p-3 text-left transition-colors ${
-                        isToday ? 'border-fg bg-fg text-bg' : 'border-border hover:bg-elevated'
-                      }`}
-                    >
-                      <div className="truncate font-display text-base tracking-[-0.04em]">
-                        {typeFromLabel(d.label)}
-                      </div>
-                      <div
-                        className={`t-label mt-1 ${
-                          isToday ? 'text-bg/70' : 'text-muted'
-                        }`}
-                        aria-hidden
-                      >
-                        {isToday ? 'today' : ' '}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
-        </Item>
-      ) : null}
-
       <Item>
         <section className="mb-6">
           <SectionHeader>Active plan</SectionHeader>
           {plan ? (
-            <Card>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-display text-xl font-semibold tracking-tight text-fg">{plan.name}</div>
-                  {week ? <div className="mt-0.5 text-sm text-muted">Week {week}</div> : null}
+            <>
+              <Card>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-display text-xl font-semibold tracking-tight text-fg">{plan.name}</div>
+                    {week ? <div className="mt-0.5 text-sm text-muted">Week {week}</div> : null}
+                  </div>
+                  {mode === 'app' ? (
+                    <a
+                      href="/app/plan"
+                      className="t-eyebrow text-muted transition-colors hover:text-fg"
+                    >
+                      View →
+                    </a>
+                  ) : null}
                 </div>
-                {mode === 'app' ? (
-                  <a
-                    href="/app/plan"
-                    className="t-eyebrow text-muted transition-colors hover:text-fg"
-                  >
-                    View →
-                  </a>
-                ) : null}
-              </div>
-            </Card>
+              </Card>
+              {/* The plan's days, tucked under the plan card with no header of
+                  their own — they belong to the plan above, not to a second
+                  section that names the same thing. Accordion rail: the active
+                  day carries its full name, every other day collapses to a
+                  letter, so a 6-day plan stays as short as a 2-day one. Flat by
+                  design — .lift sets a transform and would fight the width
+                  tween. */}
+              {mode === 'app' && days.length > 0 ? (
+                <div
+                  className="-mx-4 mt-1.5 overflow-x-auto px-4 sm:-mx-6 sm:px-6"
+                  style={edgeFade}
+                >
+                  <div className="flex gap-1.5 pb-2">
+                    {days.map((d, i) => {
+                      const isToday =
+                        dayNameFromLabel(d.label).toLowerCase() === todayDayName.toLowerCase();
+                      const isActive = d.dayKey === activeKey;
+                      return (
+                        <button
+                          key={d.dayKey}
+                          type="button"
+                          aria-label={`${d.label}${isToday ? ' (today)' : ''}`}
+                          aria-current={isActive}
+                          onClick={() => (isActive ? setPreviewDay(d) : setActiveDayKey(d.dayKey))}
+                          className={`flex min-h-11 shrink-0 items-center gap-1.5 overflow-hidden border transition-[max-width,background-color,border-color] duration-200 ease-out ${
+                            isActive
+                              ? 'max-w-[190px] border-fg bg-fg px-3 text-bg'
+                              : 'w-11 max-w-11 justify-center border-border bg-surface text-fg hover:bg-elevated'
+                          }`}
+                        >
+                          {isToday ? (
+                            <span
+                              aria-hidden
+                              className={`inline-block h-1.5 w-1.5 shrink-0 ${
+                                isActive ? 'bg-bg' : 'bg-teal'
+                              }`}
+                            />
+                          ) : null}
+                          <span
+                            aria-hidden
+                            className="truncate font-display text-[0.625rem] tracking-[-0.04em]"
+                          >
+                            {isActive ? typeFromLabel(d.label) : dayBadge(i)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </>
           ) : (
             <EmptyState>No active plan.</EmptyState>
           )}

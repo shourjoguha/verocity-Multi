@@ -294,6 +294,20 @@ no assertion. (The duplicate landmark label is a real a11y smell in its own
 right; two same-named landmarks are ambiguous to a screen reader.)
 → `src/layouts/App.astro`
 
+### audit:mobile is green on a surface it never rendered
+`[measured in Chromium]`
+`fixtureFor()` in `scripts/mobile-audit.mjs` returns `[]` for the plans table, so
+`getActivePlan()` resolves null and Home paints "No active plan." The Active-plan
+card, the day rail and every other plan-dependent control are **absent from the
+DOM the audit measures** — a rail of sub-44px chips would have shipped with
+`small-targets=0` on all 22 combinations.
+**Before citing a green run as evidence for a plan-driven surface, confirm the
+surface was in the DOM.** Either extend the fixture, or run a throwaway probe
+that seeds a plan (copy the auth/REST stubbing out of the audit; it needs no
+credentials) and measure the nodes you actually changed. Same trap for saved
+sessions and the movement library, whose fixtures are likewise thin.
+→ `scripts/mobile-audit.mjs`
+
 ### What a standing check covers — and what it cannot
 The three checks are deliberately narrow. **A green run means only what the
 check measures.** Four sheet-flicker fixes shipped citing "183 tests, astro
@@ -301,7 +315,7 @@ check clean, all 20 audit combinations pass" — none of which can see a flicker
 
 | Command | Catches | Cannot see |
 |---|---|---|
-| `npm run audit:mobile` | horizontal overflow, sub-44px targets, on every `/app` route at two widths | **Opens no sheet and clicks nothing** — it loads routes. |
+| `npm run audit:mobile` | horizontal overflow, sub-44px targets, on every `/app` route at two widths | **Opens no sheet and clicks nothing** — it loads routes. Its fixture has **no active plan**, so every plan-dependent surface renders its empty state and is never measured (see below). |
 | `npm run audit:flicker` | scroll jump, `html`/`body` style writes on touch, two scrims at once, an animated scrim, a sheet lingering after the tap, focus moving after it settled, panel resizing mid-animation, a text field focused on open | **Chromium only.** Blind to the WebKit compositing and keyboard/viewport behaviour the original bug lived in. |
 | `npm run audit:docs` | code identifiers in the docs that no longer resolve | Whether a rule is **true**. `.lift` resolves fine; that it is wrong advice for a modal panel is invisible to it. |
 
