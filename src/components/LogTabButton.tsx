@@ -36,12 +36,12 @@ export function LogTabButton({ label, glyph }: { label: string; glyph: string })
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex min-h-13 flex-1 flex-col items-center justify-center gap-0.5 text-muted transition-colors duration-150 hover:text-fg"
+        className="tab-bubble-primary flex min-h-13 flex-1 flex-col items-center justify-center gap-0.5"
       >
-        <span aria-hidden="true" className="flex h-8 w-12 items-center justify-center">
-          <span className="flex h-7 w-7 items-center justify-center border border-fg bg-fg text-xl leading-none text-bg">
-            {glyph}
-          </span>
+        {/* Geometry mirrors the plain tabs in App.astro — same min-h-13 cell,
+            same h-8 glyph row — so the ribbon stays on one baseline. */}
+        <span aria-hidden="true" className="flex h-8 items-center justify-center text-[1.75rem] leading-none">
+          {glyph}
         </span>
         <span className="t-control">{label}</span>
       </button>
