@@ -229,6 +229,12 @@ export const FITNESS_ASPECTS = [
 
 export const ASPECT_SCALE = { min: 1, max: 10 } as const;
 
+// Rolling window for the derived radar axes (lib/aspects.ts). The chart plots
+// this window against the block immediately before it, so Stats fetches 2× this
+// many days. Never hardcode the number in a component — the legend dates and the
+// query bounds must move together.
+export const ASPECT_WINDOW_DAYS = 60;
+
 export const appConfig = {
   units: UNITS,
   blocks: BLOCKS,

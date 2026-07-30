@@ -7,9 +7,10 @@ import { showcaseRefDate } from '@/lib/showcase';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
 import { flattenSets, familyOf, sessionVolume } from '@/lib/stats';
-import { computeAspectSuggestions } from '@/lib/aspects';
-import { formatDuration, formatRound } from '@/lib/format';
-import { tagColor } from '@/lib/tags';
+import { aspectWindows, computeAspectSuggestions, logsInWindow } from '@/lib/aspects';
+import { formatDate, formatDuration, formatRound } from '@/lib/format';
+import { sessionTagColors, stripeBackground } from '@/lib/tags';
+import { ASPECT_WINDOW_DAYS } from '@/app.config';
 import { EmptyState, LoadingScreen, SectionHeader, StatCard } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { FitnessProfile } from '@/components/FitnessProfile';
@@ -98,12 +99,18 @@ function Sparkline({
 export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
   const client = mode === 'showcase' ? supabasePublic : supabase;
   const today = mode === 'showcase' ? showcaseRefDate() : new Date();
-  const from = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (WEEKS * 7 - 1)),
-  );
+  // The radar compares the rolling aspect window against the block before it, so
+  // the fetch spans both — wider than the 8 weeks the rest of this page reads.
+  const windows = aspectWindows(today);
+  // Cache key names the window: with the old 8-week key a revisit would paint a
+  // cached 56-day array on the first frame (useAuthedQuery seeds synchronously)
+  // and the radar would compute over the wrong span until revalidation landed.
   const { data: logs, loading } = useAuthedQuery(
-    () => getLogsInRange(ymd(from), ymd(today), client),
-    { auth: mode === 'app', key: mode === 'app' ? 'stats:logs:8w' : undefined },
+    () => getLogsInRange(windows.prior.start, windows.current.end, client),
+    {
+      auth: mode === 'app',
+      key: mode === 'app' ? `stats:logs:${ASPECT_WINDOW_DAYS * 2}d` : undefined,
+    },
   );
 
   const [tip, setTip] = useState<{ x: number; y: number; label: string } | null>(null);
@@ -117,7 +124,18 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   useEffect(() => () => clearTimeout(tipTimer.current), []);
 
   if (loading) return <LoadingScreen />;
-  const all: WorkoutLog[] = logs ?? [];
+  const fetched: WorkoutLog[] = logs ?? [];
+
+  // Everything on this page except the radar reads the 8-week window it always
+  // read — the wider fetch above is for the radar's baseline alone, and must not
+  // quietly restate the tiles, bars, RPE fingerprint and heatmap over 120 days.
+  const eightWeeksAgo = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (WEEKS * 7 - 1)),
+  );
+  const all: WorkoutLog[] = logsInWindow(fetched, {
+    start: ymd(eightWeeksAgo),
+    end: ymd(today),
+  });
 
   // Week buckets (oldest → newest).
   const thisMonday = mondayOf(today);
@@ -142,15 +160,21 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     };
   });
 
-  // Per-day activity map for the heatmap (key = ymd).
-  type DayCell = { volume: number; activities: { color: string; label: string }[] };
+  // Per-day activity map for the heatmap (key = ymd). `colors` is the day's
+  // DISTINCT activity colors — a day is striped when it genuinely mixed
+  // activities, so two strength sessions read as one solid strength cell while a
+  // single session tagged strength + mobility reads as two stripes. Using
+  // sessionTagColors (not tags[0]) is what makes the second case work.
+  type DayCell = { volume: number; labels: string[]; colors: string[] };
   const dayMap = new Map<string, DayCell>();
   for (const log of all) {
     const key = log.log_date.slice(0, 10);
-    const cur = dayMap.get(key) ?? { volume: 0, activities: [] };
-    const label = log.tags[0] ?? log.activity_type ?? 'Session';
+    const cur = dayMap.get(key) ?? { volume: 0, labels: [], colors: [] };
     cur.volume += sessionVolume(log);
-    cur.activities.push({ color: tagColor(log.tags[0] ?? log.activity_type ?? ''), label });
+    cur.labels.push(log.tags[0] ?? log.activity_type ?? 'Session');
+    for (const c of sessionTagColors(log.tags, log.activity_type)) {
+      if (!cur.colors.includes(c)) cur.colors.push(c);
+    }
     dayMap.set(key, cur);
   }
   const dayMax = Math.max(1, ...[...dayMap.values()].map((d) => d.volume));
@@ -229,7 +253,23 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   const adherence = totalSets ? Math.round((doneSets / totalSets) * 100) : null;
 
   const totalSeconds = all.reduce((a, l) => a + (l.total_seconds ?? 0), 0);
-  const aspectSuggestions = computeAspectSuggestions(all);
+
+  // Radar periods: derived from logs, so both the polygons and the legend dates
+  // move with the calendar on their own. The prior block is dropped when it has
+  // no scores — a series of absent axes would draw a dot at the centre and read
+  // as a real measurement of zero.
+  const periodLabel = (w: { start: string; end: string }) =>
+    `${formatDate(w.start)} – ${formatDate(w.end)}`;
+  const currentPeriod = {
+    label: periodLabel(windows.current),
+    endDate: windows.current.end,
+    scores: computeAspectSuggestions(logsInWindow(fetched, windows.current)),
+  };
+  const priorScores = computeAspectSuggestions(logsInWindow(fetched, windows.prior));
+  const priorPeriod =
+    Object.keys(priorScores).length > 0
+      ? { label: periodLabel(windows.prior), endDate: windows.prior.end, scores: priorScores }
+      : null;
 
   if (all.length === 0) {
     return (
@@ -271,7 +311,8 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
         <Item>
           <FitnessProfile
-            suggestions={aspectSuggestions}
+            current={currentPeriod}
+            prior={priorPeriod}
             canEdit={mode === 'app'}
             client={client}
           />
@@ -296,28 +337,24 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     if (!cell) {
                       return <div key={row} className="hill aspect-square bg-fg/[0.05]" />;
                     }
-                    const label = `${dateLabel} · ${cell.activities.map((a) => a.label).join(', ')} · ${formatRound(cell.volume)} kg`;
-                    const multi = cell.activities.length > 1;
+                    const label = `${dateLabel} · ${cell.labels.join(', ')} · ${formatRound(cell.volume)} kg`;
+                    // Stripes for a mixed day, a solid fill for one activity —
+                    // and the volume intensity applies either way. The old
+                    // multi-activity branch passed no style at all, so those
+                    // days lost their shading and read as maximum volume.
+                    const stripes = stripeBackground(cell.colors);
                     return (
                       <div
                         key={row}
-                        className={`hill aspect-square cursor-pointer overflow-hidden ${multi ? 'flex flex-col' : ''}`}
-                        style={
-                          multi
-                            ? undefined
-                            : {
-                                backgroundColor: cell.activities[0].color,
-                                opacity: 0.3 + (cell.volume / dayMax) * 0.7,
-                              }
-                        }
+                        className="hill aspect-square cursor-pointer"
+                        style={{
+                          ...(stripes
+                            ? { backgroundImage: stripes }
+                            : { backgroundColor: cell.colors[0] }),
+                          opacity: 0.3 + (cell.volume / dayMax) * 0.7,
+                        }}
                         onMouseMove={(e) => showTip(e, label)}
-                      >
-                        {multi
-                          ? cell.activities.map((a, i) => (
-                              <div key={i} className="flex-1" style={{ backgroundColor: a.color }} />
-                            ))
-                          : null}
-                      </div>
+                      />
                     );
                   })}
                 </div>

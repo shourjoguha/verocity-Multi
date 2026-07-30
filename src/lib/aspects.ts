@@ -1,11 +1,48 @@
 import type { AspectScores } from '@/lib/types';
 import type { WorkoutLog } from '@/lib/types';
-import { ASPECT_SCALE } from '@/app.config';
+import { ASPECT_SCALE, ASPECT_WINDOW_DAYS } from '@/app.config';
 import { flattenSets } from '@/lib/stats';
 import { e1rm } from '@/lib/e1rm';
 
 const clampScore = (n: number) =>
   Math.min(ASPECT_SCALE.max, Math.max(ASPECT_SCALE.min, Math.round(n)));
+
+export type AspectWindow = { start: string; end: string };
+
+function ymd(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    d.getUTCDate(),
+  ).padStart(2, '0')}`;
+}
+
+function shift(d: Date, days: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days));
+}
+
+// The two blocks the radar compares: `current` ends on the given day, `prior` is
+// the block immediately before it, both `days` long. Bounds are inclusive ymd
+// strings (UTC) so they can be handed straight to getLogsInRange, and the caller
+// passes the day in — the showcase anchors on a fixed date, not on now.
+export function aspectWindows(
+  today: Date,
+  days: number = ASPECT_WINDOW_DAYS,
+): { current: AspectWindow; prior: AspectWindow } {
+  const end = ymd(today);
+  const start = ymd(shift(today, -(days - 1)));
+  return {
+    current: { start, end },
+    prior: { start: ymd(shift(today, -(days * 2 - 1))), end: ymd(shift(today, -days)) },
+  };
+}
+
+// Inclusive date-bound filter — logs carry `log_date` as a ymd string, so this is
+// a lexicographic compare, no Date parsing.
+export function logsInWindow(logs: WorkoutLog[], w: AspectWindow): WorkoutLog[] {
+  return logs.filter((l) => {
+    const d = l.log_date.slice(0, 10);
+    return d >= w.start && d <= w.end;
+  });
+}
 
 // Hybrid spider chart: compute a *suggested* 1–10 for the axes we can defend
 // from logged data. These seed the check-in and are fully overridable; the
