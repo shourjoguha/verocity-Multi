@@ -19,7 +19,7 @@
 
 import {
   ACWR,
-  ASPECT_ABSOLUTE_ANCHORS,
+  ASPECT_GOOD_BASELINE,
   ASPECT_MIN_BASELINE,
   ASPECT_OVERRIDE_DAYS,
   ASPECT_SCALE,
@@ -49,6 +49,8 @@ export type Confidence = 'low' | 'ok';
 export type AspectBaselines = Partial<Record<AspectKey, number[]>>;
 
 export interface AspectScoring {
+  /** Raw measurements. Carries axes that have no baseline to be scored against. */
+  metrics: AspectMetrics;
   scores: AspectScores;
   confidence: Partial<Record<AspectKey, Confidence>>;
 }
@@ -112,20 +114,23 @@ export function windowEndingOn(end: string, days: number): AspectWindow {
 }
 
 /**
- * Ends of the last `months` COMPLETED calendar months, oldest first.
+ * Ends of the last `weeks` COMPLETED weeks, oldest first. Weeks run Monday to
+ * Sunday, matching the rest of the app.
  *
- * Snapshots anchor to month ends rather than to "today minus N months" because
- * the upsert key is (owner, period_end, window_days): a period_end that drifted
- * with the current day would mint a new row on every visit instead of
- * overwriting one. The in-progress month is deliberately excluded — the live
- * radar computes its own current/prior windows and has no need to persist them.
+ * Snapshots anchor to week ends rather than to "today minus N weeks" because the
+ * upsert key is (owner, period_end, window_days): a period_end that drifted with
+ * the current day would mint a new row on every visit instead of overwriting
+ * one. The in-progress week is deliberately excluded — the live radar computes
+ * its own current/prior windows and has no need to persist them.
+ *
+ * Weekly rather than monthly because it is what allowed the invented reference
+ * values to be deleted: a real baseline now arrives in ~4 weeks, not ~4 months.
  */
-export function completedMonthEnds(today: Date, months: number): string[] {
+export function completedWeekEnds(today: Date, weeks: number): string[] {
+  const mondayIndex = (today.getUTCDay() + 6) % 7; // 0 = Monday
+  const lastSunday = shift(today, -mondayIndex - 1);
   const out: string[] = [];
-  for (let i = 1; i <= months; i += 1) {
-    // Day 0 of month M is the last day of month M−1.
-    out.push(ymd(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - i + 1, 0))));
-  }
+  for (let i = 0; i < weeks; i += 1) out.push(ymd(shift(lastSunday, -i * 7)));
   return out.reverse();
 }
 
@@ -297,7 +302,6 @@ export function computeAspectMetrics(
 // ---- stage 2: relative scoring ----
 
 const MID_SPAN = ASPECT_SCALE.max - ASPECT_SCALE.min;
-const EPSILON = 1e-6;
 
 function median(xs: number[]): number {
   const sorted = [...xs].sort((a, b) => a - b);
@@ -313,37 +317,42 @@ function toScale(position: number): number {
 }
 
 /**
- * Place `value` on ASPECT_SCALE against the user's own history.
+ * Place `value` on ASPECT_SCALE against the user's own history — a robust
+ * z-score, median and MAD rather than mean and SD, because one deload week
+ * should not drag the anchor. The median of your own history lands exactly
+ * mid-scale, which is the only thing that makes "typical for you" a true claim.
  *
- * With enough baseline samples this is a robust z-score — median and MAD, not
- * mean and SD, because one deload month should not drag the anchor — so the
- * median of your own history lands exactly mid-scale.
- *
- * Below ASPECT_MIN_BASELINE samples there is nothing to be relative *to*, so it
- * falls back to a log-ratio against a documented absolute anchor and reports
- * `confidence: 'low'`. That flag is not decoration: the chart renders those axes
- * differently so a cold-start guess doesn't read like a measurement.
+ * Returns **null** below ASPECT_MIN_BASELINE samples. There is deliberately no
+ * absolute fallback: the previous version scored thin-history axes against
+ * invented reference constants while the chart went on calling the midpoint
+ * "typical for you", which was a claim the data could not support. An axis with
+ * no baseline now reports no score, and the chart shows its raw measurement.
  */
 export function scoreAgainstBaseline(
   value: number,
   baseline: number[],
-  anchor: number,
-): { score: number; confidence: Confidence } {
+): { score: number; confidence: Confidence } | null {
   const samples = baseline.filter((n) => Number.isFinite(n));
-  if (samples.length >= ASPECT_MIN_BASELINE) {
-    const med = median(samples);
-    // 1.4826 scales MAD to an SD-equivalent for a normal distribution.
-    const dispersion = median(samples.map((n) => Math.abs(n - med))) * 1.4826;
-    // A perfectly flat history has no spread to judge against — mid-scale is the
-    // honest answer, and it keeps the divide from producing Infinity/NaN.
-    const z = dispersion > 0 ? (value - med) / dispersion : 0;
-    return { score: toScale(z / ASPECT_SOFTNESS.z), confidence: 'ok' };
-  }
-  const ratio = Math.log((Math.max(0, value) + EPSILON) / (Math.max(0, anchor) + EPSILON));
-  return { score: toScale(ratio / ASPECT_SOFTNESS.anchor), confidence: 'low' };
+  if (samples.length < ASPECT_MIN_BASELINE) return null;
+
+  const med = median(samples);
+  // 1.4826 scales MAD to an SD-equivalent for a normal distribution.
+  const dispersion = median(samples.map((n) => Math.abs(n - med))) * 1.4826;
+  // A perfectly flat history has no spread to judge against — mid-scale is the
+  // honest answer, and it keeps the divide from producing Infinity/NaN.
+  const z = dispersion > 0 ? (value - med) / dispersion : 0;
+  return {
+    score: toScale(z / ASPECT_SOFTNESS.z),
+    confidence: samples.length < ASPECT_GOOD_BASELINE ? 'low' : 'ok',
+  };
 }
 
-/** Score every measured axis. Axes absent from `metrics` stay absent. */
+/**
+ * Score every measured axis that has a baseline to be scored against. Axes
+ * absent from `metrics` stay absent; axes present but unscorable keep their raw
+ * value in `metrics` and simply get no entry in `scores` — that is the signal
+ * the chart reads to print a measurement instead of a rating.
+ */
 export function scoreAspects(
   metrics: AspectMetrics,
   baselines: AspectBaselines = {},
@@ -354,15 +363,28 @@ export function scoreAspects(
     const key = aspect.key as AspectKey;
     const value = metrics[key];
     if (value == null || !Number.isFinite(value)) continue;
-    const scored = scoreAgainstBaseline(
-      value,
-      baselines[key] ?? [],
-      ASPECT_ABSOLUTE_ANCHORS[key],
-    );
+    const scored = scoreAgainstBaseline(value, baselines[key] ?? []);
+    if (!scored) continue;
     scores[key] = scored.score;
     confidence[key] = scored.confidence;
   }
-  return { scores, confidence };
+  return { metrics, scores, confidence };
+}
+
+/**
+ * Baseline samples for ONE window length.
+ *
+ * The filter is the point, and it is load-bearing: a 28-day reading scored
+ * against a distribution of 60-day readings would be silently and badly wrong on
+ * every axis, with nothing on screen to give it away. `aspect_snapshots` keeps
+ * the two series apart via `window_days`; this is where that separation is
+ * enforced on the read side.
+ */
+export function baselinesFor(
+  snapshots: { window_days: number; metrics: AspectMetrics }[],
+  windowDays: number,
+): AspectBaselines {
+  return buildBaselines(snapshots.filter((s) => s.window_days === windowDays));
 }
 
 /** Collect per-axis baseline samples from stored snapshots. */
@@ -405,5 +427,5 @@ export function applyAssessmentOverride(
     // A rating the user typed is a statement, not an estimate from thin history.
     confidence[key] = 'ok';
   }
-  return { scores, confidence };
+  return { metrics: scoring.metrics, scores, confidence };
 }

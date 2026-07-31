@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { useScrollLock } from '@/lib/scrollLock';
 
 const FOCUSABLE =
@@ -113,7 +114,20 @@ export function Modal({
 
   if (!open) return null;
 
-  return (
+  // Portalled to <body>, and that is load-bearing rather than tidiness.
+  //
+  // `position: fixed` resolves against the nearest ancestor with a transform,
+  // and `.stagger-item` runs `stagger-in` with `animation-fill-mode: both` — a
+  // filling animation ON the transform property, which keeps the element a
+  // containing block forever after. Its computed transform reads
+  // `matrix(1, 0, 0, 1, 0, 0)`: an identity matrix, visually nothing, but enough.
+  // The keyframe's `to { transform: none }` does not save it.
+  //
+  // So any sheet rendered inside a PageStagger Item was being positioned against
+  // that item instead of the viewport — measured at top: -304px on /app/stats,
+  // header and Close button off-screen above the fold. Portalling puts the
+  // overlay outside every stagger wrapper on the page at once.
+  return createPortal(
     // overflow-hidden + overscroll-contain make this a scroll container that
     // swallows scroll chaining, which is what holds the page still on touch
     // now that nothing locks the document there. See lib/scrollLock.ts.
@@ -154,6 +168,7 @@ export function Modal({
         ) : null}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

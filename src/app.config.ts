@@ -220,67 +220,84 @@ export const E1RM = { formula: 'brzycki' } as const;
 // `auto` flag any more — power and mobility used to carry `auto: false` and so
 // only moved when the user opened the check-in, which is exactly the staleness
 // the taxonomy-driven derivation removed.
+// `unit` labels the RAW metric (AspectMetrics in lib/types.ts), which the chart
+// prints verbatim on any axis it cannot yet score. An unlabelled 112 is
+// meaningless; "112 kg" is a real measurement the user can act on.
 export const FITNESS_ASPECTS = [
-  { key: 'strength', label: 'Strength' },
-  { key: 'endurance', label: 'Endurance' },
-  { key: 'power', label: 'Power' },
-  { key: 'mobility', label: 'Mobility' },
-  { key: 'consistency', label: 'Consistency' },
-  { key: 'recovery', label: 'Recovery' },
+  { key: 'strength', label: 'Strength', unit: 'kg' },
+  { key: 'endurance', label: 'Endurance', unit: 'min/wk' },
+  { key: 'power', label: 'Power', unit: 'min/wk' },
+  { key: 'mobility', label: 'Mobility', unit: 'min/wk' },
+  { key: 'consistency', label: 'Consistency', unit: 'days/wk' },
+  { key: 'recovery', label: 'Recovery', unit: 'index' },
 ] as const;
 
 export const ASPECT_SCALE = { min: 1, max: 10 } as const;
 
-// Rolling window for the derived radar axes (lib/aspects.ts). The chart plots
-// this window against the block immediately before it, so Stats fetches 2× this
-// many days. Never hardcode the number in a component — the legend dates and the
-// query bounds must move together.
+// Selectable measurement windows. This is the responsiveness control: one
+// session is ~1/25th of a 60-day window and ~1/12th of a 28-day one, so the
+// short window is what makes a single workout visibly move the shape. The
+// *displayed* value has always rolled daily — what felt unresponsive was the
+// window length, not how often anything recomputed.
+//
+// Each length keeps its OWN baseline series (aspect_snapshots.window_days).
+// Scoring a 28-day reading against a distribution of 60-day readings would
+// silently skew every axis.
+export const ASPECT_WINDOWS = [
+  { key: 'recent', days: 28, label: 'Recent' },
+  { key: 'trend', days: 60, label: 'Trend' },
+] as const;
+
+// Default window, and the basis of the Stats log fetch: it spans this window
+// plus the block before it, which also covers every shorter window in
+// ASPECT_WINDOWS for free. Never hardcode the number in a component — the legend
+// dates and the query bounds must move together.
 export const ASPECT_WINDOW_DAYS = 60;
 
-// How far back the radar looks for the baseline it scores you against, in
-// monthly snapshots (aspect_snapshots). Scores are RELATIVE: an axis is placed
-// against the distribution of your own past values for that same metric, so the
-// midpoint always means "typical for you" and the polygon can always move. The
-// previous model was absolute and clamped, so a committed user pinned every
-// reachable axis at ASPECT_SCALE.max and the chart went inert.
-export const ASPECT_BASELINE_MONTHS = 12;
+// How far back the radar reads its baseline, in WEEKLY snapshots
+// (aspect_snapshots). Scores are RELATIVE: an axis is placed against the
+// distribution of your own past values for that same metric, so the midpoint
+// means "typical for you" and the polygon can always move.
+//
+// Weekly, not monthly: the rolling metric barely moves day to day, so weekly
+// captures effectively all of its variation — and it means a real baseline
+// arrives after ~4 weeks instead of ~4 months, which is what let the invented
+// reference values be deleted outright rather than merely deprecated.
+export const ASPECT_BASELINE_WEEKS = 52;
 
-// How many months a cold start reconstructs in one pass. Deliberately smaller
-// than ASPECT_BASELINE_MONTHS: reading a year of snapshots is a dozen tiny rows,
-// but *building* them needs the underlying logs, and each month drags another
-// ASPECT_WINDOW_DAYS of LogDocument JSONB over the wire. Six months clears
-// ASPECT_MIN_BASELINE immediately and the rest thickens a month at a time.
-export const ASPECT_BACKFILL_MONTHS = 6;
+// How many weeks a cold start reconstructs in one pass. Smaller than
+// ASPECT_BASELINE_WEEKS on purpose: reading a year of snapshots is ~52 tiny
+// rows, but *building* one needs the logs underneath it, and each week drags
+// another window of LogDocument JSONB into the fetch. A quarter clears
+// ASPECT_MIN_BASELINE immediately and the span thickens a week at a time.
+export const ASPECT_BACKFILL_WEEKS = 12;
 
-// Below this many baseline samples the relative score has nothing to stand on,
-// so the axis falls back to ASPECT_ABSOLUTE_ANCHORS and is reported as low
-// confidence. The chart MUST render that differently — a cold-start guess must
-// not read with the same authority as a year-backed score.
+// Below this many baseline samples there is nothing to be relative TO, so the
+// axis is reported UNSCORED and the chart shows its raw measurement instead.
+// There is deliberately no absolute fallback: inventing a reference value and
+// calling the midpoint "typical for you" was a claim the data could not support.
 export const ASPECT_MIN_BASELINE = 4;
+
+// Above ASPECT_MIN_BASELINE but below this, an axis is scored yet the baseline
+// is thin — reported as low confidence and drawn with a hollow vertex, so it
+// cannot be read with the same authority as a settled one.
+//
+// MUST stay comfortably above ASPECT_BACKFILL_WEEKS. Set equal to it, every
+// successful backfill lands exactly on "settled" and the hollow state becomes
+// unreachable — the distinction renders as dead code, which a probe across four
+// baseline depths caught returning `hollow 0` every time. Half a year of weekly
+// samples is the point at which a median is worth trusting without a caveat.
+export const ASPECT_GOOD_BASELINE = 26;
 
 // A check-in speaks for itself while it is fresh. Past this many days before the
 // window end, the derived score takes back over rather than letting a months-old
 // self-rating masquerade as current.
 export const ASPECT_OVERRIDE_DAYS = 21;
 
-// Softness of the logistic that maps a position onto ASPECT_SCALE. `z` is in
-// robust-z units against your own baseline (±1.5 lands roughly ±2.2 points);
-// `anchor` is in log-ratio units for the cold-start path. The logistic is
-// asymptotic, so scores approach 1 and 10 without ever pinning to them.
-export const ASPECT_SOFTNESS = { z: 1.5, anchor: 0.5 } as const;
-
-// The raw metric value that reads as the middle of the scale before you have a
-// baseline of your own. Cold-start only — after ASPECT_MIN_BASELINE snapshots
-// your own history replaces these entirely, which is why they can be rough.
-// Units match AspectMetrics in lib/aspects.ts.
-export const ASPECT_ABSOLUTE_ANCHORS = {
-  strength: 80, // kg, set-weighted mean best e1RM
-  endurance: 60, // HR-weighted aerobic minutes per week
-  power: 6, // plyometric minutes per week
-  mobility: 15, // plane-adjusted mobility minutes per week
-  consistency: 3, // training days per week × set adherence
-  recovery: 0.6, // 0–1 index
-} as const satisfies Record<(typeof FITNESS_ASPECTS)[number]['key'], number>;
+// Softness of the logistic that maps a robust z-score onto ASPECT_SCALE: ±1.5
+// lands roughly ±2.2 points. The logistic is asymptotic, so scores approach 1
+// and 10 without ever pinning to them.
+export const ASPECT_SOFTNESS = { z: 1.5 } as const;
 
 // Heart-rate model for the endurance axis. `maxFallback` stands in for an
 // observed hr_max when a user has never logged one — there is no age field, so
@@ -327,6 +344,7 @@ export type SectionKey = (typeof SECTIONS)[number];
 export type BlockKey = keyof typeof BLOCKS;
 export type ActivityTagKey = keyof typeof ACTIVITY_TAGS;
 export type AspectKey = (typeof FITNESS_ASPECTS)[number]['key'];
+export type AspectWindowKey = (typeof ASPECT_WINDOWS)[number]['key'];
 export type RegionKey = keyof typeof MUSCLE_REGIONS;
 export type ModalityKey = keyof typeof MOVEMENT_MODALITIES;
 export type PlaneKey = keyof typeof MOVEMENT_PLANES;

@@ -133,6 +133,16 @@ const SCENARIOS = [
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
+    // Stats' scoring explainer. Worth a scenario because it is the one sheet
+    // that opens from a header sitting above a chart that animates on mount —
+    // if the scroll lock or the scrim disturbed the page, the radar's bloom is
+    // exactly the kind of thing that would replay under it.
+    name: 'Stats · scoring explainer (AspectExplainer)',
+    route: '/app/stats',
+    open: '[aria-label="How this chart is scored"]',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
     // The ribbon's Log button is the one island in an otherwise static bar, and
     // it opens its sheet from inside the nav's own backdrop-blur/sticky context
     // — so it gets held to the same open/close contract as the rest. Run from
