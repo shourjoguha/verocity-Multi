@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getLogsInRange } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
+import { useAspectProfile } from '@/lib/useAspectProfile';
 import { showcaseRefDate } from '@/lib/showcase';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
 import { flattenSets, familyOf, sessionVolume } from '@/lib/stats';
-import { aspectWindows, computeAspectSuggestions, logsInWindow } from '@/lib/aspects';
-import { formatDate, formatDuration, formatRound } from '@/lib/format';
+import { aspectWindows, logsInWindow } from '@/lib/aspects';
+import { formatDuration, formatRound } from '@/lib/format';
 import { sessionTagColors, stripeBackground } from '@/lib/tags';
 import { ASPECT_WINDOW_DAYS } from '@/app.config';
 import { EmptyState, LoadingScreen, SectionHeader, StatCard } from '@/components/ui/primitives';
@@ -96,39 +97,14 @@ function Sparkline({
   );
 }
 
-export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
-  const client = mode === 'showcase' ? supabasePublic : supabase;
-  const today = mode === 'showcase' ? showcaseRefDate() : new Date();
-  // The radar compares the rolling aspect window against the block before it, so
-  // the fetch spans both — wider than the 8 weeks the rest of this page reads.
-  const windows = aspectWindows(today);
-  // Cache key names the window: with the old 8-week key a revisit would paint a
-  // cached 56-day array on the first frame (useAuthedQuery seeds synchronously)
-  // and the radar would compute over the wrong span until revalidation landed.
-  const { data: logs, loading } = useAuthedQuery(
-    () => getLogsInRange(windows.prior.start, windows.current.end, client),
-    {
-      auth: mode === 'app',
-      key: mode === 'app' ? `stats:logs:${ASPECT_WINDOW_DAYS * 2}d` : undefined,
-    },
-  );
-
-  const [tip, setTip] = useState<{ x: number; y: number; label: string } | null>(null);
-  const [groupBy, setGroupBy] = useState<'movement' | 'family'>('movement');
-  const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  function showTip(e: { clientX: number; clientY: number }, label: string) {
-    setTip({ x: e.clientX, y: e.clientY, label });
-    clearTimeout(tipTimer.current);
-    tipTimer.current = setTimeout(() => setTip(null), 2000);
-  }
-  useEffect(() => () => clearTimeout(tipTimer.current), []);
-
-  if (loading) return <LoadingScreen />;
-  const fetched: WorkoutLog[] = logs ?? [];
-
-  // Everything on this page except the radar reads the 8-week window it always
-  // read — the wider fetch above is for the radar's baseline alone, and must not
-  // quietly restate the tiles, bars, RPE fingerprint and heatmap over 120 days.
+// Everything on this page except the radar reads the 8-week window it always
+// read — the wider fetch is for the radar's baseline alone, and must not quietly
+// restate the tiles, bars, RPE fingerprint and heatmap over 120 days.
+//
+// Extracted from the render body and memoised by the caller. It used to run
+// inline on every render, so hovering a sparkline point re-derived every bucket,
+// map and series over 120 days of LogDocument JSONB just to move a tooltip.
+function deriveStats(fetched: WorkoutLog[], today: Date, groupBy: 'movement' | 'family') {
   const eightWeeksAgo = new Date(
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (WEEKS * 7 - 1)),
   );
@@ -254,22 +230,74 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
   const totalSeconds = all.reduce((a, l) => a + (l.total_seconds ?? 0), 0);
 
-  // Radar periods: derived from logs, so both the polygons and the legend dates
-  // move with the calendar on their own. The prior block is dropped when it has
-  // no scores — a series of absent axes would draw a dot at the centre and read
-  // as a real measurement of zero.
-  const periodLabel = (w: { start: string; end: string }) =>
-    `${formatDate(w.start)} – ${formatDate(w.end)}`;
-  const currentPeriod = {
-    label: periodLabel(windows.current),
-    endDate: windows.current.end,
-    scores: computeAspectSuggestions(logsInWindow(fetched, windows.current)),
+  return {
+    all,
+    weekStarts,
+    weekRows,
+    dayMap,
+    dayMax,
+    rpeRows,
+    topMoves,
+    cards,
+    seriesFor,
+    adherence,
+    totalSeconds,
   };
-  const priorScores = computeAspectSuggestions(logsInWindow(fetched, windows.prior));
-  const priorPeriod =
-    Object.keys(priorScores).length > 0
-      ? { label: periodLabel(windows.prior), endDate: windows.prior.end, scores: priorScores }
-      : null;
+}
+
+export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
+  const client = mode === 'showcase' ? supabasePublic : supabase;
+  const today = mode === 'showcase' ? showcaseRefDate() : new Date();
+  // The radar compares the rolling aspect window against the block before it, so
+  // the fetch spans both — wider than the 8 weeks the rest of this page reads.
+  const windows = aspectWindows(today);
+  // Cache key names the window: with the old 8-week key a revisit would paint a
+  // cached 56-day array on the first frame (useAuthedQuery seeds synchronously)
+  // and the radar would compute over the wrong span until revalidation landed.
+  const { data: logs, loading } = useAuthedQuery(
+    () => getLogsInRange(windows.prior.start, windows.current.end, client),
+    {
+      auth: mode === 'app',
+      key: mode === 'app' ? `stats:logs:${ASPECT_WINDOW_DAYS * 2}d` : undefined,
+    },
+  );
+
+  // The radar's own reads start here, alongside the log fetch rather than behind
+  // it — FitnessProfile does not mount until logs land, so fetching from inside
+  // it waterfalled a second round trip.
+  const profile = useAspectProfile({ logs, today, mode, client });
+
+  const [tip, setTip] = useState<{ x: number; y: number; label: string } | null>(null);
+  const [groupBy, setGroupBy] = useState<'movement' | 'family'>('movement');
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  function showTip(e: { clientX: number; clientY: number }, label: string) {
+    setTip({ x: e.clientX, y: e.clientY, label });
+    clearTimeout(tipTimer.current);
+    tipTimer.current = setTimeout(() => setTip(null), 2000);
+  }
+  useEffect(() => () => clearTimeout(tipTimer.current), []);
+
+  // `today` is intentionally out of the dep list: in app mode it is a fresh Date
+  // on every render, and re-deriving 8 weeks of buckets because the clock moved a
+  // millisecond is the cost this memo exists to avoid.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const derived = useMemo(() => deriveStats(logs ?? [], today, groupBy), [logs, groupBy]);
+
+  if (loading) return <LoadingScreen />;
+
+  const {
+    all,
+    weekStarts,
+    weekRows,
+    dayMap,
+    dayMax,
+    rpeRows,
+    topMoves,
+    cards,
+    seriesFor,
+    adherence,
+    totalSeconds,
+  } = derived;
 
   if (all.length === 0) {
     return (
@@ -310,12 +338,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
         {mode === 'app' ? <GarminHealthSection /> : null}
 
         <Item>
-          <FitnessProfile
-            current={currentPeriod}
-            prior={priorPeriod}
-            canEdit={mode === 'app'}
-            client={client}
-          />
+          <FitnessProfile profile={profile} canEdit={mode === 'app'} />
         </Item>
 
         <Item>

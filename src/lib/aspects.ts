@@ -1,13 +1,66 @@
-import type { AspectScores } from '@/lib/types';
-import type { WorkoutLog } from '@/lib/types';
-import { ASPECT_SCALE, ASPECT_WINDOW_DAYS } from '@/app.config';
-import { flattenSets } from '@/lib/stats';
-import { e1rm } from '@/lib/e1rm';
+// The fitness-profile radar (Stats spider chart), in two stages.
+//
+//   raw metrics (unit-ful, unbounded)  →  scores (1–10, relative to your history)
+//        AspectMetrics                          AspectScores
+//
+// Keeping these apart is the whole point. The previous model went straight to an
+// absolute clamped 1–10 built from hand-tuned constants ("~12 conditioning
+// sessions reads as a 10"), so a committed user pinned every reachable axis at
+// ASPECT_SCALE.max and the polygon stopped moving — see docs/LESSONS.md on the
+// fixture that couldn't show a score change because it was already at the
+// ceiling. Metrics are now compared against the distribution of *your own* past
+// values for the same metric, through a logistic that is asymptotic rather than
+// clamped, so the midpoint always means "typical for you" and there is always
+// room to move in both directions.
+//
+// AspectMetrics is what gets persisted (aspect_snapshots.metrics). AspectScores
+// is a presentation of a metric against a baseline and is never the source of
+// truth — recomputing it from a longer baseline must be able to change it.
 
-const clampScore = (n: number) =>
-  Math.min(ASPECT_SCALE.max, Math.max(ASPECT_SCALE.min, Math.round(n)));
+import {
+  ACWR,
+  ASPECT_ABSOLUTE_ANCHORS,
+  ASPECT_MIN_BASELINE,
+  ASPECT_OVERRIDE_DAYS,
+  ASPECT_SCALE,
+  ASPECT_SOFTNESS,
+  ASPECT_WINDOW_DAYS,
+  FITNESS_ASPECTS,
+  HR,
+  PLANE_KEYS,
+  RECOVERY,
+  type AspectKey,
+} from '@/app.config';
+import { summarizeBodyLoad } from '@/lib/bodyLoad';
+import type { OverrideMap } from '@/lib/movementTaxonomy';
+import { bestE1rmByMovement } from '@/lib/prs';
+import { completedLogs, flattenSets } from '@/lib/stats';
+import type {
+  AspectMetrics,
+  AspectScores,
+  AspectSnapshotInput,
+  FitnessAssessment,
+  WorkoutLog,
+} from '@/lib/types';
 
 export type AspectWindow = { start: string; end: string };
+
+export type Confidence = 'low' | 'ok';
+export type AspectBaselines = Partial<Record<AspectKey, number[]>>;
+
+export interface AspectScoring {
+  scores: AspectScores;
+  confidence: Partial<Record<AspectKey, Confidence>>;
+}
+
+export interface AspectMetricOptions {
+  /** Inclusive ymd the window ends on. Anchors the ACWR sub-windows. */
+  end: string;
+  windowDays?: number;
+  /** Max hr_max observed over a history wider than this window. */
+  hrMaxRef?: number;
+  overrides?: OverrideMap;
+}
 
 function ymd(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
@@ -17,6 +70,15 @@ function ymd(d: Date): string {
 
 function shift(d: Date, days: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days));
+}
+
+function parseYmd(s: string): Date {
+  return new Date(`${s.slice(0, 10)}T00:00:00Z`);
+}
+
+/** Whole days from ymd `a` to ymd `b`. Negative when `a` is after `b`. */
+export function daysBetween(a: string, b: string): number {
+  return Math.round((parseYmd(b).getTime() - parseYmd(a).getTime()) / 86_400_000);
 }
 
 // The two blocks the radar compares: `current` ends on the given day, `prior` is
@@ -44,64 +106,304 @@ export function logsInWindow(logs: WorkoutLog[], w: AspectWindow): WorkoutLog[] 
   });
 }
 
-// Hybrid spider chart: compute a *suggested* 1–10 for the axes we can defend
-// from logged data. These seed the check-in and are fully overridable; the
-// non-derivable axes (power, mobility) are left for the user to rate. Heuristics
-// are deliberately simple — they're a starting point, not a verdict.
-export function computeAspectSuggestions(logs: WorkoutLog[]): AspectScores {
-  const out: AspectScores = {};
-  if (logs.length === 0) return out;
+/** A window of `days` ending inclusively on ymd `end`. */
+export function windowEndingOn(end: string, days: number): AspectWindow {
+  return { start: ymd(shift(parseYmd(end), -(days - 1))), end };
+}
 
-  // Consistency: set-completion adherence across the window.
-  let total = 0;
-  let done = 0;
+/**
+ * Ends of the last `months` COMPLETED calendar months, oldest first.
+ *
+ * Snapshots anchor to month ends rather than to "today minus N months" because
+ * the upsert key is (owner, period_end, window_days): a period_end that drifted
+ * with the current day would mint a new row on every visit instead of
+ * overwriting one. The in-progress month is deliberately excluded — the live
+ * radar computes its own current/prior windows and has no need to persist them.
+ */
+export function completedMonthEnds(today: Date, months: number): string[] {
+  const out: string[] = [];
+  for (let i = 1; i <= months; i += 1) {
+    // Day 0 of month M is the last day of month M−1.
+    out.push(ymd(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - i + 1, 0))));
+  }
+  return out.reverse();
+}
+
+/**
+ * Measure each period in `periodEnds` from `logs`, which must span every
+ * period's window. Periods with no completed sessions are skipped — a month you
+ * did not train is absent data, not a zero to score against.
+ *
+ * Scores accumulate progressively: each period is scored against the periods
+ * before it (plus any `seed` metrics from snapshots already stored), which is
+ * the closest a backfill can get to "what the radar would have drawn then".
+ */
+export function buildSnapshots(
+  logs: WorkoutLog[],
+  periodEnds: string[],
+  opts: {
+    windowDays?: number;
+    hrMaxRef?: number;
+    overrides?: OverrideMap;
+    seed?: AspectMetrics[];
+  } = {},
+): AspectSnapshotInput[] {
+  const windowDays = opts.windowDays ?? ASPECT_WINDOW_DAYS;
+  const history: { metrics: AspectMetrics }[] = (opts.seed ?? []).map((metrics) => ({ metrics }));
+  const out: AspectSnapshotInput[] = [];
+
+  for (const end of periodEnds) {
+    const window = windowEndingOn(end, windowDays);
+    const metrics = computeAspectMetrics(logsInWindow(logs, window), {
+      end,
+      windowDays,
+      hrMaxRef: opts.hrMaxRef,
+      overrides: opts.overrides,
+    });
+    if (Object.keys(metrics).length === 0) continue;
+    const { scores } = scoreAspects(metrics, buildBaselines(history));
+    history.push({ metrics });
+    out.push({ period_end: end, window_days: windowDays, metrics, scores });
+  }
+  return out;
+}
+
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+// ---- stage 1: raw metrics ----
+
+function workingMinutes(logs: WorkoutLog[], overrides: OverrideMap): number {
+  return summarizeBodyLoad(logs, overrides).totalMinutes;
+}
+
+function observedHrMax(logs: WorkoutLog[]): number | null {
+  let max: number | null = null;
   for (const l of logs) {
-    for (const s of flattenSets(l)) {
-      total += 1;
-      if (s.completed) done += 1;
+    if (l.hr_max != null && (max == null || l.hr_max > max)) max = l.hr_max;
+  }
+  return max;
+}
+
+/**
+ * Measure one window. Every axis derives from logged data — `power` and
+ * `mobility` included, via the movement taxonomy's plyometric/mobility
+ * modalities, which is what stopped those two from going stale between
+ * check-ins.
+ *
+ * Returns `{}` when the window holds no completed sessions. Otherwise every axis
+ * the data can speak to is present, including as `0` — a genuine zero (you did
+ * no plyometric work) is a measurement, and omitting it would collapse that
+ * vertex to the centre where it reads identically to "no data".
+ */
+export function computeAspectMetrics(
+  logs: WorkoutLog[],
+  opts: AspectMetricOptions,
+): AspectMetrics {
+  const overrides = opts.overrides ?? {};
+  const windowDays = opts.windowDays ?? ASPECT_WINDOW_DAYS;
+  const weeks = windowDays / 7;
+  const done = completedLogs(logs);
+  if (done.length === 0) return {};
+
+  const out: AspectMetrics = {};
+  const load = summarizeBodyLoad(done, overrides);
+
+  // Strength — weighted per movement, NOT a global max. Taking the best e1RM
+  // across all movements meant swapping your main lift read as a strength
+  // collapse; weighting each movement by how many sets you actually gave it
+  // means a movement you dropped simply stops contributing.
+  const bests = bestE1rmByMovement(done);
+  const setsPerMovement = new Map<string, number>();
+  let totalSets = 0;
+  let completedSets = 0;
+  for (const log of done) {
+    for (const s of flattenSets(log)) {
+      totalSets += 1;
+      if (!s.completed) continue;
+      completedSets += 1;
+      if (s.weight == null || s.reps == null) continue;
+      setsPerMovement.set(s.movement, (setsPerMovement.get(s.movement) ?? 0) + 1);
     }
   }
-  if (total > 0) out.consistency = clampScore((done / total) * ASPECT_SCALE.max);
-
-  // Recovery: average vibe — sleep + energy + inverted soreness, on 1–5 → 1–10.
-  const vibes = logs.map((l) => l.data?.session?.vibe).filter((v): v is NonNullable<typeof v> => !!v);
-  if (vibes.length > 0) {
-    const avg =
-      vibes.reduce((a, v) => a + (v.sleep + v.energy + (6 - v.soreness)) / 3, 0) / vibes.length;
-    out.recovery = clampScore(((avg - 1) / 4) * 9 + 1);
+  let weighted = 0;
+  let weight = 0;
+  for (const [movement, best] of bests) {
+    const n = setsPerMovement.get(movement) ?? 0;
+    if (n === 0) continue;
+    weighted += best * n;
+    weight += n;
   }
+  if (weight > 0) out.strength = weighted / weight;
 
-  // Endurance: conditioning frequency + sessions with heart-rate captured.
-  // ~12 such sessions in the window reads as a 10.
-  const conditioningSessions = logs.filter((l) =>
-    (l.data?.sections ?? []).some((s) => s.key === 'conditioning' && s.groups.some((g) => g.items.length > 0)),
-  ).length;
-  const hrSessions = logs.filter((l) => l.hr_avg != null).length;
-  if (conditioningSessions > 0 || hrSessions > 0) {
-    out.endurance = clampScore(((conditioningSessions + hrSessions) / 12) * ASPECT_SCALE.max + 1);
+  // Endurance — aerobic minutes weighted by how hard they were. hr_avg/hr_max
+  // have been on workout_logs since migration 0010 and went unused; counting
+  // sessions treated a Zone 2 walk and a threshold session as the same thing.
+  const hrMaxRef = opts.hrMaxRef ?? observedHrMax(done) ?? HR.maxFallback;
+  let aerobic = 0;
+  for (const log of done) {
+    const minutes = summarizeBodyLoad([log], overrides).modalityMinutes.endurance;
+    if (minutes <= 0) continue;
+    const intensity =
+      log.hr_avg != null && hrMaxRef > 0
+        ? clamp01(log.hr_avg / hrMaxRef)
+        : HR.defaultIntensity;
+    aerobic += minutes * intensity;
   }
+  out.endurance = aerobic / weeks;
 
-  // Strength: best e1RM trend, first half vs second half of the window. A ~5%
-  // improvement nudges roughly +1; flat sits near the middle of the scale.
-  const sorted = [...logs].sort((a, b) => a.log_date.localeCompare(b.log_date));
-  const midDate = sorted[Math.floor(sorted.length / 2)]?.log_date ?? '';
-  const bestE1rm = (subset: WorkoutLog[]) => {
-    let best = 0;
-    for (const l of subset) {
-      for (const s of flattenSets(l)) {
-        if (s.weight == null || s.reps == null) continue;
-        const est = e1rm(s.weight, s.reps);
-        if (est != null) best = Math.max(best, est);
-      }
-    }
-    return best;
-  };
-  const b1 = bestE1rm(sorted.filter((l) => l.log_date < midDate));
-  const b2 = bestE1rm(sorted.filter((l) => l.log_date >= midDate));
-  if (b1 > 0 && b2 > 0) {
-    const ratio = b2 / b1; // > 1 = improving
-    out.strength = clampScore(5 + (ratio - 1) * 20);
-  }
+  // Power — plyometric minutes. The taxonomy already resolves jump/hop/bound/
+  // throw/slam/clean/snatch/jerk to `plyometric`; this axis was manual-only.
+  out.power = load.modalityMinutes.plyometric / weeks;
+
+  // Mobility — mobility minutes, rewarded for working outside the sagittal
+  // plane. The scale factor sits in [1, 2] rather than multiplying by the share
+  // directly, so a purely sagittal mobility practice still counts as work done.
+  const planeTotal = PLANE_KEYS.reduce((acc, k) => acc + load.planeMinutes[k], 0);
+  const nonSagittal =
+    planeTotal > 0 ? (planeTotal - load.planeMinutes.sagittal) / planeTotal : 0;
+  out.mobility = (load.modalityMinutes.mobility / weeks) * (1 + nonSagittal);
+
+  // Consistency — showing up, not just finishing what you started. Adherence
+  // alone scored one immaculate session in 60 days as a perfect 10.
+  const days = new Set(done.map((l) => l.log_date.slice(0, 10)));
+  const adherence = totalSets > 0 ? completedSets / totalSets : 0;
+  out.consistency = (days.size / weeks) * adherence;
+
+  // Recovery — self-rated vibe damped by training stress. ACWR (acute 7d load
+  // against chronic 28d load) is the term that makes this axis move for a user
+  // who never fills in the vibe check; it is also the only readout here that
+  // says anything about ramping too fast.
+  const vibes = done
+    .map((l) => l.data?.session?.vibe)
+    .filter((v): v is NonNullable<typeof v> => !!v);
+  const vibeNorm =
+    vibes.length > 0
+      ? clamp01((mean(vibes.map((v) => (v.sleep + v.energy + (6 - v.soreness)) / 3)) - 1) / 4)
+      : RECOVERY.neutralVibe;
+  const acute =
+    workingMinutes(logsInWindow(done, windowEndingOn(opts.end, ACWR.acuteDays)), overrides) /
+    (ACWR.acuteDays / 7);
+  const chronic =
+    workingMinutes(logsInWindow(done, windowEndingOn(opts.end, ACWR.chronicDays)), overrides) /
+    (ACWR.chronicDays / 7);
+  const ratio = chronic > 0 ? acute / chronic : 1;
+  const acwrPenalty = clamp01(1 - Math.max(0, ratio - ACWR.sweetMax) / ACWR.penaltySpan);
+  out.recovery = vibeNorm * acwrPenalty;
 
   return out;
+}
+
+// ---- stage 2: relative scoring ----
+
+const MID_SPAN = ASPECT_SCALE.max - ASPECT_SCALE.min;
+const EPSILON = 1e-6;
+
+function median(xs: number[]): number {
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/** Logistic onto ASPECT_SCALE. Asymptotic, so a score approaches the bounds but
+ *  never pins to them — which is what a clamp did, and why the chart went inert. */
+function toScale(position: number): number {
+  const raw = ASPECT_SCALE.min + MID_SPAN / (1 + Math.exp(-position));
+  return Math.round(raw * 10) / 10;
+}
+
+/**
+ * Place `value` on ASPECT_SCALE against the user's own history.
+ *
+ * With enough baseline samples this is a robust z-score — median and MAD, not
+ * mean and SD, because one deload month should not drag the anchor — so the
+ * median of your own history lands exactly mid-scale.
+ *
+ * Below ASPECT_MIN_BASELINE samples there is nothing to be relative *to*, so it
+ * falls back to a log-ratio against a documented absolute anchor and reports
+ * `confidence: 'low'`. That flag is not decoration: the chart renders those axes
+ * differently so a cold-start guess doesn't read like a measurement.
+ */
+export function scoreAgainstBaseline(
+  value: number,
+  baseline: number[],
+  anchor: number,
+): { score: number; confidence: Confidence } {
+  const samples = baseline.filter((n) => Number.isFinite(n));
+  if (samples.length >= ASPECT_MIN_BASELINE) {
+    const med = median(samples);
+    // 1.4826 scales MAD to an SD-equivalent for a normal distribution.
+    const dispersion = median(samples.map((n) => Math.abs(n - med))) * 1.4826;
+    // A perfectly flat history has no spread to judge against — mid-scale is the
+    // honest answer, and it keeps the divide from producing Infinity/NaN.
+    const z = dispersion > 0 ? (value - med) / dispersion : 0;
+    return { score: toScale(z / ASPECT_SOFTNESS.z), confidence: 'ok' };
+  }
+  const ratio = Math.log((Math.max(0, value) + EPSILON) / (Math.max(0, anchor) + EPSILON));
+  return { score: toScale(ratio / ASPECT_SOFTNESS.anchor), confidence: 'low' };
+}
+
+/** Score every measured axis. Axes absent from `metrics` stay absent. */
+export function scoreAspects(
+  metrics: AspectMetrics,
+  baselines: AspectBaselines = {},
+): AspectScoring {
+  const scores: AspectScores = {};
+  const confidence: Partial<Record<AspectKey, Confidence>> = {};
+  for (const aspect of FITNESS_ASPECTS) {
+    const key = aspect.key as AspectKey;
+    const value = metrics[key];
+    if (value == null || !Number.isFinite(value)) continue;
+    const scored = scoreAgainstBaseline(
+      value,
+      baselines[key] ?? [],
+      ASPECT_ABSOLUTE_ANCHORS[key],
+    );
+    scores[key] = scored.score;
+    confidence[key] = scored.confidence;
+  }
+  return { scores, confidence };
+}
+
+/** Collect per-axis baseline samples from stored snapshots. */
+export function buildBaselines(snapshots: { metrics: AspectMetrics }[]): AspectBaselines {
+  const out: AspectBaselines = {};
+  for (const snapshot of snapshots) {
+    for (const aspect of FITNESS_ASPECTS) {
+      const key = aspect.key as AspectKey;
+      const value = snapshot.metrics?.[key];
+      if (value == null || !Number.isFinite(value)) continue;
+      (out[key] ??= []).push(value);
+    }
+  }
+  return out;
+}
+
+/**
+ * A check-in overrides the derived scores for the axes it rated — but only while
+ * it is fresh. Past ASPECT_OVERRIDE_DAYS before the window end the derived score
+ * takes back over, so a rating from four months ago stops presenting itself as
+ * current. `assessments` must be newest-first (`taken_at desc`, as queried).
+ */
+export function applyAssessmentOverride(
+  scoring: AspectScoring,
+  assessments: FitnessAssessment[],
+  endDate: string,
+  overrideDays: number = ASPECT_OVERRIDE_DAYS,
+): AspectScoring {
+  const rated = assessments.find((a) => a.taken_at.slice(0, 10) <= endDate);
+  if (!rated) return scoring;
+  if (daysBetween(rated.taken_at.slice(0, 10), endDate) > overrideDays) return scoring;
+
+  const scores = { ...scoring.scores };
+  const confidence = { ...scoring.confidence };
+  for (const aspect of FITNESS_ASPECTS) {
+    const key = aspect.key as AspectKey;
+    const value = rated.scores[key];
+    if (value == null) continue;
+    scores[key] = value;
+    // A rating the user typed is a statement, not an estimate from thin history.
+    confidence[key] = 'ok';
+  }
+  return { scores, confidence };
 }

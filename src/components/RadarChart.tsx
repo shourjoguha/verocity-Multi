@@ -1,9 +1,16 @@
 import { motion, useReducedMotion } from 'motion/react';
 import { FITNESS_ASPECTS, ASPECT_SCALE, type AspectKey } from '@/app.config';
 import type { AspectScores } from '@/lib/types';
+import type { Confidence } from '@/lib/aspects';
 import { EASE } from '@/components/anim';
 
-export type RadarSeries = { label: string; scores: AspectScores; variant: 'primary' | 'baseline' };
+export type RadarSeries = {
+  label: string;
+  scores: AspectScores;
+  variant: 'primary' | 'baseline';
+  /** Per-axis confidence; only read for the primary series. */
+  confidence?: Partial<Record<AspectKey, Confidence>>;
+};
 
 // Hand-rolled SVG radar (no chart dep, monochrome — consistent with the Stats
 // Sparkline). Axes come from FITNESS_ASPECTS; up to two series overlay so the
@@ -22,14 +29,22 @@ export function RadarChart({ series }: { series: RadarSeries[] }) {
     C + R * ratio * Math.cos(angle(i)),
     C + R * ratio * Math.sin(angle(i)),
   ];
+  const ratioOf = (scores: AspectScores, key: AspectKey) =>
+    (scores[key] ?? 0) / ASPECT_SCALE.max;
   const polygon = (scores: AspectScores) =>
     axes
       .map((a, i) => {
-        const v = scores[a.key as AspectKey] ?? 0;
-        const [x, y] = at(i, v / ASPECT_SCALE.max);
+        const [x, y] = at(i, ratioOf(scores, a.key as AspectKey));
         return `${x.toFixed(1)},${y.toFixed(1)}`;
       })
       .join(' ');
+
+  const primary = series.find((s) => s.variant === 'primary');
+  // An axis scored from too little history is a guess against a fixed anchor,
+  // not a measurement. It gets a hollow vertex and a dotted spoke so it cannot
+  // be read with the same authority as the rest of the shape.
+  const isLow = (key: AspectKey) => primary?.confidence?.[key] === 'low';
+  const hasLow = axes.some((a) => isLow(a.key as AspectKey));
 
   return (
     <div className="flex flex-col items-center">
@@ -49,9 +64,19 @@ export function RadarChart({ series }: { series: RadarSeries[] }) {
         {axes.map((a, i) => {
           const [ex, ey] = at(i, 1);
           const [lx, ly] = at(i, 1.18);
+          const low = isLow(a.key as AspectKey);
           return (
             <g key={a.key}>
-              <line x1={C} y1={C} x2={ex} y2={ey} stroke="var(--color-fg)" strokeOpacity={0.12} strokeWidth={1} />
+              <line
+                x1={C}
+                y1={C}
+                x2={ex}
+                y2={ey}
+                stroke="var(--color-fg)"
+                strokeOpacity={0.12}
+                strokeWidth={1}
+                strokeDasharray={low ? '2 3' : undefined}
+              />
               <text
                 x={lx}
                 y={ly}
@@ -62,6 +87,18 @@ export function RadarChart({ series }: { series: RadarSeries[] }) {
               >
                 {a.label}
               </text>
+              {primary?.scores[a.key as AspectKey] != null ? (
+                <text
+                  x={lx}
+                  y={ly + 9}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="fill-fg tabular-nums"
+                  style={{ fontSize: 9 }}
+                >
+                  {primary.scores[a.key as AspectKey]}
+                </text>
+              ) : null}
             </g>
           );
         })}
@@ -99,6 +136,27 @@ export function RadarChart({ series }: { series: RadarSeries[] }) {
               />
             ),
             )}
+          {/* vertex markers carry the confidence: filled = scored against your
+              own history, hollow = still on the cold-start anchor */}
+          {primary
+            ? axes.map((a, i) => {
+                const key = a.key as AspectKey;
+                if (primary.scores[key] == null) return null;
+                const [x, y] = at(i, ratioOf(primary.scores, key));
+                const low = isLow(key);
+                return (
+                  <circle
+                    key={a.key}
+                    cx={x}
+                    cy={y}
+                    r={2.5}
+                    fill={low ? 'var(--color-surface)' : 'var(--color-fg)'}
+                    stroke="var(--color-fg)"
+                    strokeWidth={1.2}
+                  />
+                );
+              })
+            : null}
         </motion.g>
       </svg>
       <div className="mt-2 flex flex-wrap justify-center gap-4 t-control text-muted">
@@ -117,6 +175,16 @@ export function RadarChart({ series }: { series: RadarSeries[] }) {
           </span>
         ))}
       </div>
+      {/* What a ring means. Numbering the rings themselves collided with the
+          per-axis values on the vertical spoke, and the vertex numbers already
+          say where each axis sits — so the scale is stated once, in words. */}
+      <p className="mt-2 text-center text-[0.65rem] leading-relaxed text-subtle">
+        Each axis is scored {ASPECT_SCALE.min}–{ASPECT_SCALE.max} against your own history — the
+        middle ring is typical for you.
+        {hasLow
+          ? ' Hollow points are estimated against typical values until you have logged more months.'
+          : ''}
+      </p>
     </div>
   );
 }

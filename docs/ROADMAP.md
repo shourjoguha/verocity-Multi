@@ -100,6 +100,13 @@ rate and fitness assessments, library subroutines, PR detection, the three-way
 theme toggle, `/app/settings`, and the mobile UX pass (bottom tab bar, set-entry
 sheet, 44px targets) with its two standing audits.
 
+The fitness radar was then reworked end to end: raw measurement split from
+scoring (`computeAspectMetrics` → `scoreAspects`), every axis derived from logs
+including power and mobility via the movement taxonomy, heart rate folded into
+the endurance axis, and scores made **relative to the user's own history** held
+in `aspect_snapshots` — replacing an absolute clamped model that saturated at 10
+and stopped moving.
+
 ### Phase 7 — Guidance upkeep  `[ongoing]`
 `npm run audit:docs` fails if the docs name code that no longer exists. It was
 added after a five-PR bug hunt that these documents actively misdirected; see
