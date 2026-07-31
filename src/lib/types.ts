@@ -148,6 +148,43 @@ export interface FitnessAssessment {
   created_at: string;
 }
 
+// ---- aspect_snapshots: derived per-window measurements for the radar. Both
+// columns are keyed by AspectKey. `metrics` is the load-bearing one — the radar
+// scores an axis against the distribution of the owner's own past metrics, so
+// this is the history that makes a score mean "typical for you". `scores` is a
+// presentation of `metrics` against that baseline, stored only so a past reading
+// can be shown as it was drawn. Computed in lib/aspects.ts. ----
+
+/**
+ * Raw, unit-ful measurements for one window. Units matter here because these
+ * land in JSONB and a bare number is unreadable six months later:
+ *
+ * - `strength`     kg — set-count-weighted mean of per-movement best e1RM
+ * - `endurance`    HR-weighted aerobic minutes per week
+ * - `power`        plyometric working-minutes per week
+ * - `mobility`     mobility working-minutes per week, scaled by plane variety
+ * - `consistency`  training days per week × set-completion adherence
+ * - `recovery`     0–1 index — vibe damped by acute:chronic workload ratio
+ */
+export type AspectMetrics = Partial<Record<AspectKey, number>>;
+
+export interface AspectSnapshot {
+  id: string;
+  owner_user_id: string;
+  period_end: string;
+  window_days: number;
+  metrics: AspectMetrics;
+  scores: AspectScores;
+  computed_at: string;
+  created_at: string;
+}
+
+/** What a client computes and upserts. The owner comes from the session. */
+export type AspectSnapshotInput = Pick<
+  AspectSnapshot,
+  'period_end' | 'window_days' | 'metrics' | 'scores'
+>;
+
 // ---- Garmin integration (plan §6). Reads are owner-scoped by RLS; rows are
 // written only by the ingestion worker / import function (service-role). The
 // browser sees connection state only through `garmin_connection_status` (a safe

@@ -4,6 +4,8 @@ import { clearQueryCache } from '@/lib/queryCache';
 import type { MetricKey } from '@/app.config';
 import type {
   AspectScores,
+  AspectSnapshot,
+  AspectSnapshotInput,
   FitnessAssessment,
   GarminActivity,
   GarminConnectionInfo,
@@ -227,7 +229,48 @@ export async function createAssessment(scores: AspectScores): Promise<FitnessAss
     .select('*')
     .single();
   if (error) return null;
+  // A check-in overrides the derived radar for the next ASPECT_OVERRIDE_DAYS, so
+  // it changes what Stats should draw. Without this the cached read-path would
+  // keep serving the pre-check-in radar on any screen reached by link rather
+  // than by reload — the same staleness the log writers below clear for.
+  clearQueryCache();
   return data as FitnessAssessment;
+}
+
+// ---- aspect_snapshots (derived radar history; owner-scoped by RLS, anon reads
+// only the showcase profile's rows) ----
+
+/** Snapshots in an inclusive ymd range, oldest first. */
+export async function getAspectSnapshots(
+  from: string,
+  to: string,
+  client: SupabaseClient = supabase,
+): Promise<AspectSnapshot[]> {
+  const { data } = await client
+    .from('aspect_snapshots')
+    .select('*')
+    .gte('period_end', from)
+    .lte('period_end', to)
+    .order('period_end', { ascending: true });
+  return (data as AspectSnapshot[]) ?? [];
+}
+
+/**
+ * Idempotent upsert on (owner_user_id, period_end, window_days) — recomputing a
+ * period overwrites it rather than accumulating duplicates. The owner comes from
+ * the session, never from the caller.
+ */
+export async function upsertAspectSnapshots(rows: AspectSnapshotInput[]): Promise<boolean> {
+  if (rows.length === 0) return true;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { error } = await supabase.from('aspect_snapshots').upsert(
+    rows.map((r) => ({ ...r, owner_user_id: user.id, computed_at: new Date().toISOString() })),
+    { onConflict: 'owner_user_id,period_end,window_days' },
+  );
+  return !error;
 }
 
 // ---- write paths (authenticated only; owner_user_id is set from the session) ----

@@ -215,16 +215,18 @@ export const NOTATIONS = {
 // e1RM estimate uses Brzycki (see src/lib/e1rm.ts).
 export const E1RM = { formula: 'brzycki' } as const;
 
-// Fitness-profile radar axes (Stats spider chart). `auto` axes receive a
-// computed suggestion in the check-in (hybrid model, see lib/aspects.ts); every
-// axis stays user-adjustable. Scores are on ASPECT_SCALE.
+// Fitness-profile radar axes (Stats spider chart). All six derive from logged
+// data (lib/aspects.ts); a recent check-in overrides any of them. There is no
+// `auto` flag any more — power and mobility used to carry `auto: false` and so
+// only moved when the user opened the check-in, which is exactly the staleness
+// the taxonomy-driven derivation removed.
 export const FITNESS_ASPECTS = [
-  { key: 'strength', label: 'Strength', auto: true },
-  { key: 'endurance', label: 'Endurance', auto: true },
-  { key: 'power', label: 'Power', auto: false },
-  { key: 'mobility', label: 'Mobility', auto: false },
-  { key: 'consistency', label: 'Consistency', auto: true },
-  { key: 'recovery', label: 'Recovery', auto: true },
+  { key: 'strength', label: 'Strength' },
+  { key: 'endurance', label: 'Endurance' },
+  { key: 'power', label: 'Power' },
+  { key: 'mobility', label: 'Mobility' },
+  { key: 'consistency', label: 'Consistency' },
+  { key: 'recovery', label: 'Recovery' },
 ] as const;
 
 export const ASPECT_SCALE = { min: 1, max: 10 } as const;
@@ -234,6 +236,67 @@ export const ASPECT_SCALE = { min: 1, max: 10 } as const;
 // many days. Never hardcode the number in a component — the legend dates and the
 // query bounds must move together.
 export const ASPECT_WINDOW_DAYS = 60;
+
+// How far back the radar looks for the baseline it scores you against, in
+// monthly snapshots (aspect_snapshots). Scores are RELATIVE: an axis is placed
+// against the distribution of your own past values for that same metric, so the
+// midpoint always means "typical for you" and the polygon can always move. The
+// previous model was absolute and clamped, so a committed user pinned every
+// reachable axis at ASPECT_SCALE.max and the chart went inert.
+export const ASPECT_BASELINE_MONTHS = 12;
+
+// How many months a cold start reconstructs in one pass. Deliberately smaller
+// than ASPECT_BASELINE_MONTHS: reading a year of snapshots is a dozen tiny rows,
+// but *building* them needs the underlying logs, and each month drags another
+// ASPECT_WINDOW_DAYS of LogDocument JSONB over the wire. Six months clears
+// ASPECT_MIN_BASELINE immediately and the rest thickens a month at a time.
+export const ASPECT_BACKFILL_MONTHS = 6;
+
+// Below this many baseline samples the relative score has nothing to stand on,
+// so the axis falls back to ASPECT_ABSOLUTE_ANCHORS and is reported as low
+// confidence. The chart MUST render that differently — a cold-start guess must
+// not read with the same authority as a year-backed score.
+export const ASPECT_MIN_BASELINE = 4;
+
+// A check-in speaks for itself while it is fresh. Past this many days before the
+// window end, the derived score takes back over rather than letting a months-old
+// self-rating masquerade as current.
+export const ASPECT_OVERRIDE_DAYS = 21;
+
+// Softness of the logistic that maps a position onto ASPECT_SCALE. `z` is in
+// robust-z units against your own baseline (±1.5 lands roughly ±2.2 points);
+// `anchor` is in log-ratio units for the cold-start path. The logistic is
+// asymptotic, so scores approach 1 and 10 without ever pinning to them.
+export const ASPECT_SOFTNESS = { z: 1.5, anchor: 0.5 } as const;
+
+// The raw metric value that reads as the middle of the scale before you have a
+// baseline of your own. Cold-start only — after ASPECT_MIN_BASELINE snapshots
+// your own history replaces these entirely, which is why they can be rough.
+// Units match AspectMetrics in lib/aspects.ts.
+export const ASPECT_ABSOLUTE_ANCHORS = {
+  strength: 80, // kg, set-weighted mean best e1RM
+  endurance: 60, // HR-weighted aerobic minutes per week
+  power: 6, // plyometric minutes per week
+  mobility: 15, // plane-adjusted mobility minutes per week
+  consistency: 3, // training days per week × set adherence
+  recovery: 0.6, // 0–1 index
+} as const satisfies Record<(typeof FITNESS_ASPECTS)[number]['key'], number>;
+
+// Heart-rate model for the endurance axis. `maxFallback` stands in for an
+// observed hr_max when a user has never logged one — there is no age field, so
+// 220−age is not available. `defaultIntensity` is what an aerobic session with
+// no hr_avg is assumed to have been worth.
+export const HR = { maxFallback: 190, defaultIntensity: 0.65 } as const;
+
+// Acute:chronic workload ratio, the training-stress term in the recovery axis.
+// Ratios inside the sweet spot cost nothing; the penalty ramps in above it and
+// is fully applied `penaltySpan` beyond. Standard sports-science bounds.
+export const ACWR = { acuteDays: 7, chronicDays: 28, sweetMax: 1.3, penaltySpan: 0.7 } as const;
+
+// The vibe check is optional, so recovery needs a prior for sessions that carry
+// no rating. 0.5 is deliberately neutral: assuming the best would make recovery
+// collapse the day a user starts rating honestly.
+export const RECOVERY = { neutralVibe: 0.5 } as const;
 
 export const appConfig = {
   units: UNITS,

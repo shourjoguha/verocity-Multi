@@ -306,19 +306,25 @@ no assertion. (The duplicate landmark label is a real a11y smell in its own
 right; two same-named landmarks are ambiguous to a screen reader.)
 → `src/layouts/App.astro`
 
-### A fixture that saturates a clamped score can't show the score changing
+### A saturated fixture can't show the score changing
 `[measured in Chromium]`
 A probe meant to prove the radar is data-driven added two much heavier sessions
-and asserted the polygon moved. It didn't. `clampScore` caps every aspect at
+and asserted the polygon moved. It didn't: scores were absolute and clamped at
 `ASPECT_SCALE.max`, and the fixture was already at 10 on every axis the data
 could reach — so the assertion was measuring the ceiling, not the wiring. The
 same fixture also made the striped day the volume maximum, where `opacity` is
 1.0 by design, and an "intensity is applied" check failed on correct code.
 **Seed a fixture that sits mid-scale, then perturb an input the metric responds
-to linearly** — here, marking sets incomplete moves the consistency ratio at
-once. A clamped or maxed-out fixture makes a passing assertion meaningless and a
-failing one a false alarm.
-→ `computeAspectSuggestions` in `src/lib/aspects.ts`, `scripts/mobile-audit.mjs`
+to monotonically.** A maxed-out fixture makes a passing assertion meaningless
+and a failing one a false alarm.
+The clamp itself is gone — `scoreAgainstBaseline` is a logistic against the
+user's own history and is asymptotic, so an ordinary value no longer pins. The
+trap outlives it, because rounding still snaps an extreme to 10.0: when the
+question is "does this input move this axis", assert on the **raw metric** from
+`computeAspectMetrics`, which is unbounded and unit-ful. Keep score assertions
+for the scoring itself.
+→ `computeAspectMetrics` / `scoreAgainstBaseline` in `src/lib/aspects.ts`,
+`scripts/mobile-audit.mjs`
 
 ### audit:mobile is green on a surface it never rendered
 `[measured in Chromium]`
@@ -332,6 +338,13 @@ surface was in the DOM.** Either extend the fixture, or run a throwaway probe
 that seeds a plan (copy the auth/REST stubbing out of the audit; it needs no
 credentials) and measure the nodes you actually changed. Same trap for saved
 sessions and the movement library, whose fixtures are likewise thin.
+**The radar is the same trap for a different reason:** the fixture's only
+`workout_logs` row is `status: 'in_progress'`, so `completedLogs` drops it,
+`computeAspectMetrics` returns `{}` and FitnessProfile paints its empty state —
+the chart, its vertex markers and the compare toggle are never in the DOM. A
+green `/app/stats` run says nothing about any of them. The probe that does see
+them needs completed logs **and** `aspect_snapshots` rows, since the baseline is
+what decides whether a vertex renders filled or hollow.
 → `scripts/mobile-audit.mjs`
 
 ### What a standing check covers — and what it cannot
@@ -379,6 +392,21 @@ The sheet flicker took five merged PRs. These were the wrong turns:
 and each shipped describing itself as the fix. An append-only log turned that
 into five co-equal answers to one grep, four of them wrong, with the entry point
 routing every future reader straight at the pile. Demote as you go.
+
+The fitness radar:
+
+- **`clampScore` caps every aspect at `ASPECT_SCALE.max`.** It did, and that is
+  precisely why the chart went inert — a committed user pinned every reachable
+  axis at 10 and the polygon stopped responding. Scoring is now relative to the
+  user's own stored history via `scoreAgainstBaseline`, a logistic with no clamp.
+- **`computeAspectSuggestions(logs)` is the radar's scoring entry point.** Gone,
+  and with it the single-stage model. Raw measurement and scoring are now
+  separate steps — `computeAspectMetrics` then `scoreAspects` — because a score
+  is only meaningful against a baseline, and the baseline is not in the logs.
+- **`power` and `mobility` are `auto: false`, so they only move on a check-in.**
+  The `auto` flag no longer exists. Both derive from the taxonomy's
+  `plyometric` / `mobility` modality minutes; a check-in still overrides any
+  axis, but only for `ASPECT_OVERRIDE_DAYS`.
 
 ## Decisions
 

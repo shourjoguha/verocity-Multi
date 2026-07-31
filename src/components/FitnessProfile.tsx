@@ -1,81 +1,44 @@
-import { useEffect, useState } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
-import { FITNESS_ASPECTS, type AspectKey } from '@/app.config';
-import type { AspectScores, FitnessAssessment } from '@/lib/types';
-import { getAssessments } from '@/lib/queries';
+import { useState } from 'react';
 import { SectionHeader } from '@/components/ui/primitives';
 import { RadarChart, type RadarSeries } from '@/components/RadarChart';
 import { FitnessCheckIn } from '@/components/FitnessCheckIn';
+import type { AspectProfile } from '@/lib/useAspectProfile';
 
-// Axes with no derivation from logged data (`auto: false`) — these come from the
-// user's check-in. Read from config so adding a derivable axis there is enough.
-const MANUAL_ASPECTS = FITNESS_ASPECTS.filter((a) => !a.auto).map((a) => a.key as AspectKey);
-
-export type AspectPeriod = {
-  // Legend text, e.g. "Jun 1 – Jul 30". Built by the caller, which owns the dates.
-  label: string;
-  // Window end as ymd — picks which check-in supplies the manual axes.
-  endDate: string;
-  // Derived scores for the `auto` axes over that window.
-  scores: AspectScores;
-};
-
-// Stats "Fitness profile" radar. The derivable axes are recomputed from logs in
-// the rolling window on every load — so the chart and its dates track the
-// calendar without the user touching anything — and the two non-derivable axes
-// (power, mobility) are overlaid from the newest check-in that predates each
-// window's end, so the dashed baseline shows the earlier rating rather than
-// repeating today's. Read-only in showcase mode (no check-in button).
+// Stats "Fitness profile" radar — presentation only. Every measurement, fetch
+// and write-back lives in useAspectProfile; this file decides what the two
+// overlaid series are and what to say when there is nothing to draw.
+//
+// The baseline series is selectable because the two comparisons answer different
+// questions: the previous block says "am I moving right now", the oldest stored
+// snapshot says "am I better than I was". Read-only in showcase mode (no
+// check-in button).
 export function FitnessProfile({
-  current,
-  prior,
+  profile,
   canEdit,
-  client = supabase,
 }: {
-  current: AspectPeriod;
-  prior: AspectPeriod | null;
+  profile: AspectProfile;
   canEdit: boolean;
-  client?: SupabaseClient;
 }) {
-  const [assessments, setAssessments] = useState<FitnessAssessment[] | null>(null);
   const [open, setOpen] = useState(false);
+  const [compare, setCompare] = useState<'prior' | 'earliest'>('prior');
 
-  useEffect(() => {
-    getAssessments(client).then(setAssessments);
-  }, []);
+  if (profile.loading) return null;
 
-  if (assessments === null) return null;
-
-  const latest = assessments[0];
-
-  // assessments arrive `taken_at desc`, so the first match is the newest one at
-  // or before this window's end.
-  const withManual = (scores: AspectScores, endDate: string): AspectScores => {
-    const rated = assessments.find((a) => a.taken_at.slice(0, 10) <= endDate)?.scores;
-    if (!rated) return scores;
-    const out: AspectScores = { ...scores };
-    for (const key of MANUAL_ASPECTS) {
-      if (rated[key] != null) out[key] = rated[key];
-    }
-    return out;
-  };
+  const { current, prior, earliest, latestAssessment } = profile;
+  const baseline = compare === 'earliest' && earliest ? earliest : prior;
 
   const series: RadarSeries[] = [];
-  if (prior) {
+  if (baseline) {
+    series.push({ label: baseline.label, scores: baseline.scores, variant: 'baseline' });
+  }
+  if (current) {
     series.push({
-      label: prior.label,
-      scores: withManual(prior.scores, prior.endDate),
-      variant: 'baseline',
+      label: current.label,
+      scores: current.scores,
+      confidence: current.confidence,
+      variant: 'primary',
     });
   }
-  series.push({
-    label: current.label,
-    scores: withManual(current.scores, current.endDate),
-    variant: 'primary',
-  });
-
-  const hasData = Object.keys(current.scores).length > 0 || latest !== undefined;
 
   return (
     <section className="mb-10">
@@ -87,20 +50,45 @@ export function FitnessProfile({
             onClick={() => setOpen(true)}
             className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg"
           >
-            {latest ? 'Update' : 'Check in'}
+            {latestAssessment ? 'Update' : 'Check in'}
           </button>
         ) : null}
       </div>
 
-      {hasData ? (
+      {series.length > 0 ? (
         <div className="lift border border-border bg-surface p-4">
           <RadarChart series={series} />
+          {earliest ? (
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <span className="t-control text-subtle">Compare to</span>
+              {(
+                [
+                  ['prior', prior?.label ?? 'Previous block'],
+                  ['earliest', earliest.label],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={compare === key}
+                  onClick={() => setCompare(key)}
+                  className={`hill-btn flex min-h-11 items-center border bg-surface px-3 t-control transition-colors ${
+                    compare === key ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : (
         <p className="border border-border bg-surface p-6 text-center text-sm text-muted">
-          {canEdit
-            ? 'No sessions or check-ins yet. Log a workout, or rate where you are today, to start tracking progress across aspects of fitness.'
-            : 'No training or fitness check-ins yet.'}
+          {profile.building
+            ? 'Building your baseline from your training history…'
+            : canEdit
+              ? 'No sessions or check-ins yet. Log a workout, or rate where you are today, to start tracking progress across aspects of fitness.'
+              : 'No training or fitness check-ins yet.'}
         </p>
       )}
 
@@ -108,9 +96,9 @@ export function FitnessProfile({
         <FitnessCheckIn
           open={open}
           onClose={() => setOpen(false)}
-          previous={latest?.scores ?? {}}
-          suggestions={current.scores}
-          onSaved={(a) => setAssessments((prev) => [a, ...(prev ?? [])])}
+          previous={latestAssessment?.scores ?? {}}
+          suggestions={profile.suggestions}
+          onSaved={profile.onAssessmentSaved}
         />
       ) : null}
     </section>

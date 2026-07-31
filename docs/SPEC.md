@@ -201,6 +201,20 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
 - **`recommendations`** — coach output (status, drift_score, confidence, tldr,
   action, body_md, disposition fields, snooze fields…). **Kept in schema but
   unused until the AI phase.**
+- **`fitness_assessments`** — dated 1–10 self-ratings backing the Stats radar:
+  `owner_user_id, taken_at, scores jsonb (keyed by AspectKey), created_at`. A
+  rating overrides the derived score for the axes it names, and only for
+  `ASPECT_OVERRIDE_DAYS` — past that the derivation takes back over rather than
+  letting a months-old check-in read as current.
+- **`aspect_snapshots`** — derived radar history: `owner_user_id, period_end,
+  window_days, metrics jsonb, scores jsonb, computed_at, created_at`, unique on
+  `(owner_user_id, period_end, window_days)`. `metrics` is the load-bearing
+  column — raw, unit-ful measurements per window — because the radar scores each
+  axis **relative to the owner's own past values** for that metric, so the middle
+  of the scale means "typical for you". `scores` is a presentation of `metrics`
+  against that baseline, stored only so a past reading can be shown as drawn.
+  Written by the browser on demand (owner-scoped, RLS is the boundary); there is
+  no scheduler in this project.
 - **`invites`** *(new)* — invite codes for signup gating: `code_hash, used_by,
   used_at, expires_at`.
 - **`shares`** *(new)* — read-only share tokens: `id, token_hash, owner_user_id,
@@ -342,7 +356,12 @@ Function, which validates the token and performs scoped read-only queries.
   strips; click bar → log; click empty → AddSessionMenu; month list.
 - **Stats** — summary cards (sessions, time, adherence), weekly table
   (count/time/volume), consistency heatmap (7×8 weekday×week), RPE fingerprint by
-  movement family, top-movement e1RM sparklines (with family roll-up).
+  movement family, top-movement e1RM sparklines (with family roll-up), and the
+  **fitness profile radar** — six axes (strength, endurance, power, mobility,
+  consistency, recovery), all derived from logged data and each scored against
+  the owner's own stored history, with a selectable comparison against the
+  previous block or the oldest month held. Axes without enough baseline render
+  hollow, on a cold-start anchor rather than a measurement.
 - **Library** — browse/search/filter movements (shared + custom), edit own
   (rest, primary metric, delete), create custom.
 - **Sessions** — saved workout templates: browse/search/filter by activity tag,
