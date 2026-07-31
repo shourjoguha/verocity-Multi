@@ -10,23 +10,25 @@
 // It is called from StatsView's top level rather than from inside
 // FitnessProfile so its reads start on mount, in parallel with the log fetch.
 // FitnessProfile does not render until logs have landed, so fetching from there
-// waterfalled a second round trip behind the first.
+// waterfalled a second round trip.
 
 import { useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
-  ASPECT_BACKFILL_MONTHS,
-  ASPECT_BASELINE_MONTHS,
-  ASPECT_WINDOW_DAYS,
+  ASPECT_BACKFILL_WEEKS,
+  ASPECT_BASELINE_WEEKS,
+  ASPECT_MIN_BASELINE,
+  ASPECT_WINDOWS,
   FITNESS_ASPECTS,
   type AspectKey,
+  type AspectWindowKey,
 } from '@/app.config';
 import {
   applyAssessmentOverride,
   aspectWindows,
-  buildBaselines,
+  baselinesFor,
   buildSnapshots,
-  completedMonthEnds,
+  completedWeekEnds,
   computeAspectMetrics,
   logsInWindow,
   scoreAspects,
@@ -49,6 +51,9 @@ export interface AspectPeriod extends AspectScoring {
   label: string;
 }
 
+/** One stored sample, narrowed to what scoring needs. */
+type StoredSnapshot = { period_end: string; window_days: number; metrics: AspectMetrics };
+
 export interface AspectProfile {
   loading: boolean;
   /** A cold start is reconstructing history — say so rather than spinning. */
@@ -63,10 +68,20 @@ export interface AspectProfile {
   latestAssessment: FitnessAssessment | null;
   /** Fold a just-saved check-in in without waiting for a refetch. */
   onAssessmentSaved: (a: FitnessAssessment) => void;
+  /** Selected measurement window — the responsiveness control. */
+  windowKey: AspectWindowKey;
+  setWindowKey: (k: AspectWindowKey) => void;
+  windowDays: number;
+  /** Weekly samples held for the selected window, and how many are still needed. */
+  baselineSamples: number;
+  weeksUntilBaseline: number;
 }
 
 const periodLabel = (w: { start: string; end: string }) =>
   `${formatDate(w.start)} – ${formatDate(w.end)}`;
+
+const daysFor = (key: AspectWindowKey) =>
+  ASPECT_WINDOWS.find((w) => w.key === key)?.days ?? ASPECT_WINDOWS[0].days;
 
 export function useAspectProfile({
   logs,
@@ -80,15 +95,16 @@ export function useAspectProfile({
   client: SupabaseClient;
 }): AspectProfile {
   const authed = mode === 'app';
-  const windows = aspectWindows(today);
-  const baselineFrom = windowEndingOn(
-    windows.current.end,
-    ASPECT_BASELINE_MONTHS * 31,
-  ).start;
+  const [windowKey, setWindowKey] = useState<AspectWindowKey>('trend');
+  const windowDays = daysFor(windowKey);
+  const windows = aspectWindows(today, windowDays);
+  // Read span is anchored to the longest window so switching never refetches.
+  const readEnd = aspectWindows(today).current.end;
+  const baselineFrom = windowEndingOn(readEnd, ASPECT_BASELINE_WEEKS * 7).start;
 
   const { data: fetchedSnapshots, loading: snapshotsLoading } = useAuthedQuery(
-    () => getAspectSnapshots(baselineFrom, windows.current.end, client),
-    { auth: authed, key: authed ? `aspects:snapshots:${ASPECT_BASELINE_MONTHS}m` : undefined },
+    () => getAspectSnapshots(baselineFrom, readEnd, client),
+    { auth: authed, key: authed ? `aspects:snapshots:${ASPECT_BASELINE_WEEKS}w` : undefined },
   );
   const { data: assessments, loading: assessmentsLoading } = useAuthedQuery(
     () => getAssessments(client),
@@ -96,7 +112,7 @@ export function useAspectProfile({
   );
 
   // Snapshots written during this session, merged over what was fetched.
-  const [written, setWritten] = useState<{ period_end: string; metrics: AspectMetrics }[]>([]);
+  const [written, setWritten] = useState<StoredSnapshot[]>([]);
   const [building, setBuilding] = useState(false);
   // A check-in saved on this screen, folded in ahead of the fetched list (which
   // is newest-first) so the radar reflects it without a round trip.
@@ -104,41 +120,65 @@ export function useAspectProfile({
   const onAssessmentSaved = (a: FitnessAssessment) => setSaved((prev) => [a, ...prev]);
   const allAssessments = [...saved, ...(assessments ?? [])];
 
-  const stored = [
+  const stored: StoredSnapshot[] = [
     ...(fetchedSnapshots ?? []).map((s: AspectSnapshot) => ({
       period_end: s.period_end,
+      window_days: s.window_days,
       metrics: s.metrics,
     })),
     ...written,
   ];
 
   // Keep the stored history complete: reconstruct a cold start in one pass, or
-  // top up the single month that has completed since the last visit. Showcase is
+  // top up the weeks that have completed since the last visit. BOTH window
+  // lengths are maintained regardless of which is selected, so toggling is
+  // instant and never scores a reading against the wrong series. Showcase is
   // strictly read-only — it renders someone else's profile under the anon role.
   useEffect(() => {
     if (!authed || logs === null || fetchedSnapshots === null) return;
 
-    const have = new Set(stored.map((s) => s.period_end));
-    const missing = completedMonthEnds(today, ASPECT_BACKFILL_MONTHS).filter((e) => !have.has(e));
-    if (missing.length === 0) return;
+    const weekEnds = completedWeekEnds(today, ASPECT_BACKFILL_WEEKS);
+    const work = ASPECT_WINDOWS.map((w) => {
+      const have = new Set(
+        stored.filter((s) => s.window_days === w.days).map((s) => s.period_end),
+      );
+      return { days: w.days, missing: weekEnds.filter((e) => !have.has(e)) };
+    }).filter((w) => w.missing.length > 0);
+    if (work.length === 0) return;
 
-    // The newest completed month's 60-day window always falls inside the logs
-    // Stats already fetched, so the common case costs no extra request.
-    const coveredFrom = windows.prior.start;
-    const needsFetch = missing.some((e) => windowEndingOn(e, ASPECT_WINDOW_DAYS).start < coveredFrom);
+    // The most recent completed weeks fall inside the logs Stats already
+    // fetched; only a genuine cold start needs to reach further back.
+    const coveredFrom = aspectWindows(today).prior.start;
+    const needsFetch = work.some((w) =>
+      w.missing.some((e) => windowEndingOn(e, w.days).start < coveredFrom),
+    );
 
     let cancelled = false;
     (async () => {
       let source = logs;
       if (needsFetch) {
         setBuilding(true);
-        const from = windowEndingOn(missing[0], ASPECT_WINDOW_DAYS).start;
-        source = await getLogsInRange(from, windows.current.end, client);
+        const from = work
+          .map((w) => windowEndingOn(w.missing[0], w.days).start)
+          .sort()[0];
+        source = await getLogsInRange(from, readEnd, client);
       }
-      const rows = buildSnapshots(source, missing, { seed: stored.map((s) => s.metrics) });
+      const rows = work.flatMap((w) =>
+        buildSnapshots(source, w.missing, {
+          windowDays: w.days,
+          seed: stored.filter((s) => s.window_days === w.days).map((s) => s.metrics),
+        }),
+      );
       if (rows.length > 0) await upsertAspectSnapshots(rows);
       if (cancelled) return;
-      setWritten((prev) => [...prev, ...rows.map((r) => ({ period_end: r.period_end, metrics: r.metrics }))]);
+      setWritten((prev) => [
+        ...prev,
+        ...rows.map((r) => ({
+          period_end: r.period_end,
+          window_days: r.window_days,
+          metrics: r.metrics,
+        })),
+      ]);
       setBuilding(false);
     })();
 
@@ -148,6 +188,10 @@ export function useAspectProfile({
     // Runs once each time the two inputs land; `stored` is derived from them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, logs, fetchedSnapshots]);
+
+  const forWindow = stored.filter((s) => s.window_days === windowDays);
+  const baselineSamples = forWindow.length;
+  const weeksUntilBaseline = Math.max(0, ASPECT_MIN_BASELINE - baselineSamples);
 
   const loading = snapshotsLoading || assessmentsLoading || logs === null;
   if (loading) {
@@ -160,12 +204,20 @@ export function useAspectProfile({
       suggestions: {},
       latestAssessment: null,
       onAssessmentSaved,
+      windowKey,
+      setWindowKey,
+      windowDays,
+      baselineSamples,
+      weeksUntilBaseline,
     };
   }
 
-  const baselines = buildBaselines(stored);
+  const baselines = baselinesFor(stored, windowDays);
   const scored = (window: { start: string; end: string }): AspectPeriod | null => {
-    const metrics = computeAspectMetrics(logsInWindow(logs, window), { end: window.end });
+    const metrics = computeAspectMetrics(logsInWindow(logs, window), {
+      end: window.end,
+      windowDays,
+    });
     if (Object.keys(metrics).length === 0) return null;
     const scoring = applyAssessmentOverride(
       scoreAspects(metrics, baselines),
@@ -178,9 +230,9 @@ export function useAspectProfile({
   const current = scored(windows.current);
   const prior = scored(windows.prior);
 
-  // Long-range comparison: the oldest month we hold, scored against the same
-  // baseline so the two polygons are on one scale.
-  const oldest = [...stored].sort((a, b) => a.period_end.localeCompare(b.period_end))[0];
+  // Long-range comparison: the oldest sample we hold for THIS window length,
+  // scored against the same baseline so the two polygons are on one scale.
+  const oldest = [...forWindow].sort((a, b) => a.period_end.localeCompare(b.period_end))[0];
   const earliest =
     oldest && oldest.period_end < windows.prior.start
       ? {
@@ -209,5 +261,10 @@ export function useAspectProfile({
     suggestions,
     latestAssessment: allAssessments[0] ?? null,
     onAssessmentSaved,
+    windowKey,
+    setWindowKey,
+    windowDays,
+    baselineSamples,
+    weeksUntilBaseline,
   };
 }

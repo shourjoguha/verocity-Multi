@@ -58,6 +58,8 @@ const ALLOW = [
   { id: 'motion/react', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'sheets are CSS-driven now' },
   { id: 'MotionConfig', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'removed with Motion' },
   { id: 'clampScore', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'the radar’s absolute clamp, replaced by the relative logistic in scoreAgainstBaseline' },
+  { id: 'ASPECT_ABSOLUTE_ANCHORS', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'the radar’s invented reference values; a thin baseline now yields no score at all' },
+  { id: 'completedMonthEnds', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'monthly snapshot anchors, replaced by weekly completedWeekEnds' },
   { id: 'public/sw.js', doc: 'docs/LESSONS.md', why: 'the Caching entry names the old path to explain why it moved' },
   { id: '/sw.test', doc: 'docs/LESSONS.md', why: 'names the route that must NOT exist — that is the lesson' },
   // Not this repo's code.

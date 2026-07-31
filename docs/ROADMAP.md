@@ -107,6 +107,16 @@ the endurance axis, and scores made **relative to the user's own history** held
 in `aspect_snapshots` — replacing an absolute clamped model that saturated at 10
 and stopped moving.
 
+A second pass then removed the last of the invented numbers: the six absolute
+anchors a thin baseline used to fall back on are gone, so an axis without enough
+of the user's own history is simply unscored and shows its raw measurement.
+Snapshots sample weekly rather than monthly (a real baseline in ~4 weeks, not ~4
+months), `ASPECT_WINDOWS` adds a selectable measurement window as the
+responsiveness control, and `AspectExplainer` documents the scale in the UI. It
+also fixed a latent trap that affected every sheet: `Modal` now portals to
+`<body>`, because a filling CSS animation on `transform` made `.stagger-item` a
+containing block and broke `position: fixed` inside it.
+
 ### Phase 7 — Guidance upkeep  `[ongoing]`
 `npm run audit:docs` fails if the docs name code that no longer exists. It was
 added after a five-PR bug hunt that these documents actively misdirected; see

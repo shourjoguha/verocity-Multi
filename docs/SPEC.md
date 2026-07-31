@@ -208,13 +208,18 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   letting a months-old check-in read as current.
 - **`aspect_snapshots`** — derived radar history: `owner_user_id, period_end,
   window_days, metrics jsonb, scores jsonb, computed_at, created_at`, unique on
-  `(owner_user_id, period_end, window_days)`. `metrics` is the load-bearing
-  column — raw, unit-ful measurements per window — because the radar scores each
-  axis **relative to the owner's own past values** for that metric, so the middle
-  of the scale means "typical for you". `scores` is a presentation of `metrics`
-  against that baseline, stored only so a past reading can be shown as drawn.
-  Written by the browser on demand (owner-scoped, RLS is the boundary); there is
-  no scheduler in this project.
+  `(owner_user_id, period_end, window_days)`. One row per **completed week** per
+  measurement window. `metrics` is the load-bearing column — raw, unit-ful
+  measurements — because the radar scores each axis **relative to the owner's own
+  past values** for that metric, so the middle of the scale means "typical for
+  you" and nothing else. `scores` is a presentation of `metrics` against that
+  baseline, stored only so a past reading can be shown as drawn.
+  `window_days` keeps the selectable windows (`ASPECT_WINDOWS`) as separate
+  series: a 28-day reading is only ever scored against 28-day samples.
+  Below `ASPECT_MIN_BASELINE` samples an axis is **unscored** — there is no
+  absolute fallback, and the chart shows the raw measurement instead. Written by
+  the browser on demand (owner-scoped, RLS is the boundary); there is no
+  scheduler in this project.
 - **`invites`** *(new)* — invite codes for signup gating: `code_hash, used_by,
   used_at, expires_at`.
 - **`shares`** *(new)* — read-only share tokens: `id, token_hash, owner_user_id,
@@ -359,9 +364,12 @@ Function, which validates the token and performs scoped read-only queries.
   movement family, top-movement e1RM sparklines (with family roll-up), and the
   **fitness profile radar** — six axes (strength, endurance, power, mobility,
   consistency, recovery), all derived from logged data and each scored against
-  the owner's own stored history, with a selectable comparison against the
-  previous block or the oldest month held. Axes without enough baseline render
-  hollow, on a cold-start anchor rather than a measurement.
+  the owner's own stored history. Two toggles: measurement window
+  (`ASPECT_WINDOWS`, the responsiveness control) and what the dashed comparison
+  series is (previous block, or the oldest week held). Axes on a thin baseline
+  render hollow; axes with no baseline show their raw measurement and no polygon
+  is drawn. An always-available explainer (`AspectExplainer`) states what the
+  scale means, since "typical for you" is a claim that needs its source shown.
 - **Library** — browse/search/filter movements (shared + custom), edit own
   (rest, primary metric, delete), create custom.
 - **Sessions** — saved workout templates: browse/search/filter by activity tag,

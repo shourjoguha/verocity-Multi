@@ -113,6 +113,30 @@ Layer order: tab bar 50 · nav backdrop 60 · drawer 70 · sheets 80 · toasts 9
 Check with `elementFromPoint` at each control's centre, not by eye.
 → `src/layouts/App.astro`, `ui/Modal.tsx`
 
+### A sheet opens with its header off-screen, or anchored to the wrong box
+`[measured in Chromium]`
+`position: fixed` resolves against the nearest ancestor that has a transform —
+and **a CSS animation that fills on `transform` makes an element a containing
+block permanently**, even when the animation has finished and its `to` keyframe
+says `transform: none`. `.stagger-item` runs `stagger-in` with
+`animation-fill-mode: both`, so every staggered block on every page computes to
+`transform: matrix(1, 0, 0, 1, 0, 0)` — an identity matrix, visually nothing, and
+enough.
+
+Any sheet rendered inside a `PageStagger` `Item` was therefore positioned against
+that item rather than the viewport: measured on `/app/stats` at `top: -304px`,
+header and Close button above the fold, `max-h-[85dvh]` correctly applied to a
+panel nobody could reach the top of. It looked like a too-tall-content bug and
+was not one — the panel and its internal scroll were both fine.
+
+`Modal` now portals to `document.body`, which puts the overlay outside every
+stagger wrapper at once. **Prefer the portal to hunting the ancestor**: the next
+transformed parent is one `motion.div` away, and the failure is silent on short
+sheets that happen to fit anyway. Confirm with
+`getComputedStyle(el).transform !== 'none'` walking up from the overlay, not by
+eye — an identity matrix looks like nothing in DevTools' visual overlay.
+→ `ui/Modal.tsx`, `.stagger-item` / `@keyframes stagger-in` in `global.css`
+
 ### A shadow applied to the bottom bar renders nothing at all
 `[measured in Chromium]`
 Every depth token in `global.css` casts **downward** — `--shadow-lift-rest`,
@@ -341,10 +365,18 @@ sessions and the movement library, whose fixtures are likewise thin.
 **The radar is the same trap for a different reason:** the fixture's only
 `workout_logs` row is `status: 'in_progress'`, so `completedLogs` drops it,
 `computeAspectMetrics` returns `{}` and FitnessProfile paints its empty state —
-the chart, its vertex markers and the compare toggle are never in the DOM. A
-green `/app/stats` run says nothing about any of them. The probe that does see
-them needs completed logs **and** `aspect_snapshots` rows, since the baseline is
-what decides whether a vertex renders filled or hollow.
+the chart, its vertex markers and the toggles are never in the DOM. A green
+`/app/stats` run says nothing about any of them.
+
+A probe that does see them needs completed logs **and** `aspect_snapshots` rows,
+because the chart has four distinct renderings and the baseline depth is what
+picks between them: unscored (raw measurements, no polygon), thin (hollow
+vertices), mixed (some axes scored, some not, no polygon) and settled (filled).
+**Fixture depth is itself an assertion** — one run reported `hollow 0` across all
+four scenarios, which was not a rendering bug but `ASPECT_GOOD_BASELINE` sitting
+exactly on `ASPECT_BACKFILL_WEEKS`, so every successful backfill landed on
+"settled" and the hollow state was unreachable in production. A scenario whose
+fixture cannot produce the state it is named for passes silently.
 → `scripts/mobile-audit.mjs`
 
 ### What a standing check covers — and what it cannot
@@ -407,6 +439,16 @@ The fitness radar:
   The `auto` flag no longer exists. Both derive from the taxonomy's
   `plyometric` / `mobility` modality minutes; a check-in still overrides any
   axis, but only for `ASPECT_OVERRIDE_DAYS`.
+- **A thin baseline falls back to `ASPECT_ABSOLUTE_ANCHORS`.** Removed outright.
+  Those six constants were invented reference values, and while an axis rested on
+  one the chart still captioned itself "the middle ring is typical for you" — a
+  claim about the user that came from nobody's data. An axis with fewer than
+  `ASPECT_MIN_BASELINE` samples now has **no score**; the chart draws its raw
+  measurement with a unit instead.
+- **Snapshots anchor to completed calendar months (`completedMonthEnds`).**
+  Weekly now, via `completedWeekEnds`. Monthly meant four months of logging
+  before a real baseline existed, which is the only reason the invented anchors
+  had a job in the first place.
 
 ## Decisions
 
@@ -426,3 +468,17 @@ The fitness radar:
   carries its reason.
 - **Sheets have no exit animation.** Deliberate, not an oversight — see the
   first entry. Adding one back reintroduces the deferred unmount.
+- **The radar's responsiveness lever is window length, not recompute cadence.**
+  Its displayed value has always rolled daily: `StatsView` anchors
+  `aspectWindows` on `new Date()` and the log writers clear the query cache, so a
+  logged workout moves the shape the same day. "It feels unresponsive" was one
+  session being ~1/25th of a 60-day window. Hence `ASPECT_WINDOWS` — a shorter
+  span, not more frequent snapshots. Sampling the *baseline* more finely changes
+  how well the median is estimated and essentially nothing on screen; that is
+  worth doing for a different reason (it reaches `ASPECT_MIN_BASELINE` sooner),
+  and it is what made the invented anchor values deletable.
+- **Two window lengths mean two baseline series.** `aspect_snapshots` is keyed
+  `(owner, period_end, window_days)` and `baselinesFor` filters on it. Scoring a
+  28-day reading against 60-day samples is wrong on every axis and looks
+  completely normal, so the separation lives in one named function with a test
+  rather than at each call site.

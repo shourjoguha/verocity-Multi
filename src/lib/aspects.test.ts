@@ -1,17 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { ASPECT_ABSOLUTE_ANCHORS, ASPECT_MIN_BASELINE, ASPECT_SCALE, ASPECT_WINDOW_DAYS } from '@/app.config';
+import {
+  ASPECT_GOOD_BASELINE,
+  ASPECT_MIN_BASELINE,
+  ASPECT_SCALE,
+  ASPECT_WINDOW_DAYS,
+} from '@/app.config';
 import {
   applyAssessmentOverride,
   aspectWindows,
+  baselinesFor,
   buildBaselines,
   buildSnapshots,
-  completedMonthEnds,
+  completedWeekEnds,
   computeAspectMetrics,
   daysBetween,
   logsInWindow,
   scoreAgainstBaseline,
   scoreAspects,
   windowEndingOn,
+  type AspectScoring,
 } from '@/lib/aspects';
 import type { FitnessAssessment, VibeCheck, WorkoutLog } from '@/lib/types';
 
@@ -320,14 +327,15 @@ describe('computeAspectMetrics', () => {
 describe('scoreAgainstBaseline', () => {
   const baseline = [10, 20, 30, 40, 50];
   const MID = (ASPECT_SCALE.min + ASPECT_SCALE.max) / 2;
+  const thick = (n: number) => Array.from({ length: n }, (_, i) => 10 + i * 10);
 
   it('puts the median of your own history exactly mid-scale', () => {
-    expect(scoreAgainstBaseline(30, baseline, 999).score).toBe(MID);
+    expect(scoreAgainstBaseline(30, baseline)!.score).toBe(MID);
   });
 
   it('moves in the right direction either side of the median', () => {
-    expect(scoreAgainstBaseline(45, baseline, 999).score).toBeGreaterThan(MID);
-    expect(scoreAgainstBaseline(15, baseline, 999).score).toBeLessThan(MID);
+    expect(scoreAgainstBaseline(45, baseline)!.score).toBeGreaterThan(MID);
+    expect(scoreAgainstBaseline(15, baseline)!.score).toBeLessThan(MID);
   });
 
   it('keeps responding where the old clamped model went flat', () => {
@@ -337,15 +345,15 @@ describe('scoreAgainstBaseline', () => {
     // still registers. (Scores are rounded to 1dp for display, so a genuinely
     // absurd outlier does print as 10.0 — that is the asymptote showing up in
     // the rounding, not an ordinary value hitting a ceiling.)
-    const atTop = scoreAgainstBaseline(50, baseline, 999).score;
-    const beyond = scoreAgainstBaseline(75, baseline, 999).score;
+    const atTop = scoreAgainstBaseline(50, baseline)!.score;
+    const beyond = scoreAgainstBaseline(75, baseline)!.score;
     expect(atTop).toBeLessThan(ASPECT_SCALE.max);
     expect(beyond).toBeGreaterThan(atTop);
   });
 
   it('stays inside the scale for absurd inputs', () => {
     for (const v of [1e9, -1e9, 0]) {
-      const s = scoreAgainstBaseline(v, baseline, 999).score;
+      const s = scoreAgainstBaseline(v, baseline)!.score;
       expect(Number.isFinite(s), `${v}`).toBe(true);
       expect(s).toBeGreaterThanOrEqual(ASPECT_SCALE.min);
       expect(s).toBeLessThanOrEqual(ASPECT_SCALE.max);
@@ -353,39 +361,35 @@ describe('scoreAgainstBaseline', () => {
   });
 
   it('survives a perfectly flat history without dividing by zero', () => {
-    const flat = scoreAgainstBaseline(500, [10, 10, 10, 10, 10], 999);
+    const flat = scoreAgainstBaseline(500, [10, 10, 10, 10, 10])!;
     expect(Number.isFinite(flat.score)).toBe(true);
     expect(flat.score).toBe(MID);
   });
 
-  it('survives an empty and a single-sample baseline', () => {
-    for (const b of [[], [42]]) {
-      const r = scoreAgainstBaseline(50, b, 50);
-      expect(Number.isFinite(r.score)).toBe(true);
-      expect(r.confidence).toBe('low');
+  // The heart of this change: no invented reference value, so no score at all
+  // rather than a number the data cannot support.
+  it('refuses to score below the baseline threshold', () => {
+    for (const b of [[], [42], Array.from({ length: ASPECT_MIN_BASELINE - 1 }, () => 30)]) {
+      expect(scoreAgainstBaseline(80, b), `${b.length} samples`).toBeNull();
     }
   });
 
-  it('falls back to the absolute anchor below the baseline threshold', () => {
-    const thin = Array.from({ length: ASPECT_MIN_BASELINE - 1 }, () => 30);
-    const r = scoreAgainstBaseline(80, thin, 80);
-    expect(r.confidence).toBe('low');
-    expect(r.score).toBe(MID); // value === anchor
+  it('scores as soon as the threshold is met', () => {
+    expect(scoreAgainstBaseline(12, thick(ASPECT_MIN_BASELINE))).not.toBeNull();
   });
 
-  it('reports ok confidence once the baseline is thick enough', () => {
-    const thick = Array.from({ length: ASPECT_MIN_BASELINE }, (_, i) => 10 + i);
-    expect(scoreAgainstBaseline(12, thick, 999).confidence).toBe('ok');
+  it('reports low confidence on a thin baseline and ok on a settled one', () => {
+    expect(scoreAgainstBaseline(12, thick(ASPECT_MIN_BASELINE))!.confidence).toBe('low');
+    expect(scoreAgainstBaseline(12, thick(ASPECT_GOOD_BASELINE))!.confidence).toBe('ok');
   });
 
-  it('handles a zero value against a positive anchor', () => {
-    const r = scoreAgainstBaseline(0, [], 10);
-    expect(Number.isFinite(r.score)).toBe(true);
-    expect(r.score).toBeGreaterThanOrEqual(ASPECT_SCALE.min);
+  it('ignores non-finite samples when counting the baseline', () => {
+    const dirty = [...thick(ASPECT_MIN_BASELINE - 1), NaN, Infinity];
+    expect(scoreAgainstBaseline(50, dirty)).toBeNull();
   });
 });
 
-describe('buildBaselines / scoreAspects', () => {
+describe('buildBaselines / baselinesFor / scoreAspects', () => {
   it('collects one sample per snapshot per axis and skips gaps', () => {
     const b = buildBaselines([
       { metrics: { strength: 100, power: 4 } },
@@ -397,55 +401,72 @@ describe('buildBaselines / scoreAspects', () => {
     expect(b.recovery).toBeUndefined();
   });
 
-  it('scores only the axes that were measured', () => {
-    const { scores, confidence } = scoreAspects({ strength: 100 }, {});
-    expect(Object.keys(scores)).toEqual(['strength']);
-    expect(confidence.strength).toBe('low'); // no baseline yet
-    expect(scores.power).toBeUndefined();
+  it('never mixes window lengths', () => {
+    // Load-bearing: scoring a 28-day reading against 60-day samples would be
+    // badly wrong on every axis with nothing on screen to give it away.
+    const snapshots = [
+      { window_days: 28, metrics: { strength: 10 } },
+      { window_days: 60, metrics: { strength: 99 } },
+      { window_days: 28, metrics: { strength: 12 } },
+    ];
+    expect(baselinesFor(snapshots, 28).strength).toEqual([10, 12]);
+    expect(baselinesFor(snapshots, 60).strength).toEqual([99]);
+    expect(baselinesFor(snapshots, 90).strength).toBeUndefined();
   });
 
-  it('uses the per-axis anchor when there is no baseline', () => {
-    const { scores } = scoreAspects({ power: ASPECT_ABSOLUTE_ANCHORS.power }, {});
-    expect(scores.power).toBe((ASPECT_SCALE.min + ASPECT_SCALE.max) / 2);
+  it('leaves an axis unscored when there is no baseline, but keeps its metric', () => {
+    const { metrics, scores, confidence } = scoreAspects({ strength: 100 }, {});
+    expect(scores.strength).toBeUndefined();
+    expect(confidence.strength).toBeUndefined();
+    // The raw measurement survives — it is what the chart draws instead.
+    expect(metrics.strength).toBe(100);
   });
 
-  it('prefers your own history once it exists', () => {
-    const baselines = { power: [2, 3, 4, 5, 6] };
-    // 6 min/week is at the top of this user's own range but below the anchor,
-    // so the relative score must read high where the absolute one reads low.
-    const relative = scoreAspects({ power: 6 }, baselines).scores.power!;
-    const absolute = scoreAspects({ power: 6 }, {}).scores.power!;
-    expect(relative).toBeGreaterThan(absolute);
+  it('scores only the axes whose baseline is thick enough', () => {
+    const baselines = { power: [2, 3, 4, 5], strength: [100] };
+    const { scores } = scoreAspects({ power: 6, strength: 120 }, baselines);
+    expect(scores.power).toBeDefined();
+    expect(scores.strength).toBeUndefined();
+  });
+
+  it('places a value at the top of your own range above mid-scale', () => {
+    const relative = scoreAspects({ power: 6 }, { power: [2, 3, 4, 5, 6] }).scores.power!;
+    expect(relative).toBeGreaterThan((ASPECT_SCALE.min + ASPECT_SCALE.max) / 2);
   });
 });
 
-describe('completedMonthEnds', () => {
-  it('returns completed months only, oldest first', () => {
-    // Mid-July: July is still in progress, so June is the newest completed month.
-    expect(completedMonthEnds(day('2026-07-15'), 3)).toEqual([
-      '2026-04-30',
-      '2026-05-31',
-      '2026-06-30',
+describe('completedWeekEnds', () => {
+  // 2026-07-31 is a Friday, so the last completed week ended Sunday 2026-07-26.
+  it('returns completed weeks only, oldest first, ending Sunday', () => {
+    expect(completedWeekEnds(day('2026-07-31'), 3)).toEqual([
+      '2026-07-12',
+      '2026-07-19',
+      '2026-07-26',
     ]);
   });
 
-  it('still excludes the current month on its last day', () => {
-    expect(completedMonthEnds(day('2026-07-31'), 1)).toEqual(['2026-06-30']);
+  it('excludes the in-progress week even on its final day', () => {
+    // Sunday 2026-08-02 closes its own week, but that week is only complete at
+    // the moment it ends — treating it as done would make the key drift.
+    expect(completedWeekEnds(day('2026-08-02'), 1)).toEqual(['2026-07-26']);
   });
 
-  it('crosses a year boundary and a leap February', () => {
-    expect(completedMonthEnds(day('2028-04-10'), 4)).toEqual([
-      '2027-12-31',
-      '2028-01-31',
-      '2028-02-29',
-      '2028-03-31',
-    ]);
-  });
-
-  it('is stable across days within the same month', () => {
+  it('is stable across days within the same week', () => {
     // The upsert key is (owner, period_end, window_days). A period_end that
     // drifted with the current day would mint a new row on every visit.
-    expect(completedMonthEnds(day('2026-07-02'), 2)).toEqual(completedMonthEnds(day('2026-07-28'), 2));
+    expect(completedWeekEnds(day('2026-07-27'), 2)).toEqual(
+      completedWeekEnds(day('2026-08-02'), 2),
+    );
+  });
+
+  it('crosses a year boundary', () => {
+    expect(completedWeekEnds(day('2026-01-07'), 2)).toEqual(['2025-12-28', '2026-01-04']);
+  });
+
+  it('reaches a usable baseline in weeks, not months', () => {
+    const ends = completedWeekEnds(day('2026-07-31'), ASPECT_MIN_BASELINE);
+    expect(ends).toHaveLength(ASPECT_MIN_BASELINE);
+    expect(daysBetween(ends[0], ends[ends.length - 1])).toBe((ASPECT_MIN_BASELINE - 1) * 7);
   });
 });
 
@@ -474,14 +495,27 @@ describe('buildSnapshots', () => {
   });
 
   it('scores progressively, so later periods see the earlier ones', () => {
-    // Seeded history plus the first period gives the second something to be
-    // relative to; with a bare two-period call there is nothing but the anchor.
+    // Seeded history gives the later period something to be relative to. With a
+    // bare call there is no baseline at all, so nothing is scored — which is the
+    // point of removing the invented reference.
     const logs = ends.map((e, i) => log(`${e.slice(0, 7)}-15`, [{ movement: 'Back Squat', sets: squatSets(4, 100 + i * 10) }]));
     const seeded = buildSnapshots(logs, ends, {
       seed: [{ strength: 90 }, { strength: 92 }, { strength: 94 }, { strength: 96 }],
     });
     const bare = buildSnapshots(logs, ends);
-    expect(seeded[1].scores.strength).not.toBe(bare[1].scores.strength);
+    expect(seeded[1].scores.strength).toBeDefined();
+    expect(bare[1].scores.strength).toBeUndefined();
+  });
+
+  it('records the window length it was built for', () => {
+    const logs = [log('2026-06-20', [{ movement: 'Back Squat', sets: squatSets(4) }])];
+    const short = buildSnapshots(logs, ['2026-06-30'], { windowDays: 28 });
+    expect(short[0].window_days).toBe(28);
+    // Two series over the same period must be distinguishable, or the upsert key
+    // (owner, period_end, window_days) collapses them onto one row.
+    const long = buildSnapshots(logs, ['2026-06-30'], { windowDays: 60 });
+    expect(long[0].window_days).toBe(60);
+    expect(short[0].period_end).toBe(long[0].period_end);
   });
 
   it('produces rows that round-trip as snapshot input', () => {
@@ -491,37 +525,45 @@ describe('buildSnapshots', () => {
 });
 
 describe('applyAssessmentOverride', () => {
-  const derived = {
+  const derived = (): AspectScoring => ({
+    metrics: { strength: 110, power: 5, recovery: 0.6 },
     scores: { strength: 4, power: 4, recovery: 4 },
     confidence: { strength: 'low', power: 'low', recovery: 'low' },
-  } as const;
+  });
   const assessment = (taken_at: string, scores: Record<string, number>): FitnessAssessment =>
     ({ id: taken_at, owner_user_id: 'u', taken_at, scores, created_at: taken_at }) as FitnessAssessment;
 
   it('lets a fresh check-in speak for the axes it rated', () => {
-    const out = applyAssessmentOverride({ ...derived }, [assessment('2026-07-25', { strength: 9 })], END);
+    const out = applyAssessmentOverride(derived(), [assessment('2026-07-25', { strength: 9 })], END);
     expect(out.scores.strength).toBe(9);
     expect(out.scores.power).toBe(4); // unrated axis keeps the derived value
     expect(out.confidence.strength).toBe('ok');
   });
 
   it('stops trusting a stale check-in', () => {
-    const out = applyAssessmentOverride({ ...derived }, [assessment('2026-04-25', { strength: 9 })], END);
+    const out = applyAssessmentOverride(derived(), [assessment('2026-04-25', { strength: 9 })], END);
     expect(out.scores.strength).toBe(4);
     expect(out.confidence.strength).toBe('low');
   });
 
   it('ignores a check-in taken after the window end', () => {
     const out = applyAssessmentOverride(
-      { ...derived },
+      derived(),
       [assessment('2026-08-20', { strength: 9 }), assessment('2026-07-28', { strength: 7 })],
       END,
     );
     expect(out.scores.strength).toBe(7);
   });
 
+  it('carries the raw metrics through untouched', () => {
+    // A rating changes what the axis SCORES, never what was measured — the
+    // snapshot history has to stay a record of the training, not the self-image.
+    const out = applyAssessmentOverride(derived(), [assessment('2026-07-29', { strength: 9 })], END);
+    expect(out.metrics).toEqual(derived().metrics);
+  });
+
   it('does not mutate the scoring it was given', () => {
-    const input = { scores: { strength: 4 }, confidence: { strength: 'low' as const } };
+    const input = derived();
     applyAssessmentOverride(input, [assessment('2026-07-29', { strength: 9 })], END);
     expect(input.scores.strength).toBe(4);
   });
