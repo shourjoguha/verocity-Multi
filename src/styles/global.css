@@ -26,6 +26,14 @@
      still the default — use this sparingly and intentionally. */
   --color-teal: hsl(174 87% 62%);
 
+  /* The same teal taken down to a surface shade — the one filled treatment it
+     earns. It marks a workout left running: Home's primary CTA turns from
+     "Start" to "Resume" and takes this fill (see .shimmer-resume). Dark in both
+     themes, so no override below and a near-white foreground either way. It is
+     the `slab` shade the "Depth" backdrop already paints in. */
+  --color-teal-deep: hsl(174 84% 24%);
+  --color-teal-fg: hsl(0 0% 100%);
+
   /* Functional accent — the teal promoted to a sparing UI role (keyboard focus
      now; active/selected cues in later phases). Same hue both themes; reads
      bright on paper and on carbon. Monochrome stays the default everywhere else. */
@@ -571,6 +579,52 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
     animation: none;
     width: 100%;
     opacity: 0.4;
+  }
+}
+
+/* A workout left running — Home's primary CTA reads "Resume …", takes the
+   --color-teal-deep fill, and a brighter teal sheen sweeps across it. Sparing,
+   deliberate use of the teal: it is the one place in the app that has to be
+   spotted without being read.
+
+   The sweep is a translated overlay, never an animated background-position —
+   compositor-only, no layout work (docs/LESSONS.md § "Tween the property that
+   determines the layout"). The transform sits on a ::after that contains
+   nothing positioned, so the containing-block trap in that same file does not
+   apply here.
+
+   The reduce override is NOT optional. The global blanket at the end of this
+   file only clamps animation-duration to 0.01ms, which for an `infinite`
+   animation means it keeps firing forever — so the animation is switched off
+   by name, and the fill plus a static sheen carry the cue instead. Same shape
+   as .loading-sweep above. */
+.shimmer-resume {
+  position: relative;
+}
+.shimmer-resume::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    hsl(174 87% 62% / 0.38) 50%,
+    transparent 65%
+  );
+  transform: translateX(-100%);
+  animation: shimmer-resume 2.6s var(--ease-editorial) infinite;
+}
+@keyframes shimmer-resume {
+  to {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-resume::after {
+    animation: none;
+    transform: none;
+    opacity: 0.14;
   }
 }
 

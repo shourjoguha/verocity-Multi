@@ -189,6 +189,12 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
 - **`workout_logs`** — `owner_user_id, plan_id, log_date, day_key, week_number,
   status (planned|in_progress|paused|done|cancelled), started_at, ended_at,
   total_seconds, notes, activity_type, tags[], data jsonb`. Realtime enabled.
+  `in_progress` means **live right now**, not merely "the Logger is open": the
+  Logger's Home button leaves the row in that state so you can browse the app
+  mid-workout, and Home's primary CTA turns into "Resume …" while one exists
+  (`src/lib/activeSession.ts`). A row is only offered for resume inside
+  `TIMERS.maxWorkoutSeconds` of `started_at`, so a session left behind by a
+  closed tab ages out rather than shimmering forever. `paused` is unused.
 - **`movement_subs`** — substitution memory: `(owner, plan, day_key, original,
   replacement, count, last_used_at, dismissed_at)` with the `bump_movement_sub`
   RPC. Drives Logger's "you usually swap X→Y" suggestion.

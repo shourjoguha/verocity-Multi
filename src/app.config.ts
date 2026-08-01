@@ -56,6 +56,10 @@ export const TIMERS = {
   defaultRestSeconds: 120,
   autosaveSeconds: 15,
   restPresets: [0, 30, 60, 90, 120, 180, 300],
+  // Wall-clock cap on a live session. A workout left running is auto-ended
+  // here so a stale session never racks up a 9-hour duration, and Home stops
+  // offering to resume one past it. The user can edit the time later.
+  maxWorkoutSeconds: 2 * 60 * 60,
 } as const;
 
 // Subroutines: free-text blocks (title + description + optional link) that sit
