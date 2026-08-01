@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { createMovement, getLogsInRange, getMovements } from '@/lib/queries';
+import { createMovement, getLogsInRange, getMovements, getUserStats } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { supabasePublic } from '@/lib/supabase';
 import { showcaseRefDate } from '@/lib/showcase';
 import type { Movement, WorkoutLog } from '@/lib/types';
-import { regionIntensities, summarizeBodyLoad } from '@/lib/bodyLoad';
+import { regionIntensities, regionTotals, summarizeBodyLoad, type BodyCurrency } from '@/lib/bodyLoad';
+import { unweightedRepKg } from '@/lib/userStats';
 import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
 import type { BodyFace } from '@/lib/bodyRegions';
 import {
@@ -33,6 +34,16 @@ const WINDOWS = [
 ] as const;
 
 type WindowKey = (typeof WINDOWS)[number]['key'];
+
+// The two readings of the same window. Minutes answers "how long did I work
+// this region", volume answers "how much work landed there" — a 45-minute
+// mobility flow and a 45-minute squat session are the same on the first and
+// nothing alike on the second. Minutes stays the default because it is the only
+// currency that survives for unloaded work.
+const CURRENCIES = [
+  { key: 'minutes', label: 'Minutes' },
+  { key: 'volume', label: 'Volume' },
+] as const satisfies readonly { key: BodyCurrency; label: string }[];
 
 function ymd(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
@@ -84,6 +95,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const showcase = mode === 'showcase';
   const client = showcase ? supabasePublic : undefined;
   const [windowKey, setWindowKey] = useState<WindowKey>('8w');
+  const [currency, setCurrency] = useState<BodyCurrency>('minutes');
   const [face, setFace] = useState<BodyFace>('front');
   const [selected, setSelected] = useState<RegionKey | null>(null);
   const [mapping, setMapping] = useState<string | null>(null);
@@ -105,6 +117,14 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     auth: !showcase,
     key: showcase ? undefined : 'movements',
   });
+  // Owner bodyweight, used to price unweighted work. Short-circuited in showcase
+  // mode: `user_stats` has no anon policy, so the request could only ever come
+  // back null. The public map falls back to the flat constant — exactly the
+  // pre-bodyweight behaviour.
+  const { data: stats, loading: statsLoading } = useAuthedQuery(
+    () => (showcase ? Promise.resolve(null) : getUserStats()),
+    { auth: !showcase, key: showcase ? undefined : 'userStats' },
+  );
 
   // Per-user corrections, keyed by normalised name. Rows without a taxonomy
   // payload simply contribute nothing.
@@ -138,19 +158,30 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   }
 
   const all: WorkoutLog[] = logs ?? [];
-  const summary = useMemo(() => summarizeBodyLoad(all, overrides), [all, overrides]);
-  const intensity = useMemo(() => regionIntensities(summary), [summary]);
+  const unweightedKg = unweightedRepKg(stats ?? null);
+  const summary = useMemo(
+    () => summarizeBodyLoad(all, overrides, { unweightedKg }),
+    [all, overrides, unweightedKg],
+  );
+  // Normalised per currency, so the heat map cannot contradict the list beside it.
+  const intensity = useMemo(() => regionIntensities(summary, currency), [summary, currency]);
 
-  if (loading) return <LoadingScreen />;
+  // Wait on stats too, or Volume would paint at the flat constant and then jump
+  // once bodyweight lands.
+  if (loading || statsLoading) return <LoadingScreen />;
 
+  const totals = regionTotals(summary, currency);
   const regionRows = MUSCLE_REGION_KEYS.map((k) => ({
     key: k,
     label: MUSCLE_REGIONS[k].label,
+    total: totals[k],
     minutes: summary.regionMinutes[k],
     sets: summary.resistanceSets[k],
     intensity: intensity[k],
-  })).sort((a, b) => b.minutes - a.minutes);
+  })).sort((a, b) => b.total - a.total);
 
+  // Filter on minutes, not on the active currency: a region with logged work but
+  // zero volume should still appear rather than vanish when the toggle flips.
   const worked = regionRows.filter((r) => r.minutes > 0);
   const systemicShare =
     summary.totalMinutes > 0 ? summary.systemicMinutes / summary.totalMinutes : 0;
@@ -225,6 +256,23 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   audit, and a list row gives screen readers real text. */}
               <div>
                 <SectionHeader>Regions</SectionHeader>
+                <div className="t-label mb-3 flex gap-1">
+                  {CURRENCIES.map((c) => (
+                    <button
+                      key={c.key}
+                      type="button"
+                      onClick={() => setCurrency(c.key)}
+                      aria-pressed={currency === c.key}
+                      className={`hill-btn flex min-h-11 items-center border bg-surface px-3 transition-colors ${
+                        currency === c.key
+                          ? 'border-fg text-fg'
+                          : 'border-border text-muted hover:text-fg'
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
                 <ul className="flex flex-col gap-px bg-border">
                   {worked.map((r) => (
                     <li key={r.key}>
@@ -247,13 +295,20 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                             }}
                           />
                         </span>
-                        <span className="w-12 shrink-0 text-right tabular-nums text-muted">
-                          {formatRound(r.minutes, 0)}m
+                        <span className="w-14 shrink-0 text-right tabular-nums text-muted">
+                          {currency === 'minutes'
+                            ? `${formatRound(r.total, 0)}m`
+                            : formatRound(r.total, 0)}
                         </span>
                       </button>
                     </li>
                   ))}
                 </ul>
+                <p className="mt-2 text-[0.7rem] text-muted">
+                  {currency === 'minutes'
+                    ? 'Working minutes — how long each region was under work.'
+                    : 'Scaled volume — load × reps, with unloaded work priced against your bodyweight. A relative index, not kilograms.'}
+                </p>
               </div>
             </section>
           </Item>

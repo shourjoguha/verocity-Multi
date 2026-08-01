@@ -62,6 +62,15 @@ export interface AspectMetricOptions {
   windowDays?: number;
   /** Max hr_max observed over a history wider than this window. */
   hrMaxRef?: number;
+  /**
+   * Estimated hr_max (220 − age) for an owner who has never logged one. Sits
+   * BELOW `observedHrMax` in the chain on purpose: a rate the user actually hit
+   * beats a population formula, and passing this as `hrMaxRef` would silently
+   * invert that.
+   */
+  hrMaxFallback?: number;
+  /** Kg-equivalent of one unweighted rep — `unweightedRepKg(stats)`. */
+  unweightedKg?: number;
   overrides?: OverrideMap;
 }
 
@@ -150,6 +159,8 @@ export function buildSnapshots(
   opts: {
     windowDays?: number;
     hrMaxRef?: number;
+    hrMaxFallback?: number;
+    unweightedKg?: number;
     overrides?: OverrideMap;
     seed?: AspectMetrics[];
   } = {},
@@ -164,6 +175,8 @@ export function buildSnapshots(
       end,
       windowDays,
       hrMaxRef: opts.hrMaxRef,
+      hrMaxFallback: opts.hrMaxFallback,
+      unweightedKg: opts.unweightedKg,
       overrides: opts.overrides,
     });
     if (Object.keys(metrics).length === 0) continue;
@@ -242,12 +255,15 @@ export function computeAspectMetrics(
   // is kept, moved from being the metric to setting the intensity reference.
   // Power weights toward low-rep sets, or 20 sloppy box jumps would outrank 6
   // sharp ones.
-  const volume = summarizeTrainingVolume(done, overrides, bestE1rmByMovement(done));
+  const volume = summarizeTrainingVolume(done, overrides, bestE1rmByMovement(done), {
+    unweightedKg: opts.unweightedKg,
+  });
   out.strength = volume.modalityVolume.resistance / weeks;
   out.power = volume.modalityVolume.plyometric / weeks;
 
   // Endurance — three things that all mean "conditioning", in one number.
-  const hrMaxRef = opts.hrMaxRef ?? observedHrMax(done) ?? HR.maxFallback;
+  const hrMaxRef =
+    opts.hrMaxRef ?? observedHrMax(done) ?? opts.hrMaxFallback ?? HR.maxFallback;
   let aerobic = 0;
   let spread = 0;
   for (const log of done) {

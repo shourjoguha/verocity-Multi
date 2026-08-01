@@ -363,3 +363,99 @@ describe('regionIntensities', () => {
     expect(Object.values(i).every((v) => v === 0)).toBe(true);
   });
 });
+
+describe('bodyweight pricing', () => {
+  it('leaves weighted work untouched — only unloaded reps are repriced', () => {
+    const loaded = set({ weight: 100, reps: 5 });
+    expect(setVolume(loaded, 80)).toBe(setVolume(loaded));
+  });
+
+  it('prices unloaded reps at whatever the caller passes', () => {
+    expect(setVolume(set({ reps: 10 }), 52)).toBeCloseTo(520, 5);
+  });
+
+  it('scales an unloaded set with the lifter, not with a constant', () => {
+    const pushups = set({ reps: 20 });
+    expect(setVolume(pushups, 71.5)).toBeCloseTo(setVolume(pushups, 35.75) * 2, 5);
+  });
+
+  it('carries the price through summarizeTrainingVolume', () => {
+    const jumps = log([{ key: 'primary', items: [item('Box Jump', 'reps', [set({ reps: 5 })])] }]);
+    const flat = summarizeTrainingVolume([jumps]).modalityVolume.plyometric;
+    const heavy = summarizeTrainingVolume([jumps], {}, new Map(), { unweightedKg: 80 })
+      .modalityVolume.plyometric;
+    expect(heavy).toBeCloseTo(flat * (80 / VOLUME.unweightedRepKg), 5);
+  });
+
+  it('carries the price through summarizeBodyLoad to the regions', () => {
+    const jumps = log([{ key: 'primary', items: [item('Box Jump', 'reps', [set({ reps: 5 })])] }]);
+    const flat = summarizeBodyLoad([jumps]).regionVolume.quads;
+    const heavy = summarizeBodyLoad([jumps], {}, { unweightedKg: 80 }).regionVolume.quads;
+    expect(flat).toBeGreaterThan(0);
+    expect(heavy).toBeCloseTo(flat * (80 / VOLUME.unweightedRepKg), 5);
+  });
+
+  it('does not move minutes — the two currencies are independent', () => {
+    const jumps = log([{ key: 'primary', items: [item('Box Jump', 'reps', [set({ reps: 5 })])] }]);
+    expect(summarizeBodyLoad([jumps], {}, { unweightedKg: 80 }).regionMinutes.quads).toBeCloseTo(
+      summarizeBodyLoad([jumps]).regionMinutes.quads,
+      5,
+    );
+  });
+});
+
+describe('regionVolume', () => {
+  const mixed = log([
+    {
+      key: 'primary',
+      items: [item('Back Squat', 'weight', [set({ weight: 100, reps: 5 })])],
+    },
+    {
+      key: 'conditioning',
+      items: [item('Ski-Erg Intervals', 'time', [set({ time: 300 })])],
+    },
+    { key: 'accessory', items: [item('Wtd', 'reps', [set({ reps: 8, weight: 10 })])] },
+  ]);
+
+  it('distributes on the same profile weights as minutes', () => {
+    const s = summarizeBodyLoad([mixed]);
+    const wQuads = classifyMovement('Back Squat').profile.regions.quads ?? 0;
+    // One set of 100kg × 5 with no notations and no RPE is a flat 500.
+    expect(s.regionVolume.quads).toBeCloseTo(500 * wQuads, 3);
+  });
+
+  it('is non-zero for the erg work that reads as zero tonnage', () => {
+    // This is the whole reason volume can be a body-map currency at all:
+    // resistanceTonnage cannot see a Ski-Erg, and regionVolume can.
+    const s = summarizeBodyLoad([mixed]);
+    expect(s.resistanceTonnage.back).toBe(0);
+    expect(s.regionVolume.back).toBeGreaterThan(0);
+  });
+
+  it('excludes unmapped work from every region, exactly as minutes does', () => {
+    const s = summarizeBodyLoad([mixed]);
+    expect(s.unmapped.map((u) => u.name)).toEqual(['Wtd']);
+    // Region weights sum to 1 per movement, so classified volume lands in full:
+    // squat 100×5 = 500, plus the Ski-Erg's 300s at LOAD.repSeconds priced
+    // through the unweighted constant. The unmapped 10×8 lands nowhere.
+    const skiErg = (300 / LOAD.repSeconds) * VOLUME.unweightedRepKg;
+    const total = Object.values(s.regionVolume).reduce((a, b) => a + b, 0);
+    expect(total).toBeCloseTo(500 + skiErg, 3);
+  });
+
+  it('is all zeroes with no work rather than NaN', () => {
+    const s = summarizeBodyLoad([]);
+    expect(Object.values(s.regionVolume).every((v) => v === 0)).toBe(true);
+    const i = regionIntensities(s, 'volume');
+    expect(Object.values(i).every((v) => v === 0)).toBe(true);
+  });
+
+  it('normalises the heat map against the busiest region in the chosen currency', () => {
+    const s = summarizeBodyLoad([mixed]);
+    const byVolume = regionIntensities(s, 'volume');
+    expect(Math.max(...Object.values(byVolume))).toBe(1);
+    // The two currencies can disagree about which region leads — that is the
+    // point of offering both. Assert only that each is self-consistent.
+    expect(Math.max(...Object.values(regionIntensities(s, 'minutes')))).toBe(1);
+  });
+});

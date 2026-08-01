@@ -112,6 +112,32 @@ const workoutLog = {
   created_at: new Date().toISOString(),
 };
 
+// A COMPLETED log, for the same reason the active plan below is load-bearing.
+// summarizeBodyLoad counts `done` logs only, so with `workoutLog` alone (which
+// is in_progress, because /app/log needs a live session) /app/body rendered
+// "No completed sessions" and the audit measured an empty state — the exact
+// failure docs/LESSONS.md records as "audit:mobile is green on a surface it
+// never rendered". Every set here is completed so the region list, the currency
+// toggle and the heat map are all on screen when the audit runs.
+const doneLog = {
+  ...workoutLog,
+  id: '22222222-2222-2222-2222-222222222222',
+  status: 'done',
+  ended_at: new Date().toISOString(),
+  data: {
+    sections: logDoc.sections.map((s) => ({
+      ...s,
+      groups: s.groups.map((g) => ({
+        ...g,
+        items: g.items.map((it) => ({
+          ...it,
+          sets: it.sets.map((st) => ({ ...st, actual: { ...st.actual, completed: true } })),
+        })),
+      })),
+    })),
+  },
+};
+
 // An ACTIVE PLAN is load-bearing for the same reason m3 below is owned: the
 // fixture used to return [] for plans, so every plan-dependent surface rendered
 // its empty state and was never measured — Home's plan unit and day accordion,
@@ -185,9 +211,13 @@ const movements = [
 
 function fixtureFor(url) {
   const path = new URL(url).pathname;
-  if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog];
+  if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog, doneLog];
   if (path.includes('/movements')) return movements;
   if (path.includes('/profiles')) return url.includes('id=eq.') ? null : [];
+  // getUserStats() is .maybeSingle() with no filter, so it must resolve to an
+  // OBJECT or null. null is the interesting case: it is what a user who has
+  // never opened Settings sees, and what the anon showcase client always sees.
+  if (path.includes('/user_stats')) return null;
   // getActivePlan uses .maybeSingle(), so the is_active lookup must resolve to
   // an OBJECT; the unfiltered list query still wants an array.
   if (path.includes('/plans')) return url.includes('is_active=eq.true') ? activePlan : [activePlan];

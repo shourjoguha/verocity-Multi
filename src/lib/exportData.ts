@@ -1,12 +1,14 @@
 // Client-side data export (SPEC §10). JSON is the complete, lossless dump;
 // CSV is a flattened per-set view of the logs (supersets/circuits collapse to a
 // group label and item notes are dropped) for spreadsheet use.
-import type { LogDocument, Plan, Profile, Session, WorkoutLog } from '@/lib/types';
+import type { LogDocument, Plan, Profile, Session, UserStats, WorkoutLog } from '@/lib/types';
 
 export interface ExportBundle {
   exportedAt: string;
   version: 1;
   profile: Profile | null;
+  /** Owner stats. Private data, but this is the owner's own backup of it. */
+  stats: UserStats | null;
   plans: Plan[];
   logs: WorkoutLog[];
   sessions: Session[];
@@ -17,8 +19,17 @@ export function buildExportBundle(
   plans: Plan[],
   logs: WorkoutLog[],
   sessions: Session[] = [],
+  stats: UserStats | null = null,
 ): ExportBundle {
-  return { exportedAt: new Date().toISOString(), version: 1, profile, plans, logs, sessions };
+  return {
+    exportedAt: new Date().toISOString(),
+    version: 1,
+    profile,
+    stats,
+    plans,
+    logs,
+    sessions,
+  };
 }
 
 export function bundleToJson(bundle: ExportBundle): string {

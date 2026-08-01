@@ -32,7 +32,8 @@ layout. If the task needs a UI change, stop and hand off.
 
 - One new file per change: `NNNN_snake_case_description.sql`, 4-digit
   sequential (not timestamps). Current head is
-  `supabase/migrations/0016_library_subroutines.sql`.
+  `supabase/migrations/0021_aspect_metrics_v3.sql`. (This line has gone stale
+  before — check `ls supabase/migrations` rather than trusting it.)
 - **Migrations are NOT idempotent. Never edit one that has been applied.**
   A correction is a new migration.
 - Apply through the Supabase MCP `apply_migration` tool, then **run the
