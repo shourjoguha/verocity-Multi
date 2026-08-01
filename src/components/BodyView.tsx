@@ -307,7 +307,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                 <p className="mt-2 text-[0.7rem] text-muted">
                   {currency === 'minutes'
                     ? 'Working minutes — how long each region was under work.'
-                    : 'Scaled volume — load × reps, with unloaded work priced against your bodyweight. A relative index, not kilograms.'}
+                    : 'Scaled volume — load × reps × range of motion, with unloaded work priced against your bodyweight. A relative index, not kilograms.'}
                 </p>
               </div>
             </section>

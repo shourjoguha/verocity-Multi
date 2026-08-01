@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   regionIntensities,
+  romFactor,
   setMinutes,
   setVolume,
   summarizeBodyLoad,
   summarizeTrainingVolume,
 } from '@/lib/bodyLoad';
 import { classifyMovement } from '@/lib/movementTaxonomy';
-import { LOAD, RPE, VOLUME, type SectionKey } from '@/app.config';
+import { LOAD, ROM, RPE, VOLUME, type SectionKey } from '@/app.config';
 import type { LogItem, LogSet, WorkoutLog } from '@/lib/types';
 
 function set(actual: Partial<LogSet['actual']>): LogSet {
@@ -419,9 +420,12 @@ describe('regionVolume', () => {
 
   it('distributes on the same profile weights as minutes', () => {
     const s = summarizeBodyLoad([mixed]);
-    const wQuads = classifyMovement('Back Squat').profile.regions.quads ?? 0;
-    // One set of 100kg × 5 with no notations and no RPE is a flat 500.
-    expect(s.regionVolume.quads).toBeCloseTo(500 * wQuads, 3);
+    const squat = classifyMovement('Back Squat').profile;
+    const wQuads = squat.regions.quads ?? 0;
+    // One set of 100kg × 5 with no notations and no RPE is 500, scaled by the
+    // squat's ROM factor. Read both off the taxonomy rather than restating
+    // them: this test is about the distribution mechanics, not the estimates.
+    expect(s.regionVolume.quads).toBeCloseTo(500 * romFactor(squat) * wQuads, 3);
   });
 
   it('is non-zero for the erg work that reads as zero tonnage', () => {
@@ -436,11 +440,15 @@ describe('regionVolume', () => {
     const s = summarizeBodyLoad([mixed]);
     expect(s.unmapped.map((u) => u.name)).toEqual(['Wtd']);
     // Region weights sum to 1 per movement, so classified volume lands in full:
-    // squat 100×5 = 500, plus the Ski-Erg's 300s at LOAD.repSeconds priced
-    // through the unweighted constant. The unmapped 10×8 lands nowhere.
+    // squat 100×5 = 500 at its ROM factor, plus the Ski-Erg's 300s at
+    // LOAD.repSeconds priced through the unweighted constant — the erg carries
+    // no ROM estimate, so it scores the neutral 1.0. The unmapped 10×8 lands
+    // nowhere.
+    const squat = 500 * romFactor(classifyMovement('Back Squat').profile);
     const skiErg = (300 / LOAD.repSeconds) * VOLUME.unweightedRepKg;
+    expect(romFactor(classifyMovement('Ski-Erg Intervals').profile)).toBe(1);
     const total = Object.values(s.regionVolume).reduce((a, b) => a + b, 0);
-    expect(total).toBeCloseTo(500 + skiErg, 3);
+    expect(total).toBeCloseTo(squat + skiErg, 3);
   });
 
   it('is all zeroes with no work rather than NaN', () => {
@@ -457,5 +465,66 @@ describe('regionVolume', () => {
     // The two currencies can disagree about which region leads — that is the
     // point of offering both. Assert only that each is self-consistent.
     expect(Math.max(...Object.values(regionIntensities(s, 'minutes')))).toBe(1);
+  });
+});
+
+describe('romFactor', () => {
+  it('is 1.0 for a movement with no estimate — absence is never a penalty', () => {
+    expect(romFactor(undefined)).toBe(1);
+    expect(romFactor(null)).toBe(1);
+    expect(romFactor({})).toBe(1);
+  });
+
+  it('is 1.0 for an isometric, which displaces nothing', () => {
+    // The reason this metric is a RATIO and not kg·m. A Side Plank has load and
+    // duration and zero displacement; true work would price it at nothing,
+    // which is the same hole that stopped tonnage being a currency.
+    for (const name of ['Side Plank', 'Plank', 'Pallof Press', 'Dead bug']) {
+      expect(romFactor(classifyMovement(name).profile)).toBe(1);
+    }
+    expect(setVolume(set({ time: 60 }), VOLUME.unweightedRepKg, 1)).toBeGreaterThan(0);
+  });
+
+  it('ranks a squat above the reference and a calf raise well below it', () => {
+    const squat = romFactor(classifyMovement('Back Squat').profile);
+    const calf = romFactor(classifyMovement('Standing Calf Raise').profile);
+    const bench = romFactor(classifyMovement('Bench Press').profile);
+    expect(squat).toBeGreaterThan(1);
+    expect(calf).toBeLessThan(0.5);
+    expect(bench).toBeCloseTo(ROM.pushHorizontal / ROM.referenceM, 5);
+    expect(squat).toBeGreaterThan(calf * 3);
+  });
+
+  it('separates two movements that were identical on tonnage alone', () => {
+    // The whole point. Same load, same reps, different path length.
+    const squat = classifyMovement('Back Squat').profile;
+    const calf = classifyMovement('Standing Calf Raise').profile;
+    const s = set({ weight: 100, reps: 10 });
+    expect(setVolume(s)).toBe(setVolume(s)); // identical without ROM
+    expect(setVolume(s, VOLUME.unweightedRepKg, romFactor(squat))).toBeGreaterThan(
+      setVolume(s, VOLUME.unweightedRepKg, romFactor(calf)) * 3,
+    );
+  });
+
+  it('rejects a nonsense estimate rather than zeroing the movement', () => {
+    for (const rom of [0, -0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(romFactor({ rom })).toBe(1);
+    }
+  });
+
+  it('averages a compound rather than summing it', () => {
+    // "Hip Flow + KB Halos" is two atoms. Summing would make a compound score
+    // higher than either half for the same work.
+    const c = classifyMovement('Back Squat + Bench Press').profile;
+    const squat = classifyMovement('Back Squat').profile.rom!;
+    const bench = classifyMovement('Bench Press').profile.rom!;
+    expect(c.rom).toBeCloseTo((squat + bench) / 2, 5);
+    expect(c.rom!).toBeLessThan(squat + bench);
+  });
+
+  it('skips atoms with no estimate instead of counting them as zero', () => {
+    // One unestimated half of a compound must not drag the other half down.
+    const c = classifyMovement('Back Squat + Plank').profile;
+    expect(c.rom).toBeCloseTo(classifyMovement('Back Squat').profile.rom!, 5);
   });
 });

@@ -428,6 +428,19 @@ Playwright's addStyleTag is the cheap negative control, and it is the step that
 found this — run it before believing any motion check.
 → the accordion probe pattern, and `scripts/flicker-probe.mjs`
 
+### Running `prettier` rewrites the whole file, because there is no config
+`[observed — a 77-line diff became a whole-file rewrite]`
+This repo has **no `.prettierrc` and no prettier dependency**; the source is
+hand-formatted at single quotes and ~100 columns. `npx prettier --write` on a
+touched file therefore applies prettier's *defaults* — double quotes, 80 columns
+— and rewrites every line, burying the real change in hundreds of unrelated ones
+and silently breaking the single-quote rule. Recovered with `git checkout
+<file>` and re-applying the edits by script.
+**Do not run a formatter this project does not configure.** Match the
+surrounding style by hand; if a generated edit runs long, wrap only the lines
+you added.
+→ `package.json`
+
 ### A probe selector silently grabs the wrong nav
 `[measured in Chromium]`
 `App.astro` mounts **two** `<nav aria-label="Primary">` — the drawer and the
@@ -617,6 +630,42 @@ genuinely has no stats row, so `data == null` cannot distinguish them. The
 **When a derived value is persisted, gate the write on every input having
 settled — not on the inputs being non-null.**
 → `src/lib/useAspectProfile.ts`, `src/lib/useAuthedQuery.ts`
+
+### A "more physical" metric silently prices isometrics at zero
+`[argued — caught at design time, before it shipped]`
+Volume was `load × reps`, so a Calf Raise and a Back Squat scored identically at
+matched tonnage despite a quarter of the bar path. The obvious fix is real work
+— `load × displacement`, in kg·m, with displacement per movement and scaled by
+the lifter's height.
+
+It is wrong, and the reason generalises. **Work is zero wherever displacement is
+zero**, which is every isometric: a Side Plank has load and duration and moves
+nothing. That is the *same hole* that stopped tonnage being the currency in the
+first place — the fix reintroduces the bug it was brought in to fix, one axis
+over. Absolute kg·m is also only half-honest: it ignores the eccentric, path
+curvature and the limb's own mass, so the unit promises a precision the model
+cannot deliver.
+
+Shipped instead as a **dimensionless ROM factor** — estimated path length over a
+0.45m reference compound path. Same per-movement information, no unit to
+over-claim, and nothing can zero out. A movement with no estimate scores 1.0, so
+absence is neutral, matching the rule RPE already follows.
+
+Two consequences worth keeping:
+- **Height cancels.** A single global scalar divides out of a dimensionless
+  factor exactly as it divides out of any score measured against the lifter's
+  own history. Bodyweight genuinely matters (it *prices* unloaded work); height
+  does not. It stays stored and unused, which is the correct outcome, not a
+  deferral.
+- **The neutral cases are the design, not gaps.** Ergs and locomotion log
+  machine/ground travel, not a load path; carries, mobility, rotation and every
+  isometric have no meaningful per-rep displacement. 22 of the 63 names in the
+  production vocabulary sit at 1.0 on purpose.
+
+**Before converting an index into a real unit, ask what the unit reads as zero
+for.** If the answer is a kind of training the user actually does, keep the index.
+→ `src/app.config.ts` (`ROM`), `src/lib/bodyLoad.ts` (`romFactor`),
+`src/lib/movementTaxonomy.ts`, `supabase/migrations/0022_aspect_metrics_v4.sql`
 
 ## Superseded
 
