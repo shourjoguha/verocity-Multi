@@ -350,6 +350,50 @@ for the scoring itself.
 → `computeAspectMetrics` / `scoreAgainstBaseline` in `src/lib/aspects.ts`,
 `scripts/mobile-audit.mjs`
 
+### A metric changes meaning and every score built on it goes quietly wrong
+`[argued — not reproduced]`
+`aspect_snapshots.metrics` stores raw measurements and the radar scores each axis
+against the **median of the owner's own past values**. So redefining a metric
+poisons the baseline rather than resetting it: `strength` was a mean best e1RM in
+kilograms (~110) and became scaled training volume per week (thousands). A median
+over both describes neither, and **there is no symptom** — the polygon still
+draws, the vertices still fill, the numbers are simply wrong.
+
+A bare `delete from aspect_snapshots` fixes the day it ships and becomes a
+landmine: re-applied later against a database that has since rebuilt a good
+baseline, it wipes it. So the metrics carry a version
+(`ASPECT_METRICS_VERSION`, `aspect_snapshots.metrics_version`), the reset is
+`delete … where metrics_version < N`, and `getAspectSnapshots` filters on it —
+the migration cleans up, but **the read filter is the guard that matters**,
+because it holds even if a stale row survives by some other route.
+**Changing `computeAspectMetrics` means bumping the version and adding the
+two-line migration.** `0019` is the template and `AspectMetrics` in
+`src/lib/types.ts` says so at the definition site.
+→ `src/lib/types.ts`, `src/lib/queries.ts`, `supabase/migrations/0019_aspect_metrics_version.sql`
+
+### The logger records more than the metrics read
+`[measured — verified against the source]`
+Two things were being computed around data that was already sitting in the
+LogDocument:
+
+- **`/side` was never priced.** `toggleItemNotation` only pushes the string onto
+  `LogSet.notations[]`; nothing in the codebase doubles reps for it. Reps are
+  logged per side, so half of every unilateral set was invisible to every metric.
+- **Actual rest is never recorded.** `TIMERS.restPresets` is UI config and no
+  rest-timer result is persisted. `LogItem.restSeconds` is user-set *intent*
+  defaulting to 120, so an untouched item reads as un-dense whatever happened.
+  `LogGroup.restSeconds` is in the type and nothing writes it at all.
+  What *is* measured: `LogGroup.completedAt` (stamped in `logEdits.ts`) and
+  `workout_logs.total_seconds`, so working-minutes ÷ elapsed is a real density
+  read — which is why the endurance axis averages the clock and the prescription
+  instead of trusting either.
+
+**Before adding a field to capture something, check whether the logger already
+stores it.** Notations are also ITEM-level in practice — `toggleItemNotation`
+writes to every set in the item — so nothing should be built expecting per-set
+notation granularity.
+→ `src/lib/bodyLoad.ts` (`setVolume`), `src/lib/logEdits.ts`, `src/app.config.ts`
+
 ### audit:mobile is green on a surface it never rendered
 `[measured in Chromium]`
 `fixtureFor()` in `scripts/mobile-audit.mjs` returns `[]` for the plans table, so

@@ -11,12 +11,17 @@ import { Modal } from '@/components/ui/Modal';
 // answer to "typical how, from what?" no matter how much history you have — and
 // the honest answer includes a caveat (below) that the chart cannot show.
 const METRIC_NOTES: Record<string, string> = {
-  strength: 'Your best estimated 1-rep max per movement, weighted by how many sets you gave each one. Weighted per movement so dropping a lift stops contributing rather than reading as a collapse.',
-  endurance: 'Aerobic minutes per week, weighted by heart rate where a session recorded it — so a threshold session counts for more than an easy walk of the same length.',
-  power: 'Plyometric minutes per week: jumps, throws, slams and the Olympic lifts, as classified by the movement taxonomy.',
+  strength:
+    'Training volume from your resistance work — load × reps, added up. Each set is then weighted by how heavy it was relative to your own best for that movement, so a heavy low-rep block still registers instead of reading as a drop.',
+  endurance:
+    'Three things that all mean conditioning: aerobic minutes weighted by heart rate, plus strength work done on short rests, plus the gap between your average and peak heart rate scaled by how long the session ran. That gap is what separates intervals from steady state — it counts for more when you logged a conditioning block.',
+  power:
+    'Training volume from explosive work — jumps, throws, slams and the Olympic lifts, as classified by the movement taxonomy. Low-rep sets count for more, since 20 tired jumps are not the same training as 6 sharp ones.',
   mobility: 'Mobility minutes per week, scaled up slightly for work outside the sagittal plane.',
-  consistency: 'Distinct training days per week, multiplied by the share of planned sets you actually completed.',
-  recovery: 'Your sleep / energy / soreness check-ins, damped when your last 7 days of load run hot against your last 28.',
+  consistency:
+    'Distinct training days per week, multiplied by the share of planned sets you actually completed.',
+  recovery:
+    'Your sleep / energy / soreness check-ins, damped when your last 7 days of load run hot against your last 28.',
 };
 
 export function AspectExplainer({
@@ -98,6 +103,34 @@ export function AspectExplainer({
             lifetime progress. Use the comparison below the chart against an older block to see
             long-range change.
           </p>
+        </section>
+
+        <section>
+          <h3 className="mb-1.5 text-fg">What you log changes the number</h3>
+          <p>
+            Strength and power are measured as training volume, and volume is read from the
+            detail on each set — so notating a set is not just bookkeeping:
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            <li>
+              <strong className="text-fg">/side</strong> — counts the set twice. Reps are logged
+              per side, so without this marker half the work is invisible.
+            </li>
+            <li>
+              <strong className="text-fg">(p)</strong> — paused reps count for more, being more
+              time under tension than touch-and-go.
+            </li>
+            <li>
+              <strong className="text-fg">RPE</strong> — near-failure sets count for more at the
+              same load. Leaving it blank costs nothing; it scores as an average effort, so this
+              rewards hard training rather than diligent logging.
+            </li>
+            <li>
+              <strong className="text-fg">Rest, and session length</strong> — short rests push
+              work onto the endurance axis. Rest you set on a movement and the wall-clock time
+              the session took are both read, since actual rest between sets isn't recorded.
+            </li>
+          </ul>
         </section>
 
         <section>

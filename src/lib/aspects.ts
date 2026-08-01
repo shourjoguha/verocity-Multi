@@ -19,6 +19,7 @@
 
 import {
   ACWR,
+  ENDURANCE,
   ASPECT_GOOD_BASELINE,
   ASPECT_MIN_BASELINE,
   ASPECT_OVERRIDE_DAYS,
@@ -31,7 +32,7 @@ import {
   RECOVERY,
   type AspectKey,
 } from '@/app.config';
-import { summarizeBodyLoad } from '@/lib/bodyLoad';
+import { summarizeBodyLoad, summarizeTrainingVolume } from '@/lib/bodyLoad';
 import type { OverrideMap } from '@/lib/movementTaxonomy';
 import { bestE1rmByMovement } from '@/lib/prs';
 import { completedLogs, flattenSets } from '@/lib/stats';
@@ -182,6 +183,13 @@ function workingMinutes(logs: WorkoutLog[], overrides: OverrideMap): number {
   return summarizeBodyLoad(logs, overrides).totalMinutes;
 }
 
+/** Did this session log an actual conditioning block, not just a tag? */
+function hasConditioningBlock(log: WorkoutLog): boolean {
+  return (log.data?.sections ?? []).some(
+    (s) => s.key === 'conditioning' && s.groups.some((g) => g.items.length > 0),
+  );
+}
+
 function observedHrMax(logs: WorkoutLog[]): number | null {
   let max: number | null = null;
   for (const l of logs) {
@@ -214,52 +222,60 @@ export function computeAspectMetrics(
   const out: AspectMetrics = {};
   const load = summarizeBodyLoad(done, overrides);
 
-  // Strength — weighted per movement, NOT a global max. Taking the best e1RM
-  // across all movements meant swapping your main lift read as a strength
-  // collapse; weighting each movement by how many sets you actually gave it
-  // means a movement you dropped simply stops contributing.
-  const bests = bestE1rmByMovement(done);
-  const setsPerMovement = new Map<string, number>();
   let totalSets = 0;
   let completedSets = 0;
   for (const log of done) {
     for (const s of flattenSets(log)) {
       totalSets += 1;
-      if (!s.completed) continue;
-      completedSets += 1;
-      if (s.weight == null || s.reps == null) continue;
-      setsPerMovement.set(s.movement, (setsPerMovement.get(s.movement) ?? 0) + 1);
+      if (s.completed) completedSets += 1;
     }
   }
-  let weighted = 0;
-  let weight = 0;
-  for (const [movement, best] of bests) {
-    const n = setsPerMovement.get(movement) ?? 0;
-    if (n === 0) continue;
-    weighted += best * n;
-    weight += n;
-  }
-  if (weight > 0) out.strength = weighted / weight;
 
-  // Endurance — aerobic minutes weighted by how hard they were. hr_avg/hr_max
-  // have been on workout_logs since migration 0010 and went unused; counting
-  // sessions treated a Zone 2 walk and a threshold session as the same thing.
+  // Strength and power are both SCALED TRAINING VOLUME — how much work you did,
+  // not how heavy a single best rep was. `setVolume` reads the parts of a set
+  // that were previously thrown away: `/side` (reps are logged per side and
+  // nothing doubled them), `(p)` paused reps, and RPE.
+  //
+  // Strength additionally weights each set by load relative to that movement's
+  // own best e1RM. Without that, pure tonnage makes a peaking block read as a
+  // strength *drop* — 5×10 @ 60kg outscores 5×3 @ 140kg — so the e1RM machinery
+  // is kept, moved from being the metric to setting the intensity reference.
+  // Power weights toward low-rep sets, or 20 sloppy box jumps would outrank 6
+  // sharp ones.
+  const volume = summarizeTrainingVolume(done, overrides, bestE1rmByMovement(done));
+  out.strength = volume.modalityVolume.resistance / weeks;
+  out.power = volume.modalityVolume.plyometric / weeks;
+
+  // Endurance — three things that all mean "conditioning", in one number.
   const hrMaxRef = opts.hrMaxRef ?? observedHrMax(done) ?? HR.maxFallback;
   let aerobic = 0;
+  let spread = 0;
   for (const log of done) {
+    // 1. Aerobic work, weighted by how hard it was.
     const minutes = summarizeBodyLoad([log], overrides).modalityMinutes.endurance;
-    if (minutes <= 0) continue;
-    const intensity =
-      log.hr_avg != null && hrMaxRef > 0
-        ? clamp01(log.hr_avg / hrMaxRef)
-        : HR.defaultIntensity;
-    aerobic += minutes * intensity;
-  }
-  out.endurance = aerobic / weeks;
+    if (minutes > 0) {
+      const intensity =
+        log.hr_avg != null && hrMaxRef > 0
+          ? clamp01(log.hr_avg / hrMaxRef)
+          : HR.defaultIntensity;
+      aerobic += minutes * intensity;
+    }
 
-  // Power — plyometric minutes. The taxonomy already resolves jump/hop/bound/
-  // throw/slam/clean/snatch/jerk to `plyometric`; this axis was manual-only.
-  out.power = load.modalityMinutes.plyometric / weeks;
+    // 2. Heart-rate spread. hr_max − hr_avg is the interval signature: it is the
+    // only thing separating a threshold session from steady state at the same
+    // average HR, and it was being discarded entirely. Scaled by session length
+    // so a wide spread across an hour outweighs the same spread across ten
+    // minutes, and boosted when a conditioning block was actually logged.
+    if (log.hr_avg != null && log.hr_max != null && hrMaxRef > 0) {
+      const ratio = clamp01((log.hr_max - log.hr_avg) / hrMaxRef);
+      const sessionMinutes = (log.total_seconds ?? 0) / 60;
+      const boost = hasConditioningBlock(log) ? ENDURANCE.conditioningBoost : 1;
+      spread += ratio * sessionMinutes * boost;
+    }
+  }
+  // 3. Dense strength work — high volume on short rests is conditioning.
+  const density = volume.resistanceMinutes * volume.density * ENDURANCE.densityWeight;
+  out.endurance = (aerobic + density + spread) / weeks;
 
   // Mobility — mobility minutes, rewarded for working outside the sagittal
   // plane. The scale factor sits in [1, 2] rather than multiplying by the share

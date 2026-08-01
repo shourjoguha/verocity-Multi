@@ -62,6 +62,9 @@ const ALLOW = [
   { id: 'completedMonthEnds', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'monthly snapshot anchors, replaced by weekly completedWeekEnds' },
   { id: 'public/sw.js', doc: 'docs/LESSONS.md', why: 'the Caching entry names the old path to explain why it moved' },
   { id: '/sw.test', doc: 'docs/LESSONS.md', why: 'names the route that must NOT exist — that is the lesson' },
+  // A NOTATIONS token (app.config.ts), not a route — the leading slash is what
+  // trips the route rule. The others ('(p)', '(t)', '+5%') do not look routish.
+  { id: '/side', why: 'the per-side set notation, not a page' },
   // Not this repo's code.
   { id: 'three.js', why: 'library name, not a local module' },
   { id: 'ANTHROPIC_API_KEY', why: 'env var, set in the Supabase dashboard' },

@@ -125,12 +125,26 @@ describe('windowEndingOn / daysBetween', () => {
 type SetSpec = {
   weight?: number;
   reps?: number;
+  rpe?: number;
   time?: number;
   distance?: number;
   completed?: boolean;
 };
-type ItemSpec = { movement: string; metric?: string; section?: string; sets: SetSpec[] };
-type LogOpts = { hr_avg?: number; hr_max?: number; vibe?: VibeCheck; status?: string };
+type ItemSpec = {
+  movement: string;
+  metric?: string;
+  section?: string;
+  notations?: string[];
+  restSeconds?: number;
+  sets: SetSpec[];
+};
+type LogOpts = {
+  hr_avg?: number;
+  hr_max?: number;
+  total_seconds?: number;
+  vibe?: VibeCheck;
+  status?: string;
+};
 
 let seq = 0;
 function log(date: string, items: ItemSpec[], opts: LogOpts = {}): WorkoutLog {
@@ -141,6 +155,7 @@ function log(date: string, items: ItemSpec[], opts: LogOpts = {}): WorkoutLog {
     status: opts.status ?? 'done',
     hr_avg: opts.hr_avg ?? null,
     hr_max: opts.hr_max ?? null,
+    total_seconds: opts.total_seconds ?? null,
     data: {
       sections: items.map((it, i) => ({
         key: it.section ?? 'primary',
@@ -153,12 +168,14 @@ function log(date: string, items: ItemSpec[], opts: LogOpts = {}): WorkoutLog {
                 id: `i${i}`,
                 movement: it.movement,
                 primaryMetric: it.metric ?? 'weight',
+                restSeconds: it.restSeconds,
                 sets: it.sets.map((s) => ({
                   planned: null,
-                  notations: [],
+                  notations: it.notations ?? [],
                   actual: {
                     weight: s.weight,
                     reps: s.reps,
+                    rpe: s.rpe,
                     time: s.time,
                     distance: s.distance,
                     completed: s.completed ?? true,
@@ -214,6 +231,75 @@ describe('computeAspectMetrics', () => {
       ]),
     ]);
     expect(swapped.strength!).toBeGreaterThan(allSquat.strength! * 0.9);
+  });
+
+  it('strength counts /side work that used to be invisible', () => {
+    // Reps are logged per side and nothing in the app doubled them, so this was
+    // real training the metric silently threw away.
+    const oneSide = metrics([log('2026-07-20', [{ movement: 'Bulgarian Split Squat', sets: squatSets(4, 60) }])]);
+    const perSide = metrics([
+      log('2026-07-20', [
+        { movement: 'Bulgarian Split Squat', notations: ['/side'], sets: squatSets(4, 60) },
+      ]),
+    ]);
+    expect(perSide.strength!).toBeCloseTo(oneSide.strength! * 2, 5);
+  });
+
+  it('strength rises for paused reps and with RPE', () => {
+    const plain = metrics([log('2026-07-20', [{ movement: 'Back Squat', sets: squatSets(4) }])]);
+    const paused = metrics([
+      log('2026-07-20', [{ movement: 'Back Squat', notations: ['(p)'], sets: squatSets(4) }]),
+    ]);
+    const hard = metrics([
+      log('2026-07-20', [
+        { movement: 'Back Squat', sets: squatSets(4).map((s) => ({ ...s, rpe: 10 })) },
+      ]),
+    ]);
+    expect(paused.strength!).toBeGreaterThan(plain.strength!);
+    expect(hard.strength!).toBeGreaterThan(plain.strength!);
+  });
+
+  it('strength rises with volume, not just load', () => {
+    const few = metrics([log('2026-07-20', [{ movement: 'Back Squat', sets: squatSets(3) }])]);
+    const many = metrics([log('2026-07-20', [{ movement: 'Back Squat', sets: squatSets(9) }])]);
+    expect(many.strength!).toBeGreaterThan(few.strength!);
+  });
+
+  it('endurance counts dense strength work as conditioning', () => {
+    // Identical work; only the wall-clock time it took differs. Short rests are
+    // conditioning by any reasonable reading.
+    const session = (total_seconds: number) =>
+      log('2026-07-20', [{ movement: 'Back Squat', sets: squatSets(8) }], { total_seconds });
+    expect(metrics([session(900)]).endurance!).toBeGreaterThan(
+      metrics([session(5400)]).endurance!,
+    );
+  });
+
+  it('endurance rewards a wide heart-rate spread', () => {
+    // Same average HR, same duration: only the spread separates an interval
+    // session from steady state, and it was being discarded entirely.
+    const session = (hr_max: number) =>
+      log('2026-07-20', [{ movement: 'Rower Interval', metric: 'time', sets: [{ time: 1800 }] }], {
+        hr_avg: 140,
+        hr_max,
+        total_seconds: 1800,
+      });
+    expect(metrics([session(185)]).endurance!).toBeGreaterThan(metrics([session(150)]).endurance!);
+  });
+
+  it('endurance weights the spread up when a conditioning block was logged', () => {
+    const sets = [{ time: 1800 }];
+    const withBlock = log(
+      '2026-07-20',
+      [{ movement: 'Rower Interval', metric: 'time', section: 'conditioning', sets }],
+      { hr_avg: 140, hr_max: 185, total_seconds: 1800 },
+    );
+    const withoutBlock = log(
+      '2026-07-20',
+      [{ movement: 'Rower Interval', metric: 'time', section: 'primary', sets }],
+      { hr_avg: 140, hr_max: 185, total_seconds: 1800 },
+    );
+    expect(metrics([withBlock]).endurance!).toBeGreaterThan(metrics([withoutBlock]).endurance!);
   });
 
   it('endurance weights aerobic minutes by heart rate', () => {
