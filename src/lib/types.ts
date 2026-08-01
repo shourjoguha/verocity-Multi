@@ -159,12 +159,22 @@ export interface FitnessAssessment {
  * Raw, unit-ful measurements for one window. Units matter here because these
  * land in JSONB and a bare number is unreadable six months later:
  *
- * - `strength`     kg — set-count-weighted mean of per-movement best e1RM
- * - `endurance`    HR-weighted aerobic minutes per week
- * - `power`        plyometric working-minutes per week
+ * - `strength`     scaled resistance volume per week, weighted by load relative
+ *                  to each movement's own best e1RM
+ * - `endurance`    per week: HR-weighted aerobic minutes + dense strength work
+ *                  + heart-rate spread × session length
+ * - `power`        scaled plyometric volume per week, biased toward low-rep sets
  * - `mobility`     mobility working-minutes per week, scaled by plane variety
  * - `consistency`  training days per week × set-completion adherence
  * - `recovery`     0–1 index — vibe damped by acute:chronic workload ratio
+ *
+ * "Scaled volume" is `setVolume` in lib/bodyLoad.ts: load × rep-equivalents,
+ * adjusted for `/side`, `(p)` paused reps and RPE.
+ *
+ * CHANGING ANY OF THESE INVALIDATES STORED SNAPSHOTS. The baseline is a median
+ * over past values, so mixing two definitions of `strength` yields a median that
+ * describes neither — silently, with nothing on screen to show it. A definition
+ * change must come with a migration that clears the table (see 0019).
  */
 export type AspectMetrics = Partial<Record<AspectKey, number>>;
 
@@ -173,6 +183,8 @@ export interface AspectSnapshot {
   owner_user_id: string;
   period_end: string;
   window_days: number;
+  /** Which definition of computeAspectMetrics produced `metrics`. */
+  metrics_version: number;
   metrics: AspectMetrics;
   scores: AspectScores;
   computed_at: string;

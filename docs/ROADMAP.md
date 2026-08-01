@@ -117,6 +117,15 @@ also fixed a latent trap that affected every sheet: `Modal` now portals to
 `<body>`, because a filling CSS animation on `transform` made `.stagger-item` a
 containing block and broke `position: fixed` inside it.
 
+A third pass changed what three axes measure. Strength and power became **scaled
+training volume** (`setVolume`), reading the parts of a set the app had been
+discarding — `/side`, which nothing had ever doubled, `(p)` paused reps, and RPE
+— with strength weighted by load relative to each movement's own best e1RM and
+power biased toward low-rep sets. Endurance became a blend of aerobic minutes,
+dense strength work and heart-rate spread. Metrics now carry
+`ASPECT_METRICS_VERSION`, because redefining one poisons the stored baseline
+silently.
+
 ### Phase 7 — Guidance upkeep  `[ongoing]`
 `npm run audit:docs` fails if the docs name code that no longer exists. It was
 added after a five-PR bug hunt that these documents actively misdirected; see

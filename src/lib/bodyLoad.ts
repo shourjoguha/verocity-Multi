@@ -15,10 +15,13 @@
 // `FlatSet` would touch a type stats.test.ts asserts on.
 
 import {
+  ENDURANCE,
   LOAD,
   MODALITY_KEYS,
   MUSCLE_REGION_KEYS,
   PLANE_KEYS,
+  RPE,
+  VOLUME,
   type ModalityKey,
   type MovementProfile,
   type PlaneKey,
@@ -65,6 +68,168 @@ export function setMinutes(set: LogSet): number {
   if (a.reps != null) return (a.reps * LOAD.repSeconds) / 60;
   if (a.distance != null) return a.distance / LOAD.metersPerMinute;
   return LOAD.fallbackSetMinutes;
+}
+
+const clamp = (n: number, [lo, hi]: [number, number]) => Math.min(hi, Math.max(lo, n));
+const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+// How many reps' worth of work a set represents. Time and distance convert
+// through the same LOAD constants `setMinutes` uses, so every modality lands in
+// one currency rather than needing a per-modality fudge factor.
+function repEquivalents(a: LogSet['actual']): number {
+  if (a.reps != null) return a.reps;
+  if (a.time != null) return a.time / LOAD.repSeconds;
+  if (a.distance != null) return (a.distance / LOAD.metersPerMinute) * 60 / LOAD.repSeconds;
+  return 1;
+}
+
+/**
+ * Scaled training volume for one set — the currency of the strength and power
+ * axes. Only completed sets count, deliberately unlike `sessionVolume`, which
+ * counts every set: a planned-but-not-performed set is not work done.
+ *
+ * The three scalars are the point. All of them are already in the LogDocument
+ * and none of them were being read:
+ *
+ * - `/side`  reps are logged PER SIDE and nothing in the app doubles them, so
+ *            the second side has always been uncounted work.
+ * - `(p)`    a paused rep is more time under tension than a touch-and-go one.
+ * - `rpe`    near-failure work is a bigger stimulus at equal tonnage. Absent
+ *            RPE scores 1.0 — never a penalty, or the metric would reward the
+ *            habit of logging RPE rather than the training itself.
+ *
+ * Note both notations are ITEM-level in practice: `toggleItemNotation` writes
+ * them to every set in the item. Reading them per set is still correct, just
+ * finer than the UI can currently express.
+ */
+export function setVolume(set: LogSet): number {
+  const a = set.actual;
+  if (!a.completed) return 0;
+
+  const load = a.weight ?? VOLUME.unweightedRepKg;
+  const reps = repEquivalents(a);
+  const side = set.notations.includes('/side') ? 2 : 1;
+  const pause = set.notations.includes('(p)') ? VOLUME.pauseFactor : 1;
+  const rpe =
+    a.rpe != null
+      ? clamp(1 + (a.rpe - RPE.default) * VOLUME.rpePerPoint, VOLUME.rpeFactorRange)
+      : 1;
+
+  return load * reps * side * pause * rpe;
+}
+
+/** How heavy a set was relative to that movement's own best, as a multiplier. */
+function intensityFactor(a: LogSet['actual'], best: number | undefined): number {
+  if (a.weight == null || best == null || best <= 0) return 1;
+  return clamp(a.weight / best / VOLUME.refIntensity, VOLUME.intensityFactorRange);
+}
+
+/** Low-rep sets are the explosive ones; junk-rep sets are not. */
+function explosiveFactor(a: LogSet['actual']): number {
+  const reps = repEquivalents(a);
+  if (reps <= 0) return 1;
+  return clamp(VOLUME.explosiveRefReps / reps, VOLUME.explosiveFactorRange);
+}
+
+export interface TrainingVolumeSummary {
+  /** Scaled volume per modality, with the axis weighting already applied. */
+  modalityVolume: Record<ModalityKey, number>;
+  /** Working minutes of resistance work, for the endurance density term. */
+  resistanceMinutes: number;
+  /** 0..1 — how much of this window's resistance work was on short rests. */
+  density: number;
+}
+
+/**
+ * One walk over the logs producing the volume figures the radar's strength and
+ * power axes need. Separate from `summarizeBodyLoad` because it applies
+ * axis-specific weighting (intensity, explosiveness) that the body map must not
+ * inherit — but it lives here so everything that classifies movements while
+ * walking a LogDocument stays in one file.
+ *
+ * `bests` maps movement name → best e1RM, from `bestE1rmByMovement`.
+ */
+export function summarizeTrainingVolume(
+  logs: WorkoutLog[],
+  overrides: OverrideMap = {},
+  bests: Map<string, number> = new Map(),
+): TrainingVolumeSummary {
+  const modalityVolume = zeroed(MODALITY_KEYS);
+  let resistanceMinutes = 0;
+  let denseMinutes = 0;
+  let restedMinutes = 0;
+
+  for (const log of logs) {
+    if (log.status !== 'done') continue;
+
+    // Measured density: working minutes against wall-clock elapsed. Actual rest
+    // is never recorded anywhere, so this and the prescribed `restSeconds` below
+    // are the only two reads available. NOTE total_seconds is capped at 7200 by
+    // migration 0015, so a very long session reads as denser than it was.
+    const elapsedMinutes = (log.total_seconds ?? 0) / 60;
+    let logWorkingMinutes = 0;
+    let logResistanceMinutes = 0;
+    let logDenseMinutes = 0;
+
+    for (const section of log.data?.sections ?? []) {
+      for (const group of section.groups ?? []) {
+        for (const item of group.items ?? []) {
+          if (isSubroutine(item)) continue;
+
+          const minutes = item.sets.reduce((acc, s) => acc + setMinutes(s), 0);
+          if (minutes <= 0) continue;
+          logWorkingMinutes += minutes;
+
+          const c = classifyMovement(item.movement, { overrides });
+          if (Object.keys(c.profile.regions).length === 0) continue;
+
+          const modality =
+            c.profile.modality ?? inferModality(item.sets, item.primaryMetric, section.key);
+          if (!modality) continue;
+
+          const best = bests.get(item.movement);
+          for (const s of item.sets) {
+            const base = setVolume(s);
+            if (base <= 0) continue;
+            const weighted =
+              modality === 'resistance'
+                ? base * intensityFactor(s.actual, best)
+                : modality === 'plyometric'
+                  ? base * explosiveFactor(s.actual)
+                  : base;
+            modalityVolume[modality] += weighted;
+          }
+
+          if (modality === 'resistance') {
+            logResistanceMinutes += minutes;
+            // Prescribed rest: user-set intent, defaulting to 120, so an
+            // untouched item reads as un-dense whatever actually happened.
+            if (item.restSeconds != null && item.restSeconds < ENDURANCE.denseRestSeconds) {
+              logDenseMinutes += minutes;
+            }
+          }
+        }
+      }
+    }
+
+    if (logResistanceMinutes <= 0) continue;
+    resistanceMinutes += logResistanceMinutes;
+
+    const clockDensity =
+      elapsedMinutes > 0 ? Math.min(1, logWorkingMinutes / elapsedMinutes) : null;
+    const restDensity = logResistanceMinutes > 0 ? logDenseMinutes / logResistanceMinutes : null;
+    // Neither read is complete on its own, so average them where both exist.
+    const signals = [clockDensity, restDensity].filter((n): n is number => n != null);
+    const sessionDensity = signals.length > 0 ? mean(signals) : 0;
+    denseMinutes += logResistanceMinutes * sessionDensity;
+    restedMinutes += logResistanceMinutes;
+  }
+
+  return {
+    modalityVolume,
+    resistanceMinutes,
+    density: restedMinutes > 0 ? denseMinutes / restedMinutes : 0,
+  };
 }
 
 // Modality fallback, used ONLY when the taxonomy is silent on a name. Static

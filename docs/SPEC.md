@@ -207,9 +207,12 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   `ASPECT_OVERRIDE_DAYS` — past that the derivation takes back over rather than
   letting a months-old check-in read as current.
 - **`aspect_snapshots`** — derived radar history: `owner_user_id, period_end,
-  window_days, metrics jsonb, scores jsonb, computed_at, created_at`, unique on
-  `(owner_user_id, period_end, window_days)`. One row per **completed week** per
-  measurement window. `metrics` is the load-bearing column — raw, unit-ful
+  window_days, metrics_version, metrics jsonb, scores jsonb, computed_at,
+  created_at`, unique on `(owner_user_id, period_end, window_days)`. One row per
+  **completed week** per measurement window. `metrics_version` records which
+  definition of `computeAspectMetrics` produced the row; reads filter on
+  `ASPECT_METRICS_VERSION` so a stale definition can never enter a baseline, and
+  redefining a metric means bumping it plus a migration in the shape of `0019`. `metrics` is the load-bearing column — raw, unit-ful
   measurements — because the radar scores each axis **relative to the owner's own
   past values** for that metric, so the middle of the scale means "typical for
   you" and nothing else. `scores` is a presentation of `metrics` against that
@@ -362,9 +365,14 @@ Function, which validates the token and performs scoped read-only queries.
 - **Stats** — summary cards (sessions, time, adherence), weekly table
   (count/time/volume), consistency heatmap (7×8 weekday×week), RPE fingerprint by
   movement family, top-movement e1RM sparklines (with family roll-up), and the
-  **fitness profile radar** — six axes (strength, endurance, power, mobility,
-  consistency, recovery), all derived from logged data and each scored against
-  the owner's own stored history. Two toggles: measurement window
+  **fitness profile radar** — six axes, all derived from logged data and each
+  scored against the owner's own stored history. **Strength** and **power** are
+  scaled training volume (`setVolume`: load × rep-equivalents, adjusted for
+  `/side`, `(p)` paused reps and RPE), strength weighted by load relative to each
+  movement's own best e1RM and power biased toward low-rep sets.
+  **Endurance** blends HR-weighted aerobic minutes, dense strength work (short
+  rests read as conditioning) and the `hr_max − hr_avg` spread scaled by session
+  length, boosted when a conditioning block was logged. Two toggles: measurement window
   (`ASPECT_WINDOWS`, the responsiveness control) and what the dashed comparison
   series is (previous block, or the oldest week held). Axes on a thin baseline
   render hollow; axes with no baseline show their raw measurement and no polygon

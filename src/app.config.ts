@@ -194,6 +194,57 @@ export const LOAD = {
   fallbackSetMinutes: 0.5,
 } as const;
 
+// Scaled training volume (`setVolume` in lib/bodyLoad.ts), the currency of the
+// radar's strength and power axes. Volume is `load × repEquivalents` adjusted by
+// what the logger actually recorded about the set.
+//
+// Time and distance convert into rep-equivalents through LOAD.repSeconds and
+// LOAD.metersPerMinute — the same constants `setMinutes` uses — so a plank, a
+// carry and a set of squats stay commensurable the way they already do on the
+// body map.
+export const VOLUME = {
+  // Kg-equivalent for one unweighted rep (box jump, push-up, plank second).
+  // A UNIT CONVERSION, not a norm: it says nothing about any person, and because
+  // every axis is scored against the user's own history its absolute value
+  // cancels out. It only sets how weighted and unweighted work trade off.
+  // There is no bodyweight field on `profiles` to do this properly.
+  unweightedRepKg: 40,
+  // A paused rep is more time under tension than a touch-and-go one.
+  pauseFactor: 1.2,
+  // Per point of RPE above/below RPE.default. Near-failure work is a larger
+  // stimulus at equal tonnage. Sets with no logged RPE score 1.0 — absence must
+  // never be a penalty, or the axis rewards the habit of logging RPE rather
+  // than the training.
+  rpePerPoint: 0.05,
+  rpeFactorRange: [0.85, 1.2] as [number, number],
+  // Strength weights each set by load relative to that movement's own best e1RM.
+  // `refIntensity` is the fraction of 1RM that scores 1.0; without this, pure
+  // tonnage would make a peaking block read as a strength *drop* (5×10 @ 60kg
+  // beats 5×3 @ 140kg on volume alone).
+  refIntensity: 0.7,
+  intensityFactorRange: [0.6, 1.5] as [number, number],
+  // Power favours low-rep sets: real explosive work is 3–6 reps, and plain
+  // volume would let 20 sloppy box jumps outrank 6 sharp ones.
+  explosiveRefReps: 5,
+  explosiveFactorRange: [0.4, 1.5] as [number, number],
+} as const;
+
+// Endurance blends aerobic work, dense strength work and heart-rate spread
+// (lib/aspects.ts). Dense strength work is conditioning by any reasonable
+// reading, and hr_max − hr_avg is the interval signature that separates a
+// threshold session from steady state at the same average HR.
+export const ENDURANCE = {
+  // Rest below this reads as conditioning-style density.
+  denseRestSeconds: 90,
+  // How much a fully dense minute of resistance work counts against an aerobic
+  // minute. Raising this turns endurance into a strength proxy — the single
+  // most consequential constant here.
+  densityWeight: 0.6,
+  // Multiplier on the HR-spread term when the session logged a conditioning
+  // block, where a wide spread is most clearly interval work.
+  conditioningBoost: 1.5,
+} as const;
+
 // Mobile-PWA touch model tunables (SPEC §9 cross-cutting).
 export const TOUCH = {
   longPressMs: 450,
@@ -224,9 +275,9 @@ export const E1RM = { formula: 'brzycki' } as const;
 // prints verbatim on any axis it cannot yet score. An unlabelled 112 is
 // meaningless; "112 kg" is a real measurement the user can act on.
 export const FITNESS_ASPECTS = [
-  { key: 'strength', label: 'Strength', unit: 'kg' },
+  { key: 'strength', label: 'Strength', unit: 'load/wk' },
   { key: 'endurance', label: 'Endurance', unit: 'min/wk' },
-  { key: 'power', label: 'Power', unit: 'min/wk' },
+  { key: 'power', label: 'Power', unit: 'load/wk' },
   { key: 'mobility', label: 'Mobility', unit: 'min/wk' },
   { key: 'consistency', label: 'Consistency', unit: 'days/wk' },
   { key: 'recovery', label: 'Recovery', unit: 'index' },
@@ -293,6 +344,17 @@ export const ASPECT_GOOD_BASELINE = 26;
 // window end, the derived score takes back over rather than letting a months-old
 // self-rating masquerade as current.
 export const ASPECT_OVERRIDE_DAYS = 21;
+
+// Which definition of computeAspectMetrics is current. Stored on every snapshot
+// so a row written under an older definition can never enter a baseline: the
+// median of two different definitions of "strength" describes neither, and the
+// chart gives no sign that it happened.
+//
+// BUMP THIS whenever computeAspectMetrics changes what a metric means, and add a
+// migration deleting rows below the new value (0019 is the template).
+//   1 — e1RM-based strength, plyometric minutes for power, aerobic-only endurance
+//   2 — scaled training volume for strength/power, three-component endurance
+export const ASPECT_METRICS_VERSION = 2;
 
 // Softness of the logistic that maps a robust z-score onto ASPECT_SCALE: ±1.5
 // lands roughly ±2.2 points. The logistic is asymptotic, so scores approach 1

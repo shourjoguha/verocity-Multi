@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { clearQueryCache } from '@/lib/queryCache';
-import type { MetricKey } from '@/app.config';
+import { ASPECT_METRICS_VERSION, type MetricKey } from '@/app.config';
 import type {
   AspectScores,
   AspectSnapshot,
@@ -240,7 +240,15 @@ export async function createAssessment(scores: AspectScores): Promise<FitnessAss
 // ---- aspect_snapshots (derived radar history; owner-scoped by RLS, anon reads
 // only the showcase profile's rows) ----
 
-/** Snapshots in an inclusive ymd range, oldest first. */
+/**
+ * Snapshots in an inclusive ymd range, oldest first.
+ *
+ * Filtered to the current ASPECT_METRICS_VERSION. Migration 0019 clears stale
+ * rows, but this is the guard that matters: a row written under an older
+ * definition of a metric must never reach a baseline, because the median of two
+ * different definitions of "strength" describes neither and looks entirely
+ * normal on the chart.
+ */
 export async function getAspectSnapshots(
   from: string,
   to: string,
@@ -249,6 +257,7 @@ export async function getAspectSnapshots(
   const { data } = await client
     .from('aspect_snapshots')
     .select('*')
+    .eq('metrics_version', ASPECT_METRICS_VERSION)
     .gte('period_end', from)
     .lte('period_end', to)
     .order('period_end', { ascending: true });
@@ -267,7 +276,12 @@ export async function upsertAspectSnapshots(rows: AspectSnapshotInput[]): Promis
   } = await supabase.auth.getUser();
   if (!user) return false;
   const { error } = await supabase.from('aspect_snapshots').upsert(
-    rows.map((r) => ({ ...r, owner_user_id: user.id, computed_at: new Date().toISOString() })),
+    rows.map((r) => ({
+      ...r,
+      owner_user_id: user.id,
+      metrics_version: ASPECT_METRICS_VERSION,
+      computed_at: new Date().toISOString(),
+    })),
     { onConflict: 'owner_user_id,period_end,window_days' },
   );
   return !error;
