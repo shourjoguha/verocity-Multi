@@ -223,6 +223,23 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   absolute fallback, and the chart shows the raw measurement instead. Written by
   the browser on demand (owner-scoped, RLS is the boundary); there is no
   scheduler in this project.
+- **`user_stats`** *(new)* — owner anthropometrics, 1:1 with `profiles` on the
+  PK: `body_weight_kg, height_cm, birth_year, gender, body_type, injuries jsonb`.
+  Edited from the **You** group on `/app/settings` (`UserStatsPanel.tsx`).
+  **A separate table, not columns on `profiles`, for one reason:**
+  `profiles_select_showcase` grants `anon` a **whole-row** read of the showcase
+  profile and `getCurrentProfile` is `select('*')`, so a column added to
+  `profiles` is published the moment it exists. `user_stats` has **no anon
+  policy at all** — never add one.
+  Only two fields reach a metric: `body_weight_kg` prices unweighted work
+  (`VOLUME.bodyweightFraction`, replacing a flat 40kg that was identical for a
+  55kg and a 110kg lifter) and `birth_year` gives `220−age` as the HR ceiling —
+  ranked **below** an observed `hr_max`, never above it. Height, gender, body
+  type and injuries are stored and read by nothing; `Injury.region` is a
+  `RegionKey` so `/app/body` can use it later without a data migration.
+  One current row, **not a time series** — a six-month-old log is priced with
+  today's bodyweight, and a bodyweight history is the known next step.
+  Derivations are single-sourced in `src/lib/userStats.ts` and all accept `null`.
 - **`invites`** *(new)* — invite codes for signup gating: `code_hash, used_by,
   used_at, expires_at`.
 - **`shares`** *(new)* — read-only share tokens: `id, token_hash, owner_user_id,
@@ -243,9 +260,16 @@ in three cases wrong) answers so Stats output for existing logs is unchanged.
 - **Matching** in `src/lib/movementTaxonomy.ts`: normalise → exact table →
   rules (longest matched fragment wins) → `unknown`. Never falls back to a
   bucket; unresolvable names surface in the UI's unmapped list.
-- **Aggregation** in `src/lib/bodyLoad.ts`, in **working minutes** — `weight ×
-  reps` is zero for erg intervals, jumps and planks, so tonnage cannot be the
-  unit. Tonnage and hard sets remain as resistance-only secondary readouts.
+- **Aggregation** in `src/lib/bodyLoad.ts`, in **two currencies** the region
+  list toggles between. **Working minutes** is the default and the only unit
+  that survives for unloaded mobility work. **Volume** (`regionVolume`) is
+  `setVolume` distributed across the same `profile.regions` weights — load ×
+  rep-equivalents, with unloaded reps priced against the owner's bodyweight.
+  Raw **tonnage** (`weight × reps`) still cannot be a currency: it is zero for
+  erg intervals, jumps and planks, which is what `setVolume` exists to fix.
+  Tonnage and hard sets remain resistance-only secondary readouts.
+  `regionIntensities(summary, currency)` normalises per currency, so the heat
+  map cannot contradict the list beside it.
 - **Geometry** in `src/lib/bodyRegions.ts`, renderer-agnostic path data.
 - **Overrides** on `movements.taxonomy`, matched by normalised name.
 

@@ -23,6 +23,7 @@ import type {
   SessionFrame,
   Share,
   ShareScope,
+  UserStats,
   WorkoutLog,
 } from '@/lib/types';
 
@@ -33,6 +34,39 @@ import type {
 export async function getCurrentProfile(client: SupabaseClient = supabase): Promise<Profile | null> {
   const { data } = await client.from('profiles').select('*').maybeSingle();
   return (data as Profile) ?? null;
+}
+
+/**
+ * Owner anthropometrics. Returns null for the showcase/public client by design:
+ * `user_stats` has no anon RLS policy, so every consumer must degrade to the
+ * constants in app.config.ts rather than assume a row exists.
+ */
+export async function getUserStats(client: SupabaseClient = supabase): Promise<UserStats | null> {
+  const { data } = await client.from('user_stats').select('*').maybeSingle();
+  return (data as UserStats) ?? null;
+}
+
+export type UserStatsInput = Omit<UserStats, 'owner_user_id' | 'updated_at' | 'created_at'>;
+
+/**
+ * Upsert on the owner PK — there is exactly one stats row per profile, so this
+ * is both the create and the update path. The owner comes from the session,
+ * never from the caller.
+ *
+ * Clears the read-path cache: bodyweight reprices every unweighted set, so the
+ * body map and the radar are stale the moment this succeeds.
+ */
+export async function upsertUserStats(input: UserStatsInput): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { error } = await supabase.from('user_stats').upsert(
+    { ...input, owner_user_id: user.id, updated_at: new Date().toISOString() },
+    { onConflict: 'owner_user_id' },
+  );
+  if (!error) clearQueryCache();
+  return !error;
 }
 
 export async function getActivePlan(client: SupabaseClient = supabase): Promise<Plan | null> {

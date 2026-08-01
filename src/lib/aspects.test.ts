@@ -654,3 +654,57 @@ describe('applyAssessmentOverride', () => {
     expect(input.scores.strength).toBe(4);
   });
 });
+
+describe('owner stats feed the metrics', () => {
+  it('lets an observed hr_max outrank the age estimate', () => {
+    // Precedence is the whole point of hrMaxFallback existing separately from
+    // hrMaxRef. A rate the user actually hit beats 220−age; wiring the estimate
+    // in as hrMaxRef would silently invert that and quietly rescale endurance.
+    const aerobic = (hr_max: number) =>
+      log('2026-07-20', [{ movement: 'Rower Interval', metric: 'time', sets: [{ time: 1800 }] }], {
+        hr_avg: 150,
+        hr_max,
+      });
+    const withObserved = computeAspectMetrics([aerobic(200)], { end: END, hrMaxFallback: 150 });
+    const noObserved = computeAspectMetrics(
+      [
+        log('2026-07-20', [{ movement: 'Rower Interval', metric: 'time', sets: [{ time: 1800 }] }], {
+          hr_avg: 150,
+        }),
+      ],
+      { end: END, hrMaxFallback: 150 },
+    );
+    // Same hr_avg. With an observed 200 ceiling the session reads as easier
+    // than it does against the 150 estimate, so endurance must be lower.
+    expect(withObserved.endurance!).toBeLessThan(noObserved.endurance!);
+  });
+
+  it('falls back to the age estimate only when no hr_max was ever logged', () => {
+    const session = log(
+      '2026-07-20',
+      [{ movement: 'Rower Interval', metric: 'time', sets: [{ time: 1800 }] }],
+      { hr_avg: 150 },
+    );
+    const youngCeiling = computeAspectMetrics([session], { end: END, hrMaxFallback: 200 });
+    const olderCeiling = computeAspectMetrics([session], { end: END, hrMaxFallback: 160 });
+    // The same session is a harder effort against a lower ceiling.
+    expect(olderCeiling.endurance!).toBeGreaterThan(youngCeiling.endurance!);
+  });
+
+  it('prices bodyweight work through unweightedKg', () => {
+    const pushups = [
+      log('2026-07-20', [{ movement: 'Push-Up', metric: 'reps', sets: [{ reps: 20 }] }]),
+    ];
+    const light = computeAspectMetrics(pushups, { end: END, unweightedKg: 40 });
+    const heavy = computeAspectMetrics(pushups, { end: END, unweightedKg: 80 });
+    expect(heavy.strength!).toBeCloseTo(light.strength! * 2, 5);
+  });
+
+  it('leaves loaded work alone whatever the owner weighs', () => {
+    const squats = [log('2026-07-20', [{ movement: 'Back Squat', sets: squatSets(5) }])];
+    expect(computeAspectMetrics(squats, { end: END, unweightedKg: 80 }).strength).toBeCloseTo(
+      computeAspectMetrics(squats, { end: END }).strength!,
+      5,
+    );
+  });
+});

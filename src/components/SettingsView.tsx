@@ -1,12 +1,13 @@
 // Dedicated settings surface (IA reorg). Gathers the settings-class controls
 // that used to be scattered on the Home dashboard into one grouped page:
-// Appearance (theme + backdrop), Integrations (Garmin), Data (export + share),
-// Account (email + sign out). Controls are RELOCATED, not rewritten — each group
-// composes an existing component / helper.
+// You (owner stats), Appearance (theme + backdrop), Integrations (Garmin),
+// Data (export + share), Account (email + sign out). Every group composes a
+// component that owns its own state and writes — this file stays a layout.
+// "You" is the one group that was new rather than relocated.
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { signOut } from '@/lib/auth';
-import { getAllLogs, getAllPlans, getCurrentProfile, getSessions } from '@/lib/queries';
+import { getAllLogs, getAllPlans, getCurrentProfile, getSessions, getUserStats } from '@/lib/queries';
 import {
   bundleToJson,
   buildExportBundle,
@@ -21,6 +22,7 @@ import { SectionHeader } from '@/components/ui/primitives';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { BackgroundPicker } from '@/components/BackgroundPicker';
 import { GarminPanel } from '@/components/GarminPanel';
+import { UserStatsPanel } from '@/components/UserStatsPanel';
 
 const exportBtn =
   'hill-btn min-h-11 border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg disabled:opacity-40';
@@ -49,14 +51,15 @@ export default function SettingsView() {
     if (exporting) return;
     setExporting(format);
     try {
-      const [prof, plans, allLogs, sessions] = await Promise.all([
+      const [prof, plans, allLogs, sessions, stats] = await Promise.all([
         getCurrentProfile(),
         getAllPlans(),
         getAllLogs(),
         getSessions(),
+        getUserStats(),
       ]);
       if (format === 'json') {
-        const json = bundleToJson(buildExportBundle(prof, plans, allLogs, sessions));
+        const json = bundleToJson(buildExportBundle(prof, plans, allLogs, sessions, stats));
         downloadFile(exportFilename('json'), json, 'application/json');
       } else {
         downloadFile(exportFilename('csv'), logsToCsv(allLogs), 'text/csv');
@@ -77,6 +80,13 @@ export default function SettingsView() {
           as="h1"
           className="mb-6 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
         />
+      </Item>
+
+      <Item>
+        <section className="mb-6">
+          <SectionHeader>You</SectionHeader>
+          <UserStatsPanel />
+        </section>
       </Item>
 
       <Item>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { supabase, supabasePublic } from '@/lib/supabase';
-import { getLogsInRange } from '@/lib/queries';
+import { getLogsInRange, getUserStats } from '@/lib/queries';
+import { bodyweightMultiple } from '@/lib/userStats';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { useAspectProfile } from '@/lib/useAspectProfile';
 import { showcaseRefDate } from '@/lib/showcase';
@@ -267,6 +268,14 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // it waterfalled a second round trip.
   const profile = useAspectProfile({ logs, today, mode, client });
 
+  // Bodyweight, for the ×BW multiples on the e1RM cards. Null in showcase mode
+  // (no anon policy on user_stats) and null for anyone who has not filled it in,
+  // in which case the multiple simply is not rendered.
+  const { data: stats } = useAuthedQuery(
+    () => (mode === 'app' ? getUserStats() : Promise.resolve(null)),
+    { auth: mode === 'app', key: mode === 'app' ? 'userStats' : undefined },
+  );
+
   const [tip, setTip] = useState<{ x: number; y: number; label: string } | null>(null);
   const [groupBy, setGroupBy] = useState<'movement' | 'family'>('movement');
   const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -492,6 +501,16 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                       <span className="shrink-0 font-display text-lg tabular-nums tracking-tight text-fg">
                         {formatRound(value)}
                         <span className="ml-1 text-xs font-medium text-muted">kg</span>
+                        {(() => {
+                          // Only rendered once bodyweight is on file — an absent
+                          // stat shows nothing rather than a placeholder.
+                          const bw = bodyweightMultiple(value, stats);
+                          return bw == null ? null : (
+                            <span className="ml-2 text-xs font-medium text-muted">
+                              {formatRound(bw, 2)}×BW
+                            </span>
+                          );
+                        })()}
                       </span>
                     </div>
                     <div className="mt-3">

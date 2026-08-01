@@ -63,6 +63,68 @@ export const TIMERS = {
 // UI (maxLength) and the plan validator.
 export const SUBROUTINE = { maxDescriptionChars: 300 } as const;
 
+// ---------------------------------------------------------------------------
+// Owner stats (`user_stats`, edited on /app/settings).
+//
+// Only two of these fields reach a metric: `body_weight_kg` prices unweighted
+// work through VOLUME.bodyweightFraction, and `birth_year` supplies the HR
+// ceiling when no hr_max has ever been observed. Height, gender and body type
+// are STORED AND READ BY NOTHING — see the note on BODY_TYPES.
+// ---------------------------------------------------------------------------
+
+export const GENDERS = {
+  female: { label: 'Female' },
+  male: { label: 'Male' },
+  other: { label: 'Other' },
+  unspecified: { label: 'Prefer not to say' },
+} as const;
+
+// Body-shape vocabulary, per gender because the conventional shape names differ.
+// Captured because it was asked for, and deliberately wired to NOTHING: somatotype
+// has no defensible role in load estimation, and routing it into the radar would
+// bury a guess inside a number that reads as measured. If it ever earns a
+// consumer, that is a separate change with its own ASPECT_METRICS_VERSION bump.
+export const BODY_TYPES = {
+  female: [
+    { key: 'hourglass', label: 'Hourglass' },
+    { key: 'pear', label: 'Pear' },
+    { key: 'apple', label: 'Apple' },
+    { key: 'rectangle', label: 'Rectangle' },
+    { key: 'invertedTriangle', label: 'Inverted triangle' },
+  ],
+  male: [
+    { key: 'rectangle', label: 'Rectangle' },
+    { key: 'triangle', label: 'Triangle' },
+    { key: 'invertedTriangle', label: 'Inverted triangle' },
+    { key: 'oval', label: 'Oval' },
+    { key: 'trapezoid', label: 'Trapezoid' },
+  ],
+  other: [
+    { key: 'ectomorph', label: 'Ectomorph' },
+    { key: 'mesomorph', label: 'Mesomorph' },
+    { key: 'endomorph', label: 'Endomorph' },
+  ],
+  unspecified: [
+    { key: 'ectomorph', label: 'Ectomorph' },
+    { key: 'mesomorph', label: 'Mesomorph' },
+    { key: 'endomorph', label: 'Endomorph' },
+  ],
+} as const;
+
+// Bounds for the Settings form. Wide enough to be a typo guard, not a judgement.
+export const STATS_LIMITS = {
+  weightKg: { min: 25, max: 300 },
+  heightCm: { min: 100, max: 250 },
+  birthYear: { min: 1920, max: 2020 },
+  maxInjuries: 20,
+  injuryLabelChars: 80,
+} as const;
+
+// 220 − age, the standard estimate. Only ever a FALLBACK: an hr_max the user has
+// actually hit beats a formula, so this sits below `observedHrMax` in the chain
+// (see lib/aspects.ts).
+export const HR_MAX_FROM_AGE = { base: 220 } as const;
+
 // Activity tags with accent colors — used to shade activities across the app
 // (progress ribbon, stats heatmap). Five categories, fixed brand hexes.
 export const ACTIVITY_TAGS = {
@@ -203,12 +265,19 @@ export const LOAD = {
 // carry and a set of squats stay commensurable the way they already do on the
 // body map.
 export const VOLUME = {
-  // Kg-equivalent for one unweighted rep (box jump, push-up, plank second).
-  // A UNIT CONVERSION, not a norm: it says nothing about any person, and because
-  // every axis is scored against the user's own history its absolute value
-  // cancels out. It only sets how weighted and unweighted work trade off.
-  // There is no bodyweight field on `profiles` to do this properly.
+  // Kg-equivalent for one unweighted rep (box jump, push-up, plank second) when
+  // the owner's bodyweight is unknown. A UNIT CONVERSION, not a norm: it says
+  // nothing about any person, and because every axis is scored against the
+  // user's own history its absolute value cancels out. It only sets how
+  // weighted and unweighted work trade off.
   unweightedRepKg: 40,
+  // With a bodyweight on `user_stats`, an unweighted rep costs this fraction of
+  // the lifter's own mass instead. Deliberately ONE global number rather than a
+  // per-movement leverage table: a pull-up and a push-up load different
+  // fractions, but pricing that difference needs a constant for every movement
+  // in the vocabulary, for an effect that is second-order against getting the
+  // mass right at all.
+  bodyweightFraction: 0.65,
   // A paused rep is more time under tension than a touch-and-go one.
   pauseFactor: 1.2,
   // Per point of RPE above/below RPE.default. Near-failure work is a larger
@@ -354,7 +423,8 @@ export const ASPECT_OVERRIDE_DAYS = 21;
 // migration deleting rows below the new value (0019 is the template).
 //   1 — e1RM-based strength, plyometric minutes for power, aerobic-only endurance
 //   2 — scaled training volume for strength/power, three-component endurance
-export const ASPECT_METRICS_VERSION = 2;
+//   3 — unweighted work priced against the owner's bodyweight; HR ceiling from age
+export const ASPECT_METRICS_VERSION = 3;
 
 // Softness of the logistic that maps a robust z-score onto ASPECT_SCALE: ±1.5
 // lands roughly ±2.2 points. The logistic is asymptotic, so scores approach 1
@@ -395,6 +465,8 @@ export const appConfig = {
   movementModalities: MOVEMENT_MODALITIES,
   movementPlanes: MOVEMENT_PLANES,
   rotaryRoles: ROTARY_ROLES,
+  genders: GENDERS,
+  bodyTypes: BODY_TYPES,
   load: LOAD,
   touch: TOUCH,
   notations: NOTATIONS,
@@ -411,6 +483,9 @@ export type RegionKey = keyof typeof MUSCLE_REGIONS;
 export type ModalityKey = keyof typeof MOVEMENT_MODALITIES;
 export type PlaneKey = keyof typeof MOVEMENT_PLANES;
 export type RotaryRole = keyof typeof ROTARY_ROLES;
+export type GenderKey = keyof typeof GENDERS;
+
+export const GENDER_KEYS = Object.keys(GENDERS) as GenderKey[];
 
 export const MUSCLE_REGION_KEYS = Object.keys(MUSCLE_REGIONS) as RegionKey[];
 export const MODALITY_KEYS = Object.keys(MOVEMENT_MODALITIES) as ModalityKey[];

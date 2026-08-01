@@ -351,6 +351,33 @@ vouched for exactly what it was built to catch.
 breaking the code on purpose.** An unproven guard is worse than none.
 → `src/sw.test.ts`, `scripts/docs-audit.mjs`
 
+### `audit:mobile` is green on `/app/body`, which was rendering an empty state
+`[measured in Chromium]`
+The only log fixture in `scripts/mobile-audit.mjs` was `status: 'in_progress'`,
+because `/app/log` needs a live session. `summarizeBodyLoad` counts `done` logs
+only — so `/app/body` rendered "No completed sessions in this window" and the
+audit measured that. No region list, no heat map, no toggle, nothing to overflow
+and nothing to tap. It reported `small-targets=0` for a page that was blank.
+This is the same failure the active-plan fixture was added to fix, on a
+different surface, which is why it is worth a second entry: **a fixture is only
+as good as the widest status filter downstream of it.** A `doneLog` now sits
+alongside the in-progress one.
+**Before trusting an audit line, screenshot the page it claims to have checked.**
+The audit cannot tell "passed" from "there was nothing to fail".
+→ `scripts/mobile-audit.mjs`, `src/lib/bodyLoad.ts`
+
+### Two form controls whose accessible names substring-match each other
+`[measured in Chromium]`
+The Settings stats form has a "Birth year" field and, per injury row, a year
+input labelled `aria-label="Year"`. A Playwright `getByLabel('Year')` matched
+**both**, resolved `.nth(0)` to the birth-year input, and wrote the injury year
+into it — where 2023 fell outside `STATS_LIMITS.birthYear` and parsed to `null`.
+The payload looked like a parsing bug in the component; the component was fine.
+A screen reader has exactly the same ambiguity, so this is not only a test
+concern. **Give every control an accessible name that is unique under substring
+matching**, not merely unique as a string.
+→ `src/components/UserStatsPanel.tsx`
+
 ### A chart normalised to what is on screen still renders flat
 `[measured in Chromium]`
 The home activity strip scales bar heights so the tallest session **in view**
@@ -515,6 +542,42 @@ Every assertion in the flicker probe has been shown to fail against the build
 that had the bug — including its fallback for finding the panel, because an
 assertion that passes by finding nothing is not an assertion.
 → `scripts/mobile-audit.mjs`, `scripts/flicker-probe.mjs`, `scripts/docs-audit.mjs`
+
+## Data & privacy
+
+### A new column on `profiles` is published to anonymous visitors immediately
+`[argued — read off the policy and the query]`
+`profiles_select_showcase` is `for select to anon using (is_showcase)` — a
+**whole-row** grant with no column list — and `ProfileView` calls
+`getCurrentProfile(supabasePublic)`, which is `.select('*')`. So every column on
+`profiles` is fetched by an unauthenticated visitor to `/showcase` and sits in
+their browser, whether or not anything renders it. Only `display_name` is drawn,
+which makes the leak invisible in the UI.
+Adding bodyweight, age, gender and injury history there would have published all
+of it. They live on `user_stats` instead, which has **no anon policy at all** —
+the deny-all shape `invites` and `garmin_connections` already use.
+`share-read` is not affected: it selects an explicit column list.
+**Postgres RLS grants rows, not columns.** Before adding a column to a table any
+role can read, check what that role's policy actually covers, and prefer a
+separate owner-only table over trusting the UI not to render the field.
+→ `supabase/migrations/0002_rls.sql`, `supabase/migrations/0020_user_stats.sql`,
+`src/lib/queries.ts`, `src/components/ProfileView.tsx`
+
+### A late-arriving input gets persisted into a baseline at the wrong value
+`[argued — not reproduced]`
+`useAspectProfile` both computes metrics and **writes snapshots**. Bodyweight
+now feeds `computeAspectMetrics`, and it arrives on its own fetch. If the write
+effect had run on logs alone, the first pass would have priced every unweighted
+set at the fallback constant and persisted that under the current
+`ASPECT_METRICS_VERSION` — a permanently mispriced row in a baseline that the
+version guard cannot catch, because the version is right and only the value is
+wrong. Nothing on screen would show it.
+Worse, `useAuthedQuery` returns `null` **both** while loading and for a user who
+genuinely has no stats row, so `data == null` cannot distinguish them. The
+**loading flag** is the only usable gate.
+**When a derived value is persisted, gate the write on every input having
+settled — not on the inputs being non-null.**
+→ `src/lib/useAspectProfile.ts`, `src/lib/useAuthedQuery.ts`
 
 ## Superseded
 

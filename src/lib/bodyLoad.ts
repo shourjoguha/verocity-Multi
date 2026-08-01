@@ -39,8 +39,27 @@ export interface UnmappedMovement {
   sessions: number;
 }
 
+/**
+ * Tunables the walkers accept. Every field is optional and every default
+ * reproduces the pre-bodyweight behaviour exactly, so a caller with no
+ * `user_stats` row — including the anon showcase client, which cannot read the
+ * table at all — gets the same numbers it always did.
+ */
+export interface BodyLoadOptions {
+  /** Kg-equivalent of one unweighted rep. From `unweightedRepKg(stats)`. */
+  unweightedKg?: number;
+}
+
 export interface BodyLoadSummary {
   regionMinutes: Record<RegionKey, number>;
+  /**
+   * Scaled training volume distributed across regions on the SAME profile
+   * weights as `regionMinutes`. Unlike `resistanceTonnage` this is non-zero for
+   * ergs, jumps and planks — `setVolume` prices unweighted work — which is what
+   * made minutes the only viable currency before it existed. A scaled index,
+   * not kilograms: render it without a unit.
+   */
+  regionVolume: Record<RegionKey, number>;
   modalityMinutes: Record<ModalityKey, number>;
   planeMinutes: Record<PlaneKey, number>;
   rotaryMinutes: Record<RotaryRole, number>;
@@ -101,12 +120,16 @@ function repEquivalents(a: LogSet['actual']): number {
  * Note both notations are ITEM-level in practice: `toggleItemNotation` writes
  * them to every set in the item. Reading them per set is still correct, just
  * finer than the UI can currently express.
+ *
+ * `unweightedKg` is what one rep of unloaded work costs. It defaults to the
+ * flat constant so every existing caller and test is unchanged; pass
+ * `unweightedRepKg(stats)` to price it against the lifter's own mass instead.
  */
-export function setVolume(set: LogSet): number {
+export function setVolume(set: LogSet, unweightedKg: number = VOLUME.unweightedRepKg): number {
   const a = set.actual;
   if (!a.completed) return 0;
 
-  const load = a.weight ?? VOLUME.unweightedRepKg;
+  const load = a.weight ?? unweightedKg;
   const reps = repEquivalents(a);
   const side = set.notations.includes('/side') ? 2 : 1;
   const pause = set.notations.includes('(p)') ? VOLUME.pauseFactor : 1;
@@ -153,7 +176,9 @@ export function summarizeTrainingVolume(
   logs: WorkoutLog[],
   overrides: OverrideMap = {},
   bests: Map<string, number> = new Map(),
+  opts: BodyLoadOptions = {},
 ): TrainingVolumeSummary {
+  const unweightedKg = opts.unweightedKg ?? VOLUME.unweightedRepKg;
   const modalityVolume = zeroed(MODALITY_KEYS);
   let resistanceMinutes = 0;
   let denseMinutes = 0;
@@ -189,7 +214,7 @@ export function summarizeTrainingVolume(
 
           const best = bests.get(item.movement);
           for (const s of item.sets) {
-            const base = setVolume(s);
+            const base = setVolume(s, unweightedKg);
             if (base <= 0) continue;
             const weighted =
               modality === 'resistance'
@@ -259,8 +284,11 @@ function inferModality(
 export function summarizeBodyLoad(
   logs: WorkoutLog[],
   overrides: OverrideMap = {},
+  opts: BodyLoadOptions = {},
 ): BodyLoadSummary {
+  const unweightedKg = opts.unweightedKg ?? VOLUME.unweightedRepKg;
   const regionMinutes = zeroed(MUSCLE_REGION_KEYS);
+  const regionVolume = zeroed(MUSCLE_REGION_KEYS);
   const modalityMinutes = zeroed(MODALITY_KEYS);
   const planeMinutes = zeroed(PLANE_KEYS);
   const rotaryMinutes = zeroed(['rotational', 'antiRotational'] as const);
@@ -303,8 +331,14 @@ export function summarizeBodyLoad(
           const modality =
             profile.modality ?? inferModality(item.sets, item.primaryMetric, section.key);
 
+          // Unweighted by intensity/explosiveness on purpose: those are
+          // axis-specific weightings the radar applies in summarizeTrainingVolume,
+          // and the body map must not inherit them. This is raw scaled volume.
+          const itemVolume = item.sets.reduce((acc, s) => acc + setVolume(s, unweightedKg), 0);
+
           for (const [region, weight] of Object.entries(profile.regions) as [RegionKey, number][]) {
             regionMinutes[region] += minutes * weight;
+            regionVolume[region] += itemVolume * weight;
 
             if (modality === 'resistance') {
               for (const s of item.sets) {
@@ -331,6 +365,7 @@ export function summarizeBodyLoad(
 
   return {
     regionMinutes,
+    regionVolume,
     modalityMinutes,
     planeMinutes,
     rotaryMinutes,
@@ -346,11 +381,27 @@ export function summarizeBodyLoad(
   };
 }
 
+/** The two currencies the body map can be read in. */
+export type BodyCurrency = 'minutes' | 'volume';
+
+export function regionTotals(
+  summary: BodyLoadSummary,
+  currency: BodyCurrency,
+): Record<RegionKey, number> {
+  return currency === 'volume' ? summary.regionVolume : summary.regionMinutes;
+}
+
 // Region intensities normalised 0..1 against the busiest region, for the map.
-export function regionIntensities(summary: BodyLoadSummary): Record<RegionKey, number> {
-  const max = Math.max(...Object.values(summary.regionMinutes));
+// Normalisation is per currency: the heat map has to follow whichever the user
+// is reading, or the shading would contradict the list beside it.
+export function regionIntensities(
+  summary: BodyLoadSummary,
+  currency: BodyCurrency = 'minutes',
+): Record<RegionKey, number> {
+  const totals = regionTotals(summary, currency);
+  const max = Math.max(...Object.values(totals));
   const out = zeroed(MUSCLE_REGION_KEYS);
   if (max <= 0) return out;
-  for (const k of MUSCLE_REGION_KEYS) out[k] = summary.regionMinutes[k] / max;
+  for (const k of MUSCLE_REGION_KEYS) out[k] = totals[k] / max;
   return out;
 }

@@ -36,7 +36,14 @@ import {
   type AspectScoring,
 } from '@/lib/aspects';
 import { formatDate } from '@/lib/format';
-import { getAspectSnapshots, getAssessments, getLogsInRange, upsertAspectSnapshots } from '@/lib/queries';
+import {
+  getAspectSnapshots,
+  getAssessments,
+  getLogsInRange,
+  getUserStats,
+  upsertAspectSnapshots,
+} from '@/lib/queries';
+import { hrMaxFromAge, unweightedRepKg } from '@/lib/userStats';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import type {
   AspectMetrics,
@@ -110,6 +117,24 @@ export function useAspectProfile({
     () => getAssessments(client),
     { auth: authed, key: authed ? 'aspects:assessments' : undefined },
   );
+  // Owner stats feed two metric inputs: bodyweight prices unweighted work, and
+  // birth year supplies the HR ceiling. Not fetched in showcase mode —
+  // `user_stats` has no anon policy — so the public radar uses the constants.
+  const { data: stats, loading: statsLoading } = useAuthedQuery(
+    () => (authed ? getUserStats() : Promise.resolve(null)),
+    { auth: authed, key: authed ? 'userStats' : undefined },
+  );
+
+  // `useAuthedQuery` returns null both while loading and for a user who has no
+  // stats row, so the LOADING FLAG is the only way to tell them apart — and the
+  // difference matters: metrics computed before stats land would be priced at
+  // the flat constant, and the write-back below would persist that as a
+  // snapshot under the current metrics version. It would then sit in the
+  // baseline forever, mispriced, with nothing on screen to show for it.
+  const metricOpts = {
+    unweightedKg: unweightedRepKg(stats),
+    hrMaxFallback: hrMaxFromAge(stats, today) ?? undefined,
+  };
 
   // Snapshots written during this session, merged over what was fetched.
   const [written, setWritten] = useState<StoredSnapshot[]>([]);
@@ -135,7 +160,9 @@ export function useAspectProfile({
   // instant and never scores a reading against the wrong series. Showcase is
   // strictly read-only — it renders someone else's profile under the anon role.
   useEffect(() => {
-    if (!authed || logs === null || fetchedSnapshots === null) return;
+    // statsLoading is part of the gate, not an afterthought — see the note on
+    // metricOpts. A snapshot written at the wrong price is permanent.
+    if (!authed || logs === null || fetchedSnapshots === null || statsLoading) return;
 
     const weekEnds = completedWeekEnds(today, ASPECT_BACKFILL_WEEKS);
     const work = ASPECT_WINDOWS.map((w) => {
@@ -167,6 +194,7 @@ export function useAspectProfile({
         buildSnapshots(source, w.missing, {
           windowDays: w.days,
           seed: stored.filter((s) => s.window_days === w.days).map((s) => s.metrics),
+          ...metricOpts,
         }),
       );
       if (rows.length > 0) await upsertAspectSnapshots(rows);
@@ -185,15 +213,15 @@ export function useAspectProfile({
     return () => {
       cancelled = true;
     };
-    // Runs once each time the two inputs land; `stored` is derived from them.
+    // Runs once each time the inputs land; `stored` is derived from them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed, logs, fetchedSnapshots]);
+  }, [authed, logs, fetchedSnapshots, statsLoading]);
 
   const forWindow = stored.filter((s) => s.window_days === windowDays);
   const baselineSamples = forWindow.length;
   const weeksUntilBaseline = Math.max(0, ASPECT_MIN_BASELINE - baselineSamples);
 
-  const loading = snapshotsLoading || assessmentsLoading || logs === null;
+  const loading = snapshotsLoading || assessmentsLoading || statsLoading || logs === null;
   if (loading) {
     return {
       loading: true,
@@ -217,6 +245,7 @@ export function useAspectProfile({
     const metrics = computeAspectMetrics(logsInWindow(logs, window), {
       end: window.end,
       windowDays,
+      ...metricOpts,
     });
     if (Object.keys(metrics).length === 0) return null;
     const scoring = applyAssessmentOverride(

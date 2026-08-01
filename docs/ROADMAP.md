@@ -126,6 +126,34 @@ dense strength work and heart-rate spread. Metrics now carry
 `ASPECT_METRICS_VERSION`, because redefining one poisons the stored baseline
 silently.
 
+A fourth pass gave the app its first user-level data. `user_stats` (owner-only,
+deliberately not columns on `profiles` — the showcase RLS policy grants `anon` a
+whole-row read) holds bodyweight, height, birth year, gender, body type and past
+injuries, edited from the **You** group on `/app/settings`. Two of those close
+gaps the config had been carrying comments about: unweighted work is priced
+against the owner's own mass instead of a flat 40kg, and the HR ceiling falls
+back to `220−age` instead of a flat 190. `/app/body` gained a **Volume**
+currency alongside working minutes — `setVolume` distributed across the region
+weights, which unlike raw tonnage is non-zero for ergs, jumps and planks — and
+the e1RM cards on `/app/stats` show `×BW` multiples. `ASPECT_METRICS_VERSION`
+went to 3.
+
+**Deferred here, on purpose** (so the next agent does not have to guess):
+- **Range of motion / work in kg·m.** No displacement field on
+  `MovementProfile`, no per-movement path-length table, no Joules readout.
+  Height is stored and feeds nothing — a single global scalar cancels out of
+  every self-normalised score, so it only matters for cross-user comparison,
+  which this app does not do. Wiring it needs a constant per movement in the
+  vocabulary, which is the real cost.
+- **Per-movement bodyweight leverage** (pull-up ≈ 1.0×BW, push-up ≈ 0.64×BW).
+  One global `VOLUME.bodyweightFraction` instead, for the same reason.
+- **A bodyweight time series.** One current row today, so a six-month-old log is
+  priced with today's mass. Would be a new table, not a change to `user_stats`.
+- **Anything reading `body_type`, `gender` or `injuries`.** Stored only.
+  `Injury.region` is already a `RegionKey` so `/app/body` can use it later.
+- **lb / ft-in input.** `UNITS` is kg-only and the repo has no conversion layer;
+  this would be the first thing to need one.
+
 ### Phase 7 — Guidance upkeep  `[ongoing]`
 `npm run audit:docs` fails if the docs name code that no longer exists. It was
 added after a five-PR bug hunt that these documents actively misdirected; see

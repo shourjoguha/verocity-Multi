@@ -1,4 +1,12 @@
-import type { AspectKey, BlockKey, MetricKey, MovementProfile, SectionKey } from '@/app.config';
+import type {
+  AspectKey,
+  BlockKey,
+  GenderKey,
+  MetricKey,
+  MovementProfile,
+  RegionKey,
+  SectionKey,
+} from '@/app.config';
 
 // ---- DB row types (mirror supabase/migrations) ----
 
@@ -10,6 +18,37 @@ export interface Profile {
   id: string;
   display_name: string;
   is_showcase: boolean;
+  created_at: string;
+}
+
+/**
+ * One entry in `user_stats.injuries`. `region` is a MUSCLE_REGIONS key rather
+ * than free text so /app/body can later flag load on an injured region without
+ * a data migration — nothing reads it today. `null` means "not localised".
+ */
+export interface Injury {
+  id: string;
+  region: RegionKey | null;
+  label: string;
+  year?: number;
+  notes?: string;
+}
+
+/**
+ * Owner anthropometrics — one current row, never a time series (migration 0020
+ * explains why). Deliberately NOT columns on `profiles`: the showcase RLS
+ * policy grants anon a whole-row read, so age/gender/injuries there would be
+ * public. Only `body_weight_kg` and `birth_year` reach a metric.
+ */
+export interface UserStats {
+  owner_user_id: string;
+  body_weight_kg: number | null;
+  height_cm: number | null;
+  birth_year: number | null;
+  gender: GenderKey | null;
+  body_type: string | null;
+  injuries: Injury[];
+  updated_at: string;
   created_at: string;
 }
 

@@ -1,0 +1,25 @@
+-- Bump the derived-radar metric definition to 3 and clear the rows written
+-- under definition 2. Same shape and same reasoning as 0019, which is the
+-- template this follows.
+--
+-- What changed: `setVolume` used to price every unweighted rep at a flat 40kg
+-- (VOLUME.unweightedRepKg) for every user. It now prices it at the owner's own
+-- bodyweight × VOLUME.bodyweightFraction when `user_stats.body_weight_kg` is
+-- set. That moves the `strength` and `power` metrics — which are scaled
+-- training volume — by the ratio of the owner's mass to 40kg on every set of
+-- push-ups, pull-ups, jumps and planks in the window. Separately, the endurance
+-- axis's HR ceiling now falls back to 220−age instead of a flat 190 bpm.
+--
+-- The radar scores each axis against the MEDIAN of the owner's own past values
+-- for that metric, so a baseline holding both definitions yields a median that
+-- describes neither — and nothing on screen would reveal it. The polygon would
+-- just be quietly wrong.
+--
+-- Versioning rather than a bare delete keeps this idempotent: re-applied against
+-- a database that has since rebuilt a good baseline, it deletes nothing.
+--
+-- No schema change — `metrics_version` already exists from 0019.
+--   1 = e1RM-based strength, plyometric minutes for power, aerobic-only endurance.
+--   2 = scaled training volume for strength/power, three-component endurance.
+--   3 = unweighted work priced against the owner's bodyweight; HR ceiling from age.
+delete from public.aspect_snapshots where metrics_version < 3;
