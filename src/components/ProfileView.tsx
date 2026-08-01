@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import {
   getActivePlan,
@@ -34,59 +34,43 @@ function topE1rm(logs: WorkoutLog[]): number | null {
   return best;
 }
 
-// Edge-fade mask for the horizontal scrollers (ribbon + day rail).
-const edgeFade: CSSProperties = {
-  WebkitMaskImage:
-    'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
-  maskImage:
-    'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
-};
-
 // A collapsed day card shows its position, not its name: A, B, C… Past Z (no
 // real plan gets there) it falls back to the 1-based index.
 function dayBadge(i: number): string {
   return i < 26 ? String.fromCharCode(65 + i) : String(i + 1);
 }
 
-// Ribbon sizing: thin day-bars, ~36 visible at once; the rest scroll.
-const VISIBLE_BARS = 36;
-const BAR_GAP = 2;
-const BAR_HEIGHT = 40;
+// Activity strip: a fixed six-week window ending TODAY, sized by CSS.
+//
+// The previous ribbon was a horizontal scroller — a ResizeObserver measuring a
+// bar width, an auto-scroll pinning the last logged day, an edge-fade mask, and
+// 40px-tall 45° hatching on every rest day. It was the loudest element on the
+// page and said the least: rest days shouted, trained days were all one height,
+// and a multi-session day got WIDER, so the pitch was uneven.
+//
+// Now: rest is a hairline baseline, a trained day's height is its duration, and
+// multiple sessions stack within the day's single column. Fixed window + flex
+// columns means no scroller and no measurement — the strip is exactly as wide
+// as the column it sits in.
+const STRIP_DAYS = 42;
+const STRIP_HEIGHT = 44;
+const BAR_MIN = 8;
+// A 2h session tops the strip out; longer ones clamp rather than dwarf the rest.
+const BAR_FULL_SECONDS = 7200;
 
-function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }) {
+function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const points = useMemo(() => buildTimeline(plan, logs), [plan, logs]);
-  const todayIndex = points.findIndex((p) => p.isToday);
-  const anchorIndex = useMemo(() => {
-    for (let i = points.length - 1; i >= 0; i--) if (points[i].state === 'done') return i;
-    return todayIndex;
-  }, [points, todayIndex]);
   const [peekIndex, setPeekIndex] = useState<number | null>(null);
-  const [barW, setBarW] = useState(16);
 
-  // Size each bar so ~VISIBLE_BARS fit the visible width, recomputing on resize.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const measure = () => setBarW(Math.max(6, Math.round(el.clientWidth / VISIBLE_BARS) - BAR_GAP));
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Right-align the scroll on the most recent logged day (or today) so upcoming peeks in.
-  // Fat (multi-session) days are wider, so sum prior bar widths rather than assume a uniform pitch.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || anchorIndex < 0) return;
-    let offset = 0;
-    for (let i = 0; i < anchorIndex; i++) {
-      offset += barW * Math.max(1, points[i].sessions.length) + BAR_GAP;
-    }
-    el.scrollTo({ left: Math.max(0, offset - el.clientWidth * 0.8), behavior: 'auto' });
-  }, [anchorIndex, barW, points]);
+  // buildTimeline always runs through today + 14 days of runway. Those future
+  // days are blank by definition and add nothing here, so the strip ends on
+  // today rather than changing what buildTimeline promises its other caller.
+  const points = useMemo(() => {
+    const all = buildTimeline(plan, logs);
+    const todayIndex = all.findIndex((p) => p.isToday);
+    const end = todayIndex >= 0 ? todayIndex + 1 : all.length;
+    return all.slice(Math.max(0, end - STRIP_DAYS), end);
+  }, [plan, logs]);
 
   // Outside-tap dismiss for the peek popover.
   useEffect(() => {
@@ -100,62 +84,148 @@ function ProgressTimeline({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[
   }, [peekIndex]);
 
   return (
-    <div ref={containerRef} className="relative border-b border-border pb-3">
-      <div className="t-label mb-2 text-muted">Progress</div>
-      <div ref={scrollRef} className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6" style={edgeFade}>
-        <div className="relative flex items-end" style={{ gap: `${BAR_GAP}px`, minHeight: BAR_HEIGHT }}>
-          {points.map((p, i) => {
-            const columnStyle: CSSProperties = { width: barW, height: BAR_HEIGHT };
-            if (p.state === 'blank') {
-              columnStyle.backgroundImage =
-                'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-muted) 40%, transparent) 0, color-mix(in srgb, var(--color-muted) 40%, transparent) 1.5px, transparent 1.5px, transparent 4px)';
-              columnStyle.backgroundColor = 'color-mix(in srgb, var(--color-muted) 22%, transparent)';
-            }
-            const wrapStyle: CSSProperties = p.isToday
-              ? { boxShadow: 'inset 0 0 0 2px var(--color-fg)' }
-              : {};
-            return (
-              <button
-                key={p.date + i}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPeekIndex((cur) => (cur === i ? null : i));
+    <div ref={containerRef} className="relative">
+      <div className="t-label mb-2 text-muted">Activity</div>
+      <div className="flex items-end gap-px" style={{ height: STRIP_HEIGHT }}>
+        {points.map((p, i) => {
+          // Undated logs (total_seconds null) still deserve a mark, so a done
+          // day with no duration falls back to the minimum bar.
+          const scaled = Math.round(
+            BAR_MIN + Math.min(1, p.seconds / BAR_FULL_SECONDS) * (STRIP_HEIGHT - BAR_MIN),
+          );
+          const barH = p.state === 'done' ? Math.max(BAR_MIN, scaled) : 2;
+          const totalSeconds = p.sessionSeconds.reduce((a, b) => a + b, 0);
+          return (
+            <button
+              key={p.date}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPeekIndex((cur) => (cur === i ? null : i));
+              }}
+              onMouseEnter={() => setPeekIndex(i)}
+              onMouseLeave={() => setPeekIndex((cur) => (cur === i ? null : cur))}
+              className="relative flex h-full flex-1 cursor-pointer flex-col justify-end"
+              aria-label={`${p.date} ${p.fullLabel}`}
+              title={`${p.fullLabel} · ${p.date}`}
+            >
+              <span
+                className="flex w-full flex-col"
+                style={{
+                  height: barH,
+                  backgroundColor:
+                    p.state === 'done' ? undefined : 'var(--color-border)',
+                  // Today reads as a framed column whether or not it was trained.
+                  boxShadow: p.isToday ? 'inset 0 0 0 1.5px var(--color-fg)' : undefined,
                 }}
-                onMouseEnter={() => setPeekIndex(i)}
-                onMouseLeave={() => setPeekIndex((cur) => (cur === i ? null : cur))}
-                className="relative flex shrink-0 cursor-pointer items-end justify-center"
-                aria-label={`${p.date} ${p.fullLabel}`}
-                title={`${p.fullLabel} · ${p.date}`}
+                aria-hidden
               >
-                {p.state === 'done' ? (
+                {/* Sessions stack inside the ONE column, split by their share of
+                    the day's minutes — so a day never changes the strip's pitch. */}
+                {p.sessions.map((colors, si) => (
                   <span
-                    className="flex items-end"
-                    style={{ gap: `${BAR_GAP}px`, ...wrapStyle }}
-                    aria-hidden
+                    key={si}
+                    className="flex w-full flex-col"
+                    style={{
+                      flex:
+                        totalSeconds > 0
+                          ? `${p.sessionSeconds[si] || 0.0001} 1 0`
+                          : '1 1 0',
+                    }}
                   >
-                    {p.sessions.map((colors, si) => (
-                      <span key={si} className="flex flex-col" style={columnStyle}>
-                        {colors.map((c, ci) => (
-                          <span key={ci} style={{ flex: 1, backgroundColor: c }} />
-                        ))}
-                      </span>
+                    {colors.map((c, ci) => (
+                      <span key={ci} style={{ flex: 1, backgroundColor: c }} />
                     ))}
                   </span>
-                ) : (
-                  <span className="block" style={{ ...columnStyle, ...wrapStyle }} aria-hidden />
-                )}
-                {peekIndex === i && (
-                  <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 flex -translate-x-1/2 flex-col items-center gap-0.5 whitespace-nowrap bg-fg px-2 py-1 text-[0.6rem] uppercase tracking-[0.12em] text-bg">
-                    <span>{p.fullLabel}</span>
-                    <span className="text-[0.55rem] normal-case tracking-normal text-bg/60">{p.date}</span>
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+                ))}
+              </span>
+              {peekIndex === i && (
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 flex -translate-x-1/2 flex-col items-center gap-0.5 whitespace-nowrap bg-fg px-2 py-1 text-[0.6rem] uppercase tracking-[0.12em] text-bg">
+                  <span>{p.fullLabel}</span>
+                  <span className="text-[0.55rem] normal-case tracking-normal text-bg/60">{p.date}</span>
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
+      <div className="t-label mt-2 flex justify-between text-muted">
+        <span>6 wks ago</span>
+        <span>Today</span>
+      </div>
+    </div>
+  );
+}
+
+// The plan's days as a fit-width accordion — the active day carries its full
+// name, every other collapses to a letter, and the row is always exactly as
+// wide as the plan card above it.
+//
+// The animation lives in .day-card (global.css): the cards share one flex
+// free-space pool, so tweening flex-grow makes the collapsing card hand its
+// width straight to the expanding one. Do not reach for max-width — see the
+// comment on .day-card for what that looked like.
+function DayAccordion({
+  days,
+  activeKey,
+  todayDayName,
+  onSelect,
+  onPreview,
+}: {
+  days: PlanDay[];
+  activeKey: string | null;
+  todayDayName: string;
+  onSelect: (dayKey: string) => void;
+  onPreview: (day: PlanDay) => void;
+}) {
+  return (
+    <div className="flex gap-px bg-border">
+      {days.map((d, i) => {
+        const isToday = dayNameFromLabel(d.label).toLowerCase() === todayDayName.toLowerCase();
+        const isActive = d.dayKey === activeKey;
+        return (
+          <button
+            key={d.dayKey}
+            type="button"
+            aria-label={`${d.label}${isToday ? ' (today)' : ''}`}
+            aria-pressed={isActive}
+            data-active={isActive}
+            onClick={() => (isActive ? onPreview(d) : onSelect(d.dayKey))}
+            className={`day-card relative h-16 overflow-hidden text-left ${
+              isActive ? 'bg-fg text-bg' : 'bg-surface text-fg hover:bg-elevated'
+            }`}
+          >
+            {/* Both faces are absolute, so only the BOX width animates — the
+                label never reflows or ellipsises mid-tween. */}
+            <span className="day-card-face day-card-badge grid place-items-center">
+              {isToday ? (
+                <span
+                  aria-hidden
+                  className="absolute left-1/2 top-2 inline-block h-1.5 w-1.5 -translate-x-1/2 bg-teal"
+                />
+              ) : null}
+              <span aria-hidden className="font-display text-xs font-semibold tracking-[-0.02em]">
+                {dayBadge(i)}
+              </span>
+            </span>
+            <span className="day-card-face day-card-detail flex flex-col justify-center gap-0.5 whitespace-nowrap px-3.5">
+              <span aria-hidden className="t-label flex items-center gap-1.5 opacity-60">
+                {isToday ? <span className="inline-block h-1.5 w-1.5 shrink-0 bg-teal" /> : null}
+                {dayNameFromLabel(d.label).slice(0, 3) || `Day ${i + 1}`}
+              </span>
+              <span
+                aria-hidden
+                className="font-display text-[0.8125rem] font-semibold tracking-[-0.02em]"
+              >
+                {typeFromLabel(d.label)}
+              </span>
+              <span aria-hidden className="t-label opacity-60">
+                {d.exercises.length} {d.exercises.length === 1 ? 'movement' : 'movements'}
+              </span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -312,44 +382,46 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
       ?.dayKey ??
     days[0]?.dayKey ??
     null;
+  // The primary CTA starts the day the accordion is showing, so it has to
+  // resolve from the same derived key rather than from `activeDayKey` alone.
+  const activeDay = days.find((d) => d.dayKey === activeKey) ?? null;
 
   return (
     <>
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
       <Item>
+        {/* The date, the program week and the streak are meta ABOUT the name —
+            they used to be three separate bands (an eyebrow, a line under the
+            stat tiles, and a line above the ribbon) saying so at three
+            different points down the page. */}
         <header className="mb-6">
-          <p className="t-eyebrow text-muted">
-            {mode === 'showcase' ? 'Showcase' : 'Dashboard'}
-          </p>
+          <div className="t-eyebrow flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
+            <span>{mode === 'showcase' ? 'Showcase' : new Date().toDateString()}</span>
+            {mode === 'app' && week ? (
+              <>
+                <span aria-hidden>·</span>
+                <span>Week {week}</span>
+              </>
+            ) : null}
+            {mode === 'app' && streak >= 2 ? (
+              <>
+                <span aria-hidden>·</span>
+                <span className="flex items-center gap-1.5 text-teal">
+                  <span aria-hidden className="inline-block h-1.5 w-1.5 bg-teal" />
+                  {streak}-day streak
+                </span>
+              </>
+            ) : null}
+          </div>
           <div className="mt-2">
             <EchoText
               text={profile?.display_name ?? 'Athlete'}
               as="h1"
-              className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+              className="font-display text-2xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-4xl md:text-6xl"
             />
           </div>
         </header>
       </Item>
-
-      {mode === 'app' ? (
-        <Item>
-          <section className="mb-6 flex gap-3">
-            <button
-              type="button"
-              onClick={() => setAddOpen(true)}
-              className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
-            >
-              Start workout
-            </button>
-            <a
-              href="/app/coach"
-              className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
-            >
-              Coach
-            </a>
-          </section>
-        </Item>
-      ) : null}
 
       {failed ? (
         <Item>
@@ -368,6 +440,112 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </Item>
       ) : null}
 
+      {/* The hero: the plan, the day you are about to do, and the button that
+          starts it — one bordered, lifted object, internally divided by the
+          same gap-px hairlines the stat grid uses. It replaces three separate
+          bands (the twin action buttons, the "Active plan" card, and a day rail
+          that scrolled off the right edge with no visual tie to the card above
+          it). Rows inside a hairline-divider container stay flat; the depth
+          belongs to the unit, not its parts. */}
+      {mode === 'app' ? (
+        <Item>
+          <section className="mb-8">
+            <SectionHeader>Active plan</SectionHeader>
+            {plan ? (
+              <>
+                <div className="lift flex flex-col gap-px border border-border bg-border">
+                  <div className="flex items-center justify-between gap-3 bg-surface p-4">
+                    <div className="min-w-0">
+                      {/* Wraps rather than truncates: "Endurance & Cut Block"
+                          lost half its name to an ellipsis once the View link
+                          claimed its 44px target. */}
+                      <div className="font-display text-xl font-semibold leading-tight tracking-tight text-fg">
+                        {plan.name}
+                      </div>
+                      {week ? <div className="t-label mt-1 text-muted">Week {week}</div> : null}
+                    </div>
+                    {/* The glyph stays small; the TARGET may not — inline-flex
+                        + min-h-11 gives it the 44px box without changing how it
+                        reads. A bare text link measured 12px tall here. */}
+                    <a
+                      href="/app/plan"
+                      className="t-eyebrow -my-2 inline-flex min-h-11 shrink-0 items-center text-muted transition-colors hover:text-fg"
+                    >
+                      View →
+                    </a>
+                  </div>
+
+                  {days.length > 0 ? (
+                    <DayAccordion
+                      days={days}
+                      activeKey={activeKey}
+                      todayDayName={todayDayName}
+                      onSelect={setActiveDayKey}
+                      onPreview={setPreviewDay}
+                    />
+                  ) : null}
+
+                  {/* Flat, not pillowed. `.hill-btn-flush` carries a 4px radius
+                      and an inset dark edge, which inside a hairline-divider
+                      container reads as a rounded pill floating ON the card
+                      rather than a segment OF it — the same reason rows in a
+                      gap-px grid never take .lift. The unit owns the depth. */}
+                  <div className="flex gap-px bg-border">
+                    <a
+                      href={activeDay ? `/app/log?day=${encodeURIComponent(activeDay.dayKey)}` : '/app/log'}
+                      className="flex min-h-13 flex-1 items-center justify-center overflow-hidden bg-fg px-4 text-bg transition-colors hover:bg-fg/85"
+                    >
+                      <span className="t-control truncate">
+                        {activeDay ? `Start ${typeFromLabel(activeDay.label)}` : 'Start workout'}
+                      </span>
+                    </a>
+                    {/* The chooser is the only route to minis, saved sessions,
+                        past-plan days, a blank workout and Log activity — it
+                        cannot disappear just because the day cards took over
+                        the common case. */}
+                    <button
+                      type="button"
+                      onClick={() => setAddOpen(true)}
+                      aria-label="Other ways to start a session"
+                      className="flex min-h-13 w-14 items-center justify-center bg-surface text-muted transition-colors hover:bg-elevated hover:text-fg"
+                    >
+                      <span aria-hidden className="text-base leading-none">⋯</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <a
+                    href="/app/coach"
+                    className="t-control -mr-2 inline-flex min-h-11 items-center px-2 text-muted transition-colors hover:text-fg"
+                  >
+                    Coach →
+                  </a>
+                </div>
+              </>
+            ) : (
+              <>
+                <EmptyState>No active plan.</EmptyState>
+                <div className="mt-3 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAddOpen(true)}
+                    className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+                  >
+                    Start workout
+                  </button>
+                  <a
+                    href="/app/coach"
+                    className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+                  >
+                    Coach
+                  </a>
+                </div>
+              </>
+            )}
+          </section>
+        </Item>
+      ) : null}
+
       <Item>
         <section className="mb-6 grid grid-cols-3 gap-px bg-border">
           <StatCard label="Sessions" value={sessionCount} />
@@ -380,104 +558,31 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </section>
       </Item>
 
-      {mode === 'app' && streak >= 2 ? (
-        <Item>
-          <div className="t-label mb-6 -mt-6 flex items-center gap-2 text-teal">
-            <span aria-hidden className="inline-block h-1.5 w-1.5 bg-teal" />
-            {streak}-day streak
-          </div>
-        </Item>
-      ) : null}
-
       {mode === 'app' ? (
         <Item>
           <section className="mb-6">
-            <div className="t-eyebrow mb-4 text-muted">
-              {new Date().toDateString()}
-              {week ? ` · Week ${week}` : ''}
-            </div>
-            <ProgressTimeline plan={plan} logs={allLogs} />
+            <ActivityStrip plan={plan} logs={allLogs} />
           </section>
         </Item>
       ) : null}
 
-      <Item>
-        <section className="mb-6">
-          <SectionHeader>Active plan</SectionHeader>
-          {plan ? (
-            <>
+      {mode === 'showcase' ? (
+        <Item>
+          <section className="mb-6">
+            <SectionHeader>Active plan</SectionHeader>
+            {plan ? (
               <Card>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-display text-xl font-semibold tracking-tight text-fg">{plan.name}</div>
-                    {week ? <div className="mt-0.5 text-sm text-muted">Week {week}</div> : null}
-                  </div>
-                  {mode === 'app' ? (
-                    <a
-                      href="/app/plan"
-                      className="t-eyebrow text-muted transition-colors hover:text-fg"
-                    >
-                      View →
-                    </a>
-                  ) : null}
+                <div className="font-display text-xl font-semibold tracking-tight text-fg">
+                  {plan.name}
                 </div>
+                {week ? <div className="mt-0.5 text-sm text-muted">Week {week}</div> : null}
               </Card>
-              {/* The plan's days, tucked under the plan card with no header of
-                  their own — they belong to the plan above, not to a second
-                  section that names the same thing. Accordion rail: the active
-                  day carries its full name, every other day collapses to a
-                  letter, so a 6-day plan stays as short as a 2-day one. Flat by
-                  design — .lift sets a transform and would fight the width
-                  tween. */}
-              {mode === 'app' && days.length > 0 ? (
-                <div
-                  className="-mx-4 mt-1.5 overflow-x-auto px-4 sm:-mx-6 sm:px-6"
-                  style={edgeFade}
-                >
-                  <div className="flex gap-1.5 pb-2">
-                    {days.map((d, i) => {
-                      const isToday =
-                        dayNameFromLabel(d.label).toLowerCase() === todayDayName.toLowerCase();
-                      const isActive = d.dayKey === activeKey;
-                      return (
-                        <button
-                          key={d.dayKey}
-                          type="button"
-                          aria-label={`${d.label}${isToday ? ' (today)' : ''}`}
-                          aria-current={isActive}
-                          onClick={() => (isActive ? setPreviewDay(d) : setActiveDayKey(d.dayKey))}
-                          className={`flex min-h-11 shrink-0 items-center gap-1.5 overflow-hidden border transition-[max-width,background-color,border-color] duration-200 ease-out ${
-                            isActive
-                              ? 'max-w-[190px] border-fg bg-fg px-3 text-bg'
-                              : 'w-11 max-w-11 justify-center border-border bg-surface text-fg hover:bg-elevated'
-                          }`}
-                        >
-                          {isToday ? (
-                            <span
-                              aria-hidden
-                              className={`inline-block h-1.5 w-1.5 shrink-0 ${
-                                isActive ? 'bg-bg' : 'bg-teal'
-                              }`}
-                            />
-                          ) : null}
-                          <span
-                            aria-hidden
-                            className="truncate font-display text-[0.625rem] tracking-[-0.04em]"
-                          >
-                            {isActive ? typeFromLabel(d.label) : dayBadge(i)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <EmptyState>No active plan.</EmptyState>
-          )}
-        </section>
-      </Item>
+            ) : (
+              <EmptyState>No active plan.</EmptyState>
+            )}
+          </section>
+        </Item>
+      ) : null}
 
       <Item>
         <section>

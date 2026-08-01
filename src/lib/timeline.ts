@@ -34,6 +34,12 @@ export type TimelinePoint = {
   state: 'done' | 'blank';
   // One entry per logged session = that session's stacked tag colors; [] for blank.
   sessions: string[][];
+  // Seconds logged per session, index-aligned with `sessions`; [] for blank. The
+  // home strip scales a day's bar by these, so a 90-minute day reads taller than
+  // a 30-minute one instead of every trained day being one flat height.
+  sessionSeconds: number[];
+  // Sum of the above. 0 for blank, and 0 for a day whose logs carry no duration.
+  seconds: number;
   // Representative color (first session's first tag) for tint/label; 'transparent' for blank.
   color: string;
   isToday: boolean;
@@ -84,11 +90,14 @@ export function buildTimeline(
       const first = dayLogs[0];
       const pd = first.day_key ? planByDayKey.get(first.day_key) : undefined;
       const sessions = dayLogs.map((l) => sessionTagColors(l.tags, l.activity_type));
+      const sessionSeconds = dayLogs.map((l) => l.total_seconds ?? 0);
       const label = pd ? typeFromLabel(pd.label) : (first.activity_type ?? first.tags[0] ?? 'Done');
       points.push({
         date: dateStr,
         state: 'done',
         sessions,
+        sessionSeconds,
+        seconds: sessionSeconds.reduce((a, b) => a + b, 0),
         color: sessions[0][0],
         isToday,
         fullLabel: dayLogs.length > 1 ? `${label} · ×${dayLogs.length}` : label,
@@ -98,6 +107,8 @@ export function buildTimeline(
         date: dateStr,
         state: 'blank',
         sessions: [],
+        sessionSeconds: [],
+        seconds: 0,
         color: 'transparent',
         isToday,
         fullLabel: 'Rest',

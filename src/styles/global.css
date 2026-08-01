@@ -757,6 +757,57 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   animation: pop-in 0.16s var(--ease-editorial) both;
 }
 
+/* ---- Plan-day accordion (Home). The cards share ONE flex free-space pool, so
+   animating `flex-grow` makes the collapsing card hand its width straight to
+   the expanding one: synchronised by construction, on one curve, with the row
+   exactly as wide as the plan card above it on every frame.
+
+   The previous attempt tweened `max-width` and read as no animation at all —
+   the active card had no explicit `width`, so it shrink-wrapped its content
+   instantly and only the cap glided, while the collapsing card jumped from
+   `auto` to 44px with `width` untransitioned. Do not go back to it.
+
+   Faces are absolutely positioned inside an overflow-hidden box: only the box
+   width animates, so the label never reflows or ellipsises mid-flight. The
+   basis is TOUCH.minTargetPx — collapsed cards ARE the 44px target. ---- */
+.day-card {
+  flex-basis: 2.75rem; /* 44px = TOUCH.minTargetPx */
+  flex-shrink: 1;
+  flex-grow: 0;
+  min-width: 0;
+}
+.day-card[data-active='true'] {
+  flex-grow: 1;
+}
+.day-card-face {
+  position: absolute;
+  inset: 0;
+}
+/* Collapsed shows the badge, active shows the detail; the pair cross-fades
+   faster than the width tween so the swap reads as a reveal, not a slide. */
+.day-card[data-active='true'] .day-card-badge,
+.day-card[data-active='false'] .day-card-detail {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .day-card {
+    transition:
+      flex-grow 0.32s var(--ease-editorial),
+      background-color 0.32s var(--ease-editorial),
+      color 0.32s var(--ease-editorial);
+  }
+  .day-card-face {
+    transition: opacity 0.18s var(--ease-editorial);
+  }
+}
+/* Wider collapsed cards once the column is roomy, so they don't read as
+   slivers next to an active card holding ~600px of a max-w-3xl page. */
+@media (min-width: 640px) {
+  .day-card {
+    flex-basis: 5rem;
+  }
+}
+
 /* Scroll-driven reveal (progressive enhancement; zero JS) */
 @supports (animation-timeline: view()) {
   [data-reveal] {

@@ -201,6 +201,30 @@ Neither audit can see this: a wrap is not overflow and not a tap target, so
 `audit:mobile` passes with the tile at either height.
 → `src/components/ui/primitives.tsx` (`StatCard`)
 
+### One card expands but nothing collapses — the row reads as "no animation"
+`[measured in Chromium at 375px and 390px]`
+Home's plan-day rail tweened `max-width` alone: active `max-w-[190px]`, inactive
+`w-11 max-w-11`, on `transition-[max-width,…]`. The active card had **no explicit
+`width`**, so it shrink-wrapped its content the instant the class flipped and only
+the 190px *cap* glided — and the collapsing card went from `width: auto` to a
+fixed 44px with `width` untransitioned, so it **snapped on frame one**. Half the
+motion was missing and the half that survived was invisible for any label under
+the cap.
+**Animate `flex-grow` on siblings that share one flex free-space pool.** Give
+every card `flex-basis: 2.75rem` (`TOUCH.minTargetPx`) and `flex-grow: 0`, and
+the active one `flex-grow: 1`. The collapsing card then hands its width *directly*
+to the expanding one: synchronised by construction rather than by matching two
+durations, and the row's total width is the container's on every frame — which is
+also what makes it fit the card above it without measuring anything.
+Measured mid-flight at t=150ms of a 320ms tween: the collapsing card gave 72.7px
+and the expanding card took 72.7px, at 45% of the total move. The row measured
+338px at rest, mid-tween and settled.
+Note the shape of the win: `max-width` was chosen because it *looked* animatable,
+but the property that actually decides the box was `width`, and nothing was
+transitioning it. **Tween the property that determines the layout, not a
+constraint on it.**
+→ `.day-card` in `src/styles/global.css`, `DayAccordion` in `src/components/ProfileView.tsx`
+
 ## Build & deploy
 
 ### A build step works locally and silently does nothing on Vercel
@@ -317,6 +341,21 @@ vouched for exactly what it was built to catch.
 breaking the code on purpose.** An unproven guard is worse than none.
 → `src/sw.test.ts`, `scripts/docs-audit.mjs`
 
+### An animation assertion that a snap also satisfies
+`[measured in Chromium]` — third instance of the trap above, worth its own grep.
+Checking that the day accordion was *synchronised* meant sampling mid-tween and
+comparing how much width the collapsing card gave against how much the expanding
+one took. It passed. It also passed with `transition: none` forced on — because
+with no animation at all both cards jump the full delta on the same frame, so
+`gave === took` exactly. **The check was measuring symmetry, and a snap is
+perfectly symmetric.**
+**An animation needs an assertion about being PARTWAY**, not only about being
+consistent: at t=150ms of a 320ms tween the move must be somewhere in 15–85%
+complete (it measures 45% on `--ease-editorial`). Forcing `transition: none` with
+Playwright's addStyleTag is the cheap negative control, and it is the step that
+found this — run it before believing any motion check.
+→ the accordion probe pattern, and `scripts/flicker-probe.mjs`
+
 ### A probe selector silently grabs the wrong nav
 `[measured in Chromium]`
 `App.astro` mounts **two** `<nav aria-label="Primary">` — the drawer and the
@@ -396,16 +435,26 @@ notation granularity.
 
 ### audit:mobile is green on a surface it never rendered
 `[measured in Chromium]`
-`fixtureFor()` in `scripts/mobile-audit.mjs` returns `[]` for the plans table, so
-`getActivePlan()` resolves null and Home paints "No active plan." The Active-plan
-card, the day rail and every other plan-dependent control are **absent from the
-DOM the audit measures** — a rail of sub-44px chips would have shipped with
-`small-targets=0` on all 22 combinations.
-**Before citing a green run as evidence for a plan-driven surface, confirm the
-surface was in the DOM.** Either extend the fixture, or run a throwaway probe
-that seeds a plan (copy the auth/REST stubbing out of the audit; it needs no
-credentials) and measure the nodes you actually changed. Same trap for saved
-sessions and the movement library, whose fixtures are likewise thin.
+`fixtureFor()` in `scripts/mobile-audit.mjs` used to return `[]` for the plans
+table, so `getActivePlan()` resolved null and Home painted "No active plan." The
+Active-plan card, the day rail and every other plan-dependent control were
+**absent from the DOM the audit measures** — a rail of sub-44px chips would have
+shipped with `small-targets=0` on all 22 combinations.
+**Fixed for plans:** the fixture now serves a six-day `activePlan` (six, not
+four, because day count is what squeezes a collapsed-card row at 375px). The
+first run with it red-flagged **ten** genuine sub-44px targets that had been
+invisible for as long as the gap existed — `View →` and `Coach →` on Home, and
+`Edit` / `New plan` / six × `Start →` on `/app/plan`, all bare text links
+measuring 12px tall. Every one was live on a phone the whole time.
+**The general rule stands: before citing a green run as evidence for a
+data-driven surface, confirm the surface was in the DOM.** Either extend the
+fixture, or run a throwaway probe that seeds the row (copy the auth/REST stubbing
+out of the audit; it needs no credentials). Still thin, and still able to hide a
+regression this way: saved sessions, the movement library, and `aspect_snapshots`.
+Note also that `getActivePlan()` uses `.maybeSingle()`, so the `is_active=eq.true`
+lookup must be fulfilled with an **object** while the unfiltered list query wants
+an array — return the wrong shape and the surface silently stays empty, which
+looks exactly like the bug you are trying to fix.
 **The radar is the same trap for a different reason:** the fixture's only
 `workout_logs` row is `status: 'in_progress'`, so `completedLogs` drops it,
 `computeAspectMetrics` returns `{}` and FitnessProfile paints its empty state —
@@ -430,7 +479,7 @@ check clean, all 20 audit combinations pass" — none of which can see a flicker
 
 | Command | Catches | Cannot see |
 |---|---|---|
-| `npm run audit:mobile` | horizontal overflow, sub-44px targets, on every `/app` route at two widths | **Opens no sheet and clicks nothing** — it loads routes. Its fixture has **no active plan**, so every plan-dependent surface renders its empty state and is never measured (see below). |
+| `npm run audit:mobile` | horizontal overflow, sub-44px targets, on every `/app` route at two widths — including the plan-dependent surfaces, since the fixture gained an active plan | **Opens no sheet and clicks nothing** — it loads routes. It measures a **resting** DOM, so nothing about a transition, a tween or an expand/collapse is visible to it. Fixtures for saved sessions, the library and `aspect_snapshots` are still thin (see below). |
 | `npm run audit:flicker` | scroll jump, `html`/`body` style writes on touch, two scrims at once, an animated scrim, a sheet lingering after the tap, focus moving after it settled, panel resizing mid-animation, a text field focused on open | **Chromium only.** Blind to the WebKit compositing and keyboard/viewport behaviour the original bug lived in. |
 | `npm run audit:docs` | code identifiers in the docs that no longer resolve | Whether a rule is **true**. `.lift` resolves fine; that it is wrong advice for a modal panel is invisible to it. |
 
