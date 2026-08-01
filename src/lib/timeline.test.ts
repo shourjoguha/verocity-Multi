@@ -49,6 +49,7 @@ function makeLog(opts: {
   tags?: string[];
   activity_type?: string | null;
   day_key?: string | null;
+  total_seconds?: number | null;
 }): WorkoutLog {
   return {
     id: `l-${opts.log_date}`,
@@ -61,7 +62,7 @@ function makeLog(opts: {
     status: opts.status ?? 'done',
     started_at: null,
     ended_at: null,
-    total_seconds: null,
+    total_seconds: opts.total_seconds ?? null,
     hr_avg: null,
     hr_max: null,
     notes: null,
@@ -126,7 +127,7 @@ describe('buildTimeline', () => {
     expect(p.sessions).toEqual([[tagColor('strength'), tagColor('mobility')]]);
   });
 
-  it('widens a multi-session day into one column per session', () => {
+  it('splits a multi-session day into one entry per session', () => {
     const logDate = ymd(addDays(NOW, -2));
     const logs = [
       makeLog({ log_date: logDate, tags: ['strength'] }),
@@ -138,6 +139,24 @@ describe('buildTimeline', () => {
     expect(p.sessions[0]).toEqual([tagColor('strength')]);
     expect(p.sessions[1]).toEqual([tagColor('endurance'), tagColor('mobility')]);
     expect(p.fullLabel).toContain('×2');
+  });
+
+  it('carries per-session seconds and their sum, defaulting a null duration to 0', () => {
+    const logDate = ymd(addDays(NOW, -2));
+    const restDate = ymd(addDays(NOW, -1));
+    const logs = [
+      makeLog({ log_date: logDate, tags: ['strength'], total_seconds: 3600 }),
+      makeLog({ log_date: logDate, tags: ['endurance'], total_seconds: null }),
+    ];
+    const points = buildTimeline(makePlan({ end_date: null, days: [] }), logs, NOW);
+
+    const done = points.find((x) => x.date === logDate)!;
+    expect(done.sessionSeconds).toEqual([3600, 0]);
+    expect(done.seconds).toBe(3600);
+
+    const rest = points.find((x) => x.date === restDate)!;
+    expect(rest.sessionSeconds).toEqual([]);
+    expect(rest.seconds).toBe(0);
   });
 
   it('counts in_progress as done and falls back to activity_type for the label', () => {

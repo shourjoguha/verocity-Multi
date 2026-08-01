@@ -112,6 +112,54 @@ const workoutLog = {
   created_at: new Date().toISOString(),
 };
 
+// An ACTIVE PLAN is load-bearing for the same reason m3 below is owned: the
+// fixture used to return [] for plans, so every plan-dependent surface rendered
+// its empty state and was never measured — Home's plan unit and day accordion,
+// /app/plan, the calendar's day chips. See docs/LESSONS.md, "audit:mobile is
+// green on a surface it never rendered".
+//
+// SIX days, deliberately: the accordion collapses every non-active day to a
+// 44px card, so day count is what squeezes the row. Four days is the pleasant
+// case; six is where the collapsed cards and the gaps actually compete for a
+// 375px column. Keep it at six or more.
+const planDays = [
+  'Monday — Lower (Squat)+Jumps',
+  'Tuesday — Upper (Pull)',
+  'Wednesday — Conditioning',
+  'Thursday — Lower (Hinge)',
+  'Friday — Upper (Push)+Core',
+  'Saturday — Full Body (Power)',
+].map((label, i) => ({
+  dayKey: `day-${i + 1}`,
+  label,
+  exercises: Array.from({ length: 5 + (i % 4) }, (_, k) => ({
+    movement: `movement ${k + 1}`,
+    section: 'primary',
+    primaryMetric: 'weight',
+    plannedByWeek: { 1: '5x5', 2: '5x5' },
+  })),
+}));
+
+const activePlan = {
+  id: '33333333-3333-3333-3333-333333333333',
+  owner_user_id: session.user.id,
+  name: 'Endurance & Cut Block',
+  start_date: '2026-01-06',
+  end_date: null,
+  source_markdown: null,
+  parsed: {
+    title: 'Endurance & Cut Block',
+    startDate: '2026-01-06',
+    endDate: null,
+    blocks: [],
+    weeklyTemplate: planDays.map((d) => d.dayKey),
+    days: planDays,
+  },
+  is_active: true,
+  is_public: false,
+  created_at: '2026-01-06T00:00:00Z',
+};
+
 // m3 is OWNED (owner_user_id set), and that is load-bearing: Library renders
 // its per-row controls (Map / Edit / ×) only for rows the user owns, so a
 // fixture of purely shared rows meant this audit never measured them at all.
@@ -140,6 +188,9 @@ function fixtureFor(url) {
   if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog];
   if (path.includes('/movements')) return movements;
   if (path.includes('/profiles')) return url.includes('id=eq.') ? null : [];
+  // getActivePlan uses .maybeSingle(), so the is_active lookup must resolve to
+  // an OBJECT; the unfiltered list query still wants an array.
+  if (path.includes('/plans')) return url.includes('is_active=eq.true') ? activePlan : [activePlan];
   return [];
 }
 
@@ -170,10 +221,11 @@ const ALLOW = [
   /^Skip to content$/, // skip link: visually hidden until keyboard-focused
   /^Close$/, // sheet dismissal; the backdrop and Escape are the large targets
   /^Skip$/, // rest-timer skip, inside a bar that is itself the affordance
-  /^\d{4}-\d{2}-\d{2}/, // Home progress ribbon: chart columns (width is
-  // BAR_HEIGHT-relative and scales with the scroller), not a control strip.
-  // Widening them to 44px would destroy the visualization; the same data is
-  // reachable from Calendar, where the cells are real targets.
+  /^\d{4}-\d{2}-\d{2}/, // Home activity strip: chart columns, one per day of a
+  // fixed 42-day window, each a flex-sized fraction of the column — not a
+  // control strip. Widening them to 44px would destroy the visualization; the
+  // same data is reachable from Calendar, where the cells are real targets.
+  // (Keep every bar's aria-label date-first, or they stop matching this.)
 ];
 
 const results = [];

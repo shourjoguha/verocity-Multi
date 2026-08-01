@@ -95,17 +95,22 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               as="h1"
               className="min-w-0 break-words font-display text-4xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
             />
+            {/* min-h-11 + the padded box are the 44px target; the negative
+                margins keep the glyphs sitting where they always did. These
+                measured 28x12 and 63x12 — invisible to audit:mobile until its
+                fixture grew an active plan and this page stopped rendering its
+                empty state. */}
             {showcase ? null : (
-              <div className="flex shrink-0 gap-4 pb-1">
+              <div className="-mr-3 flex shrink-0 gap-1 pb-1">
                 <a
                   href="/app/plan/edit"
-                  className="t-control text-muted transition-colors hover:text-fg"
+                  className="t-control inline-flex min-h-11 items-center px-3 text-muted transition-colors hover:text-fg"
                 >
                   Edit
                 </a>
                 <a
                   href="/app/plan/upload"
-                  className="t-control text-muted transition-colors hover:text-fg"
+                  className="t-control inline-flex min-h-11 items-center px-3 text-muted transition-colors hover:text-fg"
                 >
                   New plan
                 </a>
@@ -139,7 +144,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               {showcase ? null : (
                 <a
                   href={`/app/log?day=${encodeURIComponent(day.dayKey)}`}
-                  className="t-control text-muted transition-colors hover:text-fg"
+                  className="t-control -my-2 -mr-3 inline-flex min-h-11 items-center px-3 text-muted transition-colors hover:text-fg"
                 >
                   Start →
                 </a>

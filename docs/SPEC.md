@@ -334,10 +334,13 @@ Function, which validates the token and performs scoped read-only queries.
 > and `/app/settings`.
 
 ### Pages
-- **Home** — dashboard: 30-day plan-progress timeline, day rail + day-preview,
-  active-day card with "Start workout", recent sessions list (with set-shape
-  strips + durations), inline stats (session count, total time, top e1RMs),
-  quick actions, recommendations badge.
+- **Home** — dashboard, ordered so the next workout leads: header meta (date ·
+  program week · streak) over the name; one plan unit fusing the active plan,
+  a fit-width day accordion (active day expanded, the rest collapsed to letters)
+  and the primary "Start &lt;day&gt;" action with a chooser for everything else;
+  inline stats (session count, total time, top e1RM); a six-week activity strip
+  (bar height = session duration, rest days a hairline); recent sessions list
+  (with set-shape strips + durations); recommendations badge.
 - **Plan** — week-by-week (W1–W16) progression table per day; edit mode
   (drag-reorder days, inline-edit movements/cells, add via library, delete,
   autosave); block-type color markers; shows actual best-set from last log.
