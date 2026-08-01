@@ -68,9 +68,14 @@ export function buildTimeline(
   }
   const doneDates = Array.from(logByDate.keys()).sort((a, b) => (a < b ? 1 : -1)); // desc
 
+  // Spans the WHOLE logged history: the home strip scrolls back through it, and
+  // a window anchored to the 30th most recent logged day meant there was almost
+  // nothing to the left of the opening view to scroll to. Falls back to a
+  // 30-day window when nothing is logged yet, so an empty account still shows a
+  // strip rather than a single column.
   const start =
     doneDates.length > 0
-      ? new Date(doneDates[Math.min(doneDates.length - 1, 29)] + 'T00:00:00')
+      ? new Date(doneDates[doneDates.length - 1] + 'T00:00:00')
       : new Date(today.getTime() - 30 * 86_400_000);
   const end = new Date(today.getTime() + FUTURE_DAYS * 86_400_000);
 

@@ -94,6 +94,16 @@ direction (24px) and only touch the DOM when the state actually changes.
 Measure it: `MutationObserver` on the element, count flips per gesture.
 → `src/layouts/App.astro` (`setupNav`)
 
+The home activity strip is the pattern to copy when a scroll must drive a visual
+change: the listener is `{ passive: true }` and does **one** thing — reset a
+120ms timer. All the work happens after the gesture, the visible range is
+arithmetic off `scrollLeft` (uniform pitch, so no `IntersectionObserver`), and
+the result lands as a single inherited custom property on the row rather than a
+write per bar. A 3% gate stops a one-bar nudge re-rendering. Measured at **0
+style writes mid-gesture and 1 for the whole gesture**, with the
+`MutationObserver` count above as the assertion.
+→ `ActivityStrip` in `src/components/ProfileView.tsx`
+
 ### A modal's effect re-runs on every parent render
 `[measured in Chromium]`
 Every caller passes `onClose` as an inline arrow, so an effect depending on it
@@ -340,6 +350,22 @@ vouched for exactly what it was built to catch.
 **Pin assertions to the exact line that matters, then prove the test fails by
 breaking the code on purpose.** An unproven guard is worse than none.
 → `src/sw.test.ts`, `scripts/docs-audit.mjs`
+
+### A chart normalised to what is on screen still renders flat
+`[measured in Chromium]`
+The home activity strip scales bar heights so the tallest session **in view**
+fills the strip. It was built, measured as working — scale went 1 → 2.75 on
+scroll — and still drew a row of identical bars, because a *second* clamp
+upstream had already flattened the data: heights were computed as
+`min(1, seconds / 7200)`, so every session over two hours became the same bar
+before normalisation ever ran.
+**Two clamps in series is one clamp too many.** When a view-relative scale is
+what keeps marks inside the box, the intrinsic value must stay linear — the
+scale can go below 1 and shrink everything to fit, which is the honest reading.
+The absolute ceiling only made sense while the scale was fixed at 1.
+Worth noting how it was caught: the numeric assertion passed. It took *looking
+at a screenshot* of two different scroll positions to see that both were flat.
+→ `barHeight` / `BAR_NOMINAL_SECONDS` in `src/components/ProfileView.tsx`
 
 ### An animation assertion that a snap also satisfies
 `[measured in Chromium]` — third instance of the trap above, worth its own grep.

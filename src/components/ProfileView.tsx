@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import {
   getActivePlan,
@@ -9,6 +9,7 @@ import {
 import { getCached, setCached } from '@/lib/queryCache';
 import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
+import type { TimelinePoint } from '@/lib/timeline';
 import { bestE1rm } from '@/lib/e1rm';
 import { currentProgramWeek, planWeekCount } from '@/lib/progression';
 import { completedLogs } from '@/lib/stats';
@@ -40,27 +41,60 @@ function dayBadge(i: number): string {
   return i < 26 ? String.fromCharCode(65 + i) : String(i + 1);
 }
 
-// Activity strip: a fixed six-week window ending TODAY, sized by CSS.
+// Edge-fade mask for the horizontal scroller, so the strip dissolves into the
+// page instead of ending on a hard cut mid-history.
+const edgeFade: CSSProperties = {
+  WebkitMaskImage:
+    'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
+  maskImage:
+    'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
+};
+
+// Activity strip: the whole logged history, scrollable, opening on today.
 //
-// The previous ribbon was a horizontal scroller — a ResizeObserver measuring a
-// bar width, an auto-scroll pinning the last logged day, an edge-fade mask, and
-// 40px-tall 45° hatching on every rest day. It was the loudest element on the
-// page and said the least: rest days shouted, trained days were all one height,
-// and a multi-session day got WIDER, so the pitch was uneven.
+// Rest is a hairline baseline, a trained day's height is its duration, and
+// multiple sessions stack within the day's single column so a day never changes
+// the strip's pitch.
 //
-// Now: rest is a hairline baseline, a trained day's height is its duration, and
-// multiple sessions stack within the day's single column. Fixed window + flex
-// columns means no scroller and no measurement — the strip is exactly as wide
-// as the column it sits in.
-const STRIP_DAYS = 42;
+// Heights are relative to WHAT IS IN VIEW, not to an absolute ceiling. Against a
+// fixed 2h maximum a stretch of 40-minute sessions renders as a row of identical
+// stubs; re-normalising so the tallest bar on screen fills the strip means each
+// screenful of history uses the full height and stays readable.
 const STRIP_HEIGHT = 44;
 const BAR_MIN = 8;
-// A 2h session tops the strip out; longer ones clamp rather than dwarf the rest.
-const BAR_FULL_SECONDS = 7200;
+// Nominal reference only — a 2h session is full height at scale 1. Heights are
+// deliberately NOT clamped to it: the view scale is what keeps bars inside the
+// strip, so clamping here as well would flatten every session above two hours to
+// an identical bar and hide exactly the differences this strip exists to show.
+const BAR_NOMINAL_SECONDS = 7200;
+const BAR_W = 8;
+const BAR_GAP = 1;
+// Quiet time before the strip re-normalises. Nothing runs during the gesture.
+const SETTLE_MS = 120;
+// Growth cap, so a screenful of 5-minute sessions doesn't read as a set of PRs.
+// There is no floor: when a long session is on screen the scale goes below 1 and
+// everything shrinks to fit, which is the honest reading.
+const MAX_SCALE = 4;
+
+function barHeight(p: TimelinePoint): number {
+  if (p.state !== 'done') return 2;
+  // Undated logs (total_seconds null) still deserve a mark, so a done day with
+  // no duration falls back to the minimum bar.
+  return Math.max(
+    BAR_MIN,
+    Math.round(BAR_MIN + (p.seconds / BAR_NOMINAL_SECONDS) * (STRIP_HEIGHT - BAR_MIN)),
+  );
+}
 
 function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const [peekIndex, setPeekIndex] = useState<number | null>(null);
+  const [scale, setScale] = useState(1);
+  // Date at the left edge of what is on screen. Static "first logged day" text
+  // read as if it labelled the view, and stopped being true the moment you
+  // scrolled. Set from the same settle pass, so it costs no extra work.
+  const [fromDate, setFromDate] = useState<string | null>(null);
 
   // buildTimeline always runs through today + 14 days of runway. Those future
   // days are blank by definition and add nothing here, so the strip ends on
@@ -68,11 +102,57 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
   const points = useMemo(() => {
     const all = buildTimeline(plan, logs);
     const todayIndex = all.findIndex((p) => p.isToday);
-    const end = todayIndex >= 0 ? todayIndex + 1 : all.length;
-    return all.slice(Math.max(0, end - STRIP_DAYS), end);
+    return todayIndex >= 0 ? all.slice(0, todayIndex + 1) : all;
   }, [plan, logs]);
 
-  // Outside-tap dismiss for the peek popover.
+  // Open pinned to today. Layout effect so it is never painted at the left edge
+  // — a visible jump from the oldest day to the newest on every mount.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [points.length]);
+
+  // Re-normalise AFTER the scroll settles, never during it.
+  //
+  // docs/LESSONS.md § "Something repaints constantly while scrolling": a
+  // per-frame scroll comparison produced 18 class flips in a one-second scroll.
+  // So the listener is passive and does exactly one thing — reset a timer. The
+  // visible range is arithmetic off scrollLeft (the pitch is uniform, so an
+  // IntersectionObserver over hundreds of bars would be strictly more work), and
+  // the 3% gate is the hysteresis that stops a one-bar nudge re-rendering.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let timer: number | undefined;
+
+    const settle = () => {
+      const pitch = BAR_W + BAR_GAP;
+      const first = Math.max(0, Math.floor(el.scrollLeft / pitch));
+      const last = Math.min(points.length - 1, Math.ceil((el.scrollLeft + el.clientWidth) / pitch));
+      let tallest = 0;
+      for (let i = first; i <= last; i++) {
+        const p = points[i];
+        if (p?.state === 'done') tallest = Math.max(tallest, barHeight(p));
+      }
+      const next = tallest > 0 ? Math.min(MAX_SCALE, STRIP_HEIGHT / tallest) : 1;
+      setScale((cur) => (Math.abs(next - cur) / cur > 0.03 ? next : cur));
+      setFromDate(points[first]?.date ?? null);
+    };
+
+    const onScroll = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(settle, SETTLE_MS);
+    };
+
+    settle();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      el.removeEventListener('scroll', onScroll);
+    };
+  }, [points]);
+
+  // Outside-tap dismiss for the peeked day.
   useEffect(() => {
     if (peekIndex === null) return;
     function onPointerDown(e: PointerEvent) {
@@ -83,74 +163,90 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [peekIndex]);
 
+  const peeked = peekIndex === null ? null : points[peekIndex];
+
   return (
     <div ref={containerRef} className="relative">
-      <div className="t-label mb-2 text-muted">Activity</div>
-      <div className="flex items-end gap-px" style={{ height: STRIP_HEIGHT }}>
-        {points.map((p, i) => {
-          // Undated logs (total_seconds null) still deserve a mark, so a done
-          // day with no duration falls back to the minimum bar.
-          const scaled = Math.round(
-            BAR_MIN + Math.min(1, p.seconds / BAR_FULL_SECONDS) * (STRIP_HEIGHT - BAR_MIN),
-          );
-          const barH = p.state === 'done' ? Math.max(BAR_MIN, scaled) : 2;
-          const totalSeconds = p.sessionSeconds.reduce((a, b) => a + b, 0);
-          return (
-            <button
-              key={p.date}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setPeekIndex((cur) => (cur === i ? null : i));
-              }}
-              onMouseEnter={() => setPeekIndex(i)}
-              onMouseLeave={() => setPeekIndex((cur) => (cur === i ? null : cur))}
-              className="relative flex h-full flex-1 cursor-pointer flex-col justify-end"
-              aria-label={`${p.date} ${p.fullLabel}`}
-              title={`${p.fullLabel} · ${p.date}`}
-            >
-              <span
-                className="flex w-full flex-col"
-                style={{
-                  height: barH,
-                  backgroundColor:
-                    p.state === 'done' ? undefined : 'var(--color-border)',
-                  // Today reads as a framed column whether or not it was trained.
-                  boxShadow: p.isToday ? 'inset 0 0 0 1.5px var(--color-fg)' : undefined,
+      {/* The caption lives OUTSIDE the scroller. `overflow-x: auto` computes
+          overflow-y to auto as well, so a popover anchored above a bar would be
+          clipped by its own scroll container. */}
+      <div className="t-label mb-2 flex justify-between gap-3 text-muted">
+        <span>Activity</span>
+        {peeked ? (
+          <span className="truncate text-fg">
+            {peeked.fullLabel} · {peeked.date}
+          </span>
+        ) : (
+          <span>Scroll back</span>
+        )}
+      </div>
+      <div
+        ref={scrollRef}
+        className="-mx-4 overflow-x-auto overscroll-x-contain px-4 sm:-mx-6 sm:px-6"
+        style={edgeFade}
+      >
+        <div
+          className="strip-row flex items-end"
+          style={
+            {
+              height: STRIP_HEIGHT,
+              gap: BAR_GAP,
+              '--strip-scale': scale,
+            } as CSSProperties
+          }
+        >
+          {points.map((p, i) => {
+            const totalSeconds = p.sessionSeconds.reduce((a, b) => a + b, 0);
+            return (
+              <button
+                key={p.date}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPeekIndex((cur) => (cur === i ? null : i));
                 }}
-                aria-hidden
+                onMouseEnter={() => setPeekIndex(i)}
+                onMouseLeave={() => setPeekIndex((cur) => (cur === i ? null : cur))}
+                // Today reads as a framed column whether or not it was trained.
+                // The outline lives on the COLUMN, not the bar, so scaling the
+                // bar never thickens the stroke.
+                className={`relative flex h-full shrink-0 cursor-pointer flex-col justify-end ${
+                  p.isToday ? 'shadow-[inset_0_0_0_1.5px_var(--color-fg)]' : ''
+                }`}
+                style={{ width: BAR_W }}
+                aria-label={`${p.date} ${p.fullLabel}`}
+                title={`${p.fullLabel} · ${p.date}`}
               >
-                {/* Sessions stack inside the ONE column, split by their share of
-                    the day's minutes — so a day never changes the strip's pitch. */}
-                {p.sessions.map((colors, si) => (
-                  <span
-                    key={si}
-                    className="flex w-full flex-col"
-                    style={{
-                      flex:
-                        totalSeconds > 0
-                          ? `${p.sessionSeconds[si] || 0.0001} 1 0`
-                          : '1 1 0',
-                    }}
-                  >
-                    {colors.map((c, ci) => (
-                      <span key={ci} style={{ flex: 1, backgroundColor: c }} />
+                {p.state === 'done' ? (
+                  <span className="strip-bar flex w-full flex-col" style={{ height: barHeight(p) }} aria-hidden>
+                    {/* Sessions stack inside the ONE column, split by their share
+                        of the day's minutes. */}
+                    {p.sessions.map((colors, si) => (
+                      <span
+                        key={si}
+                        className="flex w-full flex-col"
+                        style={{
+                          flex: totalSeconds > 0 ? `${p.sessionSeconds[si] || 0.0001} 1 0` : '1 1 0',
+                        }}
+                      >
+                        {colors.map((c, ci) => (
+                          <span key={ci} style={{ flex: 1, backgroundColor: c }} />
+                        ))}
+                      </span>
                     ))}
                   </span>
-                ))}
-              </span>
-              {peekIndex === i && (
-                <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 flex -translate-x-1/2 flex-col items-center gap-0.5 whitespace-nowrap bg-fg px-2 py-1 text-[0.6rem] uppercase tracking-[0.12em] text-bg">
-                  <span>{p.fullLabel}</span>
-                  <span className="text-[0.55rem] normal-case tracking-normal text-bg/60">{p.date}</span>
-                </span>
-              )}
-            </button>
-          );
-        })}
+                ) : (
+                  // Rest days are a hairline rule, NOT a bar — deliberately
+                  // outside the scaled element so they never grow into blocks.
+                  <span className="h-0.5 w-full bg-border" aria-hidden />
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
       <div className="t-label mt-2 flex justify-between text-muted">
-        <span>6 wks ago</span>
+        <span>{fromDate ?? points[0]?.date ?? ''}</span>
         <span>Today</span>
       </div>
     </div>
