@@ -168,14 +168,26 @@ describe('buildTimeline', () => {
     expect(p.fullLabel).toBe('Run');
   });
 
-  it('anchors the window start to the 30th most recent logged day', () => {
-    // 35 consecutive done logs ending yesterday → window starts 30 days back.
+  it('anchors the window start to the EARLIEST logged day, however far back', () => {
+    // 35 consecutive done logs ending yesterday → window starts at the oldest.
     const logs = Array.from({ length: 35 }, (_, i) => makeLog({ log_date: ymd(addDays(NOW, -(i + 1))) }));
     const points = buildTimeline(makePlan({ end_date: null, days: [] }), logs, NOW);
-    expect(points[0].date).toBe(ymd(addDays(NOW, -30)));
-    expect(points[0].state).toBe('done'); // 30th most recent is within range
-    // the 35th-oldest log (day -35) is before the window and excluded
-    expect(points.find((p) => p.date === ymd(addDays(NOW, -35)))).toBeUndefined();
+    expect(points[0].date).toBe(ymd(addDays(NOW, -35)));
+    expect(points[0].state).toBe('done');
+    expect(points[points.length - 1].date).toBe(ymd(addDays(NOW, 14)));
+  });
+
+  it('reaches back years, so the home strip has history to scroll into', () => {
+    // A window capped at the 30th most recent logged day left nothing to the
+    // left of the strip's opening view — this is the regression guard for it.
+    const logs = [
+      makeLog({ log_date: ymd(addDays(NOW, -800)) }),
+      ...Array.from({ length: 40 }, (_, i) => makeLog({ log_date: ymd(addDays(NOW, -(i + 1))) })),
+    ];
+    const points = buildTimeline(makePlan({ end_date: null, days: [] }), logs, NOW);
+    expect(points[0].date).toBe(ymd(addDays(NOW, -800)));
+    expect(points.find((p) => p.date === ymd(addDays(NOW, -800)))?.state).toBe('done');
+    expect(points).toHaveLength(800 + 14 + 1);
   });
 
   it('works with no plan: today −30 … +14 days, all blank', () => {

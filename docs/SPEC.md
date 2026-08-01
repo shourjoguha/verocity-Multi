@@ -346,8 +346,10 @@ Function, which validates the token and performs scoped read-only queries.
   program week · streak) over the name; one plan unit fusing the active plan,
   a fit-width day accordion (active day expanded, the rest collapsed to letters)
   and the primary "Start &lt;day&gt;" action with a chooser for everything else;
-  inline stats (session count, total time, top e1RM); a six-week activity strip
-  (bar height = session duration, rest days a hairline); recent sessions list
+  inline stats (session count, total time, top e1RM); a scrollable activity strip
+  spanning the whole logged history, opening on today (bar height = session
+  duration, rest days a hairline, heights re-normalised to the visible window
+  once scrolling settles); recent sessions list
   (with set-shape strips + durations); recommendations badge.
 - **Plan** — week-by-week (W1–W16) progression table per day; edit mode
   (drag-reorder days, inline-edit movements/cells, add via library, delete,

@@ -221,8 +221,8 @@ const ALLOW = [
   /^Skip to content$/, // skip link: visually hidden until keyboard-focused
   /^Close$/, // sheet dismissal; the backdrop and Escape are the large targets
   /^Skip$/, // rest-timer skip, inside a bar that is itself the affordance
-  /^\d{4}-\d{2}-\d{2}/, // Home activity strip: chart columns, one per day of a
-  // fixed 42-day window, each a flex-sized fraction of the column — not a
+  /^\d{4}-\d{2}-\d{2}/, // Home activity strip: chart columns, one per day of the
+  // logged history, at a fixed 8px pitch inside a horizontal scroller — not a
   // control strip. Widening them to 44px would destroy the visualization; the
   // same data is reachable from Calendar, where the cells are real targets.
   // (Keep every bar's aria-label date-first, or they stop matching this.)

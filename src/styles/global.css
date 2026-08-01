@@ -808,6 +808,30 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   }
 }
 
+/* ---- Home activity strip. Bar heights are authored against a fixed ceiling and
+   then scaled to whatever is in view, so each screenful of history uses the full
+   height instead of being flattened by a longer session somewhere else in the
+   timeline.
+
+   Scaled with `transform`, not `height`. A solid colour block scaled vertically
+   is visually identical to a taller block, and this stays on the compositor —
+   animating `height` on hundreds of bars is a layout pass per frame for the
+   whole transition. It also means re-normalising is ONE style write on the row
+   (`--strip-scale` inherits) rather than one per bar.
+
+   The rest-day hairline and the today outline deliberately sit outside the
+   scaled element: scaling a 2px rule turns it into a grey block, and scaling the
+   outline thickens its stroke. ---- */
+.strip-bar {
+  transform: scaleY(var(--strip-scale, 1));
+  transform-origin: bottom;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .strip-bar {
+    transition: transform 0.35s var(--ease-editorial);
+  }
+}
+
 /* Scroll-driven reveal (progressive enhancement; zero JS) */
 @supports (animation-timeline: view()) {
   [data-reveal] {
