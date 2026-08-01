@@ -300,6 +300,25 @@ state after an edit must write the cache too, or the edit reverts on the next
 navigation.
 → `src/lib/queries.ts`, `src/lib/queryCache.ts`, `ProfileView.tsx`
 
+### A resumed session's duration resets to zero
+`[measured in Chromium]`
+`useStopwatch(0, false)` had no way to be seeded **after** mount, so the Logger's
+`?logId=` branch called `stopwatch.start()` against a counter still at 0. The
+autosave then wrote `total_seconds: secondsRef.current` — a 47-minute session
+overwritten with `3` on the first tick. Measured directly: a fixture live for 25
+minutes reopened reading `00:00`, and the first PATCH carried `5`.
+**A value that is authoritative in the database must be read back into the state
+that overwrites it, not merely displayed.** The autosave was always the write
+path; the resume path just never told it where the clock actually was. It stayed
+invisible because resume was a rare route — reopening a finished log — until the
+Home button made it the main one.
+Now seeded before it is started, and from `started_at` rather than
+`total_seconds` for a live session: you can leave the Logger and browse while it
+runs, so the clock is wall-clock (`TIMERS.maxWorkoutSeconds` caps it, the same
+bound the auto-end uses). A reopened `done` log still seeds from its recorded
+duration and stays frozen.
+→ `src/lib/useTimer.ts`, `Logger.tsx`
+
 ### A loader that fails leaves stale numbers looking current
 `[argued — not reproduced]`
 `ProfileView`'s loader was an un-caught async IIFE. One rejected query and none
@@ -497,6 +516,26 @@ exactly on `ASPECT_BACKFILL_WEEKS`, so every successful backfill landed on
 "settled" and the hollow state was unreachable in production. A scenario whose
 fixture cannot produce the state it is named for passes silently.
 → `scripts/mobile-audit.mjs`
+
+### A scenario that stops finding its target reads as a pass
+`[measured in Chromium]`
+`audit:flicker` ends on "All sheets open and close cleanly", and a scenario whose
+`open` selector matches nothing prints `[skip]` above that line and **does not
+fail the run**. Changing Home's no-plan CTA from a `Start workout` button to a
+`Resume workout` link (the fixture's only log is `status: 'in_progress'`, so the
+resume state was always on) silently retired
+`Home · start workout (AddSessionMenu)` — the tail of the output still said
+everything passed.
+**Read the per-scenario lines, not the summary, and diff the skip count against
+the run before your change.** The same shape as "audit:mobile is green on a
+surface it never rendered" — there the surface was missing from the DOM, here the
+scenario was missing from the run — and the same fix applies: a check is only
+evidence for what it actually reached.
+The CTA now renders **above** the existing pair rather than replacing one of
+them, which restored the scenario and closed a real hole at the same time: with
+no active plan that row is the only route to the chooser, so a live session would
+have left resuming as the single thing you could do.
+→ `scripts/flicker-probe.mjs`, `ProfileView.tsx`
 
 ### What a standing check covers — and what it cannot
 The three checks are deliberately narrow. **A green run means only what the

@@ -7,6 +7,7 @@ import {
   getRecentLogs,
 } from '@/lib/queries';
 import { getCached, setCached } from '@/lib/queryCache';
+import { activeSessionOf } from '@/lib/activeSession';
 import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
 import type { TimelinePoint } from '@/lib/timeline';
@@ -482,6 +483,22 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   // resolve from the same derived key rather than from `activeDayKey` alone.
   const activeDay = days.find((d) => d.dayKey === activeKey) ?? null;
 
+  // …unless a workout is still running, in which case the CTA belongs to THAT
+  // session, not to whichever day card is expanded — you can leave the Logger
+  // by its Home button and browse, and this is the way back in. The day cards
+  // stay freely browsable; the button keeps naming what is actually live.
+  // Free: `allLogs` is already loaded and includes in-progress rows.
+  const running = mode === 'app' ? activeSessionOf(allLogs) : null;
+  const runningDay = running?.day_key
+    ? (days.find((d) => d.dayKey === running.day_key) ?? null)
+    : null;
+  const resumeLabel = runningDay ? `Resume ${typeFromLabel(runningDay.label)}` : 'Resume workout';
+  const resumeHref = running ? `/app/log?logId=${running.id}` : null;
+  // Dark teal + a sweeping sheen: the one filled, chromatic treatment in the
+  // app, so a session left running is impossible to walk past. See
+  // .shimmer-resume in global.css.
+  const resumeClass = 'bg-teal-deep text-teal-fg shimmer-resume';
+
   return (
     <>
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
@@ -588,11 +605,21 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                       gap-px grid never take .lift. The unit owns the depth. */}
                   <div className="flex gap-px bg-border">
                     <a
-                      href={activeDay ? `/app/log?day=${encodeURIComponent(activeDay.dayKey)}` : '/app/log'}
-                      className="flex min-h-13 flex-1 items-center justify-center overflow-hidden bg-fg px-4 text-bg transition-colors hover:bg-fg/85"
+                      href={
+                        resumeHref ??
+                        (activeDay ? `/app/log?day=${encodeURIComponent(activeDay.dayKey)}` : '/app/log')
+                      }
+                      className={`flex min-h-13 flex-1 items-center justify-center overflow-hidden px-4 transition-colors ${
+                        resumeHref ? resumeClass : 'bg-fg text-bg hover:bg-fg/85'
+                      }`}
                     >
-                      <span className="t-control truncate">
-                        {activeDay ? `Start ${typeFromLabel(activeDay.label)}` : 'Start workout'}
+                      {/* Above the sheen, which is an ::after on the anchor. */}
+                      <span className="t-control relative truncate">
+                        {resumeHref
+                          ? resumeLabel
+                          : activeDay
+                            ? `Start ${typeFromLabel(activeDay.label)}`
+                            : 'Start workout'}
                       </span>
                     </a>
                     {/* The chooser is the only route to minis, saved sessions,
@@ -621,6 +648,18 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             ) : (
               <>
                 <EmptyState>No active plan.</EmptyState>
+                {/* Above the pair, not instead of one of them: with no plan
+                    this row is the ONLY route to the chooser, so replacing
+                    "Start workout" would leave a live session as the single
+                    thing you could do. */}
+                {resumeHref ? (
+                  <a
+                    href={resumeHref}
+                    className={`hill-btn mt-3 flex min-h-12 items-center justify-center overflow-hidden px-4 text-sm uppercase tracking-wider transition-colors ${resumeClass}`}
+                  >
+                    <span className="relative">{resumeLabel}</span>
+                  </a>
+                ) : null}
                 <div className="mt-3 flex gap-3">
                   <button
                     type="button"

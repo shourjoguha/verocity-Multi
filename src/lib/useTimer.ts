@@ -19,6 +19,10 @@ export function useStopwatch(initialSeconds = 0, autostart = false) {
     start: () => setRunning(true),
     pause: () => setRunning(false),
     resume: () => setRunning(true),
+    // Seeding has to be possible AFTER mount: the Logger only learns a resumed
+    // session's elapsed time once the row has loaded, and without this the
+    // clock restarted at 0 and the autosave wrote that over the real duration.
+    set: (s: number) => setSeconds(s),
   };
 }
 

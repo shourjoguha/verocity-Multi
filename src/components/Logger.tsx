@@ -44,6 +44,8 @@ import {
   ungroup,
 } from '@/lib/logEdits';
 import { isSubroutine } from '@/lib/subroutine';
+import { activeSessionOf } from '@/lib/activeSession';
+import { typeFromLabel } from '@/lib/timeline';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { lastPerformance } from '@/lib/lastPerformance';
 import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
@@ -62,6 +64,7 @@ import type {
   Session,
   SetActual,
   VibeCheck,
+  WorkoutLog,
 } from '@/lib/types';
 import { Button, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
@@ -73,10 +76,6 @@ import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { toast } from '@/lib/toast';
-
-// Workouts left running are auto-ended at this cap (wall-clock since started_at)
-// so a stale session never racks up a 9-hour duration. The user can edit later.
-const MAX_WORKOUT_SECONDS = 2 * 60 * 60;
 
 const METRIC_CYCLE: MetricKey[] = ['weight', 'reps', 'time', 'distance', 'rpe'];
 
@@ -173,6 +172,9 @@ export default function Logger() {
   // Editing a past workout (opened via ?logId=…&edit=1): reuse every logging
   // control but freeze the live-session behaviors (stopwatch, auto-end, finish).
   const [editing, setEditing] = useState(false);
+  // Set when this page was asked to START a workout while another one is
+  // still running. Nothing is created until the user answers.
+  const [blockedBy, setBlockedBy] = useState<{ log: WorkoutLog; label: string } | null>(null);
 
   const stopwatch = useStopwatch(0, false);
   const rest = useCountdown(onRestDone);
@@ -187,6 +189,9 @@ export default function Logger() {
   const startedAtRef = useRef(startedAt);
   const editingRef = useRef(editing);
   const autoEndedRef = useRef(false);
+  // Set by the Home button so the unload guard below stands down for the one
+  // exit that is deliberate and already flushed.
+  const leavingRef = useRef(false);
   docRef.current = doc;
   secondsRef.current = stopwatch.seconds;
   statusRef.current = status;
@@ -222,9 +227,25 @@ export default function Logger() {
           setTags(log.tags ?? []);
           if (log.plan_id) setSubs(await getMovementSubs(log.plan_id));
           setStartedAt(log.started_at);
-          // Editing a past workout keeps the recorded duration frozen — don't
-          // run the stopwatch (it would count from 0 and clobber total_seconds).
-          if (log.total_seconds && !editMode) stopwatch.start();
+          // Seed the clock BEFORE starting it. Without this the stopwatch
+          // resumed from 0 and the autosave wrote that straight over the real
+          // duration — see docs/LESSONS.md § "a resumed session's duration
+          // resets to zero". A live session is wall-clock since started_at (you
+          // can leave the Logger and browse the app while it runs, so the time
+          // away counts); anything else seeds from its recorded duration.
+          if (!editMode) {
+            const live = log.status === 'in_progress' && log.started_at;
+            stopwatch.set(
+              live
+                ? Math.min(
+                    TIMERS.maxWorkoutSeconds,
+                    Math.floor((Date.now() - new Date(log.started_at!).getTime()) / 1000),
+                  )
+                : (log.total_seconds ?? 0),
+            );
+            // Editing a past workout keeps the recorded duration frozen.
+            if (live) stopwatch.start();
+          }
         }
         setReady(true);
         return;
@@ -249,6 +270,26 @@ export default function Logger() {
         getAllLogs(),
       ]);
       setBestByMovement(bestE1rmByMovement(allLogs));
+
+      // Everything below builds and creates a NEW row, so this is the one
+      // place every entry point converges on — the Home CTA and its ⋯ chooser,
+      // the tab bar +, the calendar, the plan and the saved-session lists all
+      // land here. Gating a second start here covers all of them at once;
+      // wiring a confirm into each chooser would not. Nothing has been created
+      // at this point, so answering the gate is free either way.
+      const running = activeSessionOf(allLogs);
+      if (running) {
+        const plan = sessionParam ? null : (source as Plan | null);
+        const runningDay = running.day_key
+          ? plan?.parsed.days.find((d) => d.dayKey === running.day_key)
+          : undefined;
+        setBlockedBy({
+          log: running,
+          label: runningDay ? typeFromLabel(runningDay.label) : 'workout',
+        });
+        setReady(true);
+        return;
+      }
 
       let built: LogDocument;
       let weekNumber: number | null = null;
@@ -401,6 +442,7 @@ export default function Logger() {
   // of entry. Only while a live session is actually in progress.
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (leavingRef.current) return;
       if (editingRef.current) return;
       if (statusRef.current === 'done' || statusRef.current === 'cancelled') return;
       e.preventDefault();
@@ -421,12 +463,12 @@ export default function Logger() {
     stopwatch.pause();
     const start = startedAtRef.current;
     const endedIso = start
-      ? new Date(new Date(start).getTime() + MAX_WORKOUT_SECONDS * 1000).toISOString()
+      ? new Date(new Date(start).getTime() + TIMERS.maxWorkoutSeconds * 1000).toISOString()
       : new Date().toISOString();
     if (idRef.current) {
       await updateLog(idRef.current, {
         data: docRef.current,
-        total_seconds: MAX_WORKOUT_SECONDS,
+        total_seconds: TIMERS.maxWorkoutSeconds,
         status: 'done',
         ended_at: endedIso,
         log_date: logDateRef.current,
@@ -440,7 +482,7 @@ export default function Logger() {
     if (!ready || editing || status !== 'in_progress' || !startedAt) return;
     const check = () => {
       const elapsed = (Date.now() - new Date(startedAt).getTime()) / 1000;
-      if (elapsed >= MAX_WORKOUT_SECONDS) autoEnd();
+      if (elapsed >= TIMERS.maxWorkoutSeconds) autoEnd();
     };
     check();
     const id = setInterval(check, 30_000);
@@ -529,6 +571,35 @@ export default function Logger() {
       next === 'done' && idRef.current ? `/app/session?id=${idRef.current}` : '/app';
   }
 
+  // Leave the Logger WITHOUT ending the session: the row stays `in_progress`,
+  // Home's primary CTA turns into "Resume …", and the clock keeps running on
+  // wall-clock. The flush is not optional — autosave runs every
+  // TIMERS.autosaveSeconds, so walking out between ticks would drop entry.
+  //
+  // A full navigation rather than a ClientRouter one, matching finish(): a soft
+  // nav would leave Home seeded from a stale queryCache entry, so the CTA would
+  // paint "Start" and only flip to "Resume" once revalidation landed.
+  async function goHome() {
+    leavingRef.current = true;
+    stopwatch.pause();
+    if (idRef.current) {
+      const ok = await updateLog(idRef.current, {
+        data: docRef.current,
+        total_seconds: secondsRef.current,
+        status: 'in_progress',
+        log_date: logDateRef.current,
+        tags: tagsRef.current,
+      });
+      if (!ok) {
+        leavingRef.current = false;
+        stopwatch.resume();
+        toast('Save failed — check your connection and try again', 'error');
+        return;
+      }
+    }
+    window.location.href = '/app';
+  }
+
   // Finish an edit of a past workout: persist the edited document (plus date/
   // tags) without changing status, duration, or ended_at, then return to the
   // read-only session view.
@@ -548,6 +619,69 @@ export default function Logger() {
   }
 
   if (!ready) return <LoadingScreen />;
+
+  // Asked to START a workout while another one is still running. Nothing has
+  // been created yet and there is nothing behind this to look at, so the gate
+  // IS the page — rendering the (empty) logging screen under it would read as
+  // a blank workout already begun. No safe silent dismiss either: the scrim
+  // and Escape both go Home.
+  if (blockedBy) {
+    return (
+      <ErrorBoundary>
+        <Modal
+          open
+          onClose={() => {
+            window.location.href = '/app';
+          }}
+          title="Session already running"
+        >
+          <div className="flex flex-col gap-4 p-4">
+            <p className="text-sm text-muted">
+              You have a <span className="capitalize text-fg">{blockedBy.label}</span> session
+              running since{' '}
+              <span className="tabular-nums text-fg">
+                {new Date(blockedBy.log.started_at!).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+              . Starting a new one leaves it behind.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button
+                onClick={() => {
+                  window.location.href = `/app/log?logId=${blockedBy.log.id}`;
+                }}
+                className="w-full"
+              >
+                Resume it
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  const ok = await updateLog(blockedBy.log.id, {
+                    status: 'cancelled',
+                    ended_at: new Date().toISOString(),
+                  });
+                  if (!ok) {
+                    toast('Save failed — check your connection and try again', 'error');
+                    return;
+                  }
+                  // Re-enter through the front door: with the old session
+                  // cancelled the gate no longer trips, and the build path
+                  // runs exactly as it would have.
+                  window.location.reload();
+                }}
+                className="w-full"
+              >
+                Discard it and start this one
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      </ErrorBoundary>
+    );
+  }
 
   const ordered = doc.sections
     .slice()
@@ -907,7 +1041,9 @@ export default function Logger() {
           `fixed` — see the bar for the iOS reason. The reading column moved in
           here; the outer div is now full-bleed so the bar can span the screen. */}
       <div className="mx-auto w-full max-w-2xl flex-1 px-4 sm:px-6 py-8">
-      <header className="mb-6 flex items-center justify-between">
+      {/* Wraps: at 375px a session past the hour mark ("1:05:23" at text-5xl)
+          plus Home and Pause does not fit on one line. */}
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-2">
         {editing ? (
           <div>
             <div className="font-display text-3xl uppercase tracking-tight text-fg">Editing</div>
@@ -927,9 +1063,17 @@ export default function Logger() {
                 {unsaved && !saving ? ' · not saved' : ''}
               </div>
             </div>
-            <Button variant="ghost" onClick={() => (stopwatch.running ? stopwatch.pause() : stopwatch.resume())}>
-              {stopwatch.running ? 'Pause' : 'Resume'}
-            </Button>
+            {/* Home leaves the session RUNNING — it is not a third way to end
+                one, which is why it sits up here with the clock rather than in
+                the Finish bar, where both actions stop the workout. */}
+            <div className="flex shrink-0 items-center gap-2">
+              <Button variant="ghost" onClick={goHome}>
+                Home
+              </Button>
+              <Button variant="ghost" onClick={() => (stopwatch.running ? stopwatch.pause() : stopwatch.resume())}>
+                {stopwatch.running ? 'Pause' : 'Resume'}
+              </Button>
+            </div>
           </>
         )}
       </header>

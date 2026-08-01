@@ -64,8 +64,15 @@ Operational detail lives in `docs/HANDOVER.md`.
 - [x] Voice input (Web Speech, feature-detected; parser unit-tested), grouping (superset/circuit merge/ungroup + kind toggle), metric swap
 - [x] Movement swap/add/remove via library picker, substitution suggestions (`bump_movement_sub` RPC + getMovementSubs)
 - [x] VibeCheck on start, ActivityLogger (`/app/activity`, lightweight non-strength)
+- [x] Leave a session running: Logger Home button (flushes, keeps `in_progress`),
+  Home's CTA becomes a shimmering "Resume …" (`lib/activeSession.ts`), and a
+  second start is confirmed rather than silently opening a parallel log
 - verify: ✓ check/build clean; pure edit logic in `lib/logEdits.ts`. Authed write
   path (create/update log, RPC) verified against the live DB via role simulation.
+  Exit/resume observed end to end in Chromium against the stub fixtures — clock
+  seeded from `started_at` (25:03, not 00:00), the flush PATCH carrying
+  `in_progress` with no `ended_at`, the gate creating nothing while open. Neither
+  standing audit can see any of that; both were run and are green.
 
 ### Phase 3 — Plan authoring  `[done]`
 - [x] Strict markdown plan parser (`planParser.ts`) → ParsedPlan
