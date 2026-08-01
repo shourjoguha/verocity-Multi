@@ -1,0 +1,29 @@
+-- Bump the derived-radar metric definition to 4 and clear rows written under
+-- definition 3. Same shape and reasoning as 0019 and 0021, which are the
+-- template this follows.
+--
+-- What changed: `setVolume` now multiplies by a per-movement RANGE-OF-MOTION
+-- factor (`ROM` in src/app.config.ts) — the movement's estimated load path
+-- divided by a 0.45m reference compound path. A calf raise moved the bar a
+-- quarter as far as a squat and scored identically at matched tonnage; it no
+-- longer does. `strength` and `power` are scaled training volume, so both move.
+--
+-- The factor is DIMENSIONLESS, not kg·m. True work would read zero for every
+-- isometric — a Side Plank has load and duration and no displacement — which is
+-- the same hole that stopped tonnage being a currency in the first place. A
+-- movement with no ROM estimate scores the neutral 1.0, so absence is never a
+-- penalty.
+--
+-- The radar scores each axis against the MEDIAN of the owner's own past values,
+-- so a baseline holding both definitions yields a median that describes neither
+-- — and nothing on screen would reveal it.
+--
+-- Idempotent: re-applied against a database that has since rebuilt a good
+-- baseline, this deletes nothing.
+--
+-- No schema change — `metrics_version` already exists from 0019.
+--   1 = e1RM-based strength, plyometric minutes for power, aerobic-only endurance.
+--   2 = scaled training volume for strength/power, three-component endurance.
+--   3 = unweighted work priced against the owner's bodyweight; HR ceiling from age.
+--   4 = volume scaled by each movement's range of motion.
+delete from public.aspect_snapshots where metrics_version < 4;

@@ -252,6 +252,46 @@ export const ROTARY_ROLES = {
   antiRotational: { label: 'Anti-rotational' },
 } as const;
 
+// Range of motion, as an estimated path length per rep for a ~175cm lifter.
+//
+// WHY A RATIO AND NOT KG·M. True work — load × distance — reads zero for every
+// isometric: a Side Plank has load and duration and no displacement at all.
+// That is the same hole that stopped tonnage being a currency, so displacement
+// is applied as a DIMENSIONLESS FACTOR (`metres ÷ referenceM`) on top of scaled
+// volume. Nothing can zero out, and the readout stays the relative index it
+// already claims to be rather than a unit the model cannot honour (it ignores
+// the eccentric, path curvature and the limb's own mass).
+//
+// A movement with no `rom` on its profile scores 1.0. Absence is neutral, never
+// a penalty — the same rule RPE follows in VOLUME below.
+//
+// HEIGHT IS DELIBERATELY NOT APPLIED. It is one global scalar per lifter, so it
+// cancels out of a dimensionless factor exactly as it cancels out of every
+// score measured against that lifter's own history. It would only mean
+// something if this were reported in absolute metres.
+export const ROM = {
+  // A typical compound bar path — bench, row, overhead press. The denominator.
+  referenceM: 0.45,
+  // Load travel per rep, in metres. Estimates, and reviewable as estimates:
+  // change one and every movement built on it moves together.
+  squat: 0.55,
+  hinge: 0.45,
+  lunge: 0.45,
+  kneeIsolation: 0.35,
+  hipIsolation: 0.35,
+  calf: 0.12,
+  pushHorizontal: 0.42,
+  pushVertical: 0.55,
+  dip: 0.4,
+  pullVertical: 0.6,
+  pullHorizontal: 0.4,
+  deltIsolation: 0.5,
+  armIsolation: 0.35,
+  prehab: 0.3,
+  coreDynamic: 0.3,
+  jump: 0.55,
+} as const;
+
 // Working-minutes model (lib/bodyLoad.ts). Tonnage is deliberately not the
 // primary currency: weight × reps is zero for Ski-Erg, Box Jump and Side Plank.
 export const LOAD = {
@@ -428,7 +468,8 @@ export const ASPECT_OVERRIDE_DAYS = 21;
 //   1 — e1RM-based strength, plyometric minutes for power, aerobic-only endurance
 //   2 — scaled training volume for strength/power, three-component endurance
 //   3 — unweighted work priced against the owner's bodyweight; HR ceiling from age
-export const ASPECT_METRICS_VERSION = 3;
+//   4 — volume scaled by each movement's range of motion (ROM)
+export const ASPECT_METRICS_VERSION = 4;
 
 // Softness of the logistic that maps a robust z-score onto ASPECT_SCALE: ±1.5
 // lands roughly ±2.2 points. The logistic is asymptotic, so scores approach 1
@@ -469,6 +510,7 @@ export const appConfig = {
   movementModalities: MOVEMENT_MODALITIES,
   movementPlanes: MOVEMENT_PLANES,
   rotaryRoles: ROTARY_ROLES,
+  rom: ROM,
   genders: GENDERS,
   bodyTypes: BODY_TYPES,
   load: LOAD,
@@ -505,6 +547,13 @@ export interface MovementProfile {
   modality: ModalityKey | null;
   planes: PlaneWeights;
   rotary: RotaryRole | null;
+  /**
+   * Estimated load travel per rep in metres (see `ROM`). Optional: absent means
+   * "not estimated", which scores the neutral 1.0 rather than penalising the
+   * movement. Isometrics leave it unset on purpose — a plank displaces nothing,
+   * and pricing that as zero work would be wrong, not precise.
+   */
+  rom?: number;
   // Whole-organism demand. Additive to the region weights, never a substitute:
   // Run is systemic AND posteriorChain/quads/calves.
   systemic: boolean;

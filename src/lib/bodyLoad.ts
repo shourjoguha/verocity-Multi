@@ -20,6 +20,7 @@ import {
   MODALITY_KEYS,
   MUSCLE_REGION_KEYS,
   PLANE_KEYS,
+  ROM,
   RPE,
   VOLUME,
   type ModalityKey,
@@ -125,7 +126,11 @@ function repEquivalents(a: LogSet['actual']): number {
  * flat constant so every existing caller and test is unchanged; pass
  * `unweightedRepKg(stats)` to price it against the lifter's own mass instead.
  */
-export function setVolume(set: LogSet, unweightedKg: number = VOLUME.unweightedRepKg): number {
+export function setVolume(
+  set: LogSet,
+  unweightedKg: number = VOLUME.unweightedRepKg,
+  rom: number = 1,
+): number {
   const a = set.actual;
   if (!a.completed) return 0;
 
@@ -138,7 +143,22 @@ export function setVolume(set: LogSet, unweightedKg: number = VOLUME.unweightedR
       ? clamp(1 + (a.rpe - RPE.default) * VOLUME.rpePerPoint, VOLUME.rpeFactorRange)
       : 1;
 
-  return load * reps * side * pause * rpe;
+  return load * reps * side * pause * rpe * rom;
+}
+
+/**
+ * How far the load travels on this movement, relative to a reference compound
+ * bar path (`ROM.referenceM`). A calf raise moves the bar a quarter as far as a
+ * squat at identical tonnage, and without this they scored the same.
+ *
+ * Dimensionless on purpose — see the note on `ROM` in app.config.ts. A movement
+ * with no estimate scores 1.0: absence is neutral, never a penalty, so an
+ * isometric is not priced at zero work for displacing nothing.
+ */
+export function romFactor(profile: { rom?: number } | null | undefined): number {
+  const m = profile?.rom;
+  if (m == null || !Number.isFinite(m) || m <= 0) return 1;
+  return m / ROM.referenceM;
 }
 
 /** How heavy a set was relative to that movement's own best, as a multiplier. */
@@ -213,8 +233,9 @@ export function summarizeTrainingVolume(
           if (!modality) continue;
 
           const best = bests.get(item.movement);
+          const rom = romFactor(c.profile);
           for (const s of item.sets) {
-            const base = setVolume(s, unweightedKg);
+            const base = setVolume(s, unweightedKg, rom);
             if (base <= 0) continue;
             const weighted =
               modality === 'resistance'
@@ -333,8 +354,13 @@ export function summarizeBodyLoad(
 
           // Unweighted by intensity/explosiveness on purpose: those are
           // axis-specific weightings the radar applies in summarizeTrainingVolume,
-          // and the body map must not inherit them. This is raw scaled volume.
-          const itemVolume = item.sets.reduce((acc, s) => acc + setVolume(s, unweightedKg), 0);
+          // and the body map must not inherit them. This is raw scaled volume,
+          // ROM-adjusted so a calf raise stops matching a squat at equal tonnage.
+          const rom = romFactor(profile);
+          const itemVolume = item.sets.reduce(
+            (acc, s) => acc + setVolume(s, unweightedKg, rom),
+            0,
+          );
 
           for (const [region, weight] of Object.entries(profile.regions) as [RegionKey, number][]) {
             regionMinutes[region] += minutes * weight;
