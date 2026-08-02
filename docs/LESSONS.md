@@ -182,10 +182,25 @@ identifies the mechanism. Eyeballing "about 75px" identifies nothing.
 
 Both `fixed` and `sticky` resolve `bottom: 0` against iOS Safari's **layout**
 viewport. Scrolling down retracts the address bar and grows the **visual**
-viewport immediately, but the layout viewport does not catch up until the
-gesture ends — so `bottom: 0` means the bottom of a box now shorter than what is
-on screen. The header never had the problem because the viewport's **top** edge
-does not move; sheets never had it because they are full-height overlays.
+viewport immediately, but the layout viewport does not catch up — so `bottom: 0`
+means the bottom of a box now shorter than what is on screen. The header never
+had the problem because the viewport's **top** edge does not move; sheets never
+had it because they are full-height overlays.
+
+**The tell: it happens on a cold load and stops after an app switch.**
+`[confirmed in the wild]` Safari establishes the layout viewport when the page
+loads, sized for the EXPANDED toolbar. Retracting the toolbar does not
+re-establish it, so the stale value persists for the rest of that page's life.
+Backgrounding the app and returning forces a re-layout — and if you return while
+scrolled down with the toolbar already retracted, the layout viewport is
+re-established at the TALLER size, the two agree, and the bar behaves for the
+rest of the session. Same reason a scroll **up** fixes it momentarily: it
+re-expands the toolbar, so the stale number becomes the true one again.
+Two consequences worth holding on to: **the bug lives in the first-load state**,
+so a reproduction attempt that starts by switching away and back will find
+nothing and conclude wrongly that it is fixed — and a symptom that clears on
+app-switch is evidence of a **stale viewport**, not of a rendering fault, which
+is what sends people looking at paint and compositing instead of layout.
 
 **`sticky bottom-0` was shipped as the fix and does not work.** The reasoning
 was that a sticky box is laid out in the document so it must track what is
