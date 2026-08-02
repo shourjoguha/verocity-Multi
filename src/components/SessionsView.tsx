@@ -14,6 +14,7 @@ import type { Movement, Plan, PlanDay, Session, SessionExercise } from '@/lib/ty
 import { ACTIVITY_TAGS, METRICS, SECTIONS, type ActivityTagKey, type MetricKey, type SectionKey } from '@/app.config';
 import { tagColor } from '@/lib/tags';
 import { formatSessionMeta } from '@/lib/sessionMeta';
+import { SessionSheet } from '@/components/SessionSheet';
 import { Button, EmptyState, LoadingScreen, Tag } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
@@ -317,6 +318,7 @@ export default function SessionsView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [busy, setBusy] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionsQ.data) setItems(sessionsQ.data);
@@ -516,7 +518,12 @@ export default function SessionsView() {
               const isShared = s.owner_user_id === null;
               return (
                 <li key={s.id} className="flex items-center gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewId(s.id)}
+                    className="min-w-0 flex-1 text-left"
+                    aria-label={`Preview ${s.name}`}
+                  >
                     <div className="truncate text-fg">{s.name}</div>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       {s.tags.map((t) => (
@@ -529,8 +536,11 @@ export default function SessionsView() {
                         {isShared ? ' · shared' : ''}
                       </span>
                     </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
+                  </button>
+                  <div
+                    className="flex shrink-0 items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <a
                       href={`/app/log?session=${encodeURIComponent(s.id)}`}
                       className="hill-btn border border-border bg-surface px-2 py-1 t-control text-fg hover:border-fg"
@@ -564,6 +574,15 @@ export default function SessionsView() {
       )}
 
       <PlansBrowser plans={plans} onSaveDay={saveDayAsSession} busy={busy} />
+
+      <SessionSheet
+        session={sessions.find((s) => s.id === previewId) ?? null}
+        onClose={() => setPreviewId(null)}
+        onEdit={(s) => {
+          setPreviewId(null);
+          startEdit(s);
+        }}
+      />
     </PageStagger>
   );
 }
