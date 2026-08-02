@@ -299,10 +299,19 @@ for (const vp of VIEWPORTS) {
     const report = await page.evaluate(({ allowSrc, deviceWidth }) => {
       const allow = allowSrc.map((s) => new RegExp(s.slice(1, s.lastIndexOf('/')), 'i'));
       const doc = document.documentElement;
+      // Measure the SCROLLER, not just the document. Under App.astro's shell
+      // the document cannot scroll at all (`.app-shell` clips it), so
+      // `documentElement.scrollWidth` is pinned to the viewport whatever the
+      // page does — this check went blind the day the shell landed, and passed
+      // on a build that laid Home out at 768px inside a 393px phone. The
+      // scroll root still reports its true content width because it is
+      // `overflow-x: hidden`, not `clip`.
+      const scroller = document.querySelector('[data-scroll-root]');
+      const widest = Math.max(doc.scrollWidth, scroller ? scroller.scrollWidth : 0);
       // Compare against the DEVICE width, not innerWidth: when content
       // overflows, mobile Chromium widens the layout viewport, so innerWidth
       // grows with scrollWidth and their difference stays 0.
-      const overflow = Math.max(doc.scrollWidth, window.innerWidth) - deviceWidth;
+      const overflow = Math.max(widest, window.innerWidth) - deviceWidth;
 
       // Which elements actually stick out past the viewport.
       const culprits = [];
@@ -329,7 +338,7 @@ for (const vp of VIEWPORTS) {
 
       return {
         overflow,
-        scrollWidth: doc.scrollWidth,
+        scrollWidth: widest,
         innerWidth: window.innerWidth,
         culprits: culprits.slice(0, 6),
         small: small.slice(0, 10),
