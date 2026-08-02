@@ -137,6 +137,7 @@ export const ACTIVITY_TAGS = {
   endurance: { label: 'Endurance', color: '#77612A' },
   mobility: { label: 'Mobility', color: '#1DBD8E' },
   sport: { label: 'Sport', color: '#004C94' },
+  hyrox: { label: 'Hyrox', color: '#4B2E83' },
 } as const;
 
 // Quick-pick activity types for the lightweight non-strength ActivityLogger.

@@ -42,7 +42,13 @@ export function AddSessionMenu({
   // Minis tagged to the active plan get their own quick group; generic saved
   // sessions (non-mini) live in the collapsed "More" section.
   const planMinis = (sessions ?? []).filter((s) => s.is_mini && s.source_plan_id === plan?.id);
-  const savedSessions = (sessions ?? []).filter((s) => !s.is_mini);
+  // Shared-library sessions (owner_user_id null) grouped by tag under "More".
+  // Hyrox is the only shared tag today; extending is a matter of listing more
+  // ACTIVITY_TAGS keys here.
+  const hyroxShared = (sessions ?? []).filter(
+    (s) => s.owner_user_id === null && s.tags.includes('hyrox'),
+  );
+  const savedSessions = (sessions ?? []).filter((s) => !s.is_mini && s.owner_user_id !== null);
 
   const dateQ = date ? `date=${date}` : '';
   const suffix = dateQ ? `?${dateQ}` : '';
@@ -59,7 +65,7 @@ export function AddSessionMenu({
   const rowClass =
     'flex items-center justify-between border-b border-border px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-elevated';
   const groupLabelClass = 'mb-2 t-label text-muted';
-  const hasMore = savedSessions.length > 0 || pastPlans.length > 0;
+  const hasMore = savedSessions.length > 0 || pastPlans.length > 0 || hyroxShared.length > 0;
 
   return (
     <Modal open={open} onClose={onClose} title={date ? 'New session' : 'Start something'}>
@@ -130,6 +136,22 @@ export function AddSessionMenu({
 
             {showMore ? (
               <div className="mt-3 flex flex-col gap-5">
+                {hyroxShared.length > 0 ? (
+                  <div>
+                    <div className={groupLabelClass}>Community · Hyrox</div>
+                    <ul className="border border-border">
+                      {hyroxShared.map((s) => (
+                        <li key={s.id}>
+                          <a href={sessionHref(s.id)} className={rowClass}>
+                            <span className="truncate text-fg">{s.name}</span>
+                            <span className="text-muted">→</span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
                 {savedSessions.length > 0 ? (
                   <div>
                     <div className="flex items-baseline justify-between">
