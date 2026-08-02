@@ -8,6 +8,7 @@ import type {
   PlanDay,
   SessionExercise,
   SessionFrame,
+  SessionGroup,
 } from '@/lib/types';
 import type { SessionInput } from '@/lib/queries';
 import { RPE, SECTIONS, type MetricKey, type SectionKey } from '@/app.config';
@@ -109,9 +110,74 @@ export function buildLogFromPlanDay(day: PlanDay, week: number): LogDocument {
 
 // Build an in-progress LogDocument from a saved session frame. An empty frame
 // falls back to a blank doc so the Logger still has a section to add into.
+// Structured sessions (Hyrox / metcon) supply `frame.groups`; that path
+// preserves circuit / superset kinds and expands `rounds` into set counts.
 export function buildLogFromSession(frame: SessionFrame): LogDocument {
+  if (frame.groups && frame.groups.length > 0) {
+    return buildLogFromGroups(frame.groups);
+  }
   if (!frame.exercises || frame.exercises.length === 0) return buildBlankLog();
   return buildLogFromExercises(frame.exercises);
+}
+
+// Expand a rounds count into a planned-set string. Round-trips through
+// parsePlanned to the same shape the Logger already renders.
+//   ('1x40s', 5) -> '5x40s'
+//   ('10',    3) -> '3x10'
+//   ('',      4) -> '4x'
+export function expandRounds(planned: string, rounds: number): string {
+  const r = Math.max(1, Math.floor(rounds));
+  if (r === 1) return planned;
+  const { count, label } = parsePlanned(planned);
+  const total = Math.max(1, count) * r;
+  return label ? `${total}x${label}` : `${total}x`;
+}
+
+function buildLogFromGroups(groups: SessionGroup[]): LogDocument {
+  const bySection = new Map<SectionKey, LogGroup[]>();
+
+  for (const g of groups) {
+    const items = g.items.map<LogItem>((ex) => {
+      if (isSubroutine(ex)) {
+        return {
+          id: newId(),
+          kind: 'subroutine',
+          movement: ex.movement,
+          description: ex.description,
+          ...(ex.url ? { url: ex.url } : {}),
+          primaryMetric: ex.primaryMetric,
+          sets: [],
+        };
+      }
+      const expanded = g.rounds && g.rounds > 1 ? expandRounds(ex.planned, g.rounds) : ex.planned;
+      const { count, label } = parsePlanned(expanded);
+      return {
+        id: newId(),
+        movement: ex.movement,
+        primaryMetric: ex.primaryMetric,
+        notes: ex.notes,
+        sets: Array.from({ length: count }, () => ({
+          planned: label || null,
+          actual: emptyActual(),
+          notations: [],
+        })),
+      };
+    });
+
+    const logGroup: LogGroup = {
+      id: newId(),
+      kind: g.kind,
+      items,
+      ...(g.restSeconds != null ? { restSeconds: g.restSeconds } : {}),
+    };
+    bySection.set(g.section, [...(bySection.get(g.section) ?? []), logGroup]);
+  }
+
+  const sections: LogSection[] = SECTIONS.filter((k) => bySection.has(k)).map((key) => ({
+    key,
+    groups: bySection.get(key) ?? [],
+  }));
+  return { sections };
 }
 
 // The smallest week number with any programmed content for a day (1 if none).

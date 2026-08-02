@@ -13,6 +13,7 @@ import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import type { Movement, Plan, PlanDay, Session, SessionExercise } from '@/lib/types';
 import { ACTIVITY_TAGS, METRICS, SECTIONS, type ActivityTagKey, type MetricKey, type SectionKey } from '@/app.config';
 import { tagColor } from '@/lib/tags';
+import { formatSessionMeta } from '@/lib/sessionMeta';
 import { Button, EmptyState, LoadingScreen, Tag } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
@@ -509,7 +510,10 @@ export default function SessionsView() {
                   </li>
                 );
               }
-              const count = s.frame.exercises?.length ?? 0;
+              const groupCount = s.frame.groups?.reduce((n, g) => n + g.items.length, 0);
+              const count = groupCount ?? s.frame.exercises?.length ?? 0;
+              const meta = formatSessionMeta(s);
+              const isShared = s.owner_user_id === null;
               return (
                 <li key={s.id} className="flex items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
@@ -519,8 +523,10 @@ export default function SessionsView() {
                         <Tag key={t} label={ACTIVITY_TAGS[t as ActivityTagKey]?.label ?? t} color={tagColor(t)} />
                       ))}
                       <span className="t-control text-muted">
+                        {meta ? `${meta} · ` : ''}
                         {count} {count === 1 ? 'movement' : 'movements'}
                         {s.source_plan_id ? ' · from plan' : ''}
+                        {isShared ? ' · shared' : ''}
                       </span>
                     </div>
                   </div>
@@ -531,20 +537,24 @@ export default function SessionsView() {
                     >
                       Start
                     </a>
-                    <button
-                      onClick={() => startEdit(s)}
-                      className="px-2 t-control text-muted hover:text-fg"
-                      aria-label={`Edit ${s.name}`}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(s)}
-                      className="px-2 text-muted hover:text-accent"
-                      aria-label={`Delete ${s.name}`}
-                    >
-                      ×
-                    </button>
+                    {isShared ? null : (
+                      <>
+                        <button
+                          onClick={() => startEdit(s)}
+                          className="px-2 t-control text-muted hover:text-fg"
+                          aria-label={`Edit ${s.name}`}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(s)}
+                          className="px-2 text-muted hover:text-accent"
+                          aria-label={`Delete ${s.name}`}
+                        >
+                          ×
+                        </button>
+                      </>
+                    )}
                   </div>
                 </li>
               );

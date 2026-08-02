@@ -4,6 +4,7 @@ import {
   buildLogFromPlanDay,
   buildLogFromSession,
   daysToMiniSessions,
+  expandRounds,
   firstWeekWithContent,
   frameFromLogDocument,
   frameFromPlanDay,
@@ -122,6 +123,53 @@ describe('buildLogFromSession', () => {
 
   it('falls back to a blank doc for an empty frame so the logger is usable', () => {
     expect(buildLogFromSession({ exercises: [] })).toEqual(buildBlankLog());
+  });
+
+  it('honours frame.groups when present — preserves kind and expands rounds', () => {
+    const frame: SessionFrame = {
+      exercises: [],
+      groups: [
+        {
+          kind: 'circuit',
+          section: 'conditioning',
+          rounds: 5,
+          restSeconds: 20,
+          items: [
+            { movement: 'Wall Ball', section: 'conditioning', primaryMetric: 'reps', planned: '1x40s' },
+            { movement: 'Ski Erg', section: 'conditioning', primaryMetric: 'distance', planned: '1x40s' },
+          ],
+        },
+      ],
+    };
+    const doc = buildLogFromSession(frame);
+    expect(doc.sections).toHaveLength(1);
+    const group = doc.sections[0].groups[0];
+    expect(group.kind).toBe('circuit');
+    expect(group.restSeconds).toBe(20);
+    expect(group.items).toHaveLength(2);
+    // 1x40s expanded by rounds=5 -> 5x40s (5 sets each).
+    expect(group.items[0].sets).toHaveLength(5);
+    expect(group.items[0].sets[0].planned).toBe('40s');
+    expect(group.items[1].sets).toHaveLength(5);
+  });
+});
+
+describe('expandRounds', () => {
+  it('multiplies the set count by rounds and preserves the label', () => {
+    expect(expandRounds('1x40s', 5)).toBe('5x40s');
+    expect(expandRounds('3x10', 4)).toBe('12x10');
+  });
+
+  it('returns the input unchanged when rounds is 1', () => {
+    expect(expandRounds('3x5', 1)).toBe('3x5');
+  });
+
+  it('handles a bare count with no label', () => {
+    expect(expandRounds('1x', 3)).toBe('3x');
+  });
+
+  it('promotes unstructured planned to Nx<raw>', () => {
+    expect(expandRounds('AMRAP', 2)).toBe('2xAMRAP');
   });
 });
 

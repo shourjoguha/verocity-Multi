@@ -145,7 +145,9 @@ export interface Share {
 
 export interface Session {
   id: string;
-  owner_user_id: string;
+  // Shared-library sessions (seeded via migration, visible to all users) have
+  // `owner_user_id === null`. See supabase/migrations/0023_hyrox_sessions.sql.
+  owner_user_id: string | null;
   name: string;
   tags: string[];
   frame: SessionFrame;
@@ -153,12 +155,58 @@ export interface Session {
   source_day_key: string | null;
   is_mini: boolean;
   created_at: string;
+  // Structured-session metadata (added 0023). NULL on legacy strength sessions;
+  // populated on Hyrox / metcon templates so the card can show a format badge
+  // and the Logger can start a live time cap.
+  session_type: SessionType | null;
+  time_cap_seconds: number | null;
+  duration_seconds: number | null;
+  rounds: number | null;
+  partner: boolean;
+  instructions: string | null;
+  source: string | null;
+  source_text: string | null;
 }
 
-// sessions.frame JSONB contract: a flat, ordered exercise list (grouping is
-// reconstructed in the Logger, exactly as plan days are).
+// Workout scoring formats. Union values are stored verbatim in
+// `sessions.session_type` (checked by a CHECK constraint in 0023).
+export type SessionType =
+  | 'AMRAP'
+  | 'EMOM'
+  | 'FOR_TIME'
+  | 'FOR_TOTAL_REPS'
+  | 'FOR_TOTAL_DISTANCE'
+  | 'FOR_LOAD'
+  | 'INTERVALS'
+  | 'ROUNDS_FOR_TIME'
+  | 'CHIPPER'
+  | 'PARTNER'
+  | 'OTHER';
+
+// sessions.frame JSONB contract. Two shapes coexist:
+//
+// - Legacy (strength-style): a flat, ordered `exercises[]` list — grouping
+//   is reconstructed in the Logger as `single`-kind groups per exercise.
+// - Structured (Hyrox / metcon): an ordered `groups[]` array that carries
+//   round/circuit structure directly; `exercises` is a flattened mirror kept
+//   only for back-compat readers that ignore `groups`.
+//
+// When both are present, `groups` is authoritative.
 export interface SessionFrame {
   exercises: SessionExercise[];
+  groups?: SessionGroup[];
+}
+
+// A group of items opened together in the Logger — mirrors `LogGroup` on the
+// log side (types below). `rounds` expands into repeated set counts on each
+// item's `planned` when the frame is unfolded by logBuilder.
+export interface SessionGroup {
+  kind: GroupKind;
+  section: SectionKey;
+  items: SessionExercise[];
+  rounds?: number;
+  restSeconds?: number;
+  label?: string;
 }
 
 export interface SessionExercise {

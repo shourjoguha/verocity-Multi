@@ -21,6 +21,7 @@ import type {
   RxDeepResult,
   Session,
   SessionFrame,
+  SessionType,
   Share,
   ShareScope,
   UserStats,
@@ -210,6 +211,15 @@ export type SessionInput = {
   source_plan_id?: string | null;
   source_day_key?: string | null;
   is_mini?: boolean;
+  // Structured-session fields (0023). Optional; legacy strength sessions omit them.
+  session_type?: SessionType | null;
+  time_cap_seconds?: number | null;
+  duration_seconds?: number | null;
+  rounds?: number | null;
+  partner?: boolean;
+  instructions?: string | null;
+  source?: string | null;
+  source_text?: string | null;
 };
 
 export async function createSession(input: SessionInput): Promise<Session | null> {
