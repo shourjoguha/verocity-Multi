@@ -132,11 +132,16 @@ const onTab = tabs.some((t) => isActive(t.href));
   {/* The scroller. `min-h-0` because a flex item's default `min-height: auto`
       would let it grow to its content instead of scrolling. The inner
       `min-h-full` column keeps `main` filling the scrollport on a short page,
-      which is what stops the Logger's Finish bar floating mid-screen there. */}
+      which is what stops the Logger's Finish bar floating mid-screen there.
+      `overflow-x-hidden` is not decoration: `overflow-y: auto` alone computes
+      the other axis to `auto` too, so any horizontal overflow turns the app
+      chrome into something you pan sideways. Clipping is the better failure —
+      `hidden` (not `clip`) so `scrollWidth` still reports the overflow and
+      `npm run audit:mobile` can still see it. */}
   <div
     id="app-scroll"
     data-scroll-root
-    class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain"
+    class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain"
   >
   <div class="flex min-h-full flex-col">
   <header
@@ -232,11 +237,18 @@ const onTab = tabs.some((t) => isActive(t.href));
     }
   </nav>
 
-  {/* A flex column, so the Logger can claim the scrollport with `flex-1`
-      instead of guessing at a viewport-unit height that has to know the
-      header's. Every app page renders a single island into it, so nothing
-      here depended on block-level margin collapsing. */}
-  <main id="main" class:list={['flex flex-1 flex-col', immersive && 'main-immersive']}>
+  {/* A PLAIN BLOCK on every route but the Logger's, and that is load-bearing.
+      Astro gives `<astro-island>` `display: contents`, so making `main` a flex
+      container promotes each page's own root div to a direct flex item — and
+      those roots carry `mx-auto`. A flex item with auto margins in the cross
+      axis does not stretch: it takes `fit-content` instead, capped by its
+      `max-w-3xl`. On a phone that laid the whole page out at 768px inside a
+      393px viewport, pannable sideways. See docs/LESSONS.md § "The page lays
+      out wider than the screen".
+      `.main-immersive` opts the Logger in, because it needs `flex-1` to claim
+      the scrollport so its Finish bar lands on the bottom edge — and its root
+      has no auto margins, so it stretches. */}
+  <main id="main" class:list={['flex-1', immersive && 'main-immersive flex flex-col']}>
     <slot />
   </main>
   </div>

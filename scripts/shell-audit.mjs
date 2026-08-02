@@ -124,11 +124,33 @@ for (const route of ROUTES) {
         }
         scroller.scrollTop = 0;
       }
+      // The page's own root, stepping over Astro's `display: contents`
+      // `<astro-island>` — the element that made this necessary — and over the
+      // box-less nodes it emits alongside the markup (`<template>`, scripts).
+      const contentRoot = (el) => {
+        for (const child of el.children) {
+          const cs = getComputedStyle(child);
+          if (cs.display === 'none') continue;
+          if (cs.display === 'contents') {
+            const inner = contentRoot(child);
+            if (inner) return inner;
+            continue;
+          }
+          if (child.getClientRects().length === 0) continue;
+          return child;
+        }
+        return null;
+      };
+      const main = document.getElementById('main');
+      const pageRoot = main ? contentRoot(main) : null;
+
       return {
         docScrollable: doc.scrollHeight - doc.clientHeight,
         scrollerScrollable: scroller ? scroller.scrollHeight - scroller.clientHeight : -1,
         barPosition: bar ? getComputedStyle(bar).position : 'MISSING',
         innerHeight: window.innerHeight,
+        mainWidth: main ? Math.round(main.clientWidth) : -1,
+        pageRootWidth: pageRoot ? Math.round(pageRoot.getBoundingClientRect().width) : -1,
         at,
       };
     });
@@ -152,6 +174,18 @@ for (const route of ROUTES) {
     if (r.scrollerScrollable < 1000)
       fail(`${tag}  [data-scroll-root] scrollable by only ${r.scrollerScrollable}px`);
     else pass(`${tag}  [data-scroll-root] scrolls (${r.scrollerScrollable}px)`);
+
+    // E — the page's root must FILL the scroller, not fit its content. An
+    //     overflow check cannot see this: when `#main` was a flex container,
+    //     Astro's `display: contents` island made each page's `mx-auto` root a
+    //     flex item, auto margins stopped it stretching, and it took
+    //     `fit-content` — NARROWER than the viewport here, and clamped to
+    //     `max-w-3xl` (768px) on a real phone where the fonts are wider. Both
+    //     are the same defect; only this assertion catches the narrow one.
+    if (r.pageRootWidth < 0) fail(`${tag}  no page root under #main`);
+    else if (Math.abs(r.pageRootWidth - r.mainWidth) > 1)
+      fail(`${tag}  page root is ${r.pageRootWidth}px inside a ${r.mainWidth}px #main — sized to content, not stretched`);
+    else pass(`${tag}  page root fills #main (${r.pageRootWidth}px)`);
 
     // D — and the bar stays put. Green on the broken build too (see the header);
     //     it is here to catch a plain layout mistake, not the viewport lag.

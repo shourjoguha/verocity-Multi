@@ -220,16 +220,12 @@ body.app-shell {
   scrollbar-gutter: stable;
 }
 
-/* Astro wraps every island in `<astro-island>`, an unstyled custom element that
-   sits between `#main`'s flex column and the island's own root — which breaks
-   `flex-1` for an island that has to fill the scrollport. Only the Logger does
-   (its Finish bar has to land on the bottom edge on a short session), so this
-   is scoped to the immersive route rather than applied to every island: a
-   `display: contents` element has no box, and a `client:visible` island needs
-   one for its IntersectionObserver to ever fire. */
-.main-immersive > astro-island {
-  display: contents;
-}
+/* NOTE — no `astro-island` rule here on purpose. Astro already gives it
+   `display: contents`, so an island's own root div IS the flex item of any
+   flex `#main`. That is exactly why `#main` is a plain block on every route
+   but the Logger's (see App.astro): page roots carry `mx-auto`, and a flex
+   item with auto cross-axis margins takes `fit-content` instead of
+   stretching. */
 
 /* Tabular numbers by default — this is a data-heavy app */
 body {

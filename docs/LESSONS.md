@@ -165,6 +165,42 @@ It would *not* break the bar's own positioning — only a transformed *ancestor*
 does that, which is the plausible-sounding reason to avoid reaching for.
 → `src/styles/global.css` (`.ledge`), `src/layouts/App.astro`
 
+### The page lays out wider than the screen and pans sideways
+`[confirmed in the wild; the same defect measured in Chromium, smaller]`
+Home rendered at **768px inside a 393px phone** — text at the correct size, but
+every box twice as wide and the whole page pannable left/right. The tab bar was
+unaffected and stayed exactly 393px, which is the tell: the bar sits outside
+`[data-scroll-root]`, so whatever went wrong was inside it.
+
+**Astro gives `<astro-island>` `display: contents`.** It has no box, so an
+island's own root div is the direct child of whatever contains the island. When
+`#main` was made `display: flex; flex-direction: column` (to let the Logger claim
+the scrollport with `flex-1`), every page's root became a **flex item** — and
+those roots all carry `mx-auto`. **A flex item with auto margins in the cross
+axis does not stretch**: auto margins absorb the free space, so the item takes
+`fit-content` instead. `fit-content` is `max-content` clamped by `max-width`,
+and the max-width is `max-w-3xl` — **768px**. Real Clash Display and Satoshi push
+max-content past that cap; the fallback fonts in the Chromium harness do not,
+which is why the same build measured a mere 319px-wide root locally.
+
+`#main` is a plain block again on every route but the Logger's, which opts in
+with `.main-immersive` and whose root has no auto margins. **Reach for
+`display: contents` and auto margins with care in the same subtree** — either
+alone is fine, together they silently change which box does the sizing.
+
+Two things this taught about detecting it:
+- **An overflow check cannot see it.** In the harness the root was *narrower*
+  than the viewport (319 < 393), so `scrollWidth` never exceeded the device
+  width and `npm run audit:mobile` was green on the broken build. The assertion
+  that catches it is "**the page root must FILL `#main`**", which fails on both
+  the narrow local case and the 768px device case — same defect, one check.
+- `overflow-y: auto` **computes the other axis to `auto` too**, which is what
+  turned the overflow into something you could pan. `[data-scroll-root]` now
+  sets `overflow-x: hidden` explicitly — `hidden`, not `clip`, so `scrollWidth`
+  still reports the overflow and the audit can still see it.
+→ `src/layouts/App.astro` (`#main`), `src/styles/global.css`,
+`scripts/shell-audit.mjs` (check E)
+
 ### The bottom bar detaches and floats mid-screen while scrolling down on iOS
 `[confirmed in the wild, measured from a device screenshot]`. Scrolling **down**
 on an iPhone leaves the tab bar stranded above the bottom edge with page content
@@ -444,6 +480,23 @@ alongside the in-progress one.
 **Before trusting an audit line, screenshot the page it claims to have checked.**
 The audit cannot tell "passed" from "there was nothing to fail".
 → `scripts/mobile-audit.mjs`, `src/lib/bodyLoad.ts`
+
+### A fix silently switched off an existing guard
+`[measured in Chromium]`
+`audit:mobile`'s overflow check reads `document.documentElement.scrollWidth`.
+The app shell then gave `html`/`body` `overflow: hidden`, which pins that number
+to the viewport **whatever the page does** — so the check kept printing
+`scrollWidth=390 (vw 390)` on a build that laid Home out at 768px on a phone. It
+did not fail; it stopped being able to fail, and nothing said so.
+Nobody edited the audit. **A guard can be disabled from outside itself**, by a
+change to the thing it measures rather than to the assertion — which makes it
+invisible in the diff that breaks it. It now measures
+`[data-scroll-root]`'s `scrollWidth` as well.
+**When a change moves where scrolling, sizing or layout happens, go and re-read
+every check that measures the old location** — and prove the check still fails
+on a deliberately broken build, which is the only thing that distinguishes
+"passing" from "no longer looking".
+→ `scripts/mobile-audit.mjs`, `src/styles/global.css` (`.app-shell`)
 
 ### `audit:shell` is green on the build whose bottom bar is broken
 `[measured — the pre-fix commit was checked out and re-run against]`
