@@ -119,16 +119,26 @@ const tabs: Tab[] = showcase
 const onTab = tabs.some((t) => isActive(t.href));
 ---
 
-<Base title={title}>
+<Base title={title} shell>
   <a href="#main" class="skip-link">Skip to content</a>
-  {/* The chrome is one full-height column so the bottom bar can be `sticky`
-      rather than `fixed` — see the bar below for why. `min-h-svh` (not dvh)
-      on purpose: the small-viewport unit does not change when iOS collapses
-      its toolbar, so the column's height is stable across a scroll. `main`
-      takes the slack, which keeps the bar on the bottom edge on short pages
-      too. Both fixed overlays below (#nav-backdrop, #nav-menu) are out of
-      flow, so they are not flex items. */}
-  <div class="flex min-h-svh flex-col">
+  {/* The chrome is one viewport-sized column that does NOT scroll — `.app-shell`
+      in global.css takes the scrolling away from the document, and the div
+      below takes it back. The tab bar is then the last flex child of a box
+      whose bottom edge IS the screen's bottom edge, so it is not positioned
+      against anything that can lag. See the bar at the foot of this file.
+      Both fixed overlays (#nav-backdrop, #nav-menu) are out of flow, so they
+      are not flex items. */}
+  <div class="flex h-full flex-col">
+  {/* The scroller. `min-h-0` because a flex item's default `min-height: auto`
+      would let it grow to its content instead of scrolling. The inner
+      `min-h-full` column keeps `main` filling the scrollport on a short page,
+      which is what stops the Logger's Finish bar floating mid-screen there. */}
+  <div
+    id="app-scroll"
+    data-scroll-root
+    class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain"
+  >
+  <div class="flex min-h-full flex-col">
   <header
     id="app-header"
     class="pt-safe sticky top-0 z-50 border-b border-border bg-bg transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-md"
@@ -222,29 +232,35 @@ const onTab = tabs.some((t) => isActive(t.href));
     }
   </nav>
 
-  <main id="main" class="flex-1">
+  {/* A flex column, so the Logger can claim the scrollport with `flex-1`
+      instead of guessing at a viewport-unit height that has to know the
+      header's. Every app page renders a single island into it, so nothing
+      here depended on block-level margin collapsing. */}
+  <main id="main" class:list={['flex flex-1 flex-col', immersive && 'main-immersive']}>
     <slot />
   </main>
+  </div>
+  </div>
 
   {/* Thumb-reachable primary nav. The drawer above survives as "More" so the
       full destination list stays one tap away.
 
-      `sticky`, NOT `fixed`. A `fixed bottom-0` bar is placed against iOS
-      Safari's LAYOUT viewport, which does not grow until the scroll gesture
-      ends — so scrolling down (where the toolbar collapses and the VISUAL
-      viewport gets ~75px taller) left the bar stranded mid-screen with page
-      content running on underneath it, and scrolling back up snapped it home.
-      A sticky box is laid out in the document, so it tracks what is actually
-      painted and never detaches — which is why the sticky header above was
-      always fine. It is the last in-flow child of the column, so it stays
-      pinned until the document ends and then settles in place; that is also
-      why `main` no longer reserves bottom padding for it. No `inset-x-0`:
-      on a sticky box `left`/`right` are sticky constraints, not offsets —
-      the flex column already stretches it full width. */}
+      NOT positioned at all — no `fixed`, and no `sticky` either. Both resolve
+      `bottom: 0` against iOS Safari's LAYOUT viewport, which lags the visual
+      one for the whole of a scroll-down while the address bar retracts, so
+      both strand the bar mid-screen with content running on underneath and
+      both snap home on the first scroll up. Sticky was tried and shipped and
+      did not fix it; see docs/LESSONS.md § "The bottom bar detaches".
+
+      Instead the shell above does not scroll, so this is simply the last flex
+      child of a box whose bottom edge is the screen's bottom edge — there is
+      no viewport offset left to resolve, and nothing to lag. `relative z-50`
+      only so `.ledge`'s upward shadow paints over the scroller it sits under;
+      no `inset-x-0`, the flex column already stretches it full width. */}
   <nav
     aria-label="Primary"
     class:list={[
-      'pb-safe ledge sticky bottom-0 z-50 border-t border-border bg-bg pointer-fine:bg-bg/95 pointer-fine:backdrop-blur-md',
+      'pb-safe ledge relative z-50 shrink-0 border-t border-border bg-bg pointer-fine:bg-bg/95 pointer-fine:backdrop-blur-md',
       immersive && 'hidden',
     ]}
   >
@@ -314,6 +330,40 @@ const onTab = tabs.some((t) => isActive(t.href));
   // astro:page-load — otherwise the burger goes dead after the first navigation.
   let ac: AbortController | null = null;
 
+  // The scroll position lives on #app-scroll now rather than the window, so
+  // ClientRouter's own restoration (which calls window.scrollTo) no longer
+  // reaches it and every back navigation would land at the top. Stash the
+  // outgoing position on the way out and put it back on a traversal — document
+  // listeners survive the swap, so this binds once.
+  const SCROLL_KEY = 'verocity:scroll';
+  let restoreTo = 0;
+
+  function readScrollStore(): Record<string, number> {
+    try {
+      const raw = sessionStorage.getItem(SCROLL_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  document.addEventListener('astro:before-preparation', (event) => {
+    const e = event as unknown as { from: URL; to: URL; direction: string };
+    const store = readScrollStore();
+    const el = document.getElementById('app-scroll');
+    // `e.from`, NOT `location`: on a back/forward traversal the browser has
+    // already moved `location` to the destination by the time this fires, so
+    // keying on it filed the OUTGOING position under the INCOMING path —
+    // overwriting the very entry the restore below then read back as 0.
+    if (el) store[e.from.pathname] = el.scrollTop;
+    try {
+      sessionStorage.setItem(SCROLL_KEY, JSON.stringify(store));
+    } catch {
+      /* private mode / quota — the restore just no-ops */
+    }
+    restoreTo = e.direction === 'back' ? (store[e.to.pathname] ?? 0) : 0;
+  });
+
   function setupNav() {
     ac?.abort();
     ac = new AbortController();
@@ -352,6 +402,37 @@ const onTab = tabs.some((t) => isActive(t.href));
       { signal },
     );
 
+    // The shell took scrolling away from the document, so everything below
+    // reads #app-scroll rather than the window.
+    const scroller = document.getElementById('app-scroll');
+    if (!scroller) return;
+
+    if (restoreTo) {
+      // Re-applied rather than assigned once: every page's content arrives with
+      // its island, which is after astro:page-load, so at this point the
+      // scroller is usually still one viewport tall and a single assignment
+      // clamps to 0. Give up the moment it takes, the moment the user reaches
+      // for the page, or after 1.2s — whichever comes first.
+      const target = restoreTo;
+      const deadline = performance.now() + 1200;
+      let cancelled = false;
+      const cancel = () => {
+        cancelled = true;
+      };
+      for (const ev of ['wheel', 'touchstart', 'pointerdown'] as const) {
+        scroller.addEventListener(ev, cancel, { once: true, passive: true, signal });
+      }
+      const settle = () => {
+        if (cancelled || signal.aborted) return;
+        scroller.scrollTop = target;
+        if (Math.abs(scroller.scrollTop - target) > 1 && performance.now() < deadline) {
+          requestAnimationFrame(settle);
+        }
+      };
+      settle();
+    }
+    restoreTo = 0;
+
     // Reclaim the header's 48px while the user is reading down the page, and
     // hand it back the moment they scroll up. Skipped under reduced-motion,
     // where a header that moves on its own is the thing being opted out of.
@@ -367,7 +448,7 @@ const onTab = tabs.some((t) => isActive(t.href));
     // Now the header only moves after 24px of committed travel in one
     // direction, and only when that would actually change its state.
     const TRAVEL = 24;
-    let lastY = window.scrollY;
+    let lastY = scroller.scrollTop;
     let hidden = false;
     let travel = 0;
     let ticking = false;
@@ -383,7 +464,7 @@ const onTab = tabs.some((t) => isActive(t.href));
       ticking = true;
       requestAnimationFrame(() => {
         ticking = false;
-        const y = Math.max(0, window.scrollY);
+        const y = Math.max(0, scroller.scrollTop);
         const dy = y - lastY;
         lastY = y;
         if (dy === 0) return;
@@ -405,7 +486,7 @@ const onTab = tabs.some((t) => isActive(t.href));
         }
       });
     };
-    window.addEventListener('scroll', onScroll, { passive: true, signal });
+    scroller.addEventListener('scroll', onScroll, { passive: true, signal });
   }
 
   document.addEventListener('astro:page-load', setupNav);

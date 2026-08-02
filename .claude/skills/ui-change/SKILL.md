@@ -136,6 +136,7 @@ npm run check
 npm run build && npm run preview &
 npm run audit:mobile
 npm run audit:flicker      # anything overlay-shaped
+npm run audit:shell        # anything touching App.astro, Base.astro or scrolling
 ```
 
 **Restart preview after every rebuild.** `astro preview` serves a startup

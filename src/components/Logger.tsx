@@ -1035,11 +1035,14 @@ export default function Logger() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.4, ease: EASE }}
-        className="flex min-h-svh flex-col"
+        className="flex flex-1 flex-col"
       >
-      {/* Full-height column so the Finish bar below can be `sticky` instead of
-          `fixed` — see the bar for the iOS reason. The reading column moved in
-          here; the outer div is now full-bleed so the bar can span the screen. */}
+      {/* Fills the scrollport rather than measuring one: `#main` is a flex
+          column inside App.astro's non-scrolling shell, so `flex-1` here lands
+          the Finish bar on the bottom edge on a short session without this
+          having to know the header's height. (`min-h-svh` did know it, and was
+          wrong by exactly that much.) The reading column moved in here; the
+          outer div is full-bleed so the bar can span the screen. */}
       <div className="mx-auto w-full max-w-2xl flex-1 px-4 sm:px-6 py-8">
       {/* Wraps: at 375px a session past the hour mark ("1:05:23" at text-5xl)
           plus Home and Pause does not fit on one line. */}
@@ -1479,12 +1482,14 @@ export default function Logger() {
       />
       </div>
 
-      {/* `sticky`, not `fixed`: a fixed bottom bar is placed against iOS
-          Safari's layout viewport, so scrolling down (toolbar collapsed,
-          visual viewport taller) stranded it mid-screen above the content.
-          Sticky is laid out in the document and tracks what is painted.
-          Last in-flow child of the column, so it pins until the page ends —
-          which is also why the column dropped its `pb-32` bar reserve. */}
+      {/* Sticky against `[data-scroll-root]`, NOT the document. Both `fixed`
+          and `sticky` resolve `bottom: 0` against iOS Safari's layout
+          viewport, which lags while the address bar retracts — that is what
+          stranded this bar mid-screen. App.astro's shell moved the scrolling
+          into an inner box, so the scrollport this sticks to is a real element
+          whose bottom edge cannot lag. Last in-flow child of the column, so it
+          pins until the page ends — which is also why the column dropped its
+          `pb-32` bar reserve. */}
       <div className="pb-safe sticky bottom-0 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur sm:px-6">
         <div className="mx-auto flex max-w-2xl flex-col items-center gap-1">
           {editing ? (

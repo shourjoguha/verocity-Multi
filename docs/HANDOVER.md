@@ -18,6 +18,7 @@ Nothing in this file describes *current work*. Sequence and status live in
 | `npm test` | vitest |
 | `npm run audit:mobile` | overflow + tap targets, every `/app` route |
 | `npm run audit:flicker` | sheet open/close behaviour |
+| `npm run audit:shell` | the app shell: document must not scroll, bottom bar not viewport-anchored |
 | `npm run audit:docs` | code identifiers in the docs still resolve |
 
 The three audits need a build and a running preview:

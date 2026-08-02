@@ -166,34 +166,79 @@ does that, which is the plausible-sounding reason to avoid reaching for.
 → `src/styles/global.css` (`.ledge`), `src/layouts/App.astro`
 
 ### The bottom bar detaches and floats mid-screen while scrolling down on iOS
-`[confirmed in the wild]` for the symptom; `[argued — not reproduced]` for the
-mechanism and the fix, neither of which any local harness can observe.
-Scrolling **down** on an iPhone left the tab bar stranded ~75px above the
-bottom edge with page content running on underneath it, on every route.
-Scrolling back **up** snapped it home, which is what makes it look like a paint
-bug rather than a layout one.
+`[confirmed in the wild, measured from a device screenshot]`. Scrolling **down**
+on an iPhone leaves the tab bar stranded above the bottom edge with page content
+running on underneath it, on every route. Scrolling back **up** snaps it home,
+which is what makes it look like a paint bug rather than a layout one.
 
-`position: fixed` is resolved against iOS Safari's **layout** viewport. Scrolling
-down collapses the toolbar and grows the **visual** viewport immediately, but
-the layout viewport does not catch up until the gesture ends — so `bottom: 0`
-means the bottom of a box that is now shorter than what is on screen. The
-sticky header never had the problem, which is the tell.
+Measured off a full-resolution iPhone 15 screenshot (1179×2556 → 393×852 CSS):
+the bar's bottom edge at **783px** against a viewport of **852**, so **69px** of
+live page content below it. Read it off the session cards' left accent stripes,
+which run at a fixed 184-device-px pitch — one is cut off at the bar's top edge
+and the next one's tail reappears below it, so the content is continuous and the
+bar is genuinely mispositioned, not a repaint artifact. **Measure the gap before
+theorising**: 69px is the height of the floating address bar, which is what
+identifies the mechanism. Eyeballing "about 75px" identifies nothing.
 
-**Pin bottom bars with `sticky bottom-0`, not `fixed bottom-0`.** A sticky box
-is laid out in the document, so it tracks what is actually painted. It needs
-three things: a full-height flex column (`min-h-svh`, not `dvh` — the small
-unit does not move when the toolbar collapses), a `flex-1` sibling above it so
-short pages still push it to the edge, and to be the **last in-flow child**.
-Two consequences that look like bugs if you do not expect them: the column above
-drops the bottom padding it used to reserve for the bar (the bar now occupies
-real space at the document end), and `inset-x-0` must go — on a sticky box
-`left`/`right` are sticky *constraints*, not offsets; the flex column already
-stretches it full width.
+Both `fixed` and `sticky` resolve `bottom: 0` against iOS Safari's **layout**
+viewport. Scrolling down retracts the address bar and grows the **visual**
+viewport immediately, but the layout viewport does not catch up until the
+gesture ends — so `bottom: 0` means the bottom of a box now shorter than what is
+on screen. The header never had the problem because the viewport's **top** edge
+does not move; sheets never had it because they are full-height overlays.
+
+**`sticky bottom-0` was shipped as the fix and does not work.** The reasoning
+was that a sticky box is laid out in the document so it must track what is
+painted — plausible, and wrong: WebKit positions sticky nodes on the scrolling
+thread against the same lagging layout viewport. It survived review for months
+because no local harness can observe the lag, and **Chromium is green on the
+broken build** — a "is the bar at the bottom of the screen" assertion passes
+there at every scroll offset while the phone is visibly broken.
+
+**Stop the document from scrolling instead.** The lag exists only because the
+root scroller scrolls: a page Safari cannot scroll never makes it retract
+anything, so the two viewports never diverge and there is nothing left to chase.
+`.app-shell` (global.css, opted into by `Base.astro`'s `shell` prop) gives
+`html`/`body` `height: 100dvh; overflow: hidden`, and `App.astro` puts the
+scrolling in an inner `[data-scroll-root]`. The tab bar is then an ordinary flex
+child of a box whose bottom edge *is* the screen's bottom edge — no position, no
+offset, nothing to resolve late. The Logger's Finish bar stays `sticky bottom-0`
+and is fixed by the same change, because the scrollport it sticks to is now a
+real element rather than the viewport.
+
+Four things this drags along, each of which looks like a separate bug:
+- **`100dvh`, never `height: 100%`.** On iOS the initial containing block is the
+  *large* viewport, so `100%` resolves taller than the screen and pushes the bar
+  back under Safari's chrome — the same symptom by another route.
+- **The scroll lock has to follow.** `lib/scrollLock.ts` set `overflow: hidden`
+  on `<body>`; under the shell that is already hidden and a wheel over the scrim
+  still scrolled the page. It targets `[data-scroll-root]` now, capturing the
+  element at acquire time so a ClientRouter swap mid-sheet cannot leave a
+  different one stuck.
+- **Back/forward scroll restoration has to be rebuilt.** ClientRouter restores
+  `window` scroll, which no longer reaches anything. Two traps: the position must
+  be filed under `e.from.pathname`, **not** `location.pathname` — on a traversal
+  the browser has already moved `location` to the destination, so keying on it
+  files the outgoing position under the incoming path and overwrites the entry
+  you are about to read — and it must be re-applied across a few frames, because
+  the island's content arrives after `astro:page-load` and a single assignment
+  clamps to 0 against a scroller that is still one viewport tall.
+- **Cost, stated plainly:** Safari's address bar no longer auto-hides, so that
+  69px is gone for good in the browser. In the installed PWA there is no address
+  bar and it costs nothing.
 
 Not tried, and rejected on sight: reading `visualViewport` and translating the
 bar per frame. That is JS-driven motion on the scroll path — see "Something
 repaints constantly while scrolling".
-→ `src/layouts/App.astro`, `src/components/Logger.tsx` (the Finish bar, same fix)
+
+`npm run audit:shell` guards the invariant. Read its header before citing it:
+it asserts the document does not scroll and the bar carries no viewport-relative
+position — both of which fail against the pre-fix commit — but it **cannot see
+the symptom**, because the lag is WebKit-only. A phone is the only place this
+was observed to stop.
+→ `src/styles/global.css` (`.app-shell`), `src/layouts/App.astro`,
+`src/layouts/Base.astro`, `src/lib/scrollLock.ts`,
+`src/components/Logger.tsx` (the Finish bar), `scripts/shell-audit.mjs`
 
 ### A stat tile is far taller than its font sizes predict
 `[measured in Chromium at 375px]`
@@ -384,6 +429,24 @@ alongside the in-progress one.
 **Before trusting an audit line, screenshot the page it claims to have checked.**
 The audit cannot tell "passed" from "there was nothing to fail".
 → `scripts/mobile-audit.mjs`, `src/lib/bodyLoad.ts`
+
+### `audit:shell` is green on the build whose bottom bar is broken
+`[measured — the pre-fix commit was checked out and re-run against]`
+The bar-detaches-on-iOS symptom is WebKit resolving a bottom offset against a
+stale layout viewport. **Chromium has no such lag**, so the obvious assertion —
+"is the bar's bottom edge at the viewport bottom, at every scroll offset?" —
+passes on the broken build at every viewport height tried. Left alone, that is a
+guard vouching for the bug it was written for.
+`scripts/shell-audit.mjs` therefore asserts the *structural precondition*
+instead: the document must not scroll, and the bar must carry no viewport
+-relative `position`. Both fail against the pre-fix commit, which is the only
+reason to trust the file. Check D is kept, labelled, and explicitly described in
+the header as green-on-broken, so nobody promotes it to evidence later.
+**When the symptom is platform-specific and your harness is not that platform,
+assert the precondition and prove the assertion fails on the old code.** Then
+say in the output that the symptom itself was not observed — this script's last
+line does.
+→ `scripts/shell-audit.mjs`
 
 ### Two form controls whose accessible names substring-match each other
 `[measured in Chromium]`
@@ -694,6 +757,28 @@ The sheet flicker took five merged PRs. These were the wrong turns:
 and each shipped describing itself as the fix. An append-only log turned that
 into five co-equal answers to one grep, four of them wrong, with the entry point
 routing every future reader straight at the pile. Demote as you go.
+
+The bottom bar detaching on iOS:
+
+- **Pin bottom bars with `sticky bottom-0`, not `fixed bottom-0`** — "a sticky
+  box is laid out in the document, so it tracks what is actually painted."
+  Shipped as the fix, marked `[argued — not reproduced]`, and the bar kept
+  detaching. WebKit resolves sticky offsets against the same lagging layout
+  viewport `fixed` uses; the document/painted distinction does not exist on the
+  scrolling thread. Both are now wrong for a bottom bar, and the live entry
+  removes the offset instead of relocating it.
+- **A full-height flex column with `min-h-svh`, a `flex-1` sibling, and the bar
+  as last in-flow child.** The scaffolding that sticky needed. The shell replaces
+  it: `h-full` on a `100dvh` body, and `min-h-svh` is gone from `Logger.tsx`,
+  where it was wrong by exactly the header's height once the scrollport stopped
+  being the viewport.
+
+**The second meta-lesson.** The first fix was wrong for months because the check
+that would have caught it could not exist — the symptom is WebKit-only and every
+harness here is Chromium. When no check can see the symptom, say so in the entry
+and write down what you measured instead; `[argued — not reproduced]` was the
+honest label and it was still not loud enough to stop the wrong mechanism being
+prescribed as settled.
 
 The fitness radar:
 
