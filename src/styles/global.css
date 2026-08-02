@@ -186,6 +186,51 @@ body {
   background-color: transparent;
 }
 
+/* ---- App shell — the document itself never scrolls. ----
+   Every box pinned to the viewport's BOTTOM edge is positioned by WebKit
+   against iOS Safari's LAYOUT viewport, which lags the VISUAL viewport for the
+   whole of a scroll-down while Safari retracts its address bar. `position:
+   sticky` is NOT exempt from that: measured on an iPhone 15 (393×852) with the
+   tab bar's bottom edge stranded at 783px and 69px of live page content
+   painting below it, snapping home on the first scroll up. The header never
+   had the problem because the viewport's TOP edge does not move.
+
+   The lag exists only because the root scroller scrolls — a document that
+   cannot scroll never makes Safari retract anything, so the two viewports
+   never diverge. So the chrome is a viewport-sized non-scrolling box and the
+   scrolling happens in `[data-scroll-root]` inside it, which leaves the tab
+   bar as an ordinary flex child with nothing to lag against. See
+   docs/LESSONS.md § "The bottom bar detaches".
+
+   `100dvh`, not `100%`: on iOS the initial containing block is the LARGE
+   viewport, so `height: 100%` resolves TALLER than what is on screen and would
+   push the bar behind Safari's chrome. With the root unscrollable the toolbar
+   never retracts, so `dvh` is stable — it is the visible height, measured. */
+html:has(> body.app-shell),
+body.app-shell {
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* The scrolling region inherits the gutter reservation `html` carries for
+   non-shell pages: without it, a sheet taking the scroll lock (lib/scrollLock.ts,
+   fine pointers) removes the scrollbar and shifts every centred column. */
+[data-scroll-root] {
+  scrollbar-gutter: stable;
+}
+
+/* Astro wraps every island in `<astro-island>`, an unstyled custom element that
+   sits between `#main`'s flex column and the island's own root — which breaks
+   `flex-1` for an island that has to fill the scrollport. Only the Logger does
+   (its Finish bar has to land on the bottom edge on a short session), so this
+   is scoped to the immersive route rather than applied to every island: a
+   `display: contents` element has no box, and a `client:visible` island needs
+   one for its IntersectionObserver to ever fire. */
+.main-immersive > astro-island {
+  display: contents;
+}
+
 /* Tabular numbers by default — this is a data-heavy app */
 body {
   font-variant-numeric: tabular-nums;

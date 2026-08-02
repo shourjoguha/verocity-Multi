@@ -12,6 +12,7 @@
     "astro": "astro",
     "audit:mobile": "node scripts/mobile-audit.mjs",
     "audit:flicker": "node scripts/flicker-probe.mjs",
+    "audit:shell": "node scripts/shell-audit.mjs",
     "audit:docs": "node scripts/docs-audit.mjs"
   },
   "dependencies": {

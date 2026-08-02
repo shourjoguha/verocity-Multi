@@ -30,7 +30,8 @@ intent, LESSONS describes what actually happened.
 | **Map a movement to a region/modality/plane, or edit the body map**      | skill movement-taxonomy — `.claude/skills/movement-taxonomy/SKILL.md` |
 | Record a lesson, or reconcile the guidance docs                          | skill docs-upkeep — `.claude/skills/docs-upkeep/SKILL.md` |
 
-**Checks:** `npm run audit:mobile` · `npm run audit:flicker` · `npm run audit:docs`.
+**Checks:** `npm run audit:mobile` · `npm run audit:flicker` · `npm run audit:shell`
+· `npm run audit:docs`.
 Each is narrow, and `docs/LESSONS.md` § Testing states what each is blind to.
 
 **Record what bit you.** `docs/LESSONS.md` logs traps and the decisions taken in
@@ -52,8 +53,8 @@ cannot see a flicker.
 
 - **skill ui-change** — `src/components/**`, `src/layouts/**`, `src/pages/**`
   markup, `src/styles/global.css`, `src/lib/theme.ts`, `src/lib/background.ts`,
-  `src/lib/scrollLock.ts`. Verified by `npm run audit:mobile` and
-  `npm run audit:flicker`.
+  `src/lib/scrollLock.ts`. Verified by `npm run audit:mobile`,
+  `npm run audit:flicker` and `npm run audit:shell`.
 - **skill db-change** — `supabase/migrations/**`, `supabase/functions/**`,
   `src/lib/queries.ts`, `src/lib/supabase.ts`, `src/lib/auth.ts`,
   `src/lib/share.ts`, DB row types. Verified by `npm test`, `npm run check`
@@ -146,13 +147,22 @@ UI audit have both run.
   every other shadow token in the file casts downward and paints off-screen
   there. Use **`.ledge`** / `--shadow-ledge` — the one upward-casting member,
   shadow-only for the same reason as `.lift-fixed`. The bottom tab bar uses it.
-- **Bottom bars are `sticky bottom-0`, never `fixed bottom-0`.** A fixed bar
-  is placed against iOS Safari's layout viewport, which lags the visual
-  viewport while the toolbar collapses — it detaches and floats mid-screen on
-  every scroll down. Sticky needs a `min-h-svh` flex column, a `flex-1`
-  sibling above, and the bar as the last in-flow child. See `docs/LESSONS.md`
-  § "The bottom bar detaches". `src/layouts/App.astro` and the Logger's Finish
-  bar are the two.
+- **The app chrome does not scroll — `[data-scroll-root]` does.** `html`/`body`
+  take `height: 100dvh; overflow: hidden` via `.app-shell` (opted into by
+  `Base.astro`'s `shell` prop) and the scrolling lives in an inner box inside
+  `src/layouts/App.astro`. Load-bearing, not tidiness: **anything anchored to
+  the viewport's bottom edge detaches on iOS**, because WebKit resolves
+  `bottom: 0` against the layout viewport, which lags the visual one while
+  Safari retracts its address bar. `sticky bottom-0` is **not** exempt — it was
+  shipped as the fix and did not work. A non-scrolling document never makes
+  Safari retract anything, so the bar is simply the last flex child of a
+  viewport-sized column with no offset left to resolve. Never restore document
+  scrolling to `/app/*`, and never anchor a bottom bar to the *viewport*;
+  `sticky bottom-0` **inside** `[data-scroll-root]` is fine and is what the
+  Logger's Finish bar uses. Anything that locks or reads scroll must target the
+  scroller, not `window` / `<body>` (`src/lib/scrollLock.ts`). Guarded by
+  `npm run audit:shell` — see `docs/LESSONS.md` § "The bottom bar detaches" for
+  what that check cannot see.
 - **Buttons are 3D pillows.** The `Button` primitive (and most bespoke
   button-shaped surfaces) carries `.hill-btn`: 4px radius + outer drop
   shadow + inset highlight (top-left) + inset shadow (bottom-right). On

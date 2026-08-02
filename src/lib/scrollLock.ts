@@ -24,9 +24,18 @@ import { useEffect } from 'react';
 
 let depth = 0;
 let previousOverflow = '';
+let locked: HTMLElement | null = null;
 
 function locksDocument() {
   return typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
+}
+
+// Under App.astro's shell the document does not scroll — `[data-scroll-root]`
+// does — so locking <body> there is a no-op and a wheel over the scrim still
+// moves the page. The auth and marketing pages are ordinary scrolling
+// documents and keep the old target.
+function scrollTarget(): HTMLElement {
+  return document.querySelector<HTMLElement>('[data-scroll-root]') ?? document.body;
 }
 
 // Returns the release function, so it can be used directly as an effect cleanup.
@@ -38,8 +47,12 @@ export function acquireScrollLock(): () => void {
   if (!locksDocument()) return () => {};
 
   if (depth === 0) {
-    previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    // Captured, not re-queried on release: ClientRouter can swap the scroller
+    // out from under a sheet, and restoring the style on a different element
+    // than the one it was taken from leaves the old one stuck.
+    locked = scrollTarget();
+    previousOverflow = locked.style.overflow;
+    locked.style.overflow = 'hidden';
   }
   depth += 1;
 
@@ -48,7 +61,10 @@ export function acquireScrollLock(): () => void {
     if (released) return;
     released = true;
     depth -= 1;
-    if (depth === 0) document.body.style.overflow = previousOverflow;
+    if (depth === 0 && locked) {
+      locked.style.overflow = previousOverflow;
+      locked = null;
+    }
   };
 }
 
