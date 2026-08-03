@@ -1,8 +1,8 @@
 ---
 import App from '@/layouts/App.astro';
-import BodyView from '@/components/BodyView';
+import ProgressGroup from '@/components/ProgressGroup';
 ---
 
 <App title="Body · Verocity">
-  <BodyView client:load />
+  <ProgressGroup initial="body" client:load />
 </App>
