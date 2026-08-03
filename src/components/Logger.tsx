@@ -61,6 +61,7 @@ import type {
   Movement,
   MovementSub,
   Plan,
+  ScalingLevel,
   Session,
   SetActual,
   VibeCheck,
@@ -259,6 +260,7 @@ export default function Logger() {
 
       const dk = params.get('day');
       const sessionParam = params.get('session');
+      const levelParam = (params.get('level') ?? undefined) as ScalingLevel | undefined;
       const planParam = params.get('plan');
       const miniParam = params.get('mini');
       const dateParam = params.get('date');
@@ -306,7 +308,7 @@ export default function Logger() {
 
       if (sessionParam) {
         const session = source as Session | null;
-        built = session ? buildLogFromSession(session.frame) : buildBlankLog();
+        built = session ? buildLogFromSession(session.frame, levelParam) : buildBlankLog();
         linkedSessionId = session?.id ?? null;
         initialTags = session?.tags ?? [];
         linkedDayKey = null;

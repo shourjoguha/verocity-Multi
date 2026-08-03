@@ -1,0 +1,1773 @@
+{
+  "sessions": [
+    {
+      "name": "Fran",
+      "tags": [
+        "crossfit"
+      ],
+      "frame": {
+        "exercises": [
+          {
+            "movement": "Thruster",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "",
+            "notes": "21-15-9 reps · 95/65 lb"
+          },
+          {
+            "movement": "Pull-up",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "",
+            "notes": "21-15-9 reps"
+          }
+        ],
+        "groups": [
+          {
+            "kind": "circuit",
+            "section": "conditioning",
+            "rounds": 3,
+            "label": "21-15-9 (Rx)",
+            "items": [
+              {
+                "movement": "Thruster",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "",
+                "notes": "21-15-9 reps · 95/65 lb"
+              },
+              {
+                "movement": "Pull-up",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "",
+                "notes": "21-15-9 reps"
+              }
+            ]
+          }
+        ],
+        "variants": [
+          {
+            "level": "rx",
+            "label": "Rx",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 3,
+                "label": "21-15-9 (Rx)",
+                "items": [
+                  {
+                    "movement": "Thruster",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps · 95/65 lb"
+                  },
+                  {
+                    "movement": "Pull-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "intermediate",
+            "label": "Intermediate",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 3,
+                "label": "21-15-9 (Intermediate)",
+                "items": [
+                  {
+                    "movement": "Thruster",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps · 65/45 lb"
+                  },
+                  {
+                    "movement": "Banded Pull-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "beginner",
+            "label": "Beginner",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 3,
+                "label": "21-15-9 (Beginner)",
+                "items": [
+                  {
+                    "movement": "Thruster",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps · 45/35 lb"
+                  },
+                  {
+                    "movement": "Ring Row",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "session_type": "FOR_TIME",
+      "time_cap_seconds": null,
+      "duration_seconds": null,
+      "rounds": 3,
+      "partner": false,
+      "instructions": "21-15-9 reps for time of Thrusters and Pull-Ups.",
+      "source": "CrossFit.com",
+      "source_ref": "benchmark/fran",
+      "source_text": "21-15-9 reps for time:\nThrusters (95/65 lb)\nPull-Ups"
+    },
+    {
+      "name": "Cindy",
+      "tags": [
+        "crossfit"
+      ],
+      "frame": {
+        "exercises": [
+          {
+            "movement": "Pull-up",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x5"
+          },
+          {
+            "movement": "Push-up",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x10"
+          },
+          {
+            "movement": "Air Squat",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x15"
+          }
+        ],
+        "groups": [
+          {
+            "kind": "circuit",
+            "section": "conditioning",
+            "rounds": 1,
+            "label": "AMRAP round (Rx)",
+            "items": [
+              {
+                "movement": "Pull-up",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x5"
+              },
+              {
+                "movement": "Push-up",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x10"
+              },
+              {
+                "movement": "Air Squat",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x15"
+              }
+            ]
+          }
+        ],
+        "variants": [
+          {
+            "level": "rx",
+            "label": "Rx",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 1,
+                "label": "AMRAP round (Rx)",
+                "items": [
+                  {
+                    "movement": "Pull-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x5"
+                  },
+                  {
+                    "movement": "Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x10"
+                  },
+                  {
+                    "movement": "Air Squat",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x15"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "intermediate",
+            "label": "Intermediate",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 1,
+                "label": "AMRAP round (Intermediate)",
+                "items": [
+                  {
+                    "movement": "Banded Pull-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x5"
+                  },
+                  {
+                    "movement": "Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x10"
+                  },
+                  {
+                    "movement": "Air Squat",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x15"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "beginner",
+            "label": "Beginner",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 1,
+                "label": "AMRAP round (Beginner)",
+                "items": [
+                  {
+                    "movement": "Ring Row",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x5"
+                  },
+                  {
+                    "movement": "Knee Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x10"
+                  },
+                  {
+                    "movement": "Air Squat",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x15"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "session_type": "AMRAP",
+      "time_cap_seconds": null,
+      "duration_seconds": 1200,
+      "rounds": 1,
+      "partner": false,
+      "instructions": "AMRAP in 20 minutes. Score = total rounds + reps.",
+      "source": "CrossFit.com",
+      "source_ref": "benchmark/cindy",
+      "source_text": "AMRAP in 20 minutes:\n5 Pull-Ups\n10 Push-Ups\n15 Air Squats"
+    },
+    {
+      "name": "Diane",
+      "tags": [
+        "crossfit"
+      ],
+      "frame": {
+        "exercises": [
+          {
+            "movement": "Deadlift",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "",
+            "notes": "21-15-9 reps · 225/155 lb"
+          },
+          {
+            "movement": "Handstand Push-up",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "",
+            "notes": "21-15-9 reps"
+          }
+        ],
+        "groups": [
+          {
+            "kind": "circuit",
+            "section": "conditioning",
+            "rounds": 3,
+            "label": "21-15-9 (Rx)",
+            "items": [
+              {
+                "movement": "Deadlift",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "",
+                "notes": "21-15-9 reps · 225/155 lb"
+              },
+              {
+                "movement": "Handstand Push-up",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "",
+                "notes": "21-15-9 reps"
+              }
+            ]
+          }
+        ],
+        "variants": [
+          {
+            "level": "rx",
+            "label": "Rx",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 3,
+                "label": "21-15-9 (Rx)",
+                "items": [
+                  {
+                    "movement": "Deadlift",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps · 225/155 lb"
+                  },
+                  {
+                    "movement": "Handstand Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "intermediate",
+            "label": "Intermediate",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 3,
+                "label": "21-15-9 (Intermediate)",
+                "items": [
+                  {
+                    "movement": "Deadlift",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps · 155/105 lb"
+                  },
+                  {
+                    "movement": "Pike Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "beginner",
+            "label": "Beginner",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 3,
+                "label": "21-15-9 (Beginner)",
+                "items": [
+                  {
+                    "movement": "Deadlift",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps · 95/65 lb"
+                  },
+                  {
+                    "movement": "Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "21-15-9 reps"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "session_type": "FOR_TIME",
+      "time_cap_seconds": null,
+      "duration_seconds": null,
+      "rounds": 3,
+      "partner": false,
+      "instructions": null,
+      "source": "CrossFit.com",
+      "source_ref": "benchmark/diane",
+      "source_text": "21-15-9 reps for time:\nDeadlifts (225/155 lb)\nHandstand Push-Ups"
+    },
+    {
+      "name": "Grace",
+      "tags": [
+        "crossfit"
+      ],
+      "frame": {
+        "exercises": [
+          {
+            "movement": "Clean and Jerk",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x30",
+            "notes": "135/95 lb"
+          }
+        ],
+        "groups": [
+          {
+            "kind": "circuit",
+            "section": "conditioning",
+            "rounds": 1,
+            "label": "30 reps (Rx)",
+            "items": [
+              {
+                "movement": "Clean and Jerk",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x30",
+                "notes": "135/95 lb"
+              }
+            ]
+          }
+        ],
+        "variants": [
+          {
+            "level": "rx",
+            "label": "Rx",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 1,
+                "label": "30 reps (Rx)",
+                "items": [
+                  {
+                    "movement": "Clean and Jerk",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x30",
+                    "notes": "135/95 lb"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "intermediate",
+            "label": "Intermediate",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 1,
+                "label": "30 reps (Intermediate)",
+                "items": [
+                  {
+                    "movement": "Clean and Jerk",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x30",
+                    "notes": "95/65 lb"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "beginner",
+            "label": "Beginner",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 1,
+                "label": "30 reps (Beginner)",
+                "items": [
+                  {
+                    "movement": "Clean and Jerk",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x30",
+                    "notes": "75/55 lb"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "session_type": "FOR_TIME",
+      "time_cap_seconds": null,
+      "duration_seconds": null,
+      "rounds": 1,
+      "partner": false,
+      "instructions": null,
+      "source": "CrossFit.com",
+      "source_ref": "benchmark/grace",
+      "source_text": "For time:\n30 Clean and Jerks (135/95 lb)"
+    },
+    {
+      "name": "Karen",
+      "tags": [
+        "crossfit"
+      ],
+      "frame": {
+        "exercises": [
+          {
+            "movement": "Wall Ball",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x150",
+            "notes": "20/14 lb"
+          }
+        ],
+        "groups": [
+          {
+            "kind": "circuit",
+            "section": "conditioning",
+            "rounds": 1,
+            "label": "150 reps (Rx)",
+            "items": [
+              {
+                "movement": "Wall Ball",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x150",
+                "notes": "20/14 lb"
+              }
+            ]
+          }
+        ],
+        "variants": [
+          {
+            "level": "rx",
+            "label": "Rx",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 1,
+                "label": "150 reps (Rx)",
+                "items": [
+                  {
+                    "movement": "Wall Ball",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x150",
+                    "notes": "20/14 lb"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "intermediate",
+            "label": "Intermediate",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 1,
+                "label": "150 reps (Intermediate)",
+                "items": [
+                  {
+                    "movement": "Wall Ball",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x150",
+                    "notes": "14/10 lb"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "beginner",
+            "label": "Beginner",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 1,
+                "label": "100 reps (Beginner)",
+                "items": [
+                  {
+                    "movement": "Wall Ball",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x100",
+                    "notes": "10/8 lb"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "session_type": "FOR_TIME",
+      "time_cap_seconds": null,
+      "duration_seconds": null,
+      "rounds": 1,
+      "partner": false,
+      "instructions": null,
+      "source": "CrossFit.com",
+      "source_ref": "benchmark/karen",
+      "source_text": "For time:\n150 Wall Ball Shots (20/14 lb)"
+    },
+    {
+      "name": "Annie",
+      "tags": [
+        "crossfit"
+      ],
+      "frame": {
+        "exercises": [
+          {
+            "movement": "Double-Under",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "",
+            "notes": "50-40-30-20-10 reps"
+          },
+          {
+            "movement": "Sit-up",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "",
+            "notes": "50-40-30-20-10 reps"
+          }
+        ],
+        "groups": [
+          {
+            "kind": "circuit",
+            "section": "conditioning",
+            "rounds": 5,
+            "label": "50-40-30-20-10 (Rx)",
+            "items": [
+              {
+                "movement": "Double-Under",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "",
+                "notes": "50-40-30-20-10 reps"
+              },
+              {
+                "movement": "Sit-up",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "",
+                "notes": "50-40-30-20-10 reps"
+              }
+            ]
+          }
+        ],
+        "variants": [
+          {
+            "level": "rx",
+            "label": "Rx",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 5,
+                "label": "50-40-30-20-10 (Rx)",
+                "items": [
+                  {
+                    "movement": "Double-Under",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "50-40-30-20-10 reps"
+                  },
+                  {
+                    "movement": "Sit-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "50-40-30-20-10 reps"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "intermediate",
+            "label": "Intermediate",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 5,
+                "label": "50-40-30-20-10 (Intermediate)",
+                "items": [
+                  {
+                    "movement": "Double-Under",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "50-40-30-20-10 reps"
+                  },
+                  {
+                    "movement": "Sit-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "50-40-30-20-10 reps"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "beginner",
+            "label": "Beginner",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 5,
+                "label": "50-40-30-20-10 (Beginner)",
+                "items": [
+                  {
+                    "movement": "Single-Under",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "100-80-60-40-20 reps (2× singles)"
+                  },
+                  {
+                    "movement": "Sit-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "",
+                    "notes": "50-40-30-20-10 reps"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "session_type": "FOR_TIME",
+      "time_cap_seconds": null,
+      "duration_seconds": null,
+      "rounds": 5,
+      "partner": false,
+      "instructions": null,
+      "source": "CrossFit.com",
+      "source_ref": "benchmark/annie",
+      "source_text": "50-40-30-20-10 reps for time:\nDouble-Unders\nSit-Ups"
+    },
+    {
+      "name": "Barbara",
+      "tags": [
+        "crossfit"
+      ],
+      "frame": {
+        "exercises": [
+          {
+            "movement": "Pull-up",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x20"
+          },
+          {
+            "movement": "Push-up",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x30"
+          },
+          {
+            "movement": "Sit-up",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x40"
+          },
+          {
+            "movement": "Air Squat",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x50"
+          }
+        ],
+        "groups": [
+          {
+            "kind": "circuit",
+            "section": "conditioning",
+            "rounds": 5,
+            "restSeconds": 180,
+            "label": "Round (5×, Rx)",
+            "items": [
+              {
+                "movement": "Pull-up",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x20"
+              },
+              {
+                "movement": "Push-up",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x30"
+              },
+              {
+                "movement": "Sit-up",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x40"
+              },
+              {
+                "movement": "Air Squat",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x50"
+              }
+            ]
+          }
+        ],
+        "variants": [
+          {
+            "level": "rx",
+            "label": "Rx",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 5,
+                "restSeconds": 180,
+                "label": "Round (5×, Rx)",
+                "items": [
+                  {
+                    "movement": "Pull-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x20"
+                  },
+                  {
+                    "movement": "Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x30"
+                  },
+                  {
+                    "movement": "Sit-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x40"
+                  },
+                  {
+                    "movement": "Air Squat",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x50"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "intermediate",
+            "label": "Intermediate",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 5,
+                "restSeconds": 180,
+                "label": "Round (5×, Intermediate)",
+                "items": [
+                  {
+                    "movement": "Banded Pull-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x20"
+                  },
+                  {
+                    "movement": "Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x30"
+                  },
+                  {
+                    "movement": "Sit-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x40"
+                  },
+                  {
+                    "movement": "Air Squat",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x50"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "beginner",
+            "label": "Beginner",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 5,
+                "restSeconds": 180,
+                "label": "Round (5×, Beginner)",
+                "items": [
+                  {
+                    "movement": "Ring Row",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x20"
+                  },
+                  {
+                    "movement": "Knee Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x30"
+                  },
+                  {
+                    "movement": "Sit-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x40"
+                  },
+                  {
+                    "movement": "Air Squat",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x50"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "session_type": "ROUNDS_FOR_TIME",
+      "time_cap_seconds": null,
+      "duration_seconds": null,
+      "rounds": 5,
+      "partner": false,
+      "instructions": "5 rounds for time. Rest exactly 3 minutes between rounds.",
+      "source": "CrossFit.com",
+      "source_ref": "benchmark/barbara",
+      "source_text": "5 Rounds for Time:\n20 Pull-Ups\n30 Push-Ups\n40 Sit-Ups\n50 Air Squats\nRest 3 minutes between rounds"
+    },
+    {
+      "name": "Chelsea",
+      "tags": [
+        "crossfit"
+      ],
+      "frame": {
+        "exercises": [
+          {
+            "movement": "Pull-up",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x5"
+          },
+          {
+            "movement": "Push-up",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x10"
+          },
+          {
+            "movement": "Air Squat",
+            "section": "conditioning",
+            "primaryMetric": "reps",
+            "planned": "1x15"
+          }
+        ],
+        "groups": [
+          {
+            "kind": "circuit",
+            "section": "conditioning",
+            "rounds": 30,
+            "label": "EMOM round (Rx)",
+            "items": [
+              {
+                "movement": "Pull-up",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x5"
+              },
+              {
+                "movement": "Push-up",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x10"
+              },
+              {
+                "movement": "Air Squat",
+                "section": "conditioning",
+                "primaryMetric": "reps",
+                "planned": "1x15"
+              }
+            ]
+          }
+        ],
+        "variants": [
+          {
+            "level": "rx",
+            "label": "Rx",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 30,
+                "label": "EMOM round (Rx)",
+                "items": [
+                  {
+                    "movement": "Pull-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x5"
+                  },
+                  {
+                    "movement": "Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x10"
+                  },
+                  {
+                    "movement": "Air Squat",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x15"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "intermediate",
+            "label": "Intermediate",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 30,
+                "label": "EMOM round (Intermediate)",
+                "items": [
+                  {
+                    "movement": "Banded Pull-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x5"
+                  },
+                  {
+                    "movement": "Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x10"
+                  },
+                  {
+                    "movement": "Air Squat",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x15"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "level": "beginner",
+            "label": "Beginner",
+            "groups": [
+              {
+                "kind": "circuit",
+                "section": "conditioning",
+                "rounds": 30,
+                "label": "EMOM round (Beginner)",
+                "items": [
+                  {
+                    "movement": "Ring Row",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x5"
+                  },
+                  {
+                    "movement": "Knee Push-up",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x10"
+                  },
+                  {
+                    "movement": "Air Squat",
+                    "section": "conditioning",
+                    "primaryMetric": "reps",
+                    "planned": "1x15"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "session_type": "EMOM",
+      "time_cap_seconds": null,
+      "duration_seconds": 1800,
+      "rounds": 30,
+      "partner": false,
+      "instructions": "EMOM for 30 minutes: 5 Pull-Ups, 10 Push-Ups, 15 Air Squats every minute.",
+      "source": "CrossFit.com",
+      "source_ref": "benchmark/chelsea",
+      "source_text": "Every minute on the minute for 30 minutes:\n5 Pull-Ups\n10 Push-Ups\n15 Air Squats"
+    }
+  ],
+  "deduplication_actions": [
+    {
+      "source_name": "Thrusters",
+      "canonical_name": "Thruster",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null)"
+    },
+    {
+      "source_name": "Pull-Ups",
+      "canonical_name": "Pull-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null)"
+    },
+    {
+      "source_name": "Push-Ups",
+      "canonical_name": "Push-up",
+      "status": "reused-from-seed",
+      "match_reason": "exact match against library row seeded by 0024"
+    },
+    {
+      "source_name": "Air Squats",
+      "canonical_name": "Air Squat",
+      "status": "reused-from-seed",
+      "match_reason": "exact match against library row seeded by 0024"
+    },
+    {
+      "source_name": "Deadlifts",
+      "canonical_name": "Deadlift",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null)"
+    },
+    {
+      "source_name": "Handstand Push-Ups",
+      "canonical_name": "Handstand Push-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null)"
+    },
+    {
+      "source_name": "Clean and Jerks",
+      "canonical_name": "Clean and Jerk",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null)"
+    },
+    {
+      "source_name": "Wall Ball Shots",
+      "canonical_name": "Wall Ball",
+      "status": "reused-from-seed",
+      "match_reason": "exact match against library row seeded by 0024"
+    },
+    {
+      "source_name": "Double-Unders",
+      "canonical_name": "Double-Under",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null)"
+    },
+    {
+      "source_name": "Sit-Ups",
+      "canonical_name": "Sit-up",
+      "status": "reused-from-seed",
+      "match_reason": "exact match against library row seeded by 0024"
+    },
+    {
+      "source_name": "Single-Unders (2x per Double-Under scaling)",
+      "canonical_name": "Single-Under",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null)"
+    },
+    {
+      "source_name": "(scaling substitute, no direct Rx source string — introduced for Intermediate/Beginner variant of Pull-up/Handstand Push-up/Push-up)",
+      "canonical_name": "Banded Pull-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null) to represent the scaled substitute movement"
+    },
+    {
+      "source_name": "(scaling substitute, no direct Rx source string — introduced for Intermediate/Beginner variant of Pull-up/Handstand Push-up/Push-up)",
+      "canonical_name": "Ring Row",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null) to represent the scaled substitute movement"
+    },
+    {
+      "source_name": "(scaling substitute, no direct Rx source string — introduced for Intermediate/Beginner variant of Pull-up/Handstand Push-up/Push-up)",
+      "canonical_name": "Pike Push-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null) to represent the scaled substitute movement"
+    },
+    {
+      "source_name": "(scaling substitute, no direct Rx source string — introduced for Intermediate/Beginner variant of Pull-up/Handstand Push-up/Push-up)",
+      "canonical_name": "Knee Push-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "no existing library row; proposed as a new shared movement (owner_user_id null) to represent the scaled substitute movement"
+    },
+    {
+      "source_name": "Overhead Squat",
+      "canonical_name": "Overhead Squat",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct barbell squat-pattern movement, not in library"
+    },
+    {
+      "source_name": "Dumbbell Hang Power Clean",
+      "canonical_name": "Dumbbell Hang Power Clean",
+      "status": "newly-proposed-shared",
+      "match_reason": "equipment+position-specific clean variant, distinct per taxonomy guardrail (clean variants are distinct)"
+    },
+    {
+      "source_name": "Dumbbell Push Press",
+      "canonical_name": "Dumbbell Push Press",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct pressing movement, not in library"
+    },
+    {
+      "source_name": "Dumbbell Farmers Carry",
+      "canonical_name": "Dumbbell Farmers Carry",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct loaded-carry movement, not in library"
+    },
+    {
+      "source_name": "Muscle-up",
+      "canonical_name": "Muscle-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct gymnastics movement, not in library"
+    },
+    {
+      "source_name": "Foot-Assisted Ring Dip",
+      "canonical_name": "Foot-Assisted Ring Dip",
+      "status": "newly-proposed-shared",
+      "match_reason": "named scaling movement for Muscle-up in source; kept distinct rather than folded into Ring Row"
+    },
+    {
+      "source_name": "Dumbbell Hang Snatch",
+      "canonical_name": "Dumbbell Hang Snatch",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct from Hang Power Snatch (different catch position); not in library"
+    },
+    {
+      "source_name": "Dumbbell-Facing Burpee",
+      "canonical_name": "Dumbbell-Facing Burpee",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct burpee variant per taxonomy guardrail (burpee variants are distinct), not in library"
+    },
+    {
+      "source_name": "Bench Press",
+      "canonical_name": "Bench Press",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct pressing movement, not in library"
+    },
+    {
+      "source_name": "Squat Clean",
+      "canonical_name": "Squat Clean",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct from Clean and Jerk / Power Clean / Clean per taxonomy guardrail (clean variants are distinct)"
+    },
+    {
+      "source_name": "Push Jerk",
+      "canonical_name": "Push Jerk",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct from Push Press / Split Jerk, not in library"
+    },
+    {
+      "source_name": "Jumping Pull-up",
+      "canonical_name": "Jumping Pull-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "named scaling movement in source, distinct from Pull-up/Banded Pull-up"
+    },
+    {
+      "source_name": "Clean",
+      "canonical_name": "Clean",
+      "status": "newly-proposed-shared",
+      "match_reason": "generic 'any variation of the clean' 1RM day; kept as its own movement rather than aliasing to Squat Clean/Power Clean/Clean and Jerk since source explicitly allows any variation"
+    },
+    {
+      "source_name": "Low-Hang Squat Snatch",
+      "canonical_name": "Low-Hang Squat Snatch",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct barbell position variant of squat snatch, not in library"
+    },
+    {
+      "source_name": "Hang Power Snatch",
+      "canonical_name": "Hang Power Snatch",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct from Power Snatch/Low-Hang Squat Snatch, not in library"
+    },
+    {
+      "source_name": "Shoulder Press",
+      "canonical_name": "Shoulder Press",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct strict press, not in library"
+    },
+    {
+      "source_name": "Power Clean",
+      "canonical_name": "Power Clean",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct from Squat Clean/Clean and Jerk/Clean per taxonomy guardrail"
+    },
+    {
+      "source_name": "Box Jump",
+      "canonical_name": "Box Jump",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct from Burpee Box Jump-Over/Step-Over, not in library"
+    },
+    {
+      "source_name": "Hand-Release Push-up",
+      "canonical_name": "Hand-Release Push-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct push-up standard, not in library"
+    },
+    {
+      "source_name": "Foot-Assisted Pull-up",
+      "canonical_name": "Foot-Assisted Pull-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "named beginner scaling movement in source, distinct from Jumping Pull-up/Banded Pull-up"
+    },
+    {
+      "source_name": "Hand-Elevated Push-up",
+      "canonical_name": "Hand-Elevated Push-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "named beginner scaling movement in source, distinct from Knee Push-up"
+    },
+    {
+      "source_name": "Bike",
+      "canonical_name": "Bike",
+      "status": "newly-proposed-shared",
+      "match_reason": "calorie-scored ergo movement; inserted with primary_metric='distance' matching the Row/Ski Erg table convention (0024), with primaryMetric:'cal' set directly on session items per the corrected 0025/0026 convention"
+    },
+    {
+      "source_name": "Dumbbell Box Step-up",
+      "canonical_name": "Dumbbell Box Step-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "weighted step-up, distinct from bodyweight Box Step-up per the weighted-vs-bodyweight guardrail example"
+    },
+    {
+      "source_name": "Box Step-up",
+      "canonical_name": "Box Step-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "bodyweight scaling movement, distinct from Dumbbell Box Step-up"
+    },
+    {
+      "source_name": "Chest-to-Bar Pull-up",
+      "canonical_name": "Chest-to-Bar Pull-up",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct pull-up standard from Pull-up, not in library"
+    },
+    {
+      "source_name": "Burpee Box Jump-Over",
+      "canonical_name": "Burpee Box Jump-Over",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct burpee variant per taxonomy guardrail, not in library"
+    },
+    {
+      "source_name": "Burpee Box Step-Over",
+      "canonical_name": "Burpee Box Step-Over",
+      "status": "newly-proposed-shared",
+      "match_reason": "named beginner scaling movement in source, distinct from Burpee Box Jump-Over"
+    },
+    {
+      "source_name": "Push Press",
+      "canonical_name": "Push Press",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct pressing movement, not in library"
+    },
+    {
+      "source_name": "Hanging Knee Raise",
+      "canonical_name": "Hanging Knee Raise",
+      "status": "newly-proposed-shared",
+      "match_reason": "canonicalization: source uses both 'hanging knee raise' and 'knee raises to chest height' as an Intermediate scaling step for Toes-to-Bar; treated as ONE movement (ROM difference is a prescription modifier, captured in notes) rather than two near-duplicates"
+    },
+    {
+      "source_name": "Front Squat",
+      "canonical_name": "Front Squat",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct barbell squat-pattern movement, not in library"
+    },
+    {
+      "source_name": "Power Snatch",
+      "canonical_name": "Power Snatch",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct from Hang Power Snatch/Low-Hang Squat Snatch, not in library"
+    },
+    {
+      "source_name": "Rope Climb",
+      "canonical_name": "Rope Climb",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct climbing movement, not in library"
+    },
+    {
+      "source_name": "Pull-to-Stand",
+      "canonical_name": "Pull-to-Stand",
+      "status": "newly-proposed-shared",
+      "match_reason": "explicitly named as a distinct scaling movement for Rope Climb in the ingestion brief's own guardrails"
+    },
+    {
+      "source_name": "Toes-to-Bar",
+      "canonical_name": "Toes-to-Bar",
+      "status": "newly-proposed-shared",
+      "match_reason": "distinct gymnastics movement, not in library"
+    },
+    {
+      "source_name": "Row / Wall Ball / Burpee / Back Squat / Run / Sit-up / Push-up / Air Squat / Pull-up / Ring Row / Deadlift / Clean and Jerk / Double-Under / Single-Under / Thruster",
+      "canonical_name": "(unchanged)",
+      "status": "existing-movement-reused",
+      "match_reason": "already shared-library rows from 0024 or 0028; reused as-is across the 22 daily-WOD sessions with no new movement or alias needed."
+    }
+  ],
+  "schema_extension_proposals": [
+    {
+      "affected_entity": "sessions.source_ref (+ sessions_source_ref_unique partial unique index on (source, source_ref))",
+      "why_existing_model_insufficient": "sessions had no uniqueness constraint at all (noted explicitly in the 0024 migration comment) — a shared-library import had no way to detect 'this WOD is already seeded' short of a full-row comparison, so re-running an import script would append duplicate rows every time.",
+      "additive_change": "New nullable text column `source_ref` on sessions (migration 0027), plus a partial unique index on (source, source_ref) WHERE source_ref IS NOT NULL. Imported rows carry a stable per-workout key (e.g. 'benchmark/fran'); the seed migration's INSERT ends with ON CONFLICT (source, source_ref) WHERE source_ref IS NOT NULL DO NOTHING, making a re-apply a no-op.",
+      "backward_compat_impact": "Column is nullable and the index is partial (WHERE source_ref IS NOT NULL), so every existing row — legacy strength sessions, user-authored sessions, the 21 Hyrox seed rows from 0024 which have no source_ref — is completely unaffected. No default, no backfill, no RLS change (data-only column, covered by the existing sessions policies).",
+      "consuming_flow": "src/lib/queries.ts SessionInput.source_ref / createSession (spreads ...input, so the new optional field passes through unchanged); read by any consumer that reads a Session row (SessionSheet, Sessions library list) but not required by any of them — it is provenance metadata, not part of the Logger's runtime path."
+    },
+    {
+      "affected_entity": "SessionFrame.variants (SessionVariant[]) in src/lib/types.ts; consumed by src/lib/logBuilder.ts buildLogFromSession/selectVariant/availableLevels",
+      "why_existing_model_insufficient": "The existing frame shape (flat `exercises[]` plus optional `groups[]`) can express a single prescription only. CrossFit benchmark WODs are conventionally published with three parallel scaled prescriptions (Rx / Intermediate / Beginner) sharing one scoring format and one circuit structure but different loads/movement substitutions — there was no way to store more than one prescription per session without either duplicating the whole session row per level (losing the 'same WOD, three scales' relationship) or overloading `notes` with unstructured scaling text the Logger could not act on.",
+      "additive_change": "New optional `variants?: SessionVariant[]` array on SessionFrame. Each SessionVariant is {level: 'rx'|'intermediate'|'beginner', label?, groups: SessionGroup[], timeCapSeconds?, instructions?} — reusing the existing SessionGroup/SessionExercise shapes, so no new nested contract was invented. Stored inside the existing `frame` JSONB column; no new SQL column. `selectVariant`/`availableLevels`/`buildLogFromSession(frame, level?)` in logBuilder.ts implement the selection and fallback (requested level -> rx -> first) and the unfold-to-LogDocument path.",
+      "backward_compat_impact": "`variants` is optional. Every pre-existing frame (Hyrox seed rows from 0024, all user-authored sessions, plan-derived frames) has no `variants` key and is untouched; buildLogFromSession falls through unchanged to `frame.groups` then `frame.exercises` exactly as before. When `variants` IS present, the top-level `exercises`/`groups` are kept as the Rx mirror specifically so old readers that don't know about `variants` still see a coherent single-prescription frame.",
+      "consuming_flow": "src/lib/logBuilder.ts (buildLogFromSession, selectVariant, availableLevels) is the only backend-side consumer today. The scaling-level picker UI (a SessionSheet control passing the chosen ScalingLevel into buildLogFromSession before calling queries.createLog) is a UI-side addition outside this task's scope — flagging that the Logger/SessionSheet UI needs to surface availableLevels() as a Rx/Intermediate/Beginner toggle for this to reach the user; the data and selection logic are done, the toggle affordance is not part of this backend change."
+    }
+  ],
+  "source_note": "Two seed migrations back this output. supabase/migrations/0028_seed_crossfit.sql seeds the 8 canonical benchmark WODs mapped in full below (source='CrossFit.com', source_ref='benchmark/<slug>'). supabase/migrations/0029_seed_crossfit_daily.sql seeds 22 additional real, dated daily WODs (source_ref='daily/YYMMDD', Jul 4 - Aug 3, 2026) captured via browser inspection of crossfit.com/workout (server-side fetch returns 403). Per the source-filtering rule, 9 rest-day / pure-editorial dates in the same capture were excluded outright — no session, no placeholder, no empty log was created for them: 2026-07-05, 07-09, 07-12, 07-16, 07-19, 07-23, 07-26, 07-30, 08-02. The full session frame JSON for the 22 daily WODs is authoritative in the migration SQL (each frame is large — up to 3 scaling variants × several movements); this file carries a compact summary plus the accompanying deduplication_actions and the movements these WODs required.",
+  "daily_wod_sessions_summary": [
+    {
+      "name": "CrossFit · Aug 3, 2026",
+      "source_ref": "daily/260803",
+      "session_type": "ROUNDS_FOR_TIME",
+      "rounds": 3,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Aug 1, 2026",
+      "source_ref": "daily/260801",
+      "session_type": "ROUNDS_FOR_TIME",
+      "rounds": 5,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 31, 2026",
+      "source_ref": "daily/260731",
+      "session_type": "FOR_TIME",
+      "rounds": null,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 29, 2026",
+      "source_ref": "daily/260729",
+      "session_type": "INTERVALS",
+      "rounds": 5,
+      "duration_seconds": 1140,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 28, 2026 (Linda)",
+      "source_ref": "daily/260728",
+      "session_type": "FOR_TIME",
+      "rounds": 10,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 27, 2026",
+      "source_ref": "daily/260727",
+      "session_type": "INTERVALS",
+      "rounds": 2,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "beginner"
+      ],
+      "note": "levels omitted from `variants` (e.g. intermediate on Jul 27/22/17/7) fall back to Rx via selectVariant() because the source stated 'Same as Rx'd'."
+    },
+    {
+      "name": "CrossFit · Jul 25, 2026 (2008 Games Event 4)",
+      "source_ref": "daily/260725",
+      "session_type": "ROUNDS_FOR_TIME",
+      "rounds": 5,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 24, 2026 (The Hopper)",
+      "source_ref": "daily/260724",
+      "session_type": "FOR_TIME",
+      "rounds": 5,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 22, 2026 (2019 Games Event 8)",
+      "source_ref": "daily/260722",
+      "session_type": "FOR_LOAD",
+      "rounds": null,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx"
+      ],
+      "note": "levels omitted from `variants` (e.g. intermediate on Jul 27/22/17/7) fall back to Rx via selectVariant() because the source stated 'Same as Rx'd'."
+    },
+    {
+      "name": "CrossFit · Jul 21, 2026 (Muscle-Up Biathlon)",
+      "source_ref": "daily/260721",
+      "session_type": "FOR_TIME",
+      "rounds": null,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 20, 2026 (2009 Games Event 5)",
+      "source_ref": "daily/260720",
+      "session_type": "ROUNDS_FOR_TIME",
+      "rounds": 3,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 18, 2026",
+      "source_ref": "daily/260718",
+      "session_type": "FOR_TIME",
+      "rounds": 5,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 17, 2026",
+      "source_ref": "daily/260717",
+      "session_type": "FOR_LOAD",
+      "rounds": null,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "beginner"
+      ],
+      "note": "levels omitted from `variants` (e.g. intermediate on Jul 27/22/17/7) fall back to Rx via selectVariant() because the source stated 'Same as Rx'd'."
+    },
+    {
+      "name": "CrossFit · Jul 15, 2026",
+      "source_ref": "daily/260715",
+      "session_type": "FOR_TIME",
+      "rounds": 3,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 14, 2026 (Jack's Triangle)",
+      "source_ref": "daily/260714",
+      "session_type": "FOR_TOTAL_REPS",
+      "rounds": null,
+      "duration_seconds": 1380,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 13, 2026",
+      "source_ref": "daily/260713",
+      "session_type": "ROUNDS_FOR_TIME",
+      "rounds": 3,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 11, 2026 (Open 20.5)",
+      "source_ref": "daily/260711",
+      "session_type": "FOR_TIME",
+      "rounds": null,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 10, 2026",
+      "source_ref": "daily/260710",
+      "session_type": "AMRAP",
+      "rounds": null,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 8, 2026",
+      "source_ref": "daily/260708",
+      "session_type": "ROUNDS_FOR_TIME",
+      "rounds": 5,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 7, 2026",
+      "source_ref": "daily/260707",
+      "session_type": "FOR_LOAD",
+      "rounds": null,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx"
+      ],
+      "note": "levels omitted from `variants` (e.g. intermediate on Jul 27/22/17/7) fall back to Rx via selectVariant() because the source stated 'Same as Rx'd'."
+    },
+    {
+      "name": "CrossFit · Jul 6, 2026",
+      "source_ref": "daily/260706",
+      "session_type": "FOR_TIME",
+      "rounds": 5,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    },
+    {
+      "name": "CrossFit · Jul 4, 2026 (Eva Strong)",
+      "source_ref": "daily/260704",
+      "session_type": "ROUNDS_FOR_TIME",
+      "rounds": 5,
+      "duration_seconds": null,
+      "variant_levels_present": [
+        "rx",
+        "intermediate",
+        "beginner"
+      ],
+      "note": null
+    }
+  ]
+}

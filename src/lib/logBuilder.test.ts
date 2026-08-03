@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  availableLevels,
   buildBlankLog,
   buildLogFromPlanDay,
   buildLogFromSession,
@@ -12,7 +13,7 @@ import {
   reduceLogDocument,
   resolveWeek,
 } from '@/lib/logBuilder';
-import type { LogDocument, ParsedPlan, PlanDay, SessionFrame } from '@/lib/types';
+import type { LogDocument, ParsedPlan, PlanDay, SessionFrame, SessionVariant } from '@/lib/types';
 
 describe('parsePlanned', () => {
   it('splits "3x5" into count and label', () => {
@@ -151,6 +152,104 @@ describe('buildLogFromSession', () => {
     expect(group.items[0].sets).toHaveLength(5);
     expect(group.items[0].sets[0].planned).toBe('40s');
     expect(group.items[1].sets).toHaveLength(5);
+  });
+});
+
+const RX_GROUP = {
+  kind: 'circuit' as const,
+  section: 'conditioning' as const,
+  rounds: 3,
+  label: '21-15-9 (Rx)',
+  items: [
+    { movement: 'Thruster', section: 'conditioning' as const, primaryMetric: 'reps' as const, planned: '', notes: '21-15-9 reps · 95/65 lb' },
+  ],
+};
+const INTERMEDIATE_GROUP = {
+  ...RX_GROUP,
+  label: '21-15-9 (Intermediate)',
+  items: [
+    { movement: 'Thruster', section: 'conditioning' as const, primaryMetric: 'reps' as const, planned: '', notes: '21-15-9 reps · 65/45 lb' },
+  ],
+};
+const BEGINNER_GROUP = {
+  ...RX_GROUP,
+  label: '21-15-9 (Beginner)',
+  items: [
+    { movement: 'Thruster', section: 'conditioning' as const, primaryMetric: 'reps' as const, planned: '', notes: '21-15-9 reps · 45/35 lb' },
+  ],
+};
+
+const VARIANT_FRAME: SessionFrame = {
+  exercises: RX_GROUP.items,
+  groups: [RX_GROUP],
+  variants: [
+    { level: 'rx', label: 'Rx', groups: [RX_GROUP] },
+    { level: 'intermediate', label: 'Intermediate', groups: [INTERMEDIATE_GROUP] },
+    { level: 'beginner', label: 'Beginner', groups: [BEGINNER_GROUP] },
+  ],
+};
+
+describe('buildLogFromSession — scaling variants', () => {
+  it('defaults to Rx when level is omitted', () => {
+    const doc = buildLogFromSession(VARIANT_FRAME);
+    const item = doc.sections[0].groups[0].items[0];
+    expect(item.notes).toBe('21-15-9 reps · 95/65 lb');
+  });
+
+  it('selects the requested level', () => {
+    const doc = buildLogFromSession(VARIANT_FRAME, 'beginner');
+    const item = doc.sections[0].groups[0].items[0];
+    expect(item.notes).toBe('21-15-9 reps · 45/35 lb');
+  });
+
+  it('falls back to Rx (then the first variant) when the requested level is absent', () => {
+    const noBeginner: SessionFrame = {
+      exercises: RX_GROUP.items,
+      groups: [RX_GROUP],
+      variants: [
+        { level: 'rx', label: 'Rx', groups: [RX_GROUP] },
+        { level: 'intermediate', label: 'Intermediate', groups: [INTERMEDIATE_GROUP] },
+      ],
+    };
+    const doc = buildLogFromSession(noBeginner, 'beginner');
+    const item = doc.sections[0].groups[0].items[0];
+    expect(item.notes).toBe('21-15-9 reps · 95/65 lb'); // falls back to Rx, not intermediate
+  });
+
+  it('preserves circuit kind and expands rounds for the selected variant', () => {
+    const doc = buildLogFromSession(VARIANT_FRAME, 'rx');
+    const group = doc.sections[0].groups[0];
+    expect(group.kind).toBe('circuit');
+    // planned "" expanded by rounds=3 -> "3x" -> 3 sets.
+    expect(group.items[0].sets).toHaveLength(3);
+  });
+
+  it('falls back to top-level groups then exercises when variants is absent (legacy)', () => {
+    const legacy: SessionFrame = { exercises: [], groups: [RX_GROUP] };
+    const doc = buildLogFromSession(legacy);
+    expect(doc.sections[0].groups[0].kind).toBe('circuit');
+
+    const flatLegacy: SessionFrame = { exercises: RX_GROUP.items };
+    const flatDoc = buildLogFromSession(flatLegacy);
+    expect(flatDoc.sections[0].groups[0].kind).toBe('single');
+  });
+});
+
+describe('availableLevels', () => {
+  it('returns only present levels in rx -> intermediate -> beginner order', () => {
+    expect(availableLevels(VARIANT_FRAME)).toEqual(['rx', 'intermediate', 'beginner']);
+  });
+
+  it('returns [] when the frame has no variants', () => {
+    expect(availableLevels({ exercises: [] })).toEqual([]);
+  });
+
+  it('reorders regardless of the array order the variants were declared in', () => {
+    const shuffled: SessionVariant[] = [
+      { level: 'beginner', groups: [BEGINNER_GROUP] },
+      { level: 'rx', groups: [RX_GROUP] },
+    ];
+    expect(availableLevels({ exercises: [], variants: shuffled })).toEqual(['rx', 'beginner']);
   });
 });
 

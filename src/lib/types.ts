@@ -166,6 +166,11 @@ export interface Session {
   instructions: string | null;
   source: string | null;
   source_text: string | null;
+  // Stable per-workout provenance key (e.g. 'benchmark/fran'), set on imported
+  // rows so a re-import is idempotent. NULL on hand-authored / user sessions.
+  // Deduped by the partial unique index (source, source_ref) — see
+  // supabase/migrations/0027_session_source_ref.sql.
+  source_ref: string | null;
 }
 
 // Workout scoring formats. Union values are stored verbatim in
@@ -192,9 +197,32 @@ export type SessionType =
 //   only for back-compat readers that ignore `groups`.
 //
 // When both are present, `groups` is authoritative.
+//
+// Scaling variants (added for CrossFit-style imports): when `variants` is set,
+// the session ships multiple scaled versions (Rx / Intermediate / Beginner) and
+// the user picks one when opening it in the Logger. The chosen variant's
+// `groups` are unfolded; `variants` wins over the top-level `groups`/`exercises`,
+// which stay as the Rx mirror for pre-variant readers. Stored inside the
+// existing `frame` JSONB — no new SQL column, same as `groups[]` was.
 export interface SessionFrame {
   exercises: SessionExercise[];
   groups?: SessionGroup[];
+  variants?: SessionVariant[];
+}
+
+// CrossFit-style workout scaling. Orthogonal to `session_type` (the scoring
+// format is shared across levels; only the prescription changes).
+export type ScalingLevel = 'rx' | 'intermediate' | 'beginner';
+
+// One scaled version of a session. `groups` uses the same shape as
+// `SessionFrame.groups`. `timeCapSeconds` overrides the session's time cap when
+// a scaled version caps differently; `instructions` overrides the prose.
+export interface SessionVariant {
+  level: ScalingLevel;
+  label?: string;
+  groups: SessionGroup[];
+  timeCapSeconds?: number;
+  instructions?: string;
 }
 
 // A group of items opened together in the Logger — mirrors `LogGroup` on the
