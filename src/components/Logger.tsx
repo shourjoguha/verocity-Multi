@@ -169,6 +169,11 @@ export default function Logger() {
   // Pre-session all-time best e1RM per movement, for the PR ring on completion.
   const [bestByMovement, setBestByMovement] = useState<Map<string, number>>(new Map());
   const [startedAt, setStartedAt] = useState<string | null>(null);
+  // The saved-session template this workout was launched from (or resumed
+  // into via its logged session_id), kept only for its display metadata —
+  // source / source_text / instructions — under Session details. Null for
+  // plan days and blank workouts, which have none of these fields.
+  const [linkedSession, setLinkedSession] = useState<Session | null>(null);
   // Editing a past workout (opened via ?logId=…&edit=1): reuse every logging
   // control but freeze the live-session behaviors (stopwatch, auto-end, finish).
   const [editing, setEditing] = useState(false);
@@ -226,6 +231,7 @@ export default function Logger() {
           setLogDate(log.log_date);
           setTags(log.tags ?? []);
           if (log.plan_id) setSubs(await getMovementSubs(log.plan_id));
+          if (log.session_id) setLinkedSession(await getSessionById(log.session_id));
           setStartedAt(log.started_at);
           // Seed the clock BEFORE starting it. Without this the stopwatch
           // resumed from 0 and the autosave wrote that straight over the real
@@ -304,6 +310,7 @@ export default function Logger() {
         linkedSessionId = session?.id ?? null;
         initialTags = session?.tags ?? [];
         linkedDayKey = null;
+        setLinkedSession(session);
       } else {
         const plan = source as Plan | null;
         if (plan && dk) {
@@ -1130,6 +1137,17 @@ export default function Logger() {
               );
             })}
           </div>
+        ) : null}
+
+        {showDetails && linkedSession?.source_text ? (
+          <details className="mt-3 border border-border">
+            <summary className="cursor-pointer px-3 py-2 t-control text-muted hover:text-fg">
+              Source{linkedSession.source ? ` · ${linkedSession.source}` : ''}
+            </summary>
+            <pre className="whitespace-pre-wrap px-3 py-2 text-xs text-muted">
+              {linkedSession.source_text}
+            </pre>
+          </details>
         ) : null}
       </div>
 
