@@ -28,6 +28,9 @@ export function parseVoiceSet(transcript: string): Partial<SetActual> {
   const meters = take(/(\d+(?:\.\d+)?)\s*(?:m|meters?|metres?)\b/);
   if (meters != null) out.distance = meters;
 
+  const calories = take(/(\d+(?:\.\d+)?)\s*(?:cal|cals|calorie|calories)\b/);
+  if (calories != null) out.calories = calories;
+
   const min = take(/(\d+(?:\.\d+)?)\s*(?:min|mins|minutes?)\b/);
   const sec = take(/(\d+(?:\.\d+)?)\s*(?:sec|secs|seconds?)\b/);
   if (min != null || sec != null) out.time = Math.round((min ?? 0) * 60 + (sec ?? 0));

@@ -8,6 +8,7 @@ export function formatSetActual(a: SetActual): string {
   else if (a.reps != null) parts.push(`${a.reps} reps`);
   if (a.time != null) parts.push(`${a.time}s`);
   if (a.distance != null) parts.push(`${a.distance}m`);
+  if (a.calories != null) parts.push(`${a.calories} cal`);
   if (a.rpe != null) parts.push(`@${a.rpe}`);
   return parts.length ? parts.join(' ') : '—';
 }

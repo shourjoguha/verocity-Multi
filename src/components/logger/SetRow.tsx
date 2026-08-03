@@ -58,6 +58,8 @@ export function SetRow({
         return a.time ? `${a.time}${METRICS.time.unit}` : '';
       case 'distance':
         return a.distance ? `${a.distance}${METRICS.distance.unit}` : '';
+      case 'cal':
+        return a.calories ? `${a.calories} ${METRICS.cal.unit}` : '';
       case 'rpe':
         return '';
     }
