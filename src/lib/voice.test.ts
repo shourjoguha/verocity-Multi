@@ -32,6 +32,11 @@ describe('parseVoiceSet', () => {
     expect(parseVoiceSet('hold 1 minute 30 seconds')).toEqual({ time: 90 });
   });
 
+  it('parses calories', () => {
+    expect(parseVoiceSet('ski erg 20 calories')).toEqual({ calories: 20 });
+    expect(parseVoiceSet('row 15 cal')).toEqual({ calories: 15 });
+  });
+
   it('returns an empty object when nothing is recognized', () => {
     expect(parseVoiceSet('no numbers here')).toEqual({});
   });

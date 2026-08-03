@@ -77,7 +77,7 @@ import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { toast } from '@/lib/toast';
 
-const METRIC_CYCLE: MetricKey[] = ['weight', 'reps', 'time', 'distance', 'rpe'];
+const METRIC_CYCLE: MetricKey[] = ['weight', 'reps', 'time', 'distance', 'cal', 'rpe'];
 
 // Module-level so the identity is stable across renders (useCountdown takes it
 // as a dependency). The countdown also vibrates; this is the on-screen half.

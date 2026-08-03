@@ -454,6 +454,7 @@ export interface SetActual {
   rpe?: number;
   distance?: number;
   time?: number;
+  calories?: number;
   completed: boolean;
   prefilled: boolean;
 }

@@ -46,6 +46,9 @@ export const METRICS = {
   reps: { label: 'Reps', unit: '', step: 1 },
   time: { label: 'Time', unit: 's', step: 5 },
   distance: { label: 'Distance', unit: 'm', step: 10 },
+  // Calories — the scoring unit for erg/row/ski/stairmaster-style zone 2
+  // machines when a workout prescribes "calorie X" rather than a distance.
+  cal: { label: 'Calories', unit: 'cal', step: 5 },
   rpe: { label: 'RPE', unit: '', step: 0.5 },
 } as const;
 

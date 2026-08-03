@@ -188,6 +188,18 @@ export function SetEntrySheet({
             ariaLabel="distance"
           />
         );
+      case 'cal':
+        return (
+          <StepperField
+            inline
+            value={a.calories ?? 0}
+            onChange={(v) => onPatch({ calories: v })}
+            step={METRICS.cal.step}
+            clamp={whole}
+            label={METRICS.cal.unit}
+            ariaLabel="calories"
+          />
+        );
       case 'rpe':
         return null;
     }

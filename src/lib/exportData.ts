@@ -52,6 +52,7 @@ const CSV_HEADERS = [
   'rpe',
   'distance',
   'time',
+  'calories',
   'completed',
   'notations',
 ] as const;
@@ -86,6 +87,7 @@ export function logsToCsv(logs: WorkoutLog[]): string {
                 set.actual.rpe,
                 set.actual.distance,
                 set.actual.time,
+                set.actual.calories,
                 set.actual.completed,
                 set.notations.join(' '),
               ]
