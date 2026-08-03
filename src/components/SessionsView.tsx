@@ -10,12 +10,13 @@ import {
 } from '@/lib/queries';
 import { firstWeekWithContent, frameFromPlanDay } from '@/lib/logBuilder';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
-import type { Movement, Plan, PlanDay, Session, SessionExercise } from '@/lib/types';
+import type { Movement, Plan, PlanDay, Session, SessionExercise, SessionType } from '@/lib/types';
 import { ACTIVITY_TAGS, METRICS, SECTIONS, type ActivityTagKey, type MetricKey, type SectionKey } from '@/app.config';
 import { tagColor } from '@/lib/tags';
-import { formatSessionMeta } from '@/lib/sessionMeta';
+import { distinctSessionMovements, formatSessionMeta, sessionMovementKeys, TYPE_SHORT } from '@/lib/sessionMeta';
 import { SessionSheet } from '@/components/SessionSheet';
 import { Button, EmptyState, LoadingScreen, Tag } from '@/components/ui/primitives';
+import { Modal } from '@/components/ui/Modal';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { MovementPicker } from '@/components/logger/MovementPicker';
@@ -23,8 +24,148 @@ import { toast } from '@/lib/toast';
 
 const TAG_KEYS = Object.keys(ACTIVITY_TAGS) as ActivityTagKey[];
 const METRIC_KEYS = Object.keys(METRICS) as MetricKey[];
+const SESSION_TYPES = Object.keys(TYPE_SHORT) as SessionType[];
 const inputClass =
   'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle';
+
+// Effective length of a session for the duration filter: an actual duration
+// when known, else the format's time cap (AMRAP/EMOM etc. have no fixed
+// duration otherwise). Sessions with neither (legacy strength templates)
+// don't match any bucket.
+function sessionSeconds(s: Session): number | null {
+  return s.duration_seconds ?? s.time_cap_seconds ?? null;
+}
+
+type DurationBucket = { key: string; label: string; min: number; max: number };
+const DURATION_BUCKETS: DurationBucket[] = [
+  { key: 'under15', label: '< 15 min', min: 0, max: 15 * 60 },
+  { key: '15to30', label: '15–30 min', min: 15 * 60, max: 30 * 60 },
+  { key: '30to45', label: '30–45 min', min: 30 * 60, max: 45 * 60 },
+  { key: '45plus', label: '45+ min', min: 45 * 60, max: Infinity },
+];
+
+function FilterIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+      strokeLinecap="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M3 4.5h14l-5.5 6.25v5.25l-3 1.5v-6.75L3 4.5z" />
+    </svg>
+  );
+}
+
+// A pill-toggle row shared by the session-type and duration filter groups —
+// the TagPicker idiom (hill-btn + aria-pressed), parameterised over a fixed
+// option list rather than ActivityTagKey.
+function PillFilter<T extends string>({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: { key: T; label: string }[];
+  selected: T[];
+  onToggle: (key: T) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map(({ key, label }) => {
+        const on = selected.includes(key);
+        return (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onToggle(key)}
+            className={`hill-btn flex min-h-11 items-center border bg-surface px-3 t-control transition-colors ${
+              on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+            }`}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Searchable multi-select for the movement include/exclude filters. Options
+// come from the movements actually present across the user's sessions (see
+// distinctSessionMovements), not the full shared library — there is no point
+// filtering by a movement no session uses.
+function MovementFilterList({
+  title,
+  hint,
+  options,
+  selected,
+  onChange,
+}: {
+  title: string;
+  hint: string;
+  options: { key: string; label: string }[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const toggle = (key: string) =>
+    onChange(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]);
+  const visible = query ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase())) : options;
+
+  return (
+    <div>
+      <div className="mb-2 t-label text-muted">{title}</div>
+      {options.length === 0 ? (
+        <p className="text-sm text-muted">No movements logged in any session yet.</p>
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-muted">{hint}</p>
+          {options.length > 8 ? (
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search movements"
+              className={`${inputClass} mb-2`}
+              aria-label={`Search ${title.toLowerCase()}`}
+            />
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {visible.length === 0 ? (
+              <p className="text-sm text-muted">No matches.</p>
+            ) : (
+              visible.map((o) => {
+                const on = selected.includes(o.key);
+                return (
+                  <button
+                    key={o.key}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggle(o.key)}
+                    className={`hill-btn flex min-h-11 items-center border bg-surface px-3 t-control capitalize transition-colors ${
+                      on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })
+            )}
+          </div>
+          {selected.length > 0 ? (
+            <button type="button" onClick={() => onChange([])} className="mt-2 t-control text-muted hover:text-fg">
+              Clear {title.toLowerCase()}
+            </button>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
 
 type Draft = { name: string; tags: string[]; exercises: SessionExercise[] };
 
@@ -314,6 +455,11 @@ export default function SessionsView() {
   const [items, setItems] = useState<Session[] | null>(null);
   const [q, setQ] = useState('');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<SessionType[]>([]);
+  const [durationFilter, setDurationFilter] = useState<string[]>([]);
+  const [includeMovements, setIncludeMovements] = useState<string[]>([]);
+  const [excludeMovements, setExcludeMovements] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
@@ -327,12 +473,40 @@ export default function SessionsView() {
   const movements = movementsQ.data ?? [];
   const plans = plansQ.data ?? [];
   const sessions = items ?? [];
+  const movementOptions = distinctSessionMovements(sessions);
 
   const filtered = sessions.filter((s) => {
     if (tagFilter && !s.tags.includes(tagFilter)) return false;
     if (q && !s.name.toLowerCase().includes(q.toLowerCase())) return false;
+    if (typeFilter.length > 0 && (!s.session_type || !typeFilter.includes(s.session_type))) return false;
+    if (durationFilter.length > 0) {
+      const secs = sessionSeconds(s);
+      if (secs == null) return false;
+      const inBucket = DURATION_BUCKETS.some((b) => durationFilter.includes(b.key) && secs >= b.min && secs < b.max);
+      if (!inBucket) return false;
+    }
+    if (includeMovements.length > 0 || excludeMovements.length > 0) {
+      const names = sessionMovementKeys(s);
+      if (includeMovements.length > 0 && !includeMovements.some((m) => names.includes(m))) return false;
+      if (excludeMovements.length > 0 && excludeMovements.some((m) => names.includes(m))) return false;
+    }
     return true;
   });
+
+  const activeFilterCount =
+    typeFilter.length + durationFilter.length + includeMovements.length + excludeMovements.length;
+
+  function clearAdvancedFilters() {
+    setTypeFilter([]);
+    setDurationFilter([]);
+    setIncludeMovements([]);
+    setExcludeMovements([]);
+  }
+
+  const toggleType = (t: SessionType) =>
+    setTypeFilter((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  const toggleDuration = (key: string) =>
+    setDurationFilter((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]));
 
   const toInput = (d: Draft): SessionInput => ({
     name: d.name.trim(),
@@ -460,12 +634,26 @@ export default function SessionsView() {
       ) : null}
 
       <Item>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search sessions"
-          className="mb-4 min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
-        />
+        <div className="mb-4 flex gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search sessions"
+            className="min-h-11 w-full flex-1 border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
+          />
+          <button
+            type="button"
+            onClick={() => setFiltersOpen(true)}
+            aria-label="Filters"
+            className={`hill-btn flex min-h-11 shrink-0 items-center gap-1.5 border bg-surface px-3 t-control transition-colors ${
+              activeFilterCount > 0 ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+            }`}
+          >
+            <FilterIcon />
+            Filters
+            {activeFilterCount > 0 ? <span className="tabular-nums">({activeFilterCount})</span> : null}
+          </button>
+        </div>
         <div className="mb-5 flex flex-wrap gap-2">
           <button
             onClick={() => setTagFilter(null)}
@@ -583,6 +771,49 @@ export default function SessionsView() {
           startEdit(s);
         }}
       />
+
+      <Modal open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filters">
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
+          <div>
+            <div className="mb-2 t-label text-muted">Workout type</div>
+            <PillFilter
+              options={SESSION_TYPES.map((t) => ({ key: t, label: TYPE_SHORT[t] }))}
+              selected={typeFilter}
+              onToggle={toggleType}
+            />
+          </div>
+
+          <div>
+            <div className="mb-2 t-label text-muted">Duration</div>
+            <PillFilter
+              options={DURATION_BUCKETS.map((b) => ({ key: b.key, label: b.label }))}
+              selected={durationFilter}
+              onToggle={toggleDuration}
+            />
+          </div>
+
+          <MovementFilterList
+            title="Include movements"
+            hint="Show sessions with any of:"
+            options={movementOptions}
+            selected={includeMovements}
+            onChange={setIncludeMovements}
+          />
+
+          <MovementFilterList
+            title="Exclude movements"
+            hint="Hide sessions with any of:"
+            options={movementOptions}
+            selected={excludeMovements}
+            onChange={setExcludeMovements}
+          />
+        </div>
+        <div className="flex shrink-0 border-t border-border p-4">
+          <Button variant="ghost" onClick={clearAdvancedFilters} disabled={activeFilterCount === 0}>
+            Clear filters
+          </Button>
+        </div>
+      </Modal>
     </PageStagger>
   );
 }
