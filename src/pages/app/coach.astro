@@ -1,8 +1,8 @@
 ---
 import App from '@/layouts/App.astro';
-import CoachView from '@/components/CoachView';
+import ProgressGroup from '@/components/ProgressGroup';
 ---
 
 <App title="Coach · Verocity">
-  <CoachView client:load />
+  <ProgressGroup initial="coach" client:load />
 </App>

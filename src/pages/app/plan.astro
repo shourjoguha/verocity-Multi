@@ -1,8 +1,8 @@
 ---
 import App from '@/layouts/App.astro';
-import PlanView from '@/components/PlanView';
+import TrainingGroup from '@/components/TrainingGroup';
 ---
 
 <App title="Plan · Verocity">
-  <PlanView client:load />
+  <TrainingGroup initial="plan" client:load />
 </App>

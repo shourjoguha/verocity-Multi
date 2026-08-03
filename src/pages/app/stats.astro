@@ -1,8 +1,8 @@
 ---
 import App from '@/layouts/App.astro';
-import StatsView from '@/components/StatsView';
+import ProgressGroup from '@/components/ProgressGroup';
 ---
 
 <App title="Stats · Verocity">
-  <StatsView client:load />
+  <ProgressGroup initial="stats" client:load />
 </App>

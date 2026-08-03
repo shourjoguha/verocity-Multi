@@ -852,6 +852,40 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   animation: pop-in 0.16s var(--ease-editorial) both;
 }
 
+/* Grouped-page tab slide (Training / Progress — GroupPager.tsx). The sibling
+   view stays mounted underneath and swaps to `hidden` the same frame the new
+   one appears, so this is a single-element entrance like the rest of the
+   file's motion, not a coordinated two-panel carousel. Direction matches the
+   tab's position relative to the one it replaced. The parent scroller already
+   carries `overflow-x-hidden` (see App.astro), which clips the brief
+   translateX overshoot. */
+@keyframes group-slide-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes group-slide-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-2rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.group-panel--right {
+  animation: group-slide-from-right 0.32s var(--ease-editorial) both;
+}
+.group-panel--left {
+  animation: group-slide-from-left 0.32s var(--ease-editorial) both;
+}
+
 /* ---- Plan-day accordion (Home). The cards share ONE flex free-space pool, so
    animating `flex-grow` makes the collapsing card hand its width straight to
    the expanding one: synchronised by construction, on one curve, with the row

@@ -1,8 +1,8 @@
 ---
 import App from '@/layouts/App.astro';
-import SessionsView from '@/components/SessionsView';
+import TrainingGroup from '@/components/TrainingGroup';
 ---
 
 <App title="Sessions · Verocity">
-  <SessionsView client:load />
+  <TrainingGroup initial="sessions" client:load />
 </App>

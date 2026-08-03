@@ -161,6 +161,19 @@ went to 3.
 - **lb / ft-in input.** `UNITS` is kg-only and the repo has no conversion layer;
   this would be the first thing to need one.
 
+A fifth pass grouped the six flat Training/Progress routes into two sliding
+pages. `src/lib/appNav.ts` holds the shared Training (Plan/Sessions/Library)
+and Progress (Stats/Body/Coach) definitions; `GroupPager.tsx` mounts each
+sibling view once (lazily, on first visit) behind a segmented control
+(`SegmentedTabs.tsx`, the app's first) and switches between them with a
+CSS-first directional slide (`.group-panel--left`/`.group-panel--right` in
+`global.css`), syncing the URL via `replaceState` so a refresh or a direct link
+to `/app/sessions` still opens on the right tab. The bottom ribbon dropped its
+"More" slot for **Training** and **Progress**, each reopening whichever
+sub-page was last viewed there (`sessionStorage`); the drawer opener moved to a
+menu icon in the header alongside a new Settings icon. The drawer's own
+content and behaviour are unchanged.
+
 ### Phase 7 — Guidance upkeep  `[ongoing]`
 `npm run audit:docs` fails if the docs name code that no longer exists. It was
 added after a five-PR bug hunt that these documents actively misdirected; see
