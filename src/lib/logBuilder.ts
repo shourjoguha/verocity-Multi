@@ -6,9 +6,11 @@ import type {
   LogSection,
   ParsedPlan,
   PlanDay,
+  ScalingLevel,
   SessionExercise,
   SessionFrame,
   SessionGroup,
+  SessionVariant,
 } from '@/lib/types';
 import type { SessionInput } from '@/lib/queries';
 import { RPE, SECTIONS, type MetricKey, type SectionKey } from '@/app.config';
@@ -108,11 +110,43 @@ export function buildLogFromPlanDay(day: PlanDay, week: number): LogDocument {
   );
 }
 
+// The scaling levels a frame offers, in canonical order, or [] when the session
+// has no variants (i.e. a single, unscaled prescription). Drives which toggles
+// the UI shows.
+const LEVEL_ORDER: ScalingLevel[] = ['rx', 'intermediate', 'beginner'];
+
+export function availableLevels(frame: SessionFrame): ScalingLevel[] {
+  const present = new Set((frame.variants ?? []).map((v) => v.level));
+  return LEVEL_ORDER.filter((l) => present.has(l));
+}
+
+// Pick a variant by level. Falls back to Rx, then to the first listed variant,
+// so an unknown/missing level still resolves. Returns null when the frame has no
+// variants at all (callers use the top-level groups/exercises instead).
+export function selectVariant(
+  frame: SessionFrame,
+  level?: ScalingLevel,
+): SessionVariant | null {
+  const variants = frame.variants;
+  if (!variants || variants.length === 0) return null;
+  return (
+    (level && variants.find((v) => v.level === level)) ||
+    variants.find((v) => v.level === 'rx') ||
+    variants[0]
+  );
+}
+
 // Build an in-progress LogDocument from a saved session frame. An empty frame
 // falls back to a blank doc so the Logger still has a section to add into.
 // Structured sessions (Hyrox / metcon) supply `frame.groups`; that path
 // preserves circuit / superset kinds and expands `rounds` into set counts.
-export function buildLogFromSession(frame: SessionFrame): LogDocument {
+// When the frame carries scaling `variants`, `level` selects one (default Rx);
+// the chosen variant's groups are authoritative over the top-level frame.
+export function buildLogFromSession(frame: SessionFrame, level?: ScalingLevel): LogDocument {
+  const variant = selectVariant(frame, level);
+  if (variant) {
+    return variant.groups.length > 0 ? buildLogFromGroups(variant.groups) : buildBlankLog();
+  }
   if (frame.groups && frame.groups.length > 0) {
     return buildLogFromGroups(frame.groups);
   }

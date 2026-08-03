@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Tag } from '@/components/ui/primitives';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { ACTIVITY_TAGS, SECTIONS, type ActivityTagKey, type SectionKey } from '@/app.config';
 import { tagColor } from '@/lib/tags';
 import { formatSessionMeta } from '@/lib/sessionMeta';
-import type { Session, SessionExercise, SessionGroup } from '@/lib/types';
+import { availableLevels, selectVariant } from '@/lib/logBuilder';
+import type { ScalingLevel, Session, SessionExercise, SessionGroup, SessionVariant } from '@/lib/types';
 
 // Read-only preview of a saved session. Opens as a bottom drawer on mobile,
 // centered card on desktop, via the shared Modal primitive (already handles
@@ -36,7 +39,11 @@ function SheetBody({
 }) {
   const meta = formatSessionMeta(session);
   const isShared = session.owner_user_id === null;
-  const blocks = normalizeGroups(session);
+  const levels = availableLevels(session.frame);
+  const [level, setLevel] = useState<ScalingLevel>('rx');
+  const variant = levels.length > 0 ? selectVariant(session.frame, level) : null;
+  const blocks = normalizeGroups(session, variant);
+  const instructions = variant?.instructions ?? session.instructions;
 
   return (
     <>
@@ -55,8 +62,22 @@ function SheetBody({
           </div>
         )}
 
-        {session.instructions ? (
-          <p className="mb-5 text-sm leading-relaxed text-muted">{session.instructions}</p>
+        {instructions ? (
+          <p className="mb-5 text-sm leading-relaxed text-muted">{instructions}</p>
+        ) : null}
+
+        {levels.length > 0 ? (
+          <div className="mb-4">
+            <SegmentedTabs
+              tabs={levels.map((l) => ({
+                key: l,
+                label: session.frame.variants?.find((v) => v.level === l)?.label ?? levelLabel(l),
+              }))}
+              active={level}
+              onChange={(k) => setLevel(k as ScalingLevel)}
+              ariaLabel="Scaling level"
+            />
+          </div>
         ) : null}
 
         {blocks.length === 0 ? (
@@ -100,7 +121,9 @@ function SheetBody({
             </button>
           ) : null}
           <a
-            href={`/app/log?session=${encodeURIComponent(session.id)}`}
+            href={`/app/log?session=${encodeURIComponent(session.id)}${
+              levels.length > 0 ? `&level=${level}` : ''
+            }`}
             className="hill-btn border border-fg bg-surface px-3 py-2 t-control text-fg"
           >
             Start
@@ -120,11 +143,11 @@ type Block = {
   items: SessionExercise[];
 };
 
-// Prefer frame.groups when present. Otherwise fall back to the flat
-// exercises[] list, bucketing by section into single-kind blocks so the
-// renderer has one uniform shape.
-function normalizeGroups(session: Session): Block[] {
-  const groups = session.frame.groups;
+// Prefer the selected variant's groups when the session has scaling variants,
+// then frame.groups, then fall back to the flat exercises[] list, bucketing by
+// section into single-kind blocks so the renderer has one uniform shape.
+function normalizeGroups(session: Session, variant: SessionVariant | null): Block[] {
+  const groups = variant?.groups ?? session.frame.groups;
   if (groups && groups.length > 0) {
     return groups.map<Block>((g: SessionGroup) => ({
       section: g.section,
@@ -188,4 +211,8 @@ function BlockCard({ block }: { block: Block }) {
 
 function sectionLabel(k: SectionKey): string {
   return k.charAt(0).toUpperCase() + k.slice(1);
+}
+
+function levelLabel(l: ScalingLevel): string {
+  return l.charAt(0).toUpperCase() + l.slice(1);
 }

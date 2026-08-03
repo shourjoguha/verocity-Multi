@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { clearQueryCache } from '@/lib/queryCache';
 import { ASPECT_METRICS_VERSION, type MetricKey } from '@/app.config';
+import { normalizeMovementName } from '@/lib/movementTaxonomy';
 import type {
   AspectScores,
   AspectSnapshot,
@@ -116,6 +117,46 @@ export async function getMovements(client: SupabaseClient = supabase): Promise<M
   return (data as Movement[]) ?? [];
 }
 
+export type MovementMatch = {
+  movement: Movement;
+  canonical_name: string;
+  match_confidence: 'exact' | 'normalized';
+  match_reason: string;
+};
+
+// Resolve a free-text (imported/source) movement name against the movement
+// library. Case-insensitive exact match on `name` wins first (confidence
+// 'exact'); otherwise falls back to comparing normalizeMovementName() forms
+// (confidence 'normalized') so plural/hyphen/abbreviation variants still
+// match. Never collapses two movements whose normalized forms differ — a
+// miss returns null rather than a guess.
+export function resolveMovement(name: string, library: Movement[]): MovementMatch | null {
+  const raw = name.trim();
+  const exact = library.find((m) => m.name.toLowerCase() === raw.toLowerCase());
+  if (exact) {
+    return {
+      movement: exact,
+      canonical_name: exact.name,
+      match_confidence: 'exact',
+      match_reason: 'case-insensitive exact match',
+    };
+  }
+
+  const normalizedIncoming = normalizeMovementName(raw);
+  if (!normalizedIncoming) return null;
+  const normalized = library.find((m) => normalizeMovementName(m.name) === normalizedIncoming);
+  if (normalized) {
+    return {
+      movement: normalized,
+      canonical_name: normalized.name,
+      match_confidence: 'normalized',
+      match_reason: 'plural/hyphen/abbrev normalized',
+    };
+  }
+
+  return null;
+}
+
 // Full owned sets (no limit), used by the data export.
 export async function getAllPlans(client: SupabaseClient = supabase): Promise<Plan[]> {
   const { data } = await client.from('plans').select('*').order('created_at', { ascending: true });
@@ -220,6 +261,9 @@ export type SessionInput = {
   instructions?: string | null;
   source?: string | null;
   source_text?: string | null;
+  // Stable per-workout provenance key (e.g. 'benchmark/fran'), set on imported
+  // rows so a re-import is idempotent — see supabase/migrations/0027.
+  source_ref?: string | null;
 };
 
 export async function createSession(input: SessionInput): Promise<Session | null> {
