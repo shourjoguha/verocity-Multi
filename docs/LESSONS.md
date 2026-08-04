@@ -331,6 +331,22 @@ transitioning it. **Tween the property that determines the layout, not a
 constraint on it.**
 → `.day-card` in `src/styles/global.css`, `DayAccordion` in `src/components/ProfileView.tsx`
 
+### A toggle's label promised a schema switch it didn't perform
+`/app/plan/upload`'s only toggle was labelled "Upload as minis". It did not
+change what was being uploaded — the input was always a plan-shaped CSV; on,
+it reinterpreted each parsed plan day as a short session attached to the
+active plan. Users reasonably read "Upload as minis" as a schema switch (plan
+CSV vs. session CSV) and got confused when session-shaped input still failed
+plan validation.
+**A toggle's label is a claim about what changes when it's flipped — make the
+label match the mechanism, not the intent.** Replaced with a `Plan | Sessions`
+target toggle that actually swaps the prompt, template, parser and save path
+(`buildSessionAiPrompt`/`parseSessionTabular`/`createSession` vs. their
+plan-side equivalents in `src/lib/sessionTemplate.ts` and
+`src/lib/planTemplate.ts`); sessions now save as N standalone `sessions` rows
+with no active-plan gate.
+→ `src/components/PlanUpload.tsx`, `src/lib/sessionTemplate.ts`
+
 ## Build & deploy
 
 ### A build step works locally and silently does nothing on Vercel

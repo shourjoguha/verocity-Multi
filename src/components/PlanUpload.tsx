@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { adoptPlan, createPlan, createSession, getActivePlan } from '@/lib/queries';
-import { daysToMiniSessions } from '@/lib/logBuilder';
+import { adoptPlan, createPlan, createSession } from '@/lib/queries';
+import type { SessionInput } from '@/lib/queries';
 import { parsePlanMarkdown, PLAN_FORMAT_HELP } from '@/lib/planParser';
 import {
   buildPlanAiPrompt,
@@ -11,13 +11,21 @@ import {
   parsePlanWorkbook,
   validateParsedPlan,
 } from '@/lib/planTemplate';
-import type { ParsedPlan, Plan } from '@/lib/types';
+import {
+  buildSessionAiPrompt,
+  buildSessionCsvTemplate,
+  buildSessionTsvTemplate,
+  parseSessionTabular,
+  parseSessionWorkbook,
+} from '@/lib/sessionTemplate';
+import type { ParsedPlan } from '@/lib/types';
 import { track } from '@/lib/analytics';
 import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
 type Source = 'markdown' | 'csv';
+type Target = 'plan' | 'session';
 
 function downloadFile(name: string, content: string, mime: string) {
   const blob = new Blob([content], { type: mime });
@@ -36,13 +44,13 @@ export default function PlanUpload() {
   const [markdown, setMarkdown] = useState('');
   const [csvText, setCsvText] = useState('');
   const [source, setSource] = useState<Source>('markdown');
-  const [parsed, setParsed] = useState<ParsedPlan | null>(null);
+  const [target, setTarget] = useState<Target>('plan');
+  const [parsedPlan, setParsedPlan] = useState<ParsedPlan | null>(null);
+  const [parsedSessions, setParsedSessions] = useState<SessionInput[] | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
-  const [asMinis, setAsMinis] = useState(false);
-  const [activePlan, setActivePlan] = useState<Plan | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -58,85 +66,87 @@ export default function PlanUpload() {
         window.location.href = result ? '/app/plan' : '/app/plan/upload';
         return;
       }
-      setActivePlan(await getActivePlan());
       setReady(true);
     })();
   }, []);
 
   if (!ready) return <LoadingScreen />;
 
-  const weeks = parsed
+  const weeks = parsedPlan
     ? Math.max(
         1,
-        ...parsed.blocks.map((b) => b.endWeek),
-        ...parsed.days.flatMap((d) =>
+        ...parsedPlan.blocks.map((b) => b.endWeek),
+        ...parsedPlan.days.flatMap((d) =>
           d.exercises.flatMap((e) => Object.keys(e.plannedByWeek).map(Number)),
         ),
       )
     : 0;
 
+  function selectTarget(t: Target) {
+    setTarget(t);
+    if (t === 'session') setSource('csv');
+    setIssues([]);
+    setError(null);
+  }
+
   function parse() {
     setError(null);
+    if (target === 'session') {
+      const result = parseSessionTabular(csvText);
+      setParsedSessions(result.sessions);
+      setIssues(result.issues);
+      return;
+    }
     if (source === 'csv') {
       const result = parsePlanTabular(csvText);
-      setParsed(result.plan);
+      setParsedPlan(result.plan);
       setIssues(result.issues);
     } else {
       const plan = parsePlanMarkdown(markdown);
-      setParsed(plan);
+      setParsedPlan(plan);
       setIssues(validateParsedPlan(plan));
     }
   }
 
   async function save() {
-    if (!parsed) return;
     const blockingIssues = issues;
     if (blockingIssues.length > 0) {
       setError(`Resolve ${blockingIssues.length} compatibility issue${blockingIssues.length === 1 ? '' : 's'} before saving.`);
       return;
     }
-    setSaving(true);
-    setError(null);
 
-    // Minis path: each parsed day becomes a standalone short session tagged to
-    // the active plan, instead of creating a new multi-week plan.
-    if (asMinis) {
-      if (!activePlan) {
-        setSaving(false);
-        setError('Activate a plan first — minis attach to your active plan.');
-        return;
-      }
-      const minis = daysToMiniSessions(parsed, activePlan.id);
-      if (minis.length === 0) {
-        setSaving(false);
-        setError('No usable days to turn into minis.');
-        return;
-      }
-      const results = await Promise.all(minis.map((m) => createSession(m)));
+    if (target === 'session') {
+      if (!parsedSessions || parsedSessions.length === 0) return;
+      setSaving(true);
+      setError(null);
+      const results = await Promise.all(parsedSessions.map((s) => createSession(s)));
       setSaving(false);
       if (results.some((r) => !r)) {
-        setError('Some minis could not be saved. Check your connection and try again.');
+        setError('Some sessions could not be saved. Check your connection and try again.');
         return;
       }
-      track('plan_minis_created', { minis_count: minis.length, weeks, days: parsed.days.length });
+      track('sessions_created', { count: parsedSessions.length, source: 'csv' });
       window.location.href = '/app/sessions';
       return;
     }
 
+    if (!parsedPlan) return;
+    setSaving(true);
+    setError(null);
     const sourceText = source === 'csv' ? csvText : markdown;
-    const result = await createPlan(parsed, sourceText);
+    const result = await createPlan(parsedPlan, sourceText);
     setSaving(false);
     if (!result) {
       setError('Could not save the plan. Check your connection and try again.');
       return;
     }
-    track('plan_created', { weeks, days: parsed.days.length, source });
+    track('plan_created', { weeks, days: parsedPlan.days.length, source });
     window.location.href = '/app/plan';
   }
 
   async function copyPrompt() {
     try {
-      await navigator.clipboard.writeText(buildPlanAiPrompt());
+      await navigator.clipboard.writeText(target === 'session' ? buildSessionAiPrompt() : buildPlanAiPrompt());
       setPromptCopied(true);
       setTimeout(() => setPromptCopied(false), 1500);
     } catch {
@@ -152,23 +162,39 @@ export default function PlanUpload() {
     setSource('csv');
     const isWorkbook = /\.xlsx?$/i.test(file.name) || file.type.includes('spreadsheet');
     try {
-      if (isWorkbook) {
+      if (target === 'session') {
+        if (isWorkbook) {
+          const buf = await file.arrayBuffer();
+          const result = await parseSessionWorkbook(buf);
+          setCsvText('');
+          setParsedSessions(result.sessions);
+          setIssues(result.issues);
+        } else {
+          const text = await file.text();
+          setCsvText(text);
+          const result = parseSessionTabular(text);
+          setParsedSessions(result.sessions);
+          setIssues(result.issues);
+        }
+      } else if (isWorkbook) {
         const buf = await file.arrayBuffer();
         const result = await parsePlanWorkbook(buf);
         setCsvText('');
-        setParsed(result.plan);
+        setParsedPlan(result.plan);
         setIssues(result.issues);
       } else {
         const text = await file.text();
         setCsvText(text);
         const result = parsePlanTabular(text);
-        setParsed(result.plan);
+        setParsedPlan(result.plan);
         setIssues(result.issues);
       }
     } catch (err) {
       setError(`Could not read "${file.name}": ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+
+  const hasParsed = target === 'session' ? parsedSessions !== null : parsedPlan !== null;
 
   return (
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
@@ -182,22 +208,50 @@ export default function PlanUpload() {
 
       <Item>
         <div className="mb-6 border border-border bg-surface p-4">
-          <SectionHeader>Generate a plan with AI</SectionHeader>
+          <SectionHeader>Generate a plan or sessions with AI</SectionHeader>
           <p className="mt-2 text-sm text-muted">
-            Download the CSV (or TSV) wireframe, attach it to your AI of choice
-            along with the copied prompt, then upload the AI&rsquo;s output below.
-            Compatibility is checked before save.
+            {target === 'session'
+              ? "Download the CSV (or TSV) wireframe, attach it to your AI of choice along with the copied prompt, then upload the AI's output below — every session in the file is saved standalone. Compatibility is checked before save."
+              : "Download the CSV (or TSV) wireframe, attach it to your AI of choice along with the copied prompt, then upload the AI's output below. Compatibility is checked before save."}
           </p>
+
+          <div className="mt-3 flex gap-2 text-xs uppercase tracking-wider">
+            <button
+              type="button"
+              onClick={() => selectTarget('plan')}
+              aria-pressed={target === 'plan'}
+              className={`hill-btn border bg-surface px-3 py-1 ${target === 'plan' ? 'border-fg text-fg' : 'border-border text-muted'}`}
+            >
+              Plan
+            </button>
+            <button
+              type="button"
+              onClick={() => selectTarget('session')}
+              aria-pressed={target === 'session'}
+              className={`hill-btn border bg-surface px-3 py-1 ${target === 'session' ? 'border-fg text-fg' : 'border-border text-muted'}`}
+            >
+              Sessions
+            </button>
+          </div>
+
           <div className="mt-3 flex flex-wrap gap-2">
             <Button
               variant="ghost"
-              onClick={() => downloadFile('verocity-plan-template.csv', buildPlanCsvTemplate(), 'text/csv')}
+              onClick={() =>
+                target === 'session'
+                  ? downloadFile('verocity-sessions-template.csv', buildSessionCsvTemplate(), 'text/csv')
+                  : downloadFile('verocity-plan-template.csv', buildPlanCsvTemplate(), 'text/csv')
+              }
             >
               Download CSV
             </Button>
             <Button
               variant="ghost"
-              onClick={() => downloadFile('verocity-plan-template.tsv', buildPlanTsvTemplate(), 'text/tab-separated-values')}
+              onClick={() =>
+                target === 'session'
+                  ? downloadFile('verocity-sessions-template.tsv', buildSessionTsvTemplate(), 'text/tab-separated-values')
+                  : downloadFile('verocity-plan-template.tsv', buildPlanTsvTemplate(), 'text/tab-separated-values')
+              }
             >
               Download TSV
             </Button>
@@ -219,24 +273,26 @@ export default function PlanUpload() {
       </Item>
 
       <Item>
-        <div className="mb-3 flex gap-2 text-xs uppercase tracking-wider">
-          <button
-            type="button"
-            onClick={() => setSource('markdown')}
-            aria-pressed={source === 'markdown'}
-            className={`hill-btn border bg-surface px-3 py-1 ${source === 'markdown' ? 'border-fg text-fg' : 'border-border text-muted'}`}
-          >
-            Markdown
-          </button>
-          <button
-            type="button"
-            onClick={() => setSource('csv')}
-            aria-pressed={source === 'csv'}
-            className={`hill-btn border bg-surface px-3 py-1 ${source === 'csv' ? 'border-fg text-fg' : 'border-border text-muted'}`}
-          >
-            CSV / TSV
-          </button>
-        </div>
+        {target === 'plan' ? (
+          <div className="mb-3 flex gap-2 text-xs uppercase tracking-wider">
+            <button
+              type="button"
+              onClick={() => setSource('markdown')}
+              aria-pressed={source === 'markdown'}
+              className={`hill-btn border bg-surface px-3 py-1 ${source === 'markdown' ? 'border-fg text-fg' : 'border-border text-muted'}`}
+            >
+              Markdown
+            </button>
+            <button
+              type="button"
+              onClick={() => setSource('csv')}
+              aria-pressed={source === 'csv'}
+              className={`hill-btn border bg-surface px-3 py-1 ${source === 'csv' ? 'border-fg text-fg' : 'border-border text-muted'}`}
+            >
+              CSV / TSV
+            </button>
+          </div>
+        ) : null}
 
         {source === 'markdown' ? (
           <textarea
@@ -251,48 +307,20 @@ export default function PlanUpload() {
           <textarea
             value={csvText}
             onChange={(e) => setCsvText(e.target.value)}
-            placeholder={buildPlanCsvTemplate()}
+            placeholder={target === 'session' ? buildSessionCsvTemplate() : buildPlanCsvTemplate()}
             spellCheck={false}
             rows={14}
             className="w-full border border-border bg-surface p-3 font-mono text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
           />
         )}
 
-        <div className="mt-4 border border-border bg-surface p-3">
-          <button
-            type="button"
-            onClick={() => setAsMinis((v) => !v)}
-            aria-pressed={asMinis}
-            className={`hill-btn border bg-surface px-3 py-1 text-xs uppercase tracking-wider transition-colors ${
-              asMinis ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-            }`}
-          >
-            Upload as minis
-          </button>
-          <p className="mt-2 text-xs text-muted">
-            {asMinis ? (
-              activePlan ? (
-                <>
-                  Each day becomes a short, standalone session tagged to{' '}
-                  <span className="text-fg">{activePlan.name}</span> — pick them from “Start
-                  something” when you’re short on time.
-                </>
-              ) : (
-                'Activate a plan first — minis attach to your active plan.'
-              )
-            ) : (
-              'Off: saves as a full multi-week plan. Toggle on to add short on-plan sessions instead.'
-            )}
-          </p>
-        </div>
-
         <div className="mt-4 flex gap-3">
           <Button variant="ghost" onClick={parse}>
             Parse
           </Button>
-          {parsed ? (
-            <Button onClick={save} disabled={saving || issues.length > 0 || (asMinis && !activePlan)}>
-              {saving ? 'Saving…' : asMinis ? 'Save minis' : 'Save & activate'}
+          {hasParsed ? (
+            <Button onClick={save} disabled={saving || issues.length > 0}>
+              {saving ? 'Saving…' : target === 'session' ? 'Save sessions' : 'Save & activate'}
             </Button>
           ) : null}
         </div>
@@ -313,16 +341,16 @@ export default function PlanUpload() {
         </Item>
       ) : null}
 
-      {parsed ? (
+      {target === 'plan' && parsedPlan ? (
         <Item>
           <div className="mt-8">
             <SectionHeader>
-              Preview · {parsed.title} · {weeks} weeks · {parsed.days.length} days
+              Preview · {parsedPlan.title} · {weeks} weeks · {parsedPlan.days.length} days
             </SectionHeader>
-            {parsed.days.length === 0 ? (
+            {parsedPlan.days.length === 0 ? (
               <EmptyState>No days parsed — check the format.</EmptyState>
             ) : (
-              parsed.days.map((day) => (
+              parsedPlan.days.map((day) => (
                 <div key={day.dayKey} className="mb-4 border border-border p-4">
                   <div className="mb-2 font-display text-lg text-fg">{day.label}</div>
                   <ul className="flex flex-col gap-1 text-sm">
@@ -338,6 +366,51 @@ export default function PlanUpload() {
                   </ul>
                 </div>
               ))
+            )}
+          </div>
+        </Item>
+      ) : null}
+
+      {target === 'session' && parsedSessions ? (
+        <Item>
+          <div className="mt-8">
+            <SectionHeader>
+              Preview · {parsedSessions.length} session{parsedSessions.length === 1 ? '' : 's'}
+            </SectionHeader>
+            {parsedSessions.length === 0 ? (
+              <EmptyState>No sessions parsed — check the format.</EmptyState>
+            ) : (
+              parsedSessions.map((s, i) => {
+                const groupCount = s.frame.groups?.length ?? 0;
+                const variantCount = s.frame.variants?.length ?? 0;
+                return (
+                  <div key={i} className="mb-4 border border-border p-4">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className="font-display text-lg text-fg">{s.name || 'Untitled session'}</span>
+                      {s.session_type ? (
+                        <span className="border border-border px-2 py-0.5 text-xs uppercase tracking-wider text-muted">
+                          {s.session_type}
+                        </span>
+                      ) : null}
+                    </div>
+                    {s.tags.length > 0 ? (
+                      <div className="mb-2 text-xs uppercase tracking-wider text-subtle">{s.tags.join(' · ')}</div>
+                    ) : null}
+                    <div className="mb-2 text-xs text-muted">
+                      {groupCount} group{groupCount === 1 ? '' : 's'}
+                      {variantCount > 0 ? ` · ${variantCount} variant${variantCount === 1 ? '' : 's'}` : ''}
+                    </div>
+                    <ul className="flex flex-col gap-1 text-sm">
+                      {s.frame.exercises.map((ex, k) => (
+                        <li key={k} className="flex justify-between">
+                          <span className="capitalize text-subtle">{ex.movement}</span>
+                          <span className="tabular-nums text-muted">{ex.planned || '—'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })
             )}
           </div>
         </Item>
