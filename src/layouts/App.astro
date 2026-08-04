@@ -47,10 +47,7 @@ const groups: NavGroup[] = showcase
   : [
       {
         label: 'Today',
-        items: [
-          { href: '/app', label: 'Home' },
-          { href: '/app/calendar', label: 'Calendar' },
-        ],
+        items: [{ href: '/app', label: 'Home' }],
       },
       {
         label: GROUPS.training.label,
@@ -60,13 +57,9 @@ const groups: NavGroup[] = showcase
         label: GROUPS.progress.label,
         items: GROUPS.progress.tabs.map(({ href, label }) => ({ href, label })),
       },
-      {
-        label: 'You',
-        items: [
-          { href: '/app/settings', label: 'Settings' },
-          { href: '/app/shares', label: 'Share links' },
-        ],
-      },
+      // The You group folded into the /app/you ribbon slot, which mounts the
+      // same Settings + Share links (and Goals) inside a single collapsible
+      // page. Drawer redundancy dropped.
     ];
 const isActive = (href: string) => (href === home ? path === home : path.startsWith(href));
 const groupActive = (g: NavGroup) => g.items.some((i) => isActive(i.href));
@@ -107,7 +100,10 @@ const tabs: Tab[] = showcase
     ]
   : [
       { href: '/app', label: 'Home', glyph: '◫' },
-      { href: '/app/calendar', label: 'Calendar', glyph: '▤' },
+      // Calendar retired as a standalone destination — it lives on Home now,
+      // above Recent sessions. This slot goes to You (settings, share links,
+      // goals) instead.
+      { href: '/app/you', label: 'You', glyph: '☺' },
       // Not a destination: opens the "what are you logging?" sheet.
       { href: '/app/log', label: 'Log', glyph: '+', primary: true, action: 'log' },
       { href: GROUPS.training.base, label: GROUPS.training.label, glyph: '◧', group: 'training' },

@@ -29,7 +29,7 @@ const BASE = process.env.BASE || 'http://localhost:4321';
 // Enough of the app to catch a layout regressing on one surface only. The
 // Logger is deliberately included: it is immersive (no tab bar) but owns the
 // other bottom bar, the Finish bar, which had the identical bug.
-const ROUTES = ['/app', '/app/stats', '/app/calendar', '/app/settings', '/showcase'];
+const ROUTES = ['/app', '/app/stats', '/app/you', '/app/settings', '/showcase'];
 
 // Three viewport heights, because the failure was a MISMATCH between two
 // viewport sizes. A shell that only holds at the height it was authored

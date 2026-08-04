@@ -961,6 +961,16 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   }
 }
 
+/* Hide the platform disclosure triangle so <Disclosure> can paint its own
+   chevron. `list-none` on <summary> is enough in modern Firefox/Chrome, but
+   Safari still respects the WebKit-prefixed pseudo. */
+.disclosure summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure summary::marker {
+  display: none;
+}
+
 /* Scroll-driven reveal (progressive enhancement; zero JS) */
 @supports (animation-timeline: view()) {
   [data-reveal] {

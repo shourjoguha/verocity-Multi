@@ -95,7 +95,7 @@ export default function SessionDetail() {
               >
                 Save as session
               </button>
-              <DeleteLogButton id={log.id} onDeleted={() => (window.location.href = '/app/calendar')} />
+              <DeleteLogButton id={log.id} onDeleted={() => (window.location.href = '/app')} />
             </div>
           </div>
           <EchoText
