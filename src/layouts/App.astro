@@ -81,12 +81,17 @@ const immersive = path === '/app/log';
 // instead of a bottom "More" slot. Showcase has no write surface and no
 // Sessions/Body/Coach sub-pages, so its centre slot is Plan rather than Log
 // and its two trailing tabs stay single pages.
+type RibbonIcon = 'home' | 'training' | 'progress' | 'log';
 type Tab = {
   href: string;
   label: string;
   glyph: string;
   // When true, render the person-silhouette SVG instead of the text glyph.
   svgGlyph?: boolean;
+  // Ribbon icon key — resolves to an inline SVG below. All four ribbon icons
+  // share a viewBox, stroke width and use `currentColor` so they read as one
+  // set and adapt to fg/muted/paper across theme + active/primary states.
+  icon?: RibbonIcon;
   // Inverted chip treatment for the centre slot.
   primary?: boolean;
   // Set when the slot opens a sheet instead of navigating.
@@ -98,17 +103,17 @@ type Tab = {
 };
 const tabs: Tab[] = showcase
   ? [
-      { href: '/showcase', label: 'Home', glyph: '◫' },
+      { href: '/showcase', label: 'Home', glyph: '', icon: 'home' },
       { href: '/showcase/calendar', label: 'Calendar', glyph: '▤' },
       { href: '/showcase/plan', label: 'Plan', glyph: '◈', primary: true },
-      { href: '/showcase/stats', label: 'Stats', glyph: '◲' },
+      { href: '/showcase/stats', label: 'Stats', glyph: '', icon: 'progress' },
     ]
   : [
-      { href: '/app', label: 'Home', glyph: '◫' },
-      { href: GROUPS.training.base, label: GROUPS.training.label, glyph: '◧', group: 'training' },
+      { href: '/app', label: 'Home', glyph: '', icon: 'home' },
+      { href: GROUPS.training.base, label: GROUPS.training.label, glyph: '', icon: 'training', group: 'training' },
       // Not a destination: opens the "what are you logging?" sheet.
-      { href: '/app/log', label: 'Log', glyph: '+', primary: true, action: 'log' },
-      { href: GROUPS.progress.base, label: GROUPS.progress.label, glyph: '◲', group: 'progress' },
+      { href: '/app/log', label: 'Log', glyph: '', primary: true, action: 'log', icon: 'log' },
+      { href: GROUPS.progress.base, label: GROUPS.progress.label, glyph: '', icon: 'progress', group: 'progress' },
       // Calendar retired as a standalone destination — it lives on Home now,
       // above Recent sessions. The trailing slot goes to You (settings, share
       // links, goals) instead.
@@ -342,9 +347,51 @@ const tabActive = (t: Tab) =>
               ]}
             >
               {/* Fixed h-8 glyph row on every tab so baselines stay aligned and
-                  nothing shifts vertically between pages. */}
+                  nothing shifts vertically between pages. Icons share
+                  viewBox="0 0 24 24", stroke-width 1.8 and currentColor so the
+                  set reads as one, and so the primary (ink) slot's paper stroke
+                  and the muted/active fg swaps come for free. */}
               <span aria-hidden="true" class="flex h-8 items-center justify-center text-[1.75rem] leading-none">
-                {t.svgGlyph ? (
+                {t.icon ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="h-7 w-7"
+                  >
+                    {t.icon === 'home' && (
+                      <>
+                        <path d="M12 3.5 L20 10.5 V19 A1.5 1.5 0 0 1 18.5 20.5 H5.5 A1.5 1.5 0 0 1 4 19 V10.5 Z" />
+                        <path d="M9 17.5 H15" />
+                      </>
+                    )}
+                    {t.icon === 'training' && (
+                      <>
+                        <path d="M5.5 4.5 A1.5 1.5 0 0 1 8.5 4.5 V7.6 C 8.5 8.4 9.4 8.9 10.8 9.2 C 15 10 18.6 10.6 20 13.2 C 20.8 14.7 20.4 16.7 18.8 17.6 C 16.8 18.8 13.4 18.9 10.4 17.9 C 7.4 16.9 5.5 14.6 5.5 11.6 Z" />
+                        <path d="M14.5 15.5 H16.3" />
+                      </>
+                    )}
+                    {t.icon === 'progress' && (
+                      <>
+                        <path d="M12 20.5 C 4 15 3 11 3 7.7 C 3 5.2 5 3.5 7.5 3.5 C 9.5 3.5 11 4.6 12 6 C 13 4.6 14.5 3.5 16.5 3.5 C 19 3.5 21 5.2 21 7.7 C 21 11 20 15 12 20.5 Z" />
+                        <path d="M5.5 11 H8.3 L9.7 8.5 L12.2 13.5 L13.7 11 H18.5" />
+                      </>
+                    )}
+                    {t.icon === 'log' && (
+                      <>
+                        <path d="M4 5.5 C 4 4.2 5 3.5 6 3.5 H12 C 13.1 3.5 14 4.5 14 5.8 V6.6 C 14 7.6 13.2 8.4 12.2 8.4 H5.5 C 4.6 8.4 4 7.8 4 7 Z" />
+                        <path d="M5.5 8.4 V17.2 C 5.5 18.7 4.5 19.7 3 19.7" />
+                        <path d="M3 19.7 H10.5 C 12 19.7 13 18.7 13 17.2 V16.4 H5.5" />
+                        <path d="M7 12.4 Q 8.5 11.6 10 12.4 T 12 12.4" />
+                        <path d="M20.5 3.8 L15 9.2" />
+                        <path d="M15 9.2 Q 13.6 6.6 15.8 5.2 Q 18 4.4 19.8 4.6" />
+                      </>
+                    )}
+                  </svg>
+                ) : t.svgGlyph ? (
                   <svg
                     viewBox="0 0 24 28"
                     fill="none"
@@ -356,7 +403,6 @@ const tabActive = (t: Tab) =>
                   >
                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" transform="translate(-4 -1) rotate(-90 12 9)" />
                     <path d="M3 17h18a2 2 0 0 1 2 2v1a11 8 0 0 1-22 0v-1a2 2 0 0 1 2-2Z" />
-
                   </svg>
                 ) : t.glyph}
               </span>
