@@ -463,6 +463,43 @@ navigations rather than more patching of the update path.
 
 ## Testing & tooling
 
+### `audit:mobile` never visits `/app/plan/upload`
+`[measured in Chromium]`
+Its `ROUTES` list covers the nav destinations, so the entire plan/session
+authoring surface — every button on `PlanUpload`, including the ones added for
+the AI repair loop — is **unaudited**. A green `audit:mobile` says nothing about
+that page. The same goes for `/app/settings`' newer controls, which are reached
+through a `Disclosure` the audit does not open.
+Checked by hand at 375 and 390 instead: no horizontal overflow, `Copy fix
+request` at 179x44, equipment toggles at `min-h-11`. **If you change
+`PlanUpload` or `UserStatsPanel`, cite a measurement, not the audit.**
+→ `scripts/mobile-audit.mjs`, `src/components/PlanUpload.tsx`
+
+### The prompt's worked example must be the LAST thing in the prompt
+`[caught by its own test, same session it was written]`
+`buildPlanAiPrompt` / `buildSessionAiPrompt` end with a full valid CSV for the
+model to imitate, and the test proves it is still valid by slicing from the
+**final** header-row occurrence to the end and parsing it. That makes the slice
+load-bearing: `sessionTemplate.ts` left `Produce ONLY the CSV. No prose…` sitting
+*after* the example, and the parser dutifully read it as `Row 30: unknown kind
+"PRODUCE ONLY THE CSV. NO PROSE"`.
+**Append nothing after the worked example.** Instructions that belong near the
+end go before it. The failure is loud, which is the point — the alternative is
+shipping a prompt whose own example does not import.
+→ `src/lib/planTemplate.ts`, `src/lib/sessionTemplate.ts`
+
+### Hydration is broken in `astro dev` in this container; `astro preview` is fine
+`[measured]`
+`/@id/astro:scripts/before-hydration.js` returns **500 — "Missing field
+moduleType"** (a Vite-internal field, not ours) on every page, so React islands
+never hydrate and every page sits
+on its server-rendered `LOADING` state. It reproduces on a clean tree, so it is
+environmental (astro 6.3.7 resolving against vite 8), not a regression — do not
+go hunting for it in your own diff. `package-lock.json` is untouched.
+**Drive interactive checks against `npm run build && npm run preview`**, where
+islands hydrate normally. A Playwright script pointed at the dev server will
+report "button not found" for a button that is perfectly fine.
+
 ### `astro preview` serves a startup snapshot
 `[confirmed in the wild]`
 It does **not** pick up files rebuilt while it is running, which silently

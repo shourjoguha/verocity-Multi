@@ -48,7 +48,15 @@ export async function getUserStats(client: SupabaseClient = supabase): Promise<U
   return (data as UserStats) ?? null;
 }
 
-export type UserStatsInput = Omit<UserStats, 'owner_user_id' | 'updated_at' | 'created_at'>;
+/**
+ * Partial on purpose. Two forms write this one row — UserStatsPanel owns the
+ * anthropometrics and preferences, GoalsEditor owns `goals` — and each must be
+ * able to save without resending (and so without clobbering) the other's
+ * fields. PostgREST's upsert only SETs the columns present in the payload, so
+ * an omitted key is left alone on update and takes its column default on
+ * insert.
+ */
+export type UserStatsInput = Partial<Omit<UserStats, 'owner_user_id' | 'updated_at' | 'created_at'>>;
 
 /**
  * Upsert on the owner PK — there is exactly one stats row per profile, so this

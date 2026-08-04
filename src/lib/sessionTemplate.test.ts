@@ -5,6 +5,7 @@ import {
   SESSION_CSV_HEADERS,
   buildSessionAiPrompt,
   buildSessionCsvTemplate,
+  buildSessionFixPrompt,
   buildSessionTsvTemplate,
   parseSessionTabular,
   validateSessions,
@@ -154,5 +155,45 @@ describe('session tabular parser — compatibility checks', () => {
     ].join('\n');
     const { issues } = parseSessionTabular(csv);
     expect(issues.some((i) => i.includes('unknown variant level'))).toBe(true);
+  });
+});
+
+describe('session prompt format hardening', () => {
+  /**
+   * The session mirror of the plan's format guard: the prompt's worked example
+   * is `buildSessionCsvTemplate()`, so the file the model is told to imitate is
+   * the same one the parser is tested against. If it ever stops importing
+   * cleanly, every session generated from this prompt is rejected.
+   */
+  it('embeds a worked example that parses with zero issues', () => {
+    const prompt = buildSessionAiPrompt();
+    const header = SESSION_CSV_HEADERS.join(',');
+    const example = prompt.slice(prompt.lastIndexOf(header));
+    expect(example.split('\n')[0]).toBe(header);
+
+    const { sessions, issues } = parseSessionTabular(example);
+    expect(issues).toEqual([]);
+    expect(sessions.length).toBeGreaterThan(0);
+    expect(validateSessions(sessions)).toEqual([]);
+  });
+
+  it('carries the self-check list', () => {
+    expect(buildSessionAiPrompt()).toContain('SELF-CHECK BEFORE YOU SEND');
+  });
+});
+
+describe('buildSessionFixPrompt', () => {
+  it('numbers the issues and echoes the rejected CSV', () => {
+    const csv = 'kind,id\nSESSION,monday';
+    const prompt = buildSessionFixPrompt(['Bad section.', 'Bad metric.'], csv);
+    expect(prompt).toContain('1. Bad section.');
+    expect(prompt).toContain('2. Bad metric.');
+    expect(prompt).toContain(csv);
+    expect(prompt).toContain(SESSION_CSV_HEADERS.join(','));
+  });
+
+  it('omits the echo when the upload was a workbook', () => {
+    const prompt = buildSessionFixPrompt(['Bad section.'], '');
+    expect(prompt).toContain('uploaded as a spreadsheet');
   });
 });
