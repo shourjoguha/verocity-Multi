@@ -226,7 +226,7 @@ function fixtureFor(url) {
 
 const ROUTES = [
   '/app',
-  '/app/calendar',
+  '/app/you',
   '/app/stats',
   '/app/body',
   '/app/coach',

@@ -17,13 +17,13 @@ const CACHE = 'verocity-__BUILD_ID__';
 const SHELL = [
   '/',
   '/app',
-  '/app/calendar',
   '/app/stats',
   '/app/coach',
   '/app/plan',
   '/app/sessions',
   '/app/library',
   '/app/settings',
+  '/app/you',
   '/login',
   '/showcase',
 ];

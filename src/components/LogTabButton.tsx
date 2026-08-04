@@ -13,7 +13,8 @@ import { AddSessionMenu } from '@/components/AddSessionMenu';
 //
 // The tab bar is otherwise static Astro, so this is the one island in the
 // layout. It is deliberately tiny — AddSessionMenu and Modal are already in the
-// /app bundle graph via ProfileView and CalendarView, so it adds no new chunk.
+// /app bundle graph via ProfileView (which now hosts the calendar), so it adds
+// no new chunk.
 export function LogTabButton({ label, glyph }: { label: string; glyph: string }) {
   const [open, setOpen] = useState(false);
   // Seed-then-revalidate, the same idiom ProfileView uses: on a tab navigation

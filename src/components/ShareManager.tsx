@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { createShare, getAllPlans, getRecentLogs, getShares, revokeShare } from '@/lib/queries';
 import { randomToken, sha256Hex, shareUrl } from '@/lib/share';
@@ -24,7 +24,11 @@ function shareStatus(s: Share): 'revoked' | 'expired' | 'active' {
   return 'active';
 }
 
-export default function ShareManager() {
+// `embedded` drops the outer PageStagger + big header so the same component
+// can live inside a Disclosure on /app/you without doubling the chrome. The
+// standalone /app/shares route calls with defaults and still renders its own
+// header + shell.
+export default function ShareManager({ embedded = false }: { embedded?: boolean } = {}) {
   const [ready, setReady] = useState(false);
   const [shares, setShares] = useState<Share[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -105,24 +109,35 @@ export default function ShareManager() {
 
   if (!ready) return <LoadingScreen />;
 
-  return (
-    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
-      <Item>
-        <header className="mb-8">
-          <EchoText
-            text="SHARES"
-            as="h1"
-            className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
-          />
-          <p className="mt-4 text-sm text-muted">
-            Mint a read-only link to your profile, a plan, or a single workout. Holders can view but
-            never edit. The full link is shown once on creation; revoke any time.
-          </p>
-        </header>
-      </Item>
+  const header = embedded ? null : (
+    <Item>
+      <header className="mb-8">
+        <EchoText
+          text="SHARES"
+          as="h1"
+          className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+        />
+        <p className="mt-4 text-sm text-muted">
+          Mint a read-only link to your profile, a plan, or a single workout. Holders can view but
+          never edit. The full link is shown once on creation; revoke any time.
+        </p>
+      </header>
+    </Item>
+  );
+
+  const wrap = (children: ReactNode) =>
+    embedded ? (
+      <div className="flex flex-col gap-6">{children}</div>
+    ) : (
+      <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">{children}</PageStagger>
+    );
+
+  return wrap(
+    <>
+      {header}
 
       <Item>
-        <section className="mb-8 flex flex-col gap-3 border border-border bg-surface p-4">
+        <section className={`${embedded ? '' : 'mb-8 '}flex flex-col gap-3 border border-border bg-surface p-4`}>
         <SectionHeader>Create a link</SectionHeader>
         <div className="flex flex-wrap gap-2">
           {SCOPES.map((s) => (
@@ -264,6 +279,6 @@ export default function ShareManager() {
           )}
         </section>
       </Item>
-    </PageStagger>
+    </>,
   );
 }

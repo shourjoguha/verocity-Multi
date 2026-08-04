@@ -23,6 +23,7 @@ import { Item, PageStagger } from '@/components/anim';
 import { DayPreviewDialog } from '@/components/DayPreviewDialog';
 import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
+import { MonthCalendar } from '@/components/MonthCalendar';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;
@@ -345,6 +346,8 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
     mode === 'app' ? (getCached<WorkoutLog[]>('logs:all') ?? []) : [],
   );
   const [addOpen, setAddOpen] = useState(false);
+  // Pre-filled date when Add is opened from a specific calendar cell.
+  const [addDate, setAddDate] = useState<string | null>(null);
   const [previewDay, setPreviewDay] = useState<PlanDay | null>(null);
   // Which day in the rail is expanded. null = "not chosen yet", which resolves
   // to today (or the first day) below — deliberately derived rather than set in
@@ -719,6 +722,24 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </Item>
       ) : null}
 
+      {mode === 'app' ? (
+        <Item>
+          <section className="mb-8">
+            <MonthCalendar
+              logs={allLogs}
+              onDayClick={(date, sessions) => {
+                if (sessions.length > 0) setQuickLog(sessions[0]);
+                else {
+                  setAddDate(date);
+                  setAddOpen(true);
+                }
+              }}
+              onSelectLog={setQuickLog}
+            />
+          </section>
+        </Item>
+      ) : null}
+
       <Item>
         <section>
           <SectionHeader>Recent sessions</SectionHeader>
@@ -734,7 +755,15 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
 
       {mode === 'app' ? (
         <>
-          <AddSessionMenu plan={plan} open={addOpen} onClose={() => setAddOpen(false)} />
+          <AddSessionMenu
+            plan={plan}
+            date={addDate ?? undefined}
+            open={addOpen}
+            onClose={() => {
+              setAddOpen(false);
+              setAddDate(null);
+            }}
+          />
           <DayPreviewDialog
             day={previewDay}
             week={week ?? 1}
