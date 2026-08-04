@@ -118,6 +118,71 @@ export const BODY_TYPES = {
   ],
 } as const;
 
+// ---------------------------------------------------------------------------
+// Training preferences (`user_stats`, migration 0030).
+//
+// Unlike BODY_TYPES below, these all have a consumer: every one is rendered
+// into the ATHLETE PROFILE block of the plan-authoring prompt
+// (`buildPlanAiPrompt`, src/lib/planTemplate.ts) and matched against the rules
+// in src/lib/planRubric.ts. Absence is meaningful — a field with no value
+// becomes a question the AI asks the athlete before it writes anything.
+// ---------------------------------------------------------------------------
+
+// Suggested goals. NOT a closed set: GoalsEditor lets the athlete add free text,
+// which stores a uuid id with their own label. So `label` is what downstream
+// reads — see the note on Goal in lib/types.ts.
+export const GOALS = {
+  strength: { label: 'Strength' },
+  hypertrophy: { label: 'Hypertrophy' },
+  endurance: { label: 'Endurance' },
+  mobility: { label: 'Mobility' },
+  skill: { label: 'Skill work' },
+} as const;
+
+// Default rank + weighting, used when an athlete has never saved goals. Order
+// is the rank, so this is an array and not a map.
+export const GOAL_DEFAULTS = [
+  { id: 'strength', weight: 70 },
+  { id: 'hypertrophy', weight: 50 },
+  { id: 'endurance', weight: 40 },
+  { id: 'mobility', weight: 30 },
+  { id: 'skill', weight: 20 },
+] as const;
+
+export const GOAL_WEIGHT = { min: 0, max: 100, step: 5, default: 40 } as const;
+
+// Training age. `blurb` is the helper text under the Settings select AND the
+// gloss sent to the AI, so the athlete and the model are told the same thing.
+export const EXPERIENCE_LEVELS = {
+  beginner: { label: 'Beginner', blurb: 'Under a year of consistent lifting' },
+  intermediate: { label: 'Intermediate', blurb: 'One to three years, familiar with the main lifts' },
+  advanced: { label: 'Advanced', blurb: 'Three years or more, training around known weak points' },
+} as const;
+
+// What the athlete can actually train with. Drives the substitution ladders in
+// planRubric.ts, so the vocabulary here must stay in step with the equipment
+// words those rules use.
+export const EQUIPMENT = [
+  { key: 'barbell', label: 'Barbell' },
+  { key: 'rack', label: 'Squat rack' },
+  { key: 'bench', label: 'Bench' },
+  { key: 'dumbbells', label: 'Dumbbells' },
+  { key: 'kettlebells', label: 'Kettlebells' },
+  { key: 'machines', label: 'Machines' },
+  { key: 'cables', label: 'Cables' },
+  { key: 'pullupBar', label: 'Pull-up bar' },
+  { key: 'bands', label: 'Resistance bands' },
+  { key: 'rower', label: 'Rower' },
+  { key: 'bike', label: 'Bike' },
+  { key: 'treadmill', label: 'Treadmill' },
+  { key: 'sled', label: 'Sled' },
+] as const;
+
+// Plan length bounds. 6 is the shortest span a block structure can express
+// (accumulation / intensification / deload); 12 is where the rubric's block
+// tables stop. The prompt asks the athlete to confirm a length inside this.
+export const PLAN_LENGTH = { minWeeks: 6, maxWeeks: 12, defaultWeeks: 8 } as const;
+
 // Bounds for the Settings form. Wide enough to be a typo guard, not a judgement.
 export const STATS_LIMITS = {
   weightKg: { min: 25, max: 300 },
@@ -125,6 +190,9 @@ export const STATS_LIMITS = {
   birthYear: { min: 1920, max: 2020 },
   maxInjuries: 20,
   injuryLabelChars: 80,
+  daysPerWeek: { min: 1, max: 7 },
+  maxGoals: 12,
+  goalLabelChars: 40,
 } as const;
 
 // 220 − age, the standard estimate. Only ever a FALLBACK: an hr_max the user has
@@ -535,8 +603,12 @@ export type ModalityKey = keyof typeof MOVEMENT_MODALITIES;
 export type PlaneKey = keyof typeof MOVEMENT_PLANES;
 export type RotaryRole = keyof typeof ROTARY_ROLES;
 export type GenderKey = keyof typeof GENDERS;
+export type GoalKey = keyof typeof GOALS;
+export type ExperienceKey = keyof typeof EXPERIENCE_LEVELS;
+export type EquipmentKey = (typeof EQUIPMENT)[number]['key'];
 
 export const GENDER_KEYS = Object.keys(GENDERS) as GenderKey[];
+export const EXPERIENCE_KEYS = Object.keys(EXPERIENCE_LEVELS) as ExperienceKey[];
 
 export const MUSCLE_REGION_KEYS = Object.keys(MUSCLE_REGIONS) as RegionKey[];
 export const MODALITY_KEYS = Object.keys(MOVEMENT_MODALITIES) as ModalityKey[];

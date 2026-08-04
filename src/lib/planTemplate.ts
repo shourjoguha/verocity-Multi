@@ -4,7 +4,11 @@
 
 import {
   BLOCKS,
+  EQUIPMENT,
+  EXPERIENCE_LEVELS,
+  GENDERS,
   METRICS,
+  PLAN_LENGTH,
   SECTIONS,
   SECTION_ALIASES,
   SUBROUTINE,
@@ -13,8 +17,10 @@ import {
   type MetricKey,
   type SectionKey,
 } from '@/app.config';
-import type { ParsedPlan, PlanBlock, PlanDay, PlanExercise } from '@/lib/types';
+import type { ParsedPlan, PlanBlock, PlanDay, PlanExercise, UserStats } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
+import { renderRubric } from '@/lib/planRubric';
+import { ageFrom } from '@/lib/userStats';
 
 export const PLAN_CSV_HEADERS = [
   'kind',
@@ -187,8 +193,110 @@ export function buildPlanTsvTemplate(): string {
   return joinRows(sampleRows(), '\t');
 }
 
-// AI prompt — derived from app.config so it stays in sync with the domain.
-export function buildPlanAiPrompt(): string {
+// ---------- the athlete profile block ----------
+
+/**
+ * What the app knows about the person, and — just as load-bearing — what it
+ * does not. Absent fields are listed under UNKNOWN so phase 1 of the prompt has
+ * an explicit list to interview against; without it a user who has never opened
+ * Settings gets a confidently generic plan instead of being asked anything.
+ *
+ * Goals render by LABEL, not key. GoalsEditor accepts free text, and the rubric
+ * keys its rules on wording like "skill work" while the config key is `skill` —
+ * labels are what make those line up, and they carry the athlete's own phrasing
+ * through to the model intact.
+ *
+ * `body_type` is deliberately not rendered. app.config.ts refuses it a consumer
+ * ("somatotype has no defensible role in load estimation") and routing it into
+ * prescription here would quietly overturn that.
+ */
+function athleteProfileBlock(stats: UserStats | null, today: Date): string {
+  if (!stats) {
+    return [
+      'No profile is on file for this athlete — the app had nothing to send.',
+      'Treat EVERY field below as unknown and ask about it in phase 1: age, sex,',
+      'bodyweight, injury history, goals and their relative priority, training',
+      'experience, days available per week, equipment, and plan length.',
+    ].join('\n');
+  }
+
+  const known: string[] = [];
+  const unknown: string[] = [];
+
+  const age = ageFrom(stats, today);
+  if (age != null) known.push(`- Age: ${age}`);
+  else unknown.push('age');
+
+  if (stats.gender && stats.gender !== 'unspecified') {
+    known.push(`- Sex: ${GENDERS[stats.gender].label.toLowerCase()}`);
+  } else unknown.push('sex');
+
+  if (stats.body_weight_kg != null) known.push(`- Bodyweight: ${stats.body_weight_kg} ${UNITS.weight}`);
+  else unknown.push('bodyweight');
+
+  if (stats.height_cm != null) known.push(`- Height: ${stats.height_cm} cm`);
+
+  const injuries = (stats.injuries ?? []).filter((i) => i.label.trim() !== '');
+  if (injuries.length > 0) {
+    const list = injuries
+      .map((i) => {
+        const meta = [i.region, i.year].filter(Boolean).join(', ');
+        return meta ? `${i.label} (${meta})` : i.label;
+      })
+      .join('; ');
+    known.push(`- Past injuries: ${list}`);
+  } else {
+    known.push('- Past injuries: none recorded');
+  }
+
+  const goals = (stats.goals ?? []).filter((g) => g.label.trim() !== '');
+  if (goals.length > 0) {
+    known.push('- Goals, in priority order, each weighted 0-100:');
+    goals.forEach((g, i) => known.push(`    ${i + 1}. ${g.label} (${g.weight})`));
+  } else unknown.push('goals and their relative priority');
+
+  if (stats.experience) {
+    const e = EXPERIENCE_LEVELS[stats.experience];
+    known.push(`- Experience: ${e.label} — ${e.blurb.toLowerCase()}`);
+  } else unknown.push('training experience');
+
+  if (stats.days_per_week != null) known.push(`- Training days available per week: ${stats.days_per_week}`);
+  else unknown.push('training days available per week');
+
+  const equipment = stats.equipment ?? [];
+  if (equipment.length > 0) {
+    const labels = equipment.map((k) => EQUIPMENT.find((e) => e.key === k)?.label ?? k);
+    known.push(`- Equipment available: ${labels.join(', ')}`);
+  } else unknown.push('equipment available');
+
+  if (stats.preferred_plan_weeks != null) {
+    known.push(`- Preferred plan length: ${stats.preferred_plan_weeks} weeks`);
+  } else unknown.push('plan length');
+
+  const lines = known.length > 0 ? known : ['- Nothing on file.'];
+  if (unknown.length > 0) {
+    lines.push('', `UNKNOWN — ask the athlete in phase 1: ${unknown.join(', ')}.`);
+  }
+  return lines.join('\n');
+}
+
+export interface PlanPromptContext {
+  stats: UserStats | null;
+  /** Injectable for tests; age is derived from `birth_year` at render time. */
+  today?: Date;
+}
+
+/**
+ * AI prompt — derived from app.config so it stays in sync with the domain, and
+ * from the caller's `user_stats` row so it is about a person rather than an
+ * abstraction.
+ *
+ * Synchronous, with a null-profile default, on purpose: the caller fetches. That
+ * keeps every existing call site compiling, keeps the showcase safe for free
+ * (`getUserStats` returns null for the anon client, which lands on the
+ * no-profile branch), and keeps this a pure function the tests can pin.
+ */
+export function buildPlanAiPrompt(ctx: PlanPromptContext = { stats: null }): string {
   const sectionList = (SECTIONS as readonly string[]).join(', ');
   const metricEntries = Object.entries(METRICS)
     .map(([k, v]) => `${k} (${v.label}${v.unit ? `, ${v.unit}` : ''})`)
@@ -198,7 +306,42 @@ export function buildPlanAiPrompt(): string {
     .map(([from, to]) => `"${from}" → ${to}`)
     .join('; ');
 
-  return `You are generating a strength/training plan for the Verocity app.
+  return `You are the strength & conditioning coach writing a training plan for one
+athlete, which will be imported into the Verocity app.
+
+THIS IS A TWO-PHASE TASK. DO NOT SKIP PHASE 1. Phase 1 is a conversation; phase
+2 is a file. Producing the file before the athlete has confirmed the plan is a
+failed response, even if the file is perfectly formatted.
+
+=== ATHLETE PROFILE (supplied by the app) ===
+${athleteProfileBlock(ctx.stats, ctx.today ?? new Date())}
+=== END ATHLETE PROFILE ===
+
+PHASE 1 — PROPOSE, THEN CONFIRM (prose; no CSV)
+1. Read the ATHLETE PROFILE against the PRESCRIPTION RUBRIC below and propose a
+   plan composition: how many training days, the split, which blocks and their
+   week ranges, the emphasis per section, and the rep and intensity ranges you
+   intend. Say briefly WHY each choice follows from the profile.
+2. Ask the athlete to confirm the plan length. It must be between
+   ${PLAN_LENGTH.minWeeks} and ${PLAN_LENGTH.maxWeeks} weeks${
+     ctx.stats?.preferred_plan_weeks != null
+       ? `; propose their stored preference of ${ctx.stats.preferred_plan_weeks} weeks as the default`
+       : `; propose ${PLAN_LENGTH.defaultWeeks} weeks as the default`
+   }.
+3. Ask about everything listed as UNKNOWN in the profile, plus anything else you
+   genuinely need — schedule constraints, equipment gaps, current working
+   weights, whether any date has to land on a specific week.
+4. Keep it to at most 6 numbered questions in a single message. Do not
+   interrogate one question at a time.
+5. STOP and wait for the athlete's reply. Revise the proposal and ask again if
+   anything is still open. Continue only when they have confirmed.
+6. Emit no CSV during phase 1 — not as a preview, not as an example.
+
+PHASE 2 — EMIT THE CSV
+Once the athlete has confirmed, output the plan as a CSV and NOTHING else: no
+preamble, no explanation, no markdown code fences, nothing before the header row
+and nothing after the last data row. If you want to comment on the plan, do it
+in phase 1 before you send the file.
 
 OUTPUT FORMAT
 - A single CSV file. The first row must be exactly:
@@ -213,7 +356,10 @@ ROW SHAPES
 - META: id ∈ {title, start, weeks, end}; label = the value.
     • start/end are ISO dates (YYYY-MM-DD). weeks is a positive integer.
 - BLOCK: id ∈ {${blockList}}; week is a range "S-E" (1-based, inclusive).
-    • Blocks should cover the plan contiguously and not overlap.
+    • Blocks must tile weeks 1..META.weeks: no gaps, no overlaps.
+    • A block type MAY repeat — "deload 5-5" and "deload 10-10" in one plan is
+      normal and is what the rubric's longer structures prescribe. One row per
+      occurrence.
 - DAY: id = a short slug (lowercase, dashes); label = human title.
     • Each EX row refers to a DAY by its slug. Day order = weekly template order.
 - EX: id = the day slug; label = movement name; section ∈ {${sectionList}};
@@ -252,7 +398,79 @@ NOTES ON CURRENT CAPABILITY
   mention the intent in the notes column ("superset with next").
 - Plan length is implicit from META.weeks plus per-week EX rows.
 
-Produce ONLY the CSV. No prose, no markdown fences.`;
+PRESCRIPTION RUBRIC
+Conditional programming policy. Apply the rules whose conditions the ATHLETE
+PROFILE satisfies, and ignore the rest. Where a rule needs a fact the profile
+does not have, ask for it in phase 1 rather than guessing.
+
+${renderRubric()}
+
+SELF-CHECK BEFORE YOU SEND (phase 2 only)
+Re-read your finished CSV line by line and confirm every item. This is the whole
+ballgame: a file that fails any of these is rejected by the importer and the
+athlete gets nothing.
+[ ] The first line is exactly: ${PLAN_CSV_HEADERS.join(',')}
+[ ] Nothing precedes the header row and nothing follows the last data row — no
+    prose, no "Here is your plan", no \`\`\` fences anywhere in the response.
+[ ] Every row has exactly ${PLAN_CSV_HEADERS.length} fields. Any cell containing a comma is quoted.
+[ ] Every row's first column is one of META, BLOCK, DAY, EX, SUB.
+[ ] META rows include title and weeks; weeks is a positive integer.
+[ ] Every EX and SUB id exactly matches the id of a DAY row you wrote — same
+    spelling, same dashes, no capitals.
+[ ] Every EX section is one of {${sectionList}} and every EX metric is one of
+    {${Object.keys(METRICS).join(', ')}}. No invented values.
+[ ] Every EX week is "*" or an integer from 1 to META.weeks. No "1-4" ranges in
+    an EX row — ranges belong to BLOCK rows only.
+[ ] Every EX has a non-empty planned cell.
+[ ] BLOCK rows tile 1..META.weeks with no gaps and no overlaps.
+[ ] Every SUB has a label and a notes description of ≤${SUBROUTINE.maxDescriptionChars} characters.
+If any check fails, fix it and run the list again. Do not send a CSV that fails
+a check.
+
+WORKED EXAMPLE
+A complete, valid file that exercises every feature above. Match its shape — not
+its content.
+
+${buildPlanCsvTemplate()}`;
+}
+
+/**
+ * The repair prompt: what the athlete pastes back when the importer rejects the
+ * generated CSV.
+ *
+ * Closes the loop the compatibility checker opens. Without it the user is
+ * relaying validator errors by hand into a chat where the original prompt may
+ * have scrolled out of context, which is why the format rules are restated here
+ * rather than assumed.
+ */
+export function buildPlanFixPrompt(issues: string[], csvText: string): string {
+  const numbered = issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n');
+  const echo = csvText.trim()
+    ? `\n\nTHE CSV YOU SENT\n${csvText.trim()}`
+    : '\n\n(The file was uploaded as a spreadsheet, so it is not repeated here — ' +
+      'correct the version you produced.)';
+
+  return `The CSV you produced was rejected by the Verocity importer. It reported these
+issues:
+
+${numbered}
+
+Fix exactly these issues and re-send the COMPLETE corrected CSV. Do not send a
+patch, a diff, or only the changed rows — send the whole file.
+
+The rules that matter here, restated so you do not have to scroll back:
+- First row exactly: ${PLAN_CSV_HEADERS.join(',')}
+- First column is one of: META, BLOCK, DAY, EX, SUB.
+- Allowed sections: ${(SECTIONS as readonly string[]).join(', ')}.
+- Allowed metrics: ${Object.keys(METRICS).join(', ')}.
+- Allowed block types: ${(Object.keys(BLOCKS) as BlockKey[]).join(', ')}; BLOCK week is a
+  range "S-E", and blocks must tile 1..META.weeks without gaps or overlaps.
+- Every EX/SUB id must match a DAY id you declared.
+- EX week is "*" or a single integer in 1..META.weeks — never a range.
+- Subroutine descriptions are ≤${SUBROUTINE.maxDescriptionChars} characters.
+- Cells containing commas or quotes are double-quoted; embedded quotes doubled.
+
+Output ONLY the corrected CSV: no prose, no explanation, no markdown fences.${echo}`;
 }
 
 // ---------- parser ----------

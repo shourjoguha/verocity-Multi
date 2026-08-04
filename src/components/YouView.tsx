@@ -109,7 +109,7 @@ export default function YouView() {
           <Disclosure
             title={sectionTitle(
               'Goals',
-              'Rank and weight what you want out of training. Nothing reads these yet — the ordering is visual only, and the list does not persist.',
+              'Rank and weight what you want out of training. Order is priority. These drive the rep ranges and section emphasis the AI proposes when you generate a plan.',
             )}
           >
             <GoalsEditor />

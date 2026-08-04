@@ -156,8 +156,10 @@ went to 3.
   One global `VOLUME.bodyweightFraction` instead, for the same reason.
 - **A bodyweight time series.** One current row today, so a six-month-old log is
   priced with today's mass. Would be a new table, not a change to `user_stats`.
-- **Anything reading `body_type`, `gender` or `injuries`.** Stored only.
-  `Injury.region` is already a `RegionKey` so `/app/body` can use it later.
+- **Anything reading `body_type`.** Stored only, and deliberately so — see the
+  note on `BODY_TYPES` in `app.config.ts`. (`gender`, `injuries` and `height_cm`
+  were also stored-only until the plan-prompt pass below; `body_type` is now the
+  sole remaining unread field.)
 - **lb / ft-in input.** `UNITS` is kg-only and the repo has no conversion layer;
   this would be the first thing to need one.
 
@@ -173,6 +175,35 @@ to `/app/sessions` still opens on the right tab. The bottom ribbon dropped its
 sub-page was last viewed there (`sessionStorage`); the drawer opener moved to a
 menu icon in the header alongside a new Settings icon. The drawer's own
 content and behaviour are unchanged.
+
+A sixth pass made the plan-authoring prompt personal. `buildPlanAiPrompt` took
+no arguments and returned one string for every user; it now takes the caller's
+`user_stats` row and renders an **ATHLETE PROFILE** block, with absent fields
+listed under `UNKNOWN` so the model interviews rather than assumes. Migration
+`0030` added the inputs that were missing entirely — `goals` (a ranked, weighted
+jsonb array; `GoalsEditor` was a `useState` mock that saved nothing),
+`experience`, `days_per_week`, `equipment`, `preferred_plan_weeks` — all on
+`user_stats`, for the same anon-exposure reason as `0020`. The prompt gained a
+two-phase shape (propose and confirm, *then* emit the CSV), a conditional
+prescription rubric (`docs/PLAN_RUBRIC.md`, imported `?raw` by
+`src/lib/planRubric.ts` so there is one copy, not two), a self-check list, and
+`buildPlanCsvTemplate()` embedded as a worked example — pulled back out of the
+finished prompt by a test and parsed, so the example cannot drift from the
+parser. When the importer still rejects a file, **Copy fix request**
+(`buildPlanFixPrompt`) hands the exact validator errors back to the AI.
+`height_cm`, `gender` and `injuries` stopped being stored-only in the process.
+
+**Deferred here, on purpose:**
+- **Sessions get format hardening only.** `buildSessionAiPrompt` gained the
+  self-check, the worked example and `buildSessionFixPrompt`, but not the
+  two-phase interview or the rubric — a single session is a one-shot ask.
+- **Nothing validates the rubric's clinical content.** `planRubric.test.ts`
+  proves the markdown parses and speaks the domain vocabulary; it cannot know
+  whether a rep range is *right*. That is a human review, and
+  `docs/PLAN_RUBRIC_PROMPT.md` is where a regeneration starts.
+- **The coach still ignores the profile.** `supabase/functions/coach/index.ts`
+  builds its `signals` payload from `workout_logs` alone — no age, sex, goals or
+  injuries. Same data, same argument for using it; separate change.
 
 ### Phase 7 — Guidance upkeep  `[ongoing]`
 `npm run audit:docs` fails if the docs name code that no longer exists. It was

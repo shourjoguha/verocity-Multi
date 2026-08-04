@@ -326,7 +326,68 @@ INVARIANTS THE APP WILL CHECK ON UPLOAD
 8. Every SUB has a title (label) and a description (notes)
    ≤${SUBROUTINE.maxDescriptionChars} characters.
 
-Produce ONLY the CSV. No prose, no markdown fences.`;
+SELF-CHECK BEFORE YOU SEND
+Re-read your finished CSV line by line and confirm every item. A file that fails
+any of these is rejected by the importer and the user gets nothing.
+[ ] The first line is exactly: ${SESSION_CSV_HEADERS.join(',')}
+[ ] Nothing precedes the header row and nothing follows the last data row — no
+    prose, no "Here are your sessions", no \`\`\` fences anywhere in the response.
+[ ] Every row has exactly ${SESSION_CSV_HEADERS.length} fields. Any cell containing a comma is quoted.
+[ ] Every row's first column is one of META, SESSION, GROUP, EX, SUB, VARIANT.
+[ ] Every SESSION id is unique within the file and every session has a name.
+[ ] Every EX section is one of {${sectionList}} and every EX metric is one of
+    {${Object.keys(METRICS).join(', ')}}. No invented values.
+[ ] Every EX has a non-empty planned cell.
+[ ] Every GROUP kind is one of {${groupKindList}} or empty.
+[ ] Every VARIANT label is "level:label" with level in {${scalingLevelList}}.
+[ ] Every SUB has a label and a notes description of ≤${SUBROUTINE.maxDescriptionChars} characters.
+If any check fails, fix it and run the list again. Do not send a CSV that fails
+a check.
+
+Produce ONLY the CSV. No prose, no markdown fences.
+
+WORKED EXAMPLE
+A complete, valid file that exercises every feature above. Match its shape — not
+its content. Ends the prompt so the last thing you read is a correct file.
+
+${buildSessionCsvTemplate()}`;
+}
+
+/**
+ * The repair prompt: what the user pastes back when the importer rejects the
+ * generated CSV. Mirrors `buildPlanFixPrompt` in src/lib/planTemplate.ts — the
+ * format rules are restated because the original prompt may have scrolled out
+ * of the chat's context by the time this is needed.
+ */
+export function buildSessionFixPrompt(issues: string[], csvText: string): string {
+  const numbered = issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n');
+  const echo = csvText.trim()
+    ? `\n\nTHE CSV YOU SENT\n${csvText.trim()}`
+    : '\n\n(The file was uploaded as a spreadsheet, so it is not repeated here — ' +
+      'correct the version you produced.)';
+
+  return `The CSV you produced was rejected by the Verocity importer. It reported these
+issues:
+
+${numbered}
+
+Fix exactly these issues and re-send the COMPLETE corrected CSV. Do not send a
+patch, a diff, or only the changed rows — send the whole file.
+
+The rules that matter here, restated so you do not have to scroll back:
+- First row exactly: ${SESSION_CSV_HEADERS.join(',')}
+- First column is one of: META, SESSION, GROUP, EX, SUB, VARIANT.
+- Allowed sections: ${(SECTIONS as readonly string[]).join(', ')}.
+- Allowed metrics: ${Object.keys(METRICS).join(', ')}.
+- Allowed session types: ${SESSION_TYPES.join(', ')}.
+- Allowed group kinds: ${GROUP_KINDS.join(', ')}.
+- Allowed scaling levels: ${SCALING_LEVELS.join(', ')}.
+- Every session needs a name, and every EX needs a section, a metric and a
+  planned value.
+- Subroutine descriptions are ≤${SUBROUTINE.maxDescriptionChars} characters.
+- Cells containing commas or quotes are double-quoted; embedded quotes doubled.
+
+Output ONLY the corrected CSV: no prose, no explanation, no markdown fences.${echo}`;
 }
 
 // ---------- parser ----------

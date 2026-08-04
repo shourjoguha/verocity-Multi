@@ -1,6 +1,8 @@
 import type {
   AspectKey,
   BlockKey,
+  EquipmentKey,
+  ExperienceKey,
   GenderKey,
   MetricKey,
   MovementProfile,
@@ -35,10 +37,30 @@ export interface Injury {
 }
 
 /**
- * Owner anthropometrics — one current row, never a time series (migration 0020
- * explains why). Deliberately NOT columns on `profiles`: the showcase RLS
- * policy grants anon a whole-row read, so age/gender/injuries there would be
- * public. Only `body_weight_kg` and `birth_year` reach a metric.
+ * One entry in `user_stats.goals`. LIST ORDER IS THE RANK — `weight` grades how
+ * much each goal matters, order decides ties and which goal claims a `primary`
+ * slot first.
+ *
+ * `label` is authoritative, not `id`. GoalsEditor accepts free-text goals, whose
+ * `id` is a uuid that matches nothing in GOALS, and the prompt renders labels so
+ * an athlete's own wording reaches the AI intact.
+ */
+export interface Goal {
+  id: string;
+  label: string;
+  weight: number;
+}
+
+/**
+ * Owner anthropometrics, injury history and training preferences — one current
+ * row, never a time series (migration 0020 explains why). Deliberately NOT
+ * columns on `profiles`: the showcase RLS policy grants anon a whole-row read,
+ * so age/gender/injuries/goals there would be public.
+ *
+ * Two fields reach a metric (`body_weight_kg`, `birth_year`). Everything else
+ * exists to be rendered into the plan-authoring prompt by `buildPlanAiPrompt`
+ * — including `height_cm`, `gender` and `injuries`, which had no consumer
+ * before migration 0030. `body_type` is still deliberately unread.
  */
 export interface UserStats {
   owner_user_id: string;
@@ -48,6 +70,11 @@ export interface UserStats {
   gender: GenderKey | null;
   body_type: string | null;
   injuries: Injury[];
+  goals: Goal[];
+  experience: ExperienceKey | null;
+  days_per_week: number | null;
+  equipment: EquipmentKey[];
+  preferred_plan_weeks: number | null;
   updated_at: string;
   created_at: string;
 }

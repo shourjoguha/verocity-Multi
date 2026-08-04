@@ -1,14 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import ExcelJS from 'exceljs';
+import { PLAN_LENGTH } from '@/app.config';
 import {
   PLAN_CSV_HEADERS,
   buildPlanAiPrompt,
   buildPlanCsvTemplate,
+  buildPlanFixPrompt,
   buildPlanTsvTemplate,
   parsePlanTabular,
   parsePlanWorkbook,
   validateParsedPlan,
 } from '@/lib/planTemplate';
+import type { UserStats } from '@/lib/types';
+
+/** A fully-populated stats row — every branch of the profile block reachable. */
+const fullStats = (): UserStats => ({
+  owner_user_id: 'u1',
+  body_weight_kg: 68,
+  height_cm: 170,
+  birth_year: 1992,
+  gender: 'female',
+  body_type: null,
+  injuries: [{ id: 'i1', region: 'shoulders', label: 'Rotator cuff', year: 2023 }],
+  goals: [
+    { id: 'strength', label: 'Strength', weight: 70 },
+    { id: 'hypertrophy', label: 'Hypertrophy', weight: 50 },
+  ],
+  experience: 'intermediate',
+  days_per_week: 4,
+  equipment: ['barbell', 'rack'],
+  preferred_plan_weeks: 10,
+  updated_at: '2026-01-01T00:00:00Z',
+  created_at: '2026-01-01T00:00:00Z',
+});
 
 describe('plan CSV template', () => {
   it('CSV starts with the canonical header row', () => {
@@ -125,6 +149,104 @@ describe('buildPlanAiPrompt', () => {
     expect(prompt).toContain('primary');
     expect(prompt).toContain('accumulation');
     expect(prompt).toContain('weight');
+  });
+
+  it('carries the two-phase structure and the rubric', () => {
+    const prompt = buildPlanAiPrompt();
+    expect(prompt).toContain('PHASE 1');
+    expect(prompt).toContain('PHASE 2');
+    expect(prompt).toContain('PRESCRIPTION RUBRIC');
+    expect(prompt).toContain('SELF-CHECK BEFORE YOU SEND');
+    // The rubric is what makes the prompt reason rather than just transcribe.
+    expect(prompt).toContain('Goal weighting');
+    expect(prompt).toContain(`${PLAN_LENGTH.minWeeks} and ${PLAN_LENGTH.maxWeeks} weeks`);
+  });
+
+  /**
+   * THE FORMAT GUARD. The prompt ends with a worked example, and the example is
+   * `buildPlanCsvTemplate()` — so the thing the model is told to imitate is the
+   * same artifact the parser is tested against. Pulling it back out of the
+   * finished prompt and parsing it is what stops the two drifting apart: if the
+   * example ever stops importing cleanly, the whole feature is redundant.
+   */
+  it('embeds a worked example that parses with zero issues', () => {
+    const prompt = buildPlanAiPrompt();
+    const header = PLAN_CSV_HEADERS.join(',');
+    // The example is the last thing in the prompt, so the final header
+    // occurrence opens it.
+    const example = prompt.slice(prompt.lastIndexOf(header));
+    expect(example.split('\n')[0]).toBe(header);
+
+    const { plan, issues } = parsePlanTabular(example);
+    expect(issues).toEqual([]);
+    expect(plan.days.length).toBeGreaterThan(0);
+    expect(validateParsedPlan(plan)).toEqual([]);
+  });
+
+  it('says the profile is missing when there is no stats row', () => {
+    const prompt = buildPlanAiPrompt({ stats: null });
+    expect(prompt).toContain('No profile is on file');
+    expect(prompt).not.toContain('undefined');
+    expect(prompt).not.toContain('NaN');
+    expect(prompt).not.toContain('null');
+  });
+
+  it('renders a full profile, with goals in rank order', () => {
+    const prompt = buildPlanAiPrompt({
+      stats: fullStats(),
+      today: new Date('2026-08-01T00:00:00Z'),
+    });
+    expect(prompt).toContain('- Age: 34');
+    expect(prompt).toContain('- Sex: female');
+    expect(prompt).toContain('- Bodyweight: 68 kg');
+    expect(prompt).toContain('- Height: 170 cm');
+    expect(prompt).toContain('1. Strength (70)');
+    expect(prompt).toContain('2. Hypertrophy (50)');
+    expect(prompt).toContain('Experience: Intermediate');
+    expect(prompt).toContain('Training days available per week: 4');
+    expect(prompt).toContain('Barbell, Squat rack');
+    expect(prompt).toContain('Preferred plan length: 10 weeks');
+    expect(prompt).toContain('Rotator cuff (shoulders, 2023)');
+    // Everything is known, so nothing should be queued for the interview.
+    expect(prompt).not.toContain('UNKNOWN — ask the athlete');
+  });
+
+  it('lists absent fields as UNKNOWN so phase 1 has something to ask about', () => {
+    const prompt = buildPlanAiPrompt({
+      stats: { ...fullStats(), birth_year: null, experience: null, equipment: [], goals: [] },
+      today: new Date('2026-08-01T00:00:00Z'),
+    });
+    const unknown = prompt.slice(prompt.indexOf('UNKNOWN — ask the athlete'));
+    expect(unknown).toContain('age');
+    expect(unknown).toContain('training experience');
+    expect(unknown).toContain('equipment available');
+    expect(unknown).toContain('goals and their relative priority');
+  });
+
+  // app.config.ts refuses body_type a consumer on purpose; routing it into
+  // prescription here would quietly overturn that decision.
+  it('never sends body type', () => {
+    const prompt = buildPlanAiPrompt({ stats: { ...fullStats(), body_type: 'hourglass' } });
+    expect(prompt).not.toContain('hourglass');
+  });
+});
+
+describe('buildPlanFixPrompt', () => {
+  it('numbers the issues and echoes the rejected CSV', () => {
+    const csv = 'kind,id\nDAY,monday';
+    const prompt = buildPlanFixPrompt(['Bad section.', 'Bad metric.'], csv);
+    expect(prompt).toContain('1. Bad section.');
+    expect(prompt).toContain('2. Bad metric.');
+    expect(prompt).toContain(csv);
+    // The original prompt may have scrolled out of the chat by now.
+    expect(prompt).toContain(PLAN_CSV_HEADERS.join(','));
+    expect(prompt).toContain('warmup, primary');
+  });
+
+  it('omits the echo when the upload was a workbook', () => {
+    const prompt = buildPlanFixPrompt(['Bad section.'], '');
+    expect(prompt).toContain('1. Bad section.');
+    expect(prompt).toContain('uploaded as a spreadsheet');
   });
 });
 

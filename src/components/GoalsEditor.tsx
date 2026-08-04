@@ -1,23 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { GOAL_DEFAULTS, GOALS, GOAL_WEIGHT, STATS_LIMITS, type GoalKey } from '@/app.config';
+import { getUserStats, upsertUserStats } from '@/lib/queries';
+import type { Goal } from '@/lib/types';
+import { toast } from '@/lib/toast';
 import { Button } from '@/components/ui/primitives';
 
-// Rank + weight the user's training goals. No wiring: nothing reads this state
-// and it does not persist across reloads — the intent is UI shape, not a
-// stored preference. If a downstream ever wants this, this is the seam.
+// Rank + weight the user's training goals, stored on `user_stats.goals`
+// (migration 0030). LIST ORDER IS THE RANK — the array is saved in the order
+// shown, so the ↑/↓ buttons are data and not decoration.
+//
+// The consumer is buildPlanAiPrompt (src/lib/planTemplate.ts): every goal here
+// is rendered into the prompt's ATHLETE PROFILE block and matched against the
+// rules in docs/PLAN_RUBRIC.md, which is what decides the plan's rep ranges and
+// section emphasis. `label` is what travels, not `id` — free-text goals get a
+// uuid id that matches nothing in GOALS.
+//
+// Saves only the `goals` column: UserStatsPanel owns the rest of the row and
+// the two must not overwrite each other (see UserStatsInput in lib/queries.ts).
 
-interface Goal {
-  id: string;
-  label: string;
-  weight: number;
-}
-
-const DEFAULTS: Goal[] = [
-  { id: 'strength', label: 'Strength', weight: 70 },
-  { id: 'hypertrophy', label: 'Hypertrophy', weight: 50 },
-  { id: 'endurance', label: 'Endurance', weight: 40 },
-  { id: 'mobility', label: 'Mobility', weight: 30 },
-  { id: 'skill', label: 'Skill work', weight: 20 },
-];
+const DEFAULTS: Goal[] = GOAL_DEFAULTS.map((g) => ({
+  id: g.id,
+  label: GOALS[g.id as GoalKey].label,
+  weight: g.weight,
+}));
 
 const rowBtn =
   'inline-flex h-8 w-8 items-center justify-center text-muted transition-colors hover:text-fg disabled:opacity-30 disabled:hover:text-muted';
@@ -25,6 +30,35 @@ const rowBtn =
 export function GoalsEditor() {
   const [goals, setGoals] = useState<Goal[]>(DEFAULTS);
   const [draft, setDraft] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const stats = await getUserStats();
+      if (!active) return;
+      // An empty array means "never saved", not "no goals" — a user who really
+      // wants none can remove them all and save, which stores [] and reads back
+      // as the defaults again. Living with that: an empty goal list carries no
+      // information for the prompt anyway.
+      if (stats?.goals?.length) setGoals(stats.goals);
+      setLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function onSave() {
+    if (saving) return;
+    setSaving(true);
+    const ok = await upsertUserStats({
+      goals: goals.filter((g) => g.label.trim() !== ''),
+    });
+    setSaving(false);
+    toast(ok ? 'Goals saved' : 'Could not save — try again', ok ? 'success' : 'error');
+  }
 
   function move(id: string, delta: -1 | 1) {
     setGoals((gs) => {
@@ -47,10 +81,12 @@ export function GoalsEditor() {
 
   function add() {
     const label = draft.trim();
-    if (!label) return;
-    setGoals((gs) => [...gs, { id: crypto.randomUUID(), label, weight: 40 }]);
+    if (!label || goals.length >= STATS_LIMITS.maxGoals) return;
+    setGoals((gs) => [...gs, { id: crypto.randomUUID(), label, weight: GOAL_WEIGHT.default }]);
     setDraft('');
   }
+
+  if (loading) return <p className="text-sm text-muted">Loading…</p>;
 
   return (
     <div className="flex flex-col gap-4">
@@ -91,9 +127,9 @@ export function GoalsEditor() {
                 <div className="mt-1 flex items-center gap-3">
                   <input
                     type="range"
-                    min={0}
-                    max={100}
-                    step={5}
+                    min={GOAL_WEIGHT.min}
+                    max={GOAL_WEIGHT.max}
+                    step={GOAL_WEIGHT.step}
                     value={g.weight}
                     onChange={(e) => setWeight(g.id, Number(e.target.value))}
                     aria-label={`${g.label} weight`}
@@ -130,10 +166,21 @@ export function GoalsEditor() {
           }}
           placeholder="Add a goal…"
           aria-label="New goal"
+          maxLength={STATS_LIMITS.goalLabelChars}
           className="min-h-11 flex-1 border border-border bg-surface px-3 text-sm text-fg outline-none focus:border-fg"
         />
-        <Button variant="ghost" onClick={add} disabled={draft.trim() === ''}>
+        <Button
+          variant="ghost"
+          onClick={add}
+          disabled={draft.trim() === '' || goals.length >= STATS_LIMITS.maxGoals}
+        >
           Add
+        </Button>
+      </div>
+
+      <div>
+        <Button onClick={onSave} disabled={saving}>
+          {saving ? 'Saving…' : 'Save goals'}
         </Button>
       </div>
     </div>

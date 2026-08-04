@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { adoptPlan, createPlan, createSession } from '@/lib/queries';
+import { adoptPlan, createPlan, createSession, getUserStats } from '@/lib/queries';
 import type { SessionInput } from '@/lib/queries';
 import { parsePlanMarkdown, PLAN_FORMAT_HELP } from '@/lib/planParser';
 import {
   buildPlanAiPrompt,
   buildPlanCsvTemplate,
+  buildPlanFixPrompt,
   buildPlanTsvTemplate,
   parsePlanTabular,
   parsePlanWorkbook,
@@ -14,11 +15,12 @@ import {
 import {
   buildSessionAiPrompt,
   buildSessionCsvTemplate,
+  buildSessionFixPrompt,
   buildSessionTsvTemplate,
   parseSessionTabular,
   parseSessionWorkbook,
 } from '@/lib/sessionTemplate';
-import type { ParsedPlan } from '@/lib/types';
+import type { ParsedPlan, UserStats } from '@/lib/types';
 import { track } from '@/lib/analytics';
 import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
@@ -51,6 +53,11 @@ export default function PlanUpload() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
+  const [fixCopied, setFixCopied] = useState(false);
+  // The athlete's own profile, rendered into the copied prompt. Fetched here
+  // rather than inside the copy handler so the click stays instant, and so a
+  // failed read degrades to the generic prompt instead of an error.
+  const [stats, setStats] = useState<UserStats | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -66,6 +73,7 @@ export default function PlanUpload() {
         window.location.href = result ? '/app/plan' : '/app/plan/upload';
         return;
       }
+      setStats(await getUserStats());
       setReady(true);
     })();
   }, []);
@@ -146,11 +154,30 @@ export default function PlanUpload() {
 
   async function copyPrompt() {
     try {
-      await navigator.clipboard.writeText(target === 'session' ? buildSessionAiPrompt() : buildPlanAiPrompt());
+      await navigator.clipboard.writeText(
+        target === 'session' ? buildSessionAiPrompt() : buildPlanAiPrompt({ stats }),
+      );
       setPromptCopied(true);
       setTimeout(() => setPromptCopied(false), 1500);
     } catch {
       setError('Clipboard unavailable — select and copy the prompt manually.');
+    }
+  }
+
+  /**
+   * Hand the compatibility errors back to the AI that produced the file. The
+   * user was otherwise relaying validator messages by hand into a chat where
+   * the original prompt had often scrolled away.
+   */
+  async function copyFixRequest() {
+    try {
+      await navigator.clipboard.writeText(
+        target === 'session' ? buildSessionFixPrompt(issues, csvText) : buildPlanFixPrompt(issues, csvText),
+      );
+      setFixCopied(true);
+      setTimeout(() => setFixCopied(false), 1500);
+    } catch {
+      setError('Clipboard unavailable — select and copy the issues manually.');
     }
   }
 
@@ -195,6 +222,9 @@ export default function PlanUpload() {
   }
 
   const hasParsed = target === 'session' ? parsedSessions !== null : parsedPlan !== null;
+  // Enough to personalise with. Goals drive every rep range in the rubric, so a
+  // row that only has a bodyweight in it is not worth calling a profile.
+  const profileIsUsable = (stats?.goals?.length ?? 0) > 0 || stats?.experience != null;
 
   return (
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
@@ -212,8 +242,17 @@ export default function PlanUpload() {
           <p className="mt-2 text-sm text-muted">
             {target === 'session'
               ? "Download the CSV (or TSV) wireframe, attach it to your AI of choice along with the copied prompt, then upload the AI's output below — every session in the file is saved standalone. Compatibility is checked before save."
-              : "Download the CSV (or TSV) wireframe, attach it to your AI of choice along with the copied prompt, then upload the AI's output below. Compatibility is checked before save."}
+              : 'The copied prompt carries your profile and goals. The AI will propose a plan and ask you a few questions — including how many weeks you want — before it produces the file. Paste its final CSV below, or upload it. Compatibility is checked before save.'}
           </p>
+          {target === 'plan' && !profileIsUsable ? (
+            <p className="mt-2 text-sm text-muted">
+              Nothing is on file about you yet, so the AI will ask for all of it. Filling in{' '}
+              <a href="/app/you" className="underline">
+                your profile and goals
+              </a>{' '}
+              first makes the plan it proposes specific to you.
+            </p>
+          ) : null}
 
           <div className="mt-3 flex gap-2 text-xs uppercase tracking-wider">
             <button
@@ -337,6 +376,14 @@ export default function PlanUpload() {
                 <li key={k}>{i}</li>
               ))}
             </ul>
+            <p className="mt-3 text-sm text-muted">
+              Paste this back into the same AI conversation and it will re-send a corrected file.
+            </p>
+            <div className="mt-2">
+              <Button variant="ghost" onClick={copyFixRequest}>
+                {fixCopied ? 'Fix request copied' : 'Copy fix request'}
+              </Button>
+            </div>
           </div>
         </Item>
       ) : null}
