@@ -9,6 +9,7 @@ import { connectGarmin, disconnectGarmin } from '@/lib/garmin/connectClient';
 import type { GarminConnectionInfo } from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { toast } from '@/lib/toast';
+import { track } from '@/lib/analytics';
 import { Button } from '@/components/ui/primitives';
 
 const STATUS_LABEL: Record<GarminConnectionInfo['status'], string> = {
@@ -80,6 +81,7 @@ export function GarminPanel() {
         : 'Import complete',
     );
     toast('Garmin export imported', 'success');
+    track('garmin_export_imported', { activities: c?.activities, health_days: c?.health });
     refresh();
   }
 
@@ -97,6 +99,7 @@ export function GarminPanel() {
     setEmail('');
     setShowConnect(false);
     toast('Garmin connected', 'success');
+    track('garmin_connected');
     refresh();
   }
 
@@ -110,6 +113,7 @@ export function GarminPanel() {
       return;
     }
     toast('Garmin disconnected', 'success');
+    track('garmin_disconnected');
     refresh();
   }
 

@@ -114,6 +114,10 @@ const {
         }
       })();
     </script>
+    <script>
+      import { capturePageview } from '@/lib/analytics';
+      document.addEventListener('astro:page-load', capturePageview);
+    </script>
   </head>
   <body class={shell ? 'app-shell' : 'min-h-dvh'}>
     {!noBackdrop && <BackgroundLayer />}

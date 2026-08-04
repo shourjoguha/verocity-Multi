@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getSession, signIn, signUpWithInvite } from '@/lib/auth';
+import { track } from '@/lib/analytics';
 import { Button } from '@/components/ui/primitives';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -48,6 +49,7 @@ export default function SignupForm() {
             // Account created + email pre-confirmed; sign straight in.
             const { error: signInErr } = await signIn(email, password);
             setBusy(false);
+            if (!signInErr) track('account_created');
             window.location.href = signInErr ? '/login' : '/app';
           }}
           className="flex flex-col gap-3"

@@ -4,6 +4,7 @@ import { createShare, getAllPlans, getRecentLogs, getShares, revokeShare } from 
 import { randomToken, sha256Hex, shareUrl } from '@/lib/share';
 import type { Plan, Share, ShareScope, WorkoutLog } from '@/lib/types';
 import { formatDate } from '@/lib/format';
+import { track } from '@/lib/analytics';
 import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
@@ -79,6 +80,7 @@ export default function ShareManager() {
       setCreated(shareUrl(token));
       setCopied(false);
       setLabel('');
+      track('share_link_created', { scope, expiry_days: expiryDays, has_label: !!label.trim() });
     }
   }
 
@@ -95,7 +97,10 @@ export default function ShareManager() {
   async function handleRevoke(id: string) {
     if (!confirm('Revoke this link? Anyone holding it loses access immediately.')) return;
     const ok = await revokeShare(id);
-    if (ok) setShares((prev) => prev.map((s) => (s.id === id ? { ...s, revoked: true } : s)));
+    if (ok) {
+      setShares((prev) => prev.map((s) => (s.id === id ? { ...s, revoked: true } : s)));
+      track('share_link_revoked');
+    }
   }
 
   if (!ready) return <LoadingScreen />;

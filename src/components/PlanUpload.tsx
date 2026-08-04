@@ -12,6 +12,7 @@ import {
   validateParsedPlan,
 } from '@/lib/planTemplate';
 import type { ParsedPlan, Plan } from '@/lib/types';
+import { track } from '@/lib/analytics';
 import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
@@ -117,6 +118,7 @@ export default function PlanUpload() {
         setError('Some minis could not be saved. Check your connection and try again.');
         return;
       }
+      track('plan_minis_created', { minis_count: minis.length, weeks, days: parsed.days.length });
       window.location.href = '/app/sessions';
       return;
     }
@@ -128,6 +130,7 @@ export default function PlanUpload() {
       setError('Could not save the plan. Check your connection and try again.');
       return;
     }
+    track('plan_created', { weeks, days: parsed.days.length, source });
     window.location.href = '/app/plan';
   }
 
