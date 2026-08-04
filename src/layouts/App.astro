@@ -105,14 +105,14 @@ const tabs: Tab[] = showcase
     ]
   : [
       { href: '/app', label: 'Home', glyph: '◫' },
-      // Calendar retired as a standalone destination — it lives on Home now,
-      // above Recent sessions. This slot goes to You (settings, share links,
-      // goals) instead.
-      { href: '/app/you', label: 'You', glyph: '☺', svgGlyph: true },
+      { href: GROUPS.training.base, label: GROUPS.training.label, glyph: '◧', group: 'training' },
       // Not a destination: opens the "what are you logging?" sheet.
       { href: '/app/log', label: 'Log', glyph: '+', primary: true, action: 'log' },
-      { href: GROUPS.training.base, label: GROUPS.training.label, glyph: '◧', group: 'training' },
       { href: GROUPS.progress.base, label: GROUPS.progress.label, glyph: '◲', group: 'progress' },
+      // Calendar retired as a standalone destination — it lives on Home now,
+      // above Recent sessions. The trailing slot goes to You (settings, share
+      // links, goals) instead.
+      { href: '/app/you', label: 'You', glyph: '☺', svgGlyph: true },
     ];
 
 // A group tab is active for any of its member routes, not just its (possibly
@@ -237,9 +237,18 @@ const tabActive = (t: Tab) =>
                   {isActive(l.href) && <span class="block h-[3px] w-[3px] bg-fg" />}
                 </span>
                 {l.svgGlyph && (
-                  <svg aria-hidden="true" viewBox="0 0 24 28" fill="currentColor" class="h-4 w-4 shrink-0">
-                    <ellipse cx="12" cy="8.5" rx="5.5" ry="6.5" />
-                    <path d="M3 27a9 9 0 0 1 18 0Z" />
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 28"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="h-4 w-4 shrink-0"
+                  >
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" transform="translate(-4 -1) rotate(-90 12 9)" />
+                    <path d="M3 17h18a2 2 0 0 1 2 2v1a11 8 0 0 1-22 0v-1a2 2 0 0 1 2-2Z" />
                   </svg>
                 )}
                 {l.label}
@@ -336,9 +345,18 @@ const tabActive = (t: Tab) =>
                   nothing shifts vertically between pages. */}
               <span aria-hidden="true" class="flex h-8 items-center justify-center text-[1.75rem] leading-none">
                 {t.svgGlyph ? (
-                  <svg viewBox="0 0 24 28" fill="currentColor" class="h-7 w-7">
-                    <ellipse cx="12" cy="8.5" rx="5.5" ry="6.5" />
-                    <path d="M3 27a9 9 0 0 1 18 0Z" />
+                  <svg
+                    viewBox="0 0 24 28"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="h-7 w-7"
+                  >
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" transform="translate(-4 -1) rotate(-90 12 9)" />
+                    <path d="M3 17h18a2 2 0 0 1 2 2v1a11 8 0 0 1-22 0v-1a2 2 0 0 1 2-2Z" />
+
                   </svg>
                 ) : t.glyph}
               </span>
