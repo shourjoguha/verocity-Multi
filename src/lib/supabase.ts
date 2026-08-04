@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { captureUserIdentified, resetAnalyticsIdentity } from '@/lib/analytics';
 
 const url = import.meta.env.PUBLIC_SUPABASE_URL;
 const anonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
@@ -17,6 +18,16 @@ const fallbackKey = anonKey || 'public-anon-key';
 // user sessions layer onto this client via Supabase Auth.
 export const supabase: SupabaseClient = createClient(fallbackUrl, fallbackKey, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
+
+// Identify/reset PostHog at the auth boundary so every consumer of this
+// client (the only one that ever signs in/out) gets tracked consistently.
+supabase.auth.onAuthStateChange((event, session) => {
+  if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session) {
+    captureUserIdentified(session.user.id, { email: session.user.email });
+  } else if (event === 'SIGNED_OUT') {
+    resetAnalyticsIdentity();
+  }
 });
 
 // Session-less public client for the read-only showcase. Never adopts a user

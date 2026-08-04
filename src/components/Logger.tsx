@@ -15,6 +15,7 @@ import {
   getSessionById,
   updateLog,
 } from '@/lib/queries';
+import { track } from '@/lib/analytics';
 import {
   buildBlankLog,
   buildLogFromPlanDay,
@@ -575,6 +576,11 @@ export default function Logger() {
         toast('Save failed — check your connection and try again', 'error');
         return;
       }
+    }
+    if (next === 'done') {
+      track('workout_completed', { duration_seconds: secondsRef.current, tags: tagsRef.current });
+    } else {
+      track('workout_cancelled', { duration_seconds: secondsRef.current });
     }
     window.location.href =
       next === 'done' && idRef.current ? `/app/session?id=${idRef.current}` : '/app';

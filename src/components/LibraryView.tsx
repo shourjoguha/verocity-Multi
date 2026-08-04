@@ -7,6 +7,7 @@ import {
   type MovementInput,
 } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
+import { track } from '@/lib/analytics';
 import { supabasePublic } from '@/lib/supabase';
 import type { Movement } from '@/lib/types';
 import { METRICS, type MetricKey } from '@/app.config';
@@ -223,6 +224,11 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
     if (created) {
       setItems((prev) => [...(prev ?? []), created].sort(byName));
       cancel();
+      track('movement_created', {
+        category: created.category,
+        primary_metric: created.primary_metric,
+        kind: created.kind,
+      });
     }
   }
 
@@ -258,6 +264,11 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
       if (created) {
         setItems((prev) => [...(prev ?? []), created].sort(byName));
         setSubEditing(null);
+        track('movement_created', {
+          category: created.category,
+          primary_metric: created.primary_metric,
+          kind: created.kind,
+        });
       }
     } else {
       const { id } = subEditing;
@@ -301,7 +312,15 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
     setBusy(true);
     const ok = await deleteMovement(m.id);
     setBusy(false);
-    if (ok) setItems((prev) => (prev ?? []).filter((x) => x.id !== m.id));
+    if (ok) {
+      setItems((prev) => (prev ?? []).filter((x) => x.id !== m.id));
+      track('movement_deleted', {
+        category: m.category,
+        primary_metric: m.primary_metric,
+        kind: m.kind,
+        is_custom: m.owner_user_id !== null,
+      });
+    }
   }
 
   if (loading || items === null) {

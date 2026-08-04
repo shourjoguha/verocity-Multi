@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { createLog } from '@/lib/queries';
+import { track } from '@/lib/analytics';
 import { ACTIVITY_TAGS, ACTIVITY_TYPES, METRICS } from '@/app.config';
 import type { LogDocument } from '@/lib/types';
 import { Button, LoadingScreen } from '@/components/ui/primitives';
@@ -106,6 +107,12 @@ export default function ActivityLogger() {
       setError('Could not save. Check your connection and try again.');
       return;
     }
+    track('activity_logged', {
+      activity_type: type.trim(),
+      duration_seconds: durationSec,
+      distance_meters: distanceM,
+      tags,
+    });
     window.location.href = '/app';
   }
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getSession, requestPasswordReset, signIn } from '@/lib/auth';
+import { track } from '@/lib/analytics';
 import { Button } from '@/components/ui/primitives';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -41,6 +42,7 @@ export default function LoginForm() {
         setError(error.message);
         return;
       }
+      track('user_signed_in');
       window.location.href = '/app';
     } else {
       const { error } = await requestPasswordReset(email);
