@@ -82,6 +82,8 @@ type Tab = {
   href: string;
   label: string;
   glyph: string;
+  // When true, render the person-silhouette SVG instead of the text glyph.
+  svgGlyph?: boolean;
   // Inverted chip treatment for the centre slot.
   primary?: boolean;
   // Set when the slot opens a sheet instead of navigating.
@@ -103,7 +105,7 @@ const tabs: Tab[] = showcase
       // Calendar retired as a standalone destination — it lives on Home now,
       // above Recent sessions. This slot goes to You (settings, share links,
       // goals) instead.
-      { href: '/app/you', label: 'You', glyph: '☺' },
+      { href: '/app/you', label: 'You', glyph: '☺', svgGlyph: true },
       // Not a destination: opens the "what are you logging?" sheet.
       { href: '/app/log', label: 'Log', glyph: '+', primary: true, action: 'log' },
       { href: GROUPS.training.base, label: GROUPS.training.label, glyph: '◧', group: 'training' },
@@ -338,7 +340,12 @@ const tabActive = (t: Tab) =>
               {/* Fixed h-8 glyph row on every tab so baselines stay aligned and
                   nothing shifts vertically between pages. */}
               <span aria-hidden="true" class="flex h-8 items-center justify-center text-[1.75rem] leading-none">
-                {t.glyph}
+                {t.svgGlyph ? (
+                  <svg viewBox="0 0 24 28" fill="currentColor" class="h-7 w-7">
+                    <ellipse cx="12" cy="8.5" rx="5.5" ry="6.5" />
+                    <path d="M3 27a9 9 0 0 1 18 0Z" />
+                  </svg>
+                ) : t.glyph}
               </span>
               <span class="t-control">{t.label}</span>
             </a>
