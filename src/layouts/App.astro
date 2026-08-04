@@ -25,7 +25,10 @@ const home = showcase ? '/showcase' : '/app';
 // /app/activity does NOT belong here — it is an action (log a non-lifting
 // activity), already offered by AddSessionMenu from the ribbon's centre slot
 // and from Home, and this panel lists places.
-type NavGroup = { label: string; items: { href: string; label: string }[] };
+type NavGroup = {
+  label: string;
+  items: { href: string; label: string; svgGlyph?: boolean }[];
+};
 const groups: NavGroup[] = showcase
   ? [
       {
@@ -57,9 +60,9 @@ const groups: NavGroup[] = showcase
         label: GROUPS.progress.label,
         items: GROUPS.progress.tabs.map(({ href, label }) => ({ href, label })),
       },
-      // The You group folded into the /app/you ribbon slot, which mounts the
-      // same Settings + Share links (and Goals) inside a single collapsible
-      // page. Drawer redundancy dropped.
+      // One row, no sub-items: You is a single collapsible page
+      // (Settings + Share links + Goals), not a neighbourhood of its own.
+      { label: 'You', items: [{ href: '/app/you', label: 'You', svgGlyph: true }] },
     ];
 const isActive = (href: string) => (href === home ? path === home : path.startsWith(href));
 const groupActive = (g: NavGroup) => g.items.some((i) => isActive(i.href));
@@ -176,7 +179,7 @@ const tabActive = (t: Tab) =>
         </a>
       </div>
       {
-        showcase ? (
+        showcase && (
           <div class="flex items-center gap-3">
             <span class="hidden text-[0.6rem] uppercase tracking-[0.18em] text-muted sm:inline">
               Read-only showcase
@@ -188,20 +191,6 @@ const tabActive = (t: Tab) =>
               Sign in
             </a>
           </div>
-        ) : (
-          <a
-            href="/app/settings"
-            aria-current={isActive('/app/settings') ? 'page' : undefined}
-            aria-label="Settings"
-            class:list={[
-              'flex min-h-11 min-w-11 items-center justify-center transition-colors duration-150',
-              isActive('/app/settings') ? 'text-fg' : 'text-muted hover:text-fg',
-            ]}
-          >
-            <span aria-hidden="true" class="text-lg leading-none">
-              ⚙
-            </span>
-          </a>
         )
       }
     </div>
@@ -247,6 +236,12 @@ const tabActive = (t: Tab) =>
                 <span aria-hidden="true" class="flex w-3 shrink-0 items-center">
                   {isActive(l.href) && <span class="block h-[3px] w-[3px] bg-fg" />}
                 </span>
+                {l.svgGlyph && (
+                  <svg aria-hidden="true" viewBox="0 0 24 28" fill="currentColor" class="h-4 w-4 shrink-0">
+                    <ellipse cx="12" cy="8.5" rx="5.5" ry="6.5" />
+                    <path d="M3 27a9 9 0 0 1 18 0Z" />
+                  </svg>
+                )}
                 {l.label}
               </a>
             ))}
