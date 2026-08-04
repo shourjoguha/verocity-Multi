@@ -141,6 +141,7 @@ export const ACTIVITY_TAGS = {
   mobility: { label: 'Mobility', color: '#1DBD8E' },
   sport: { label: 'Sport', color: '#004C94' },
   hyrox: { label: 'Hyrox', color: '#4B2E83' },
+  crossfit: { label: 'CrossFit', color: '#B23A2E' },
 } as const;
 
 // Quick-pick activity types for the lightweight non-strength ActivityLogger.
