@@ -331,11 +331,20 @@ PHASE 1 — PROPOSE, THEN CONFIRM (prose; no CSV)
 3. Ask about everything listed as UNKNOWN in the profile, plus anything else you
    genuinely need — schedule constraints, equipment gaps, current working
    weights, whether any date has to land on a specific week.
-4. Keep it to at most 6 numbered questions in a single message. Do not
+4. Ask whether there are any **preferred movements** the athlete wants included
+   (favourites they train for their own sake, or lifts they want to peak) and
+   any **movements to avoid** beyond what the profile's injuries already imply
+   (personal dislikes, gym-etiquette constraints, prior bad experiences). Make
+   it explicit that "none" is a fine answer — this is not a required field.
+   Preferred movements go into \`primary\`/\`secondary\` where the rubric's rep
+   ranges for the top goal allow it; avoided movements are treated the same as
+   an injury contraindication — substitute from the equipment ladder, keep the
+   goal's intent, and note the substitution.
+5. Keep it to at most 6 numbered questions in a single message. Do not
    interrogate one question at a time.
-5. STOP and wait for the athlete's reply. Revise the proposal and ask again if
+6. STOP and wait for the athlete's reply. Revise the proposal and ask again if
    anything is still open. Continue only when they have confirmed.
-6. Emit no CSV during phase 1 — not as a preview, not as an example.
+7. Emit no CSV during phase 1 — not as a preview, not as an example.
 
 PHASE 2 — EMIT THE CSV
 Once the athlete has confirmed, output the plan as a CSV and NOTHING else: no
