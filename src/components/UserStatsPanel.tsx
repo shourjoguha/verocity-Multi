@@ -19,6 +19,7 @@
 import { useEffect, useState } from 'react';
 import {
   BODY_TYPES,
+  DISCIPLINES,
   EQUIPMENT,
   EXPERIENCE_KEYS,
   EXPERIENCE_LEVELS,
@@ -28,6 +29,7 @@ import {
   MUSCLE_REGION_KEYS,
   PLAN_LENGTH,
   STATS_LIMITS,
+  type DisciplineKey,
   type EquipmentKey,
   type ExperienceKey,
   type GenderKey,
@@ -55,6 +57,7 @@ interface FormState {
   experience: ExperienceKey | '';
   daysPerWeek: string;
   equipment: EquipmentKey[];
+  disciplines: DisciplineKey[];
   planWeeks: string;
 }
 
@@ -68,6 +71,7 @@ const EMPTY: FormState = {
   experience: '',
   daysPerWeek: '',
   equipment: [],
+  disciplines: [],
   planWeeks: '',
 };
 
@@ -83,6 +87,7 @@ function toForm(stats: UserStats | null): FormState {
     experience: stats.experience ?? '',
     daysPerWeek: stats.days_per_week?.toString() ?? '',
     equipment: stats.equipment ?? [],
+    disciplines: stats.disciplines ?? [],
     planWeeks: stats.preferred_plan_weeks?.toString() ?? '',
   };
 }
@@ -142,6 +147,14 @@ export function UserStatsPanel() {
     });
   }
 
+  function toggleDiscipline(key: DisciplineKey) {
+    patch({
+      disciplines: form.disciplines.includes(key)
+        ? form.disciplines.filter((k) => k !== key)
+        : [...form.disciplines, key],
+    });
+  }
+
   function addInjury() {
     if (form.injuries.length >= STATS_LIMITS.maxInjuries) return;
     patch({
@@ -171,6 +184,7 @@ export function UserStatsPanel() {
       experience: form.experience === '' ? null : form.experience,
       days_per_week: bounded(form.daysPerWeek, STATS_LIMITS.daysPerWeek),
       equipment: form.equipment,
+      disciplines: form.disciplines,
       preferred_plan_weeks: bounded(form.planWeeks, {
         min: PLAN_LENGTH.minWeeks,
         max: PLAN_LENGTH.maxWeeks,
@@ -364,10 +378,32 @@ export function UserStatsPanel() {
         </div>
       </div>
 
+      <div>
+        <span className={label}>Disciplines</span>
+        <div className="flex flex-wrap gap-2">
+          {DISCIPLINES.map((d) => {
+            const on = form.disciplines.includes(d.key);
+            return (
+              <button
+                key={d.key}
+                type="button"
+                onClick={() => toggleDiscipline(d.key)}
+                aria-pressed={on}
+                className={`hill-btn min-h-11 border bg-surface px-3 text-sm ${
+                  on ? 'border-fg text-fg' : 'border-border text-muted'
+                }`}
+              >
+                {d.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <p className="text-[0.7rem] text-muted">
-        Experience, days, equipment and plan length are written into the AI prompt on the
-        new-plan page, along with your goals, age, sex and injuries. Anything you leave blank
-        becomes a question the AI asks you before it writes the plan.
+        Experience, days, equipment, disciplines and plan length are written into the AI prompt
+        on the new-plan page, along with your goals, age, sex and injuries. Anything you leave
+        blank becomes a question the AI asks you before it writes the plan.
       </p>
 
       <div>

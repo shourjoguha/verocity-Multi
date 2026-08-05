@@ -30,6 +30,8 @@ const fullStats = (): UserStats => ({
   days_per_week: 4,
   equipment: ['barbell', 'rack'],
   preferred_plan_weeks: 10,
+  disciplines: ['weightlifting', 'calisthenics'],
+  onboarded_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   created_at: '2026-01-01T00:00:00Z',
 });
@@ -215,6 +217,7 @@ describe('buildPlanAiPrompt', () => {
     expect(prompt).toContain('Experience: Intermediate');
     expect(prompt).toContain('Training days available per week: 4');
     expect(prompt).toContain('Barbell, Squat rack');
+    expect(prompt).toContain('Preferred disciplines: Weightlifting, Calisthenics');
     expect(prompt).toContain('Preferred plan length: 10 weeks');
     expect(prompt).toContain('Rotator cuff (shoulders, 2023)');
     // Everything is known, so nothing should be queued for the interview.

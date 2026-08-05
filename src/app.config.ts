@@ -178,6 +178,23 @@ export const EQUIPMENT = [
   { key: 'sled', label: 'Sled' },
 ] as const;
 
+// Training disciplines the athlete identifies with. Unlike EQUIPMENT this does
+// not drive substitution rules — it biases suggestions and is rendered into the
+// ATHLETE PROFILE block of buildPlanAiPrompt. Open-ended in spirit but a fixed
+// vocabulary here so the onboarding chips and Settings editor stay in step; add
+// an option by editing this list, not a migration (there is no check
+// constraint, same call goals/experience/equipment made).
+export const DISCIPLINES = [
+  { key: 'weightlifting', label: 'Weightlifting' },
+  { key: 'powerlifting', label: 'Powerlifting' },
+  { key: 'bodybuilding', label: 'Bodybuilding' },
+  { key: 'calisthenics', label: 'Calisthenics' },
+  { key: 'crossfit', label: 'CrossFit' },
+  { key: 'hyrox', label: 'Hyrox' },
+  { key: 'endurance', label: 'Endurance / Running' },
+  { key: 'mobility', label: 'Mobility & Recovery' },
+] as const;
+
 // Plan length bounds. 6 is the shortest span a block structure can express
 // (accumulation / intensification / deload); 12 is where the rubric's block
 // tables stop. The prompt asks the athlete to confirm a length inside this.
@@ -585,6 +602,7 @@ export const appConfig = {
   rotaryRoles: ROTARY_ROLES,
   rom: ROM,
   genders: GENDERS,
+  disciplines: DISCIPLINES,
   bodyTypes: BODY_TYPES,
   load: LOAD,
   touch: TOUCH,
@@ -606,9 +624,11 @@ export type GenderKey = keyof typeof GENDERS;
 export type GoalKey = keyof typeof GOALS;
 export type ExperienceKey = keyof typeof EXPERIENCE_LEVELS;
 export type EquipmentKey = (typeof EQUIPMENT)[number]['key'];
+export type DisciplineKey = (typeof DISCIPLINES)[number]['key'];
 
 export const GENDER_KEYS = Object.keys(GENDERS) as GenderKey[];
 export const EXPERIENCE_KEYS = Object.keys(EXPERIENCE_LEVELS) as ExperienceKey[];
+export const DISCIPLINE_KEYS = DISCIPLINES.map((d) => d.key) as DisciplineKey[];
 
 export const MUSCLE_REGION_KEYS = Object.keys(MUSCLE_REGIONS) as RegionKey[];
 export const MODALITY_KEYS = Object.keys(MOVEMENT_MODALITIES) as ModalityKey[];

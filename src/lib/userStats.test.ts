@@ -16,6 +16,8 @@ const stats = (patch: Partial<UserStats> = {}): UserStats => ({
   days_per_week: null,
   equipment: [],
   preferred_plan_weeks: null,
+  disciplines: [],
+  onboarded_at: null,
   updated_at: '2026-01-01T00:00:00Z',
   created_at: '2026-01-01T00:00:00Z',
   ...patch,

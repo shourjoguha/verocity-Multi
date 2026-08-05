@@ -50,7 +50,9 @@ export default function SignupForm() {
             const { error: signInErr } = await signIn(email, password);
             setBusy(false);
             if (!signInErr) track('account_created');
-            window.location.href = signInErr ? '/login' : '/app';
+            // New accounts go through onboarding first; a failed sign-in falls
+            // back to /login. Returning users (LoginForm) still land on /app.
+            window.location.href = signInErr ? '/login' : '/app/onboarding';
           }}
           className="flex flex-col gap-3"
         >
