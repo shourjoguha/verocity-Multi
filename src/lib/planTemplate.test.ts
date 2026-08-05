@@ -231,6 +231,44 @@ describe('buildPlanAiPrompt', () => {
   });
 });
 
+describe('LLM wrapper tolerance', () => {
+  // Measured before the fix: a ```csv fence produced 3 issues and a "Here is
+  // your plan:" line produced 2 — on files whose every data row was already
+  // valid (days parsed fine in both). The header check was the only thing
+  // rejecting them, and it cost the user a repair round trip.
+  it('accepts output wrapped in a markdown fence', () => {
+    const { plan, issues } = parsePlanTabular('```csv\n' + buildPlanCsvTemplate() + '\n```');
+    expect(issues).toEqual([]);
+    expect(plan.days.length).toBe(2);
+  });
+
+  it('accepts a preamble line before the header', () => {
+    const { plan, issues } = parsePlanTabular('Here is your plan:\n' + buildPlanCsvTemplate());
+    expect(issues).toEqual([]);
+    expect(plan.days.length).toBe(2);
+  });
+
+  it('handles a fenced TSV — the fence must not fool the delimiter sniff', () => {
+    const { plan, issues } = parsePlanTabular('```\n' + buildPlanTsvTemplate() + '\n```');
+    expect(issues).toEqual([]);
+    expect(plan.days.length).toBe(2);
+  });
+
+  // The agreed scope was fences and preamble, nothing more. A line after the
+  // data might be a mistyped row, so it still reports rather than vanishing.
+  it('still reports trailing prose instead of silently dropping it', () => {
+    const { issues } = parsePlanTabular(buildPlanCsvTemplate() + '\n\nLet me know!');
+    expect(issues.some((i) => i.includes('unknown kind'))).toBe(true);
+  });
+
+  // The bad-header error must survive: a file with no canonical header is left
+  // alone so it reports against its own first line, exactly as before.
+  it('still rejects a genuinely wrong header', () => {
+    const { issues } = parsePlanTabular('a,b,c\nEX,monday,Squat,primary,weight,1,3x5,');
+    expect(issues.some((i) => i.includes('Header row must be exactly'))).toBe(true);
+  });
+});
+
 describe('buildPlanFixPrompt', () => {
   it('numbers the issues and echoes the rejected CSV', () => {
     const csv = 'kind,id\nDAY,monday';

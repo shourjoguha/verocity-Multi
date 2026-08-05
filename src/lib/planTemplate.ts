@@ -513,13 +513,46 @@ export interface PlanParseResult {
   issues: string[];
 }
 
+/**
+ * Drop the wrapper an LLM tends to put around a CSV: ``` fences, and any prose
+ * before the header row ("Here is your plan:").
+ *
+ * `parsePlanWorkbook` already scans for the header anywhere in the sheet, but
+ * the text path demanded line 0 — so a single ```csv fence rejected a file
+ * whose every row was valid, and the user paid a round trip for it. The prompt
+ * tells the model not to fence; this is what happens when it does anyway.
+ *
+ * Deliberately narrow: it removes fence lines and preamble and guesses at
+ * nothing else. No fuzzy section/metric matching, no header reordering. A file
+ * with no canonical header is returned untouched, so it still reports the same
+ * "Header row must be exactly" error against its own first line. Trailing prose
+ * after the data still surfaces as `unknown kind`, because a line that might be
+ * a mistyped row must not be silently discarded.
+ */
+function stripLlmWrapper(text: string): string[] {
+  return text.split(/\r?\n/).filter((l) => l.trim() !== '' && !/^\s*```/.test(l));
+}
+
+function dropPreamble(lines: string[], delimiter: string): string[] {
+  const expected = PLAN_CSV_HEADERS.map((h) => h.toLowerCase());
+  const headerAt = lines.findIndex((l) => {
+    const cells = splitCsvLine(l, delimiter).map((c) => c.trim().toLowerCase());
+    return expected.every((h, i) => cells[i] === h);
+  });
+  return headerAt > 0 ? lines.slice(headerAt) : lines;
+}
+
 export function parsePlanTabular(text: string): PlanParseResult {
   const issues: string[] = [];
-  const delimiter = detectDelimiter(text);
-  const rawLines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
-  if (rawLines.length === 0) {
+  // Fences come off BEFORE the delimiter sniff: `detectDelimiter` reads the
+  // first line, and a ```csv fence there would make a tab-delimited file look
+  // comma-delimited.
+  const stripped = stripLlmWrapper(text);
+  if (stripped.length === 0) {
     return { plan: emptyPlan(), issues: ['File is empty.'] };
   }
+  const delimiter = detectDelimiter(stripped.join('\n'));
+  const rawLines = dropPreamble(stripped, delimiter);
 
   const header = splitCsvLine(rawLines[0], delimiter).map((c) => c.trim().toLowerCase());
   const expected = PLAN_CSV_HEADERS.map((h) => h.toLowerCase());

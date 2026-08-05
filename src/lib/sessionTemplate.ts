@@ -481,13 +481,35 @@ function toSessionInput(rec: SessionRecord): SessionInput {
   };
 }
 
+/**
+ * The session mirror of `stripLlmWrapper` / `dropPreamble` in planTemplate.ts —
+ * duplicated rather than shared, per this file's "no shared helpers module"
+ * convention. Removes ``` fences and prose before the header row, and nothing
+ * else: no fuzzy matching, no header reordering. See the plan-side comment for
+ * why the text path needed this when the workbook path never did.
+ */
+function stripLlmWrapper(text: string): string[] {
+  return text.split(/\r?\n/).filter((l) => l.trim() !== '' && !/^\s*```/.test(l));
+}
+
+function dropPreamble(lines: string[], delimiter: string): string[] {
+  const expected = SESSION_CSV_HEADERS.map((h) => h.toLowerCase());
+  const headerAt = lines.findIndex((l) => {
+    const cells = splitCsvLine(l, delimiter).map((c) => c.trim().toLowerCase());
+    return expected.every((h, i) => cells[i] === h);
+  });
+  return headerAt > 0 ? lines.slice(headerAt) : lines;
+}
+
 export function parseSessionTabular(text: string): SessionParseResult {
   const issues: string[] = [];
-  const delimiter = detectDelimiter(text);
-  const rawLines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
-  if (rawLines.length === 0) {
+  // Fences off before the delimiter sniff — see the plan-side note.
+  const stripped = stripLlmWrapper(text);
+  if (stripped.length === 0) {
     return { sessions: [], issues: ['File is empty.'] };
   }
+  const delimiter = detectDelimiter(stripped.join('\n'));
+  const rawLines = dropPreamble(stripped, delimiter);
 
   const header = splitCsvLine(rawLines[0], delimiter).map((c) => c.trim().toLowerCase());
   const expected = SESSION_CSV_HEADERS.map((h) => h.toLowerCase());
