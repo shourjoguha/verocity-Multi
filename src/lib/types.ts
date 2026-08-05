@@ -1,6 +1,7 @@
 import type {
   AspectKey,
   BlockKey,
+  DisciplineKey,
   EquipmentKey,
   ExperienceKey,
   GenderKey,
@@ -57,10 +58,12 @@ export interface Goal {
  * columns on `profiles`: the showcase RLS policy grants anon a whole-row read,
  * so age/gender/injuries/goals there would be public.
  *
- * Two fields reach a metric (`body_weight_kg`, `birth_year`). Everything else
+ * Two fields reach a metric (`body_weight_kg`, `birth_year`). Most of the rest
  * exists to be rendered into the plan-authoring prompt by `buildPlanAiPrompt`
  * — including `height_cm`, `gender` and `injuries`, which had no consumer
- * before migration 0030. `body_type` is still deliberately unread.
+ * before migration 0030, and `disciplines` (migration 0031). `body_type` is
+ * still deliberately unread; `onboarded_at` is a first-run flag, read only by
+ * the post-signup redirect, never by the prompt.
  */
 export interface UserStats {
   owner_user_id: string;
@@ -75,6 +78,8 @@ export interface UserStats {
   days_per_week: number | null;
   equipment: EquipmentKey[];
   preferred_plan_weeks: number | null;
+  disciplines: DisciplineKey[];
+  onboarded_at: string | null;
   updated_at: string;
   created_at: string;
 }

@@ -4,6 +4,7 @@
 
 import {
   BLOCKS,
+  DISCIPLINES,
   EQUIPMENT,
   EXPERIENCE_LEVELS,
   GENDERS,
@@ -259,6 +260,12 @@ function athleteProfileBlock(stats: UserStats | null, today: Date): string {
     const e = EXPERIENCE_LEVELS[stats.experience];
     known.push(`- Experience: ${e.label} — ${e.blurb.toLowerCase()}`);
   } else unknown.push('training experience');
+
+  const disciplines = stats.disciplines ?? [];
+  if (disciplines.length > 0) {
+    const labels = disciplines.map((k) => DISCIPLINES.find((d) => d.key === k)?.label ?? k);
+    known.push(`- Preferred disciplines: ${labels.join(', ')}`);
+  }
 
   if (stats.days_per_week != null) known.push(`- Training days available per week: ${stats.days_per_week}`);
   else unknown.push('training days available per week');

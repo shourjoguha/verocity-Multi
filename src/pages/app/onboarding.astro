@@ -1,0 +1,13 @@
+---
+// First-run onboarding takeover. Deliberately mounted on Base (like the auth
+// pages) and NOT App.astro: no bottom tab bar or drawer should show while the
+// user is still setting up. `shell` gives the non-scrolling app-shell so the
+// pinned nav can't lag iOS Safari; `noBackdrop` keeps the 3D scene from booting
+// behind an opaque full-screen flow.
+import Base from '@/layouts/Base.astro';
+import OnboardingView from '@/components/OnboardingView';
+---
+
+<Base title="Welcome · Verocity" shell noBackdrop>
+  <OnboardingView client:load />
+</Base>

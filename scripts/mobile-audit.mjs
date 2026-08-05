@@ -235,6 +235,7 @@ const ROUTES = [
   '/app/library',
   '/app/settings',
   '/app/activity',
+  '/app/onboarding',
   `/app/log?logId=${LOG_ID}`,
 ];
 
