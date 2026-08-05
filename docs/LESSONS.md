@@ -475,6 +475,38 @@ request` at 179x44, equipment toggles at `min-h-11`. **If you change
 `PlanUpload` or `UserStatsPanel`, cite a measurement, not the audit.**
 → `scripts/mobile-audit.mjs`, `src/components/PlanUpload.tsx`
 
+### Ask the LLM for "no fences, no prose" and it will still send fences and prose
+`[measured — reviewed the shipped code and pasted three model outputs at the parser]`
+`parsePlanTabular` demanded the header on `rawLines[0]`, so a ` ```csv ` fence
+or a "Here is your plan:" preamble made the check report `Header row must be
+exactly: … (got: \`\`\`csv)` on a file whose every data row was already valid
+— the parser's own count said `days=2`. The user then paid a repair round trip
+for a failure the prompt cannot fully prevent, because fences and preamble are
+what models do when they see "no markdown fences."
+Two-part fix: `stripLlmWrapper` drops fence lines and preamble; **the fence
+strip runs BEFORE `detectDelimiter`**, because that helper reads the first
+line and a fenced TSV would otherwise be sniffed as CSV. Deliberately narrow:
+no fuzzy section/metric matching, no header reordering, and trailing prose
+after the data still surfaces as `unknown kind` because a line that might be a
+mistyped row must not be silently dropped. The workbook path already scanned
+for the header anywhere in the sheet, which is what made the text-path
+strictness clearly a gap and not a design choice.
+→ `src/lib/planTemplate.ts`, `src/lib/sessionTemplate.ts`
+
+### A page ready-gate that awaits an optional read is a page that never renders
+`[caught in own-code review, same session it was written]`
+`PlanUpload.tsx` fetched the athlete's profile inside its mount effect and only
+then called `setReady(true)`. The comment claimed a failed read "degrades to
+the generic prompt"; it actually degrades to a permanent `LoadingScreen` with
+no way to author a plan at all, because `await` inside the IIFE never runs the
+line after it if the promise rejects. **Ready must gate only on what the page
+cannot function without.** The profile is optional (its absence just makes the
+prompt ask more questions), so the fix was to flip `ready` before the fetch and
+let stats land later — the tiny race is a sub-second window where a fast click
+gets the no-profile prompt, which is what happens for a real profile-less user
+anyway.
+→ `src/components/PlanUpload.tsx`
+
 ### The prompt's worked example must be the LAST thing in the prompt
 `[caught by its own test, same session it was written]`
 `buildPlanAiPrompt` / `buildSessionAiPrompt` end with a full valid CSV for the

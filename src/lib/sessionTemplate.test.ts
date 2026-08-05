@@ -182,6 +182,40 @@ describe('session prompt format hardening', () => {
   });
 });
 
+describe('LLM wrapper tolerance', () => {
+  // Session mirror of the plan-side tests: the text path required the header on
+  // line 0, so a ```csv fence or a "Here are your sessions:" line rejected an
+  // otherwise-valid file. The workbook path already scanned for the header.
+  it('accepts output wrapped in a markdown fence', () => {
+    const { sessions, issues } = parseSessionTabular(
+      '```csv\n' + buildSessionCsvTemplate() + '\n```',
+    );
+    expect(issues).toEqual([]);
+    expect(sessions.length).toBeGreaterThan(0);
+  });
+
+  it('accepts a preamble line before the header', () => {
+    const { sessions, issues } = parseSessionTabular(
+      'Here are your sessions:\n' + buildSessionCsvTemplate(),
+    );
+    expect(issues).toEqual([]);
+    expect(sessions.length).toBeGreaterThan(0);
+  });
+
+  it('handles a fenced TSV — the fence must not fool the delimiter sniff', () => {
+    const { sessions, issues } = parseSessionTabular(
+      '```\n' + buildSessionTsvTemplate() + '\n```',
+    );
+    expect(issues).toEqual([]);
+    expect(sessions.length).toBeGreaterThan(0);
+  });
+
+  it('still rejects a genuinely wrong header', () => {
+    const { issues } = parseSessionTabular('a,b,c\nSESSION,mon,Monday,,,,,');
+    expect(issues.some((i) => i.includes('Header row must be exactly'))).toBe(true);
+  });
+});
+
 describe('buildSessionFixPrompt', () => {
   it('numbers the issues and echoes the rejected CSV', () => {
     const csv = 'kind,id\nSESSION,monday';

@@ -54,9 +54,8 @@ export default function PlanUpload() {
   const [error, setError] = useState<string | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
   const [fixCopied, setFixCopied] = useState(false);
-  // The athlete's own profile, rendered into the copied prompt. Fetched here
-  // rather than inside the copy handler so the click stays instant, and so a
-  // failed read degrades to the generic prompt instead of an error.
+  // The athlete's own profile, rendered into the copied prompt. Fetched once on
+  // mount rather than inside the copy handler so the click stays instant.
   const [stats, setStats] = useState<UserStats | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -73,8 +72,15 @@ export default function PlanUpload() {
         window.location.href = result ? '/app/plan' : '/app/plan/upload';
         return;
       }
-      setStats(await getUserStats());
+      // Ready does NOT wait on the profile. It is optional decoration on the
+      // prompt, and gating the page on it meant a slow or failed read left
+      // /app/plan/upload stuck on LoadingScreen with no way to author a plan at
+      // all. Authoring works without a profile; the prompt just asks more
+      // questions.
       setReady(true);
+      getUserStats()
+        .then(setStats)
+        .catch(() => setStats(null));
     })();
   }, []);
 
@@ -225,6 +231,10 @@ export default function PlanUpload() {
   // Enough to personalise with. Goals drive every rep range in the rubric, so a
   // row that only has a bodyweight in it is not worth calling a profile.
   const profileIsUsable = (stats?.goals?.length ?? 0) > 0 || stats?.experience != null;
+  // The repair prompt talks CSV rows and echoes `csvText`, so it only makes
+  // sense for the tabular path. On the Markdown path it would hand a user
+  // CSV-format instructions and an empty echo for a file they wrote by hand.
+  const canRepair = target === 'session' || source === 'csv';
 
   return (
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
@@ -376,14 +386,19 @@ export default function PlanUpload() {
                 <li key={k}>{i}</li>
               ))}
             </ul>
-            <p className="mt-3 text-sm text-muted">
-              Paste this back into the same AI conversation and it will re-send a corrected file.
-            </p>
-            <div className="mt-2">
-              <Button variant="ghost" onClick={copyFixRequest}>
-                {fixCopied ? 'Fix request copied' : 'Copy fix request'}
-              </Button>
-            </div>
+            {canRepair ? (
+              <>
+                <p className="mt-3 text-sm text-muted">
+                  Paste this back into the same AI conversation and it will re-send a corrected
+                  file.
+                </p>
+                <div className="mt-2">
+                  <Button variant="ghost" onClick={copyFixRequest}>
+                    {fixCopied ? 'Fix request copied' : 'Copy fix request'}
+                  </Button>
+                </div>
+              </>
+            ) : null}
           </div>
         </Item>
       ) : null}
