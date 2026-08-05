@@ -248,11 +248,11 @@ export default function PlanUpload() {
 
       <Item>
         <div className="mb-6 border border-border bg-surface p-4">
-          <SectionHeader>Generate a plan or sessions with AI</SectionHeader>
+          <SectionHeader>Generate with an outside AI</SectionHeader>
           <p className="mt-2 text-sm text-muted">
             {target === 'session'
-              ? "Download the CSV (or TSV) wireframe, attach it to your AI of choice along with the copied prompt, then upload the AI's output below — every session in the file is saved standalone. Compatibility is checked before save."
-              : 'The copied prompt carries your profile and goals. The AI will propose a plan and ask you a few questions — including how many weeks you want — before it produces the file. Paste its final CSV below, or upload it. Compatibility is checked before save.'}
+              ? 'Copy the prompt, paste it into an outside AI chat (Claude, ChatGPT, Gemini or similar), and attach the CSV wireframe if that chat lets you upload a file. Ask the AI to produce the sessions, then paste its CSV back in below or upload the file. Every session in the file is saved standalone. Compatibility is checked before save.'
+              : 'Copy the prompt and paste it into an outside AI chat — Claude, ChatGPT, Gemini or similar. It carries your profile and goals, so the AI will propose a plan, ask you a few questions (including how many weeks you want and whether any movements are must-have or off-limits) and then produce the CSV. Paste its final CSV back in below, or upload the file.'}
           </p>
           {target === 'plan' && !profileIsUsable ? (
             <p className="mt-2 text-sm text-muted">

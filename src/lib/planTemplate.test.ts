@@ -162,6 +162,16 @@ describe('buildPlanAiPrompt', () => {
     expect(prompt).toContain(`${PLAN_LENGTH.minWeeks} and ${PLAN_LENGTH.maxWeeks} weeks`);
   });
 
+  // Preferred/avoided movements are things the profile has no field for and
+  // the AI would not know to ask about otherwise. Pinned so a later prompt
+  // rewrite that drops them fails loudly.
+  it('asks the athlete about preferred and avoided movements', () => {
+    const prompt = buildPlanAiPrompt();
+    expect(prompt).toMatch(/preferred movements/i);
+    expect(prompt).toMatch(/movements to avoid/i);
+    expect(prompt).toMatch(/none.*fine answer/i);
+  });
+
   /**
    * THE FORMAT GUARD. The prompt ends with a worked example, and the example is
    * `buildPlanCsvTemplate()` — so the thing the model is told to imitate is the
