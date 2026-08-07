@@ -6,7 +6,11 @@ interface DatedLog {
   status: string;
 }
 
-function ymdLocal(d: Date): string {
+// Exported because anything comparing a Date against `log_date` must use THIS
+// one. `log_date` is a calendar date with no timezone, so a UTC-based key is
+// off by a day for anyone west of Greenwich after 00:00 UTC — the streak, the
+// Home week rail and the calendar would then disagree about what "today" is.
+export function ymdLocal(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }

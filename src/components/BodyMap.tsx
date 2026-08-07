@@ -9,6 +9,7 @@ import {
 } from '@/lib/bodyRegions';
 import { MUSCLE_REGIONS, MUSCLE_REGION_KEYS, type RegionKey } from '@/app.config';
 import { EASE } from '@/components/anim';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
 
 // Presentational only — no data loading, no query imports. See the CSS block
 // "Body map slab" in global.css for the 3D contract and the flattening trap.
@@ -261,20 +262,17 @@ export function BodyMap({
 
       {/* The discrete control ships always: it is the keyboard path, the
           screen-reader path, and the only path under reduced motion. */}
-      <div className="t-label flex gap-1">
-        {(['front', 'back'] as const).map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => onFaceChange(f)}
-            aria-pressed={face === f}
-            className={`hill-btn flex min-h-11 items-center border bg-surface px-4 transition-colors ${
-              face === f ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-            }`}
-          >
-            {f === 'front' ? 'Front' : 'Back'}
-          </button>
-        ))}
+      <div className="w-44">
+        <SegmentedTabs
+          tabs={[
+            { key: 'front', label: 'Front' },
+            { key: 'back', label: 'Back' },
+          ]}
+          active={face}
+          onChange={(k) => onFaceChange(k as BodyFace)}
+          ariaLabel="Body view"
+          size="sm"
+        />
       </div>
     </div>
   );

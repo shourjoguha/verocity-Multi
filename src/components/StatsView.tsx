@@ -12,9 +12,17 @@ import { flattenSets, familyOf, sessionVolume } from '@/lib/stats';
 import { aspectWindows, logsInWindow } from '@/lib/aspects';
 import { formatDuration, formatRound } from '@/lib/format';
 import { sessionTagColors, stripeBackground } from '@/lib/tags';
-import { ASPECT_WINDOW_DAYS } from '@/app.config';
-import { EmptyState, LoadingScreen, SectionHeader, StatCard } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import { ASPECT_WINDOW_DAYS, FITNESS_ASPECTS } from '@/app.config';
+import {
+  EmptyState,
+  LoadingScreen,
+  SectionHeader,
+  StatStrip,
+  Takeaway,
+} from '@/components/ui/primitives';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { Disclosure } from '@/components/ui/Disclosure';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { FitnessProfile } from '@/components/FitnessProfile';
 import { GarminHealthSection } from '@/components/GarminHealthSection';
 import { EASE, Item, PageStagger } from '@/components/anim';
@@ -292,6 +300,34 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const derived = useMemo(() => deriveStats(logs ?? [], today, groupBy), [logs, groupBy]);
 
+  // The biggest riser and the biggest faller between the current period and the
+  // one before it, plus whichever axis is now lowest. Scores are on
+  // ASPECT_SCALE (1..10), so a delta is already a plain integer and needs no
+  // normalising. Only axes present in BOTH periods can move — an axis that just
+  // acquired a baseline has not "gone up", it has started being measured.
+  const movers = useMemo(() => {
+    const cur = profile.current?.scores;
+    const prev = profile.prior?.scores;
+    if (!cur || !prev) return null;
+    const deltas = FITNESS_ASPECTS.map((a) => ({
+      label: a.label,
+      delta: (cur[a.key] ?? NaN) - (prev[a.key] ?? NaN),
+      now: cur[a.key] ?? NaN,
+    })).filter((d) => Number.isFinite(d.delta) && Number.isFinite(d.now));
+    if (deltas.length === 0) return null;
+
+    const up = [...deltas].sort((a, b) => b.delta - a.delta)[0];
+    const down = [...deltas].sort((a, b) => a.delta - b.delta)[0];
+    const lowest = [...deltas].sort((a, b) => a.now - b.now)[0];
+    // Nothing actually moved — say nothing rather than reporting "up 0".
+    if (up.delta <= 0) return null;
+    return {
+      up,
+      down: down.delta < 0 && down.label !== up.label ? down : null,
+      lowest: lowest.label !== up.label ? lowest.label : null,
+    };
+  }, [profile.current, profile.prior]);
+
   if (loading) return <LoadingScreen />;
 
   const {
@@ -308,13 +344,14 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     totalSeconds,
   } = derived;
 
+
   if (all.length === 0) {
     return (
       <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
         <EchoText
           text="STATS"
           as="h1"
-          className="mb-6 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+          className={`mb-6 ${ECHO_APP_TITLE}`}
         />
         <EmptyState>No sessions in the last {WEEKS} weeks.</EmptyState>
       </div>
@@ -328,26 +365,49 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
           <EchoText
             text="STATS"
             as="h1"
-            className="mb-6 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+            className={`mb-6 ${ECHO_APP_TITLE}`}
           />
         </Item>
 
-        <Item>
-          <section className="mb-6 grid grid-cols-3 gap-px bg-border">
-            <StatCard label="Sessions" value={all.length} />
-            <StatCard label="Time" value={formatDuration(totalSeconds)} />
-            <StatCard
-              label="Adherence"
-              value={adherence != null ? adherence : '—'}
-              unit={adherence != null ? '%' : undefined}
-            />
-          </section>
-        </Item>
-
-        {mode === 'app' ? <GarminHealthSection /> : null}
+        {/* The headline the radar used to make you decode. Both movers are
+            named in plain language before any chart appears; the radar below
+            then shows the shape they belong to. Renders nothing until there is
+            a prior period to compare against — an invented takeaway is worse
+            than none. */}
+        {movers ? (
+          <Item>
+            <section className="mb-6">
+              <Takeaway
+                lead={`${movers.up.label} up ${movers.up.delta}.`}
+                trail={
+                  movers.down ? `${movers.down.label} down ${Math.abs(movers.down.delta)}.` : undefined
+                }
+                detail={`Against the previous ${profile.windowDays} days.${
+                  movers.lowest ? ` ${movers.lowest} is now your lowest axis.` : ''
+                }`}
+              />
+            </section>
+          </Item>
+        ) : null}
 
         <Item>
           <FitnessProfile profile={profile} canEdit={mode === 'app'} />
+        </Item>
+
+        <Item>
+          <section className="mb-6">
+            <StatStrip
+              stats={[
+                { label: 'Sessions', value: all.length },
+                { label: 'Time', value: formatDuration(totalSeconds) },
+                {
+                  label: 'Adherence',
+                  value: adherence != null ? adherence : '—',
+                  unit: adherence != null ? '%' : undefined,
+                },
+              ]}
+            />
+          </section>
         </Item>
 
         <Item>
@@ -398,8 +458,15 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
           </section>
         </Item>
 
+        {/* Everything below is real analysis that most visits do not need on
+            arrival. It is COLLAPSED, not removed: the weekly table, the RPE
+            fingerprint, the per-movement e1RM sparklines with their
+            Movement/Family toggle, and the Garmin recovery block all keep their
+            current implementations and open in one tap. Native <details>, so
+            no JS state and nothing to animate. */}
         <Item>
-          <section className="mb-6">
+          <Disclosure title="More detail">
+        <section className="mb-6">
             <SectionHeader>Weekly</SectionHeader>
             <table className="w-full border border-border bg-surface text-sm">
               <thead>
@@ -422,10 +489,8 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               </tbody>
             </table>
           </section>
-        </Item>
 
         {rpeRows.length > 0 ? (
-          <Item>
             <section className="mb-6">
               <SectionHeader>RPE fingerprint</SectionHeader>
               <div className="flex flex-col gap-3">
@@ -467,30 +532,25 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                 ))}
               </div>
             </section>
-          </Item>
         ) : null}
 
         {topMoves.length > 0 ? (
-          <Item>
             <section>
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="font-display text-sm font-semibold uppercase tracking-[0.04em] text-fg">
+                <h2 className="t-label text-muted">
                   Top {groupBy === 'family' ? 'families' : 'movements'} (e1RM)
                 </h2>
-                <div className="t-label flex gap-1">
-                  {(['movement', 'family'] as const).map((g) => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => setGroupBy(g)}
-                      aria-pressed={groupBy === g}
-                      className={`hill-btn flex min-h-11 items-center border bg-surface px-3 transition-colors ${
-                        groupBy === g ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-                      }`}
-                    >
-                      {g === 'movement' ? 'Movement' : 'Family'}
-                    </button>
-                  ))}
+                <div className="w-48 shrink-0">
+                  <SegmentedTabs
+                    tabs={[
+                      { key: 'movement', label: 'Movement' },
+                      { key: 'family', label: 'Family' },
+                    ]}
+                    active={groupBy}
+                    onChange={(k) => setGroupBy(k as 'movement' | 'family')}
+                    ariaLabel="Group top lifts by"
+                    size="sm"
+                  />
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -520,8 +580,11 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                 ))}
               </div>
             </section>
-          </Item>
         ) : null}
+
+            {mode === 'app' ? <GarminHealthSection /> : null}
+          </Disclosure>
+        </Item>
       </PageStagger>
 
       <AnimatePresence>

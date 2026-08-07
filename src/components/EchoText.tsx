@@ -16,6 +16,24 @@ const LAYERS = [
   { dx: '-0.16em', tz: '-32px', color: 'var(--color-echo-4)' },
 ] as const;
 
+// The two title tiers, so the class string stops being copy-pasted per screen.
+//
+// HERO is the full responsive ramp, and stays on the surfaces where the
+// wordmark IS the content: /login, /signup, /reset-password, Landing,
+// onboarding.
+//
+// APP_TITLE is one size, no ramp. Inside /app the header and the tab bar
+// already say where you are, so a title that ramps to text-7xl was spending
+// ~120px of a 375px screen restating it — and competing with the content
+// headline (the Takeaway on Stats, the session name on Home) that the design
+// wants carrying the display weight. No `font-bold`: Archivo Black is a single
+// weight and the utility would only ask for a synthesised one (see the
+// .font-display rule in global.css).
+export const ECHO_HERO =
+  'font-display text-3xl uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl';
+export const ECHO_APP_TITLE =
+  'font-display text-2xl uppercase leading-[0.95] tracking-[-0.03em] text-fg';
+
 type EchoTextProps = {
   text: string;
   as?: ElementType;
