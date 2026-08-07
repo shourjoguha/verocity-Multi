@@ -17,10 +17,17 @@ export const THEME_EVENT = 'verocity:theme-change';
 export const THEME_PREFS: ThemePref[] = ['light', 'dark', 'system'];
 
 // Mirrors the meta[name=theme-color] swap done in the pre-paint script; keep in
-// sync with the dark --color-bg in global.css.
+// sync with --color-bg in global.css.
+//
+// This pair is duplicated in FIVE places and they must all move together, or
+// the PWA status bar / WebGL clear colour stops matching the page: here, the
+// literal <meta> in Base.astro, the pre-paint script in Base.astro, and the
+// `bgColor` in BackgroundScene3DCanvas.tsx + LoginHeroScene.tsx (both are the
+// three.js clear colour behind a full-viewport scene — a mismatch shows as a
+// seam at the edges of the backdrop).
 export const THEME_COLOR: Record<ResolvedTheme, string> = {
   light: '#f2f2f2',
-  dark: '#0d0d0d',
+  dark: '#050505',
 };
 
 export function isThemePref(value: string | null | undefined): value is ThemePref {
