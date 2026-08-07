@@ -178,7 +178,7 @@ const tabActive = (t: Tab) =>
         </button>
         <a
           href={home}
-          class="flex min-h-11 items-center font-display text-base font-semibold uppercase tracking-tight text-fg"
+          class="flex min-h-11 items-center font-display text-[0.8125rem] uppercase tracking-[0.06em] text-fg"
         >
           Verocity
         </a>
@@ -191,7 +191,7 @@ const tabActive = (t: Tab) =>
             </span>
             <a
               href="/login"
-              class="inline-flex h-9 items-center rounded-full border border-fg px-4 text-xs uppercase tracking-wider text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
+              class="inline-flex h-9 items-center rounded-control border border-fg px-4 text-xs uppercase tracking-wider text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
             >
               Sign in
             </a>
@@ -209,7 +209,7 @@ const tabActive = (t: Tab) =>
     class="fixed left-0 top-0 z-[70] flex h-dvh w-64 -translate-x-full flex-col border-r border-border bg-bg shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-xl"
   >
     <div class="flex h-16 shrink-0 items-center px-6">
-      <span class="font-display text-lg font-semibold uppercase tracking-tight text-fg">Verocity</span>
+      <span class="font-display text-base uppercase tracking-[0.06em] text-fg">Verocity</span>
     </div>
     {/* Grouped, so it scrolls: ten 44px rows plus four eyebrows measure ~648px
         against 667px of dvh on a 375-wide phone, and this panel carries no
@@ -406,7 +406,7 @@ const tabActive = (t: Tab) =>
                   </svg>
                 ) : t.glyph}
               </span>
-              <span class="t-control">{t.label}</span>
+              <span class="t-nano">{t.label}</span>
             </a>
           ),
         )

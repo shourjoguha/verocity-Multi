@@ -65,7 +65,7 @@ export function LogTabButton({ label, glyph: _glyph }: { label: string; glyph: s
             <path d="M15 9.2 Q 13.6 6.6 15.8 5.2 Q 18 4.4 19.8 4.6" />
           </svg>
         </span>
-        <span className="t-control">{label}</span>
+        <span className="t-nano">{label}</span>
       </button>
       <AddSessionMenu plan={plan} open={open} onClose={() => setOpen(false)} />
     </>

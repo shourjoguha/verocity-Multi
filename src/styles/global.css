@@ -36,6 +36,15 @@
   --color-accent: hsl(0 0% 7%);
   --color-accent-fg: hsl(0 0% 100%);
 
+  /* Direction-of-change, and the ONLY place colour is allowed to carry meaning
+     in the chrome. Used by the Delta primitive and by trend sparklines — never
+     for decoration, never as a brand colour. A user who cannot distinguish
+     these still gets the arrow glyph and the signed number, so the hue is
+     reinforcement, not the signal. Activity/block colours remain in
+     app.config.ts, which is domain truth. */
+  --color-up: hsl(147 46% 30%);
+  --color-down: hsl(4 55% 42%);
+
   /* Bright accent — #49F2E1. Introduced for the "Depth" backdrop; exposed as a
      token (bg-teal / text-teal / border-teal / var(--color-teal)) so it can be
      picked up for other accents when appropriate. The monochrome identity is
@@ -140,6 +149,10 @@ html[data-theme='dark'] {
   --color-fg: hsl(0 0% 100%); /* paper as ink */
   --color-accent: hsl(0 0% 100%); /* active = paper */
   --color-accent-fg: hsl(0 0% 2%);
+  /* Lightened off the light-theme values so they clear AA on carbon — the
+     reference design's #3fa45b / #c4554d. */
+  --color-up: hsl(137 44% 45%);
+  --color-down: hsl(4 43% 54%);
   --color-echo-1: hsl(0 0% 20%);
   --color-echo-2: hsl(0 0% 17%);
   --color-echo-3: hsl(0 0% 14%);
