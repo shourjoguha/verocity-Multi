@@ -140,6 +140,11 @@ export default function SessionDetail() {
                     {group.items.map((item) => (
                       <div key={item.id} className="px-3 py-2">
                         <div className="mb-1 capitalize text-fg">{item.movement}</div>
+                        {item.notes ? (
+                          <p className="mb-1 whitespace-pre-wrap text-[0.7rem] text-muted">
+                            {item.notes}
+                          </p>
+                        ) : null}
                         <ul className="flex flex-col gap-1">
                           {item.sets.map((set, i) => (
                             <li

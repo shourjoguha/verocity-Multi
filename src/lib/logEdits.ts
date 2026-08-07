@@ -98,6 +98,13 @@ export function setItemRest(doc: LogDocument, si: number, gi: number, ii: number
   return mapItem(doc, si, gi, ii, (it) => ({ ...it, restSeconds: seconds }));
 }
 
+// Set (or clear, when blank) an item's free-text note. Trimmed to undefined so
+// an empty note never lingers in the JSONB.
+export function setItemNotes(doc: LogDocument, si: number, gi: number, ii: number, notes: string): LogDocument {
+  const trimmed = notes.trim();
+  return mapItem(doc, si, gi, ii, (it) => ({ ...it, notes: trimmed || undefined }));
+}
+
 // Swap the movement on an item, resetting actuals but keeping the set count and
 // planned targets (the prescription survives a substitution).
 export function swapItemMovement(

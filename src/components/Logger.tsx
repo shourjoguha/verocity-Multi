@@ -38,6 +38,7 @@ import {
   removeSet,
   setGroupKind,
   setItemMetric,
+  setItemNotes,
   setItemRest,
   setSubroutine,
   swapItemMovement,
@@ -886,6 +887,11 @@ export default function Logger() {
         </div>
         {isCollapsed ? null : (
         <>
+        {item.notes ? (
+          <p className="mb-3 whitespace-pre-wrap border-l-2 border-border pl-2 t-control text-muted">
+            {item.notes}
+          </p>
+        ) : null}
         <div className="flex flex-col gap-3">
           {item.sets.map((set, ki) => {
             const prev = ki > 0 ? item.sets[ki - 1] : null;
@@ -1428,6 +1434,20 @@ export default function Logger() {
 
                   {!sub ? (
                   <>
+                  <div className="mt-5">
+                    <div className="mb-2 t-label text-muted">
+                      Notes
+                    </div>
+                    <textarea
+                      key={item.id}
+                      defaultValue={item.notes ?? ''}
+                      onChange={(e) => setDoc((d) => setItemNotes(d, si, gi, ii, e.target.value))}
+                      rows={2}
+                      placeholder="Optional — cue, setup, how it felt"
+                      className="w-full resize-none border border-border bg-surface px-2 py-1.5 text-sm text-fg placeholder:text-muted focus:border-fg focus:outline-none"
+                    />
+                  </div>
+
                   <div className="mt-5">
                     <div className="mb-2 t-label text-muted">
                       Notations

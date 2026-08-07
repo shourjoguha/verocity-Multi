@@ -461,6 +461,7 @@ export const TOUCH = {
 export const NOTATIONS = {
   '(p)': 'paused rep',
   '(t)': 'tempo',
+  '(v)': 'variation',
   '+5%': 'add 5% to last',
   '/side': 'per side',
   '→': 'then / superset into',
