@@ -266,7 +266,7 @@ export default function BackgroundScene3DCanvas() {
   const [tabHidden, setTabHidden] = useState(false);
   const [compact, setCompact] = useState(false);
   const dark = useResolvedTheme() === 'dark';
-  const bgColor = dark ? '#0d0d0d' : '#f2f2f2';
+  const bgColor = dark ? '#050505' : '#f2f2f2';
 
   useEffect(() => {
     const motionMql = window.matchMedia(REDUCED_MOTION_QUERY);

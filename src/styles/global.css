@@ -1,22 +1,38 @@
 @import "tailwindcss";
 
-/* Design tokens — light editorial system. Per the provided design spec +
-   reference screenshots (which take precedence on aesthetics), this supersedes
-   the prior dark identity. Swiss luxury-brutalist: heavy Clash Display + Satoshi,
-   a strictly monochrome palette, hairlines, sharp corners, tabular numbers, the
-   typographic Echo Stack. Data-viz accents (activity tags / training blocks)
-   still come from app.config.ts as HSL. */
-@theme {
-  /* Monochrome light scale */
-  --color-bg: hsl(0 0% 95%);            /* #f2f2f2 */
-  --color-surface: hsl(0 0% 100%);      /* #ffffff */
-  --color-elevated: hsl(0 0% 90%);      /* tracks / hover fills */
-  --color-border: hsl(0 0% 12% / 0.1);  /* #1e1e1e @ 10% — hairline */
-  --color-muted: hsl(0 0% 40%);         /* #666666 — standard secondary text (AA ≥4.5:1 on bg) */
-  --color-subtle: hsl(0 0% 30%);        /* #4d4d4d — stronger secondary text */
-  --color-fg: hsl(0 0% 7%);             /* #111111 */
+/* Design tokens — flat hairline system, authored from the reference design.
+   Archivo Black + Space Grotesk, monochrome CHROME with a semantic tone triad
+   reserved for data, 1px hairlines, 4px controls / 6px cards, tabular numbers,
+   the typographic Echo Stack (auth + marketing only).
 
-  /* Monochrome signal (neutral per spec): selected/active = ink */
+   LIGHT AND DARK ARE EQUALS. Neither is derived from the other: both are
+   authored to the same token ROLES, and every token defined here has a
+   counterpart in the `html[data-theme='dark']` block below. A value that exists
+   in only one block is a silent break in the other theme — that is the single
+   most expensive mistake available in this file.
+
+   Data-viz accents (activity tags / training blocks) still come from
+   app.config.ts, which is domain truth and shared with the backend. */
+@theme {
+  /* Monochrome light scale — "paper" */
+  --color-bg: hsl(0 0% 95%);            /* #f2f2f2 — also lib/theme.ts THEME_COLOR.light */
+  --color-surface: hsl(0 0% 100%);      /* #ffffff — cards */
+  --color-elevated: hsl(0 0% 91%);      /* tracks / hover fills / pressed rows */
+  --color-border: hsl(0 0% 12% / 0.14); /* OUTER hairline — card + control outlines */
+  --color-border-soft: hsl(0 0% 12% / 0.07); /* INNER hairline — dividers BETWEEN rows
+                                                inside one card. The reference design
+                                                separates `line` from `lineSoft`, and
+                                                that distinction carries most of its
+                                                list-row look. */
+  --color-muted: hsl(0 0% 42%);         /* standard secondary text (AA ≥4.5:1 on bg) */
+  --color-subtle: hsl(0 0% 28%);        /* stronger secondary text */
+  --color-faint: hsl(0 0% 58%);         /* THIRD text tier — inactive tabs, units,
+                                           captions. Deliberately below AA for body
+                                           copy: never use it for anything a user has
+                                           to read to operate the app. */
+  --color-fg: hsl(0 0% 7%);             /* #111111 — ink */
+
+  /* Monochrome signal: selected/active = ink */
   --color-accent: hsl(0 0% 7%);
   --color-accent-fg: hsl(0 0% 100%);
 
@@ -45,116 +61,101 @@
   --color-echo-3: hsl(0 0% 82%);
   --color-echo-4: hsl(0 0% 85%);
 
-  /* Type — Clash Display (headlines) + Satoshi (body) + serif for editorial flair */
-  --font-display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  /* Type — Archivo Black (headlines) + Space Grotesk (body) + serif for flair.
+     Archivo Black ships ONE weight. See the `.font-display` rule further down:
+     it pins the weight and kills synthesis, so the 34 places that write
+     `font-display font-bold` do not each need editing. */
+  --font-display: "Archivo Black", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-serif: ui-serif, Georgia, "Times New Roman", serif;
 
   /* Motion */
   --ease-editorial: cubic-bezier(0.77, 0, 0.175, 1);
 
-  /* Sharp corners by default (pills opt in per-component) */
+  /* Radius. This REVERSES the previous "sharp corners by default" rule — the
+     reference design is softly rounded at a small, consistent scale. */
   --radius-none: 0px;
+  --radius-chip: 3px;    /* tags, seg-tab thumbs, tiny toggles */
+  --radius-control: 4px; /* buttons, inputs, seg-tab shells */
+  --radius-card: 6px;    /* cards, panels, sheets */
 
-  /* Depth — "thick cardboard sitting on the ground" at rest; interaction lifts.
-     Soft, monochrome, derived from the ink color so it stays in-token.
-     Doubled from initial pass — earlier values were buried by the editorial
-     surface tones; this lands as actual elevation without color leaking.
-     The tight 2–4px layer is the "sharpness" tier: a crisp contact edge that
-     separates interactive surfaces from the animated backdrop, on top of the
-     existing soft ambient cast. */
-  --shadow-lift-rest:
-    0 1px 0 hsl(0 0% 7% / 0.10), 0 2px 4px hsl(0 0% 7% / 0.13), 0 8px 18px hsl(0 0% 7% / 0.11);
-  --shadow-lift-hover:
-    0 3px 0 hsl(0 0% 7% / 0.12), 0 4px 8px hsl(0 0% 7% / 0.17), 0 16px 34px hsl(0 0% 7% / 0.20);
-  /* Upward cast — for a surface pinned to the bottom viewport edge (the tab
-     bar), where every other shadow token above points off-screen and renders
-     nothing at all. Same three-tier structure as --shadow-lift-rest, mirrored
-     in y, plus a top inset highlight so the bar reads as a raised ledge lit
-     from above rather than a card that happens to sit at the bottom. */
-  --shadow-ledge:
-    0 -1px 0 hsl(0 0% 7% / 0.1),
-    0 -2px 6px hsl(0 0% 7% / 0.13),
-    0 -10px 24px hsl(0 0% 7% / 0.11),
-    inset 0 1.5px 0 hsl(0 0% 100% / 0.55);
+  /* ---- Depth — RETIRED. ----
+     The identity is now flat: separation comes from a 1px hairline and a
+     surface-tone step, never from a cast shadow. These three tokens are kept
+     (rather than deleted) because ~40 components consume `.lift`, `.lift-fixed`
+     and `.ledge` by name, and each of those classes still carries a rule worth
+     preserving — see their definitions below. Setting the tokens to `none`
+     flattens the whole app from one place, with no component churn.
+
+     Consequence worth knowing: this retires an entire class of bug. Every
+     depth token used to cast DOWNWARD, so applying one to the bottom-pinned tab
+     bar painted off-screen and looked like a no-op (docs/LESSONS.md, now
+     superseded). With no shadows at all there is nothing left to point the
+     wrong way. */
+  --shadow-lift-rest: none;
+  --shadow-lift-hover: none;
+  --shadow-ledge: none;
 }
 
-/* Pillow (.hill*) shadow tokens — light defaults. Tokenized so the dark theme
-   block below can re-light the dome (faint highlight + deeper shadow). */
+/* Pillow (.hill*) shadow tokens — RETIRED along with the rest of the depth
+   system. Buttons are flat now: a hairline, a fill, and a fill/border flip on
+   press. Kept as `none` for the same reason as the lift tokens — `.hill-btn` is
+   on nearly every button in the app and still owns the radius and the pressed
+   state, so the class stays and only its shadows go.
+
+   NOT retired with them: `aria-pressed` on toggle buttons. That was documented
+   here as the hook the pressed-in pillow needed, but it is an accessibility
+   contract first — ui/SegmentedTabs depends on it — and it stays mandatory. */
 :root {
-  --hill:
-    inset 1.5px 1.5px 3px hsl(0 0% 100% / 0.45),
-    inset -1.5px -1.5px 3px hsl(0 0% 0% / 0.28);
-  --hill-btn-rest:
-    0 1px 0 hsl(0 0% 7% / 0.10), 0 2px 5px hsl(0 0% 7% / 0.14),
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.32),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.22);
-  --hill-btn-hover:
-    0 2px 0 hsl(0 0% 7% / 0.12), 0 5px 12px hsl(0 0% 7% / 0.20),
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.36),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.24);
-  --hill-btn-active:
-    inset 1.5px 1.5px 2.5px hsl(0 0% 0% / 0.22),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 100% / 0.20);
-  --hill-btn-disabled:
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.20),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.12);
-  --hill-btn-flush-rest:
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.32),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.22);
+  --hill: none;
+  --hill-btn-rest: none;
+  --hill-btn-hover: none;
+  --hill-btn-active: none;
+  --hill-btn-disabled: none;
+  --hill-btn-flush-rest: none;
 }
 
-/* ---- Dark theme — "Carbon editorial". Inverts the monochrome ink-on-paper
-   identity: near-black paper, off-white ink, white hairlines, teal accent
-   intact. Overrides only token VALUES; every component consuming var(--color-*)
-   or the pillow vars flips with zero per-component change. Applied via the
-   pre-paint script in Base.astro (System / Light / Dark, see lib/theme.ts). ---- */
+/* ---- Dark theme — "Carbon". The reference design's native palette, and an
+   EQUAL of the light block above rather than a derivation of it: same token
+   roles, independently chosen values. Overrides only token VALUES, so every
+   component consuming var(--color-*) flips with zero per-component change.
+   Applied via the pre-paint script in Base.astro (System / Light / Dark, see
+   lib/theme.ts).
+
+   Values track the reference palette: bg #050505, surface #0E0E0E, elevated
+   #171717, line #262626, lineSoft #1C1C1C, dim #8C8C8C, faint #5A5A5A, and
+   pure-white ink. The hairlines are white alphas rather than flat greys so they
+   stay correct over the six backdrop presets, which paint behind the surfaces.
+
+   IF YOU ADD A TOKEN ABOVE, ADD IT HERE. ---- */
 html[data-theme='dark'] {
-  --color-bg: hsl(0 0% 5%); /* #0d0d0d carbon */
-  --color-surface: hsl(0 0% 9%); /* raised card */
-  --color-elevated: hsl(0 0% 15%); /* tracks / hover fills */
-  --color-border: hsl(0 0% 100% / 0.12); /* white hairline */
-  --color-muted: hsl(0 0% 62%); /* AA secondary on carbon */
+  --color-bg: hsl(0 0% 2%); /* #050505 */
+  --color-surface: hsl(0 0% 5.5%); /* #0e0e0e — cards */
+  --color-elevated: hsl(0 0% 9%); /* #171717 — tracks / hover fills */
+  --color-border: hsl(0 0% 100% / 0.14); /* ≈ #262626 over the page — OUTER hairline */
+  --color-border-soft: hsl(0 0% 100% / 0.07); /* ≈ #1c1c1c — INNER row divider */
+  --color-muted: hsl(0 0% 55%); /* #8c8c8c — AA secondary on carbon */
   --color-subtle: hsl(0 0% 76%); /* stronger secondary */
-  --color-fg: hsl(0 0% 95%); /* paper as ink */
-  --color-accent: hsl(0 0% 95%); /* active = paper (monochrome rule) */
-  --color-accent-fg: hsl(0 0% 7%);
+  --color-faint: hsl(0 0% 35%); /* #5a5a5a — third tier, never body copy */
+  --color-fg: hsl(0 0% 100%); /* paper as ink */
+  --color-accent: hsl(0 0% 100%); /* active = paper */
+  --color-accent-fg: hsl(0 0% 2%);
   --color-echo-1: hsl(0 0% 20%);
   --color-echo-2: hsl(0 0% 17%);
   --color-echo-3: hsl(0 0% 14%);
   --color-echo-4: hsl(0 0% 11%);
 
-  /* On carbon, soft casts read weakly — deepen them and let the white hairline
-     borders carry separation. Pillow highlight drops to a faint white. */
-  --shadow-lift-rest:
-    0 1px 0 hsl(0 0% 0% / 0.5), 0 2px 4px hsl(0 0% 0% / 0.5), 0 10px 22px hsl(0 0% 0% / 0.55);
-  --shadow-lift-hover:
-    0 3px 0 hsl(0 0% 0% / 0.55), 0 6px 12px hsl(0 0% 0% / 0.55), 0 18px 38px hsl(0 0% 0% / 0.6);
-  --shadow-ledge:
-    0 -1px 0 hsl(0 0% 0% / 0.5),
-    0 -2px 6px hsl(0 0% 0% / 0.5),
-    0 -12px 28px hsl(0 0% 0% / 0.55),
-    inset 0 1.5px 0 hsl(0 0% 100% / 0.08);
-  --hill:
-    inset 1.5px 1.5px 3px hsl(0 0% 100% / 0.1),
-    inset -1.5px -1.5px 3px hsl(0 0% 0% / 0.5);
-  --hill-btn-rest:
-    0 1px 0 hsl(0 0% 0% / 0.5), 0 2px 5px hsl(0 0% 0% / 0.5),
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.08),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.5);
-  --hill-btn-hover:
-    0 2px 0 hsl(0 0% 0% / 0.55), 0 5px 12px hsl(0 0% 0% / 0.6),
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.11),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.52);
-  --hill-btn-active:
-    inset 1.5px 1.5px 2.5px hsl(0 0% 0% / 0.55),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 100% / 0.06);
-  --hill-btn-disabled:
-    inset 1.5px 1.5px 2.5px hsl(0 0% 0% / 0.32),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 100% / 0.05);
-  --hill-btn-flush-rest:
-    inset 1.5px 1.5px 2.5px hsl(0 0% 100% / 0.08),
-    inset -1.5px -1.5px 2.5px hsl(0 0% 0% / 0.5);
+  /* Depth is retired in both themes — see the light block. Restated here rather
+     than inherited so the two blocks stay readable as a matched pair. */
+  --shadow-lift-rest: none;
+  --shadow-lift-hover: none;
+  --shadow-ledge: none;
+  --hill: none;
+  --hill-btn-rest: none;
+  --hill-btn-hover: none;
+  --hill-btn-active: none;
+  --hill-btn-disabled: none;
+  --hill-btn-flush-rest: none;
 }
 
 :root {
@@ -165,7 +166,7 @@ html,
 body {
   color: var(--color-fg);
   font-family: var(--font-sans);
-  font-weight: 500; /* Satoshi medium (spec) */
+  font-weight: 500; /* Space Grotesk medium */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -288,18 +289,54 @@ p {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+.t-nano {
+  font-size: 0.5625rem; /* 9px — the BOTTOM RIBBON LABELS AND NOTHING ELSE.
+                           The reference design sets these at 8.5px; 9px is the
+                           floor at which the caps stay legible here. Adding a
+                           tier this small was a considered exception, not a new
+                           general size — if you are reaching for it anywhere
+                           other than the tab bar, use .t-label instead.
+                           NOTE: the ribbon slot must still measure ≥44px tall
+                           (TOUCH.minTargetPx, enforced by audit:mobile rule 2),
+                           which is a property of the slot's padding, not of
+                           this font size. */
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
 
-/* Lift utility — resting depth + hover bump. Cards and stat tiles opt in via
-   the Card primitive. Stays inside the existing CSS-first motion budget.
-   Interactive variant gets a real 3D perspective tilt on hover — perspective
-   on the element itself (not parent) so neighbours don't all share one
-   vanishing point. Wrapped in prefers-reduced-motion guard. */
+/* Archivo Black ships a SINGLE weight (400). 34 places in the app write
+   `font-display` next to a `font-bold` / `font-semibold` utility — inherited
+   from Clash Display, which had four weights. Left alone, each of those asks
+   the browser to SYNTHESISE a bold: heavier, blurrier, and critically WIDER,
+   which is what blows the StatCard width budget documented in
+   docs/LESSONS.md § "A stat tile is far taller than its font sizes predict".
+
+   Pinning it here rather than editing 34 files: this rule is unlayered, and
+   Tailwind's utilities live in a real `@layer`, so unlayered CSS wins the
+   cascade regardless of source order or class order in the markup. */
+.font-display {
+  font-weight: 400;
+  font-synthesis-weight: none;
+}
+
+/* Lift utility — the CARD TREATMENT. Historically a resting drop shadow plus a
+   hover perspective tilt; now flat, because the identity is a hairline and a
+   surface-tone step. Cards and stat tiles still opt in via the Card primitive,
+   which supplies `border border-border bg-surface` — this adds the radius and
+   the state transition on top.
+
+   The class is kept rather than deleted for two reasons: ~40 components name
+   it, and the rules attached to it below (`.lift-fixed`, `.ledge`) each encode
+   a real bug that would return if depth ever did. NOTE the transition list no
+   longer mentions `transform` — that is deliberate and is what made `.lift`
+   wrong for animated surfaces in the first place. */
 .lift {
-  box-shadow: var(--shadow-lift-rest);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lift-rest); /* `none` — see the token block */
   transition:
-    box-shadow 0.3s var(--ease-editorial),
-    transform 0.3s var(--ease-editorial);
-  transform: perspective(900px) translateZ(0);
+    background-color 0.18s var(--ease-editorial),
+    border-color 0.18s var(--ease-editorial);
 }
 /* ---- Screen-entrance stagger (PageStagger / Item in components/anim.tsx).
    CSS rather than Motion because the content is server-rendered: a JS entrance
@@ -375,30 +412,42 @@ p {
   .stagger > .stagger-item:nth-child(10) { animation-delay: 0.59s; }
 }
 
-/* Depth for surfaces whose transform is driven by JS — the modal and sheet
-   panels, which Motion animates on `y`/`scale`. `.lift` sets `transition:
-   transform` AND its own `transform`, so every inline transform Motion writes
-   gets re-transitioned over 300ms on top of the animation already in flight.
-   The two fight each other and the sheet visibly stutters as it slides in.
-   Same resting shadow, no transform, no transition. */
+/* The card treatment for surfaces whose transform is ANIMATED — the modal and
+   sheet panels, which run the `sheet-rise` keyframe on `transform`.
+   Historically `.lift` set `transition: transform` and its own `transform`, so
+   every frame of the animation got re-transitioned over 300ms on top of the
+   animation already in flight; the two fought and the sheet visibly stuttered.
+
+   With depth retired this is now visually identical to `.lift`, and it is kept
+   anyway — on purpose. The rule it encodes ("never put a transform or a
+   transform transition on a surface that is already being animated") is about
+   compositing, not about shadows, and it will be just as true the next time
+   someone reaches for a hover effect on a sheet panel. Radius only, no
+   transition of any kind. */
 .lift-fixed {
-  box-shadow: var(--shadow-lift-rest);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lift-rest); /* `none` */
 }
 
-/* Ledge — the one upward-casting member of the depth family, for a surface
-   pinned to the bottom viewport edge (the tab bar). Everything else in this
-   file casts DOWN, which on a bottom-0 element paints off-screen and shows
-   nothing at all.
-   Box-shadow only, deliberately. `.lift` is wrong here on three counts: it
-   casts the wrong way; its perspective(900px) would promote a composited layer
-   on the same element that already carries pointer-fine:backdrop-blur-md (the
-   pairing LESSONS § "Flicker on touch devices" warns about); and it would make
-   the bar a containing block for any future fixed *descendant*. Its
-   `transition: transform` also buys nothing on a bar that never changes
-   state. Note the transform would NOT break the bar's own sticky positioning —
-   only a transformed ancestor does that. */
+/* Ledge — the bottom tab bar's separation from the content scrolling under it.
+   Was the one UPWARD-casting shadow in the file, because every other depth
+   token cast down and on a bottom-edge element painted off-screen, showing
+   nothing at all and looking like a no-op.
+
+   Now that separation is a hairline: `border-t border-border` + an opaque
+   `bg-bg` on the nav in App.astro, which is exactly what the reference design
+   does. The shadow token resolves to `none`, and the class survives to hold
+   this warning:
+
+   DO NOT PUT A TRANSFORM ON THIS ELEMENT, for any reason, including a hover or
+   press effect. It carries `pointer-fine:backdrop-blur-md`, and a transform on
+   the same element promotes a composited layer — the pairing LESSONS
+   § "Flicker on touch devices" warns about. It would also make the bar a
+   containing block for any future `fixed` DESCENDANT. (It would NOT break the
+   bar's own position: only a transformed ANCESTOR does that. That is the
+   plausible-sounding wrong reason to avoid it.) */
 .ledge {
-  box-shadow: var(--shadow-ledge);
+  box-shadow: var(--shadow-ledge); /* `none` */
 }
 
 /* Active tab — the current destination's whole cell, icon AND label, rides a
@@ -417,9 +466,9 @@ p {
    touch devices" warns about. Nothing animates either, so ClientRouter's DOM
    swap between pages needs no re-trigger. */
 .tab-bubble {
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: var(--color-elevated);
-  box-shadow: var(--hill-btn-rest);
+  box-shadow: var(--hill-btn-rest); /* `none` — the fill alone marks the tab now */
 }
 
 /* Primary tab — the centre slot (Log in app mode, Plan in the showcase) fills
@@ -427,84 +476,87 @@ p {
    tokens so the dark theme inverts with everything else. Beats .tab-bubble
    when a primary slot is also the active route. */
 .tab-bubble-primary {
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: var(--color-fg);
   color: var(--color-bg);
-  box-shadow: var(--hill-btn-rest);
+  box-shadow: var(--hill-btn-rest); /* `none` */
 }
 /* Unlike .tab-bubble this one IS a button — it opens AddSessionMenu — so it
-   presses in. Shadow inversion only, never a transform, for the backdrop-blur
+   needs a press cue. A fill step, never a transform, for the backdrop-blur
    reason above. */
 .tab-bubble-primary:active {
-  box-shadow: var(--hill-btn-active);
+  background: var(--color-subtle);
 }
 
+/* Interactive card. The hover cue is now a fill + border change rather than a
+   shadow bump and a perspective tilt, so there is no motion left to guard —
+   the prefers-reduced-motion branches that used to wrap this are gone rather
+   than emptied. Matches the reference design, where a hoverable row goes to
+   the `elevated` surface tone. */
 .lift-interactive {
   cursor: pointer;
 }
-@media (prefers-reduced-motion: no-preference) {
-  .lift-interactive:hover,
-  .lift-interactive:focus-visible {
-    box-shadow: var(--shadow-lift-hover);
-    transform: perspective(900px) rotateX(1.4deg) rotateY(-2.2deg) translateZ(6px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .lift-interactive:hover,
-  .lift-interactive:focus-visible {
-    box-shadow: var(--shadow-lift-hover);
-  }
+.lift-interactive:hover,
+.lift-interactive:focus-visible {
+  background-color: var(--color-elevated);
+  border-color: var(--color-fg);
 }
 
-/* Hill utility — "rounded pillow popping out of the page". Inset highlight
-   on the top-left + inset shadow on the bottom-right reads as a domed cell
-   with light coming from the upper left. Designed for the consistency
-   heatmap where cells are tiny and colored, but works on any small colored
-   surface. Inset shadows stay inside the cell so they never bleed into
-   neighbouring cells in a gap-1 grid. */
+/* Hill — small colored cell (the consistency heatmap). Was a domed pillow;
+   now just the shared chip radius, so a grid of them reads as flat tiles. */
 .hill {
-  border-radius: 4px;
-  box-shadow: var(--hill);
+  border-radius: var(--radius-chip);
+  box-shadow: var(--hill); /* `none` */
 }
 
-/* Hill button — extends the pillow into a proper raised button: outer drop
-   shadow lifts it above the page, inset highlight + shadow gives the dome,
-   :active inverts both axes so it reads as pressed in. Hover deepens the
-   outer shadow slightly to suggest the press is imminent. Sharp-corner
-   editorial language is preserved by keeping radius small (4px). Pillow shadow
-   values are tokenized (--hill-btn-*) so the dark theme re-lights the dome
-   (faint highlight, deeper shadow) without touching these rules. */
+/* Hill button — THE button treatment, on nearly every button in the app.
+   Was a 3D pillow (outer drop shadow + inset highlight top-left + inset shadow
+   bottom-right, inverting on :active so it read as pressed in). Now flat: a
+   4px radius and a fill/border state change.
+
+   `aria-pressed` on toggle buttons IS STILL MANDATORY. It used to be described
+   here as the hook the pressed-in pillow needed, which undersold it — it is an
+   accessibility contract, ui/SegmentedTabs depends on it, and the flat pressed
+   state below is keyed off it too.
+
+   No transform in any state: several of these sit inside surfaces carrying
+   `pointer-fine:backdrop-blur-*`, and the press used to `translateY(1px)`. A
+   fill change costs nothing to composite. */
 .hill-btn {
-  border-radius: 4px;
-  box-shadow: var(--hill-btn-rest);
+  border-radius: var(--radius-control);
+  box-shadow: var(--hill-btn-rest); /* `none` */
   transition:
-    box-shadow 0.18s var(--ease-editorial),
-    transform 0.18s var(--ease-editorial);
+    background-color 0.15s var(--ease-editorial),
+    border-color 0.15s var(--ease-editorial),
+    color 0.15s var(--ease-editorial);
 }
 .hill-btn:hover:not(:disabled),
 .hill-btn:focus-visible {
-  box-shadow: var(--hill-btn-hover);
+  border-color: var(--color-fg);
 }
 .hill-btn:active:not(:disabled),
 .hill-btn[aria-pressed='true'] {
-  box-shadow: var(--hill-btn-active);
-  transform: translateY(1px);
+  background-color: var(--color-elevated);
+  border-color: var(--color-fg);
 }
 .hill-btn:disabled {
-  box-shadow: var(--hill-btn-disabled);
+  box-shadow: var(--hill-btn-disabled); /* `none` — opacity is set by the caller */
 }
 
-/* Flush variant — pillow inset only, no outer rise. For buttons inside an
-   already-elevated container (popover, modal) where a drop shadow would
-   double up against the container's own shadow. */
+/* Flush variant — for buttons inside an already-elevated container (popover,
+   modal). With no outer shadow left to double up there is nothing to suppress,
+   so it is now the same as .hill-btn; kept because callers name it and because
+   the distinction returns the moment anything gains elevation again. */
 .hill-btn-flush {
-  border-radius: 4px;
-  box-shadow: var(--hill-btn-flush-rest);
-  transition: box-shadow 0.18s var(--ease-editorial);
+  border-radius: var(--radius-control);
+  box-shadow: var(--hill-btn-flush-rest); /* `none` */
+  transition:
+    background-color 0.15s var(--ease-editorial),
+    border-color 0.15s var(--ease-editorial);
 }
 .hill-btn-flush:active:not(:disabled),
 .hill-btn-flush[aria-pressed='true'] {
-  box-shadow: var(--hill-btn-active);
+  background-color: var(--color-elevated);
 }
 
 /* ---- Toggleable background backdrop (BackgroundLayer + ProfileView toggle).
