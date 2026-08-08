@@ -209,3 +209,33 @@ parser. When the importer still rejects a file, **Copy fix request**
 `npm run audit:docs` fails if the docs name code that no longer exists. It was
 added after a five-PR bug hunt that these documents actively misdirected; see
 `docs/LESSONS.md` § Superseded for the full account.
+
+### Phase 8 — Visual redesign  `[shipped]`
+Adopted the Magic Patterns direction across the app. Shipped in four merged
+PRs (#125 tokens/fonts/flattening/primitives/chrome, #126 the Body and Stats
+layouts, #127 the Home layout, #128 You + tap targets) plus this one.
+
+**What changed.** Archivo Black + Space Grotesk; light and dark authored as
+equals with `system` still the default; all three shadow families retired to
+`none`; a 3px/4px/6px radius scale replacing "sharp corners by default"; a
+shared layout vocabulary in `ui/primitives.tsx` (`StatStrip`, `ListCard`,
+`Takeaway`, `TickProgress`, `DistributionBar`, `SegmentMeter`, `StackedBar`,
+`Delta`); `ui/SegmentedTabs` restyled and five hand-rolled copies folded into
+it. Body and Stats now lead with one visual and collapse the rest; You leads
+with a summary card; Home kept its original layout by request, gaining the
+week-progress dashes and a five-row Recent.
+
+`npm run audit:mobile` passes for the first time — the 22 sub-44px tap targets
+it had been red on since before this phase are gone.
+
+**Not done here, and deliberately:**
+- **The Logger got presentation only.** Section headers and the blur gating;
+  no change to the Finish bar's positioning, the autosave/rest-timer logic, or
+  the sheet contract. Its information architecture is untouched.
+- **`StatCard`'s size tier is still unmeasured against the real font.** It was
+  chosen against Clash Display with 2.2px of headroom; Archivo Black is wider.
+  The fonts do not load in the Playwright harness (`document.fonts` is empty),
+  so no audit here can settle it — it needs a `white-space: nowrap` probe at
+  375px in a real browser.
+- **The iOS bottom bar is unverified as ever.** `audit:shell` asserts the
+  invariants; only a phone can observe the symptom.
