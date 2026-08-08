@@ -111,7 +111,10 @@ function bodyTypesFor(gender: GenderKey | ''): readonly { key: string; label: st
   return gender === '' ? BODY_TYPES.unspecified : BODY_TYPES[gender];
 }
 
-export function UserStatsPanel() {
+// `onSaved` lets a parent re-read the row after a successful save. YouView's
+// summary card renders the same user_stats row and would otherwise show stale
+// numbers until a full reload.
+export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -192,6 +195,7 @@ export function UserStatsPanel() {
     });
     setSaving(false);
     toast(ok ? 'Stats saved' : 'Could not save — try again', ok ? 'success' : 'error');
+    if (ok) onSaved?.();
   }
 
   if (loading) return <p className="text-sm text-muted">Loading…</p>;
