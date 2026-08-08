@@ -22,8 +22,17 @@ import {
 } from '@/app.config';
 import { TaxonomyEditor } from '@/components/TaxonomyEditor';
 import { formatRound } from '@/lib/format';
-import { Card, EmptyState, LoadingScreen, SectionHeader, StatCard } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import {
+  Card,
+  EmptyState,
+  LoadingScreen,
+  SectionHeader,
+  StackedBar,
+  StatStrip,
+} from '@/components/ui/primitives';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { Disclosure } from '@/components/ui/Disclosure';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { BodyMap } from '@/components/BodyMap';
 import { EASE, Item, PageStagger } from '@/components/anim';
 
@@ -90,6 +99,72 @@ function ShareBar({
     </div>
   );
 }
+
+type RegionRowData = {
+  key: RegionKey;
+  label: string;
+  total: number;
+  minutes: number;
+  sets: number;
+  intensity: number;
+};
+
+// One region row. Extracted because it now renders in TWO places — the top-3
+// summary and the full list inside the disclosure — and a copy-paste would let
+// the two drift.
+function RegionRow({
+  row,
+  currency,
+  selected,
+  onSelect,
+}: {
+  row: RegionRowData;
+  currency: BodyCurrency;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={selected}
+        className={`flex min-h-11 w-full items-center gap-3 bg-surface px-3 py-2 text-left text-sm transition-colors ${
+          selected ? 'text-fg' : 'text-subtle hover:text-fg'
+        }`}
+      >
+        <span className="w-24 shrink-0">{row.label}</span>
+        <span className="flex h-2 flex-1 overflow-hidden rounded-[2px] bg-elevated">
+          <span
+            className="h-full"
+            style={{
+              width: `${row.intensity * 100}%`,
+              backgroundColor: 'var(--color-fg)',
+              opacity: selected ? 0.9 : 0.55,
+            }}
+          />
+        </span>
+        <span className="w-14 shrink-0 text-right tabular-nums text-muted">
+          {currency === 'minutes' ? `${formatRound(row.total, 0)}m` : formatRound(row.total, 0)}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+// Roughly where each region sits down the figure, so a callout points at the
+// part it names instead of floating at an arbitrary height. Percentages of the
+// stage's height, tuned against the silhouette in BodyMap.
+const CALLOUT_TOP: Record<RegionKey, string> = {
+  shoulders: '18%',
+  chest: '26%',
+  back: '26%',
+  arms: '38%',
+  core: '40%',
+  posteriorChain: '56%',
+  quads: '58%',
+  calves: '78%',
+};
 
 export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
   const showcase = mode === 'showcase';
@@ -188,6 +263,34 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
 
   const rotaryTotal = summary.rotaryMinutes.rotational + summary.rotaryMinutes.antiRotational;
 
+  // The four busiest regions, annotated on the figure. Shares are always of
+  // MINUTES regardless of the currency toggle: the callouts sit beside a
+  // silhouette shaded by `intensity`, and a percentage that changed meaning
+  // when a toggle further down the page flipped would be quietly wrong.
+  // Alternating sides keeps two adjacent regions from stacking on one edge.
+  const totalWorked = worked.reduce((a, r) => a + r.minutes, 0);
+  const callouts = worked.slice(0, 4).map((r, i) => ({
+    key: r.key,
+    label: MUSCLE_REGIONS[r.key].short,
+    pct: totalWorked > 0 ? Math.round((r.minutes / totalWorked) * 100) : 0,
+    top: CALLOUT_TOP[r.key],
+    side: (i % 2 === 0 ? 'left' : 'right') as 'left' | 'right',
+  }));
+
+  // Modality as one stacked bar. Zero-minute modalities are dropped rather than
+  // rendered as slivers, and the opacity ramp is what distinguishes them —
+  // the identity is monochrome, so this is a tone ladder, not a palette.
+  const modalityTotal = MODALITY_KEYS.reduce((a, k) => a + summary.modalityMinutes[k], 0);
+  const modalitySegments = MODALITY_KEYS.filter((k) => summary.modalityMinutes[k] > 0)
+    .sort((a, b) => summary.modalityMinutes[b] - summary.modalityMinutes[a])
+    .map((k, i, arr) => ({
+      name: MOVEMENT_MODALITIES[k].label,
+      pct: Math.round((summary.modalityMinutes[k] / modalityTotal) * 100),
+      color: `color-mix(in srgb, var(--color-fg) ${Math.round(
+        100 - (i / Math.max(1, arr.length)) * 65,
+      )}%, var(--color-elevated))`,
+    }));
+
   return (
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
       <Item>
@@ -195,26 +298,19 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           <EchoText
             text="BODY"
             as="h1"
-            className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+            className={ECHO_APP_TITLE}
           />
         </div>
       </Item>
 
       <Item>
-        <div className="t-label mb-6 flex gap-1">
-          {WINDOWS.map((w) => (
-            <button
-              key={w.key}
-              type="button"
-              onClick={() => setWindowKey(w.key)}
-              aria-pressed={windowKey === w.key}
-              className={`hill-btn flex min-h-11 items-center border bg-surface px-3 transition-colors ${
-                windowKey === w.key ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-              }`}
-            >
-              {w.label}
-            </button>
-          ))}
+        <div className="mb-6">
+          <SegmentedTabs
+            tabs={WINDOWS.map((w) => ({ key: w.key, label: w.label }))}
+            active={windowKey}
+            onChange={(k) => setWindowKey(k as WindowKey)}
+            ariaLabel="Time window"
+          />
         </div>
       </Item>
 
@@ -224,20 +320,30 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
         </Item>
       ) : (
         <>
-          <Item>
-            <div className="mb-6 grid grid-cols-3 gap-px bg-border">
-              <StatCard label="Working min" value={Math.round(summary.totalMinutes)} />
-              <StatCard label="Sessions" value={summary.sessions} />
-              <StatCard label="Mapped" value={`${Math.round(summary.coverage * 100)}%`} />
-            </div>
-          </Item>
+          {/* The figure IS the page. Its four busiest regions are annotated ON
+              it with their share, so the headline reading — where did the work
+              go — needs no list at all.
 
+              THE CALLOUTS ARE SIBLINGS OF <BodyMap>, NOT ANCESTORS OF THE
+              STAGE. BodyMap is a CSS-only 3D slab, and any grouping property
+              (overflow:hidden, opacity<1, filter, mask, clip-path,
+              contain:paint) on an element BETWEEN .bodymap-stage and the faces
+              flattens it silently. This wrapper sits above the stage and adds
+              only `position: relative`, which is not a grouping property. Do
+              not move these inside, and do not add overflow-hidden here. */}
           <Item>
-            <section className="mb-8 grid gap-6 sm:grid-cols-2 sm:items-start">
-              {/* The Card carries .lift; the stage inside carries the
-                  perspective. Never the other way round — see global.css. */}
-              <Card>
-                <div className="p-4">
+            <section className="mb-6">
+              <SectionHeader
+                action={
+                  <span className="t-label text-muted">
+                    {Math.round(summary.totalMinutes)} min · {summary.sessions} sessions
+                  </span>
+                }
+              >
+                Where the work went
+              </SectionHeader>
+              <div className="lift border border-border bg-surface p-4">
+                <div className="relative">
                   <BodyMap
                     intensity={intensity}
                     systemic={systemicShare}
@@ -245,89 +351,113 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                     onFaceChange={setFace}
                     selected={selected}
                   />
-                  <p className="mt-3 text-center t-control text-muted">
-                    Drag to turn · {Math.round(systemicShare * 100)}% full-body
-                  </p>
-                </div>
-              </Card>
-
-              {/* Region selection lives HERE, not on the SVG paths: a 12px
-                  calf path as a role="button" would fail the 44px tap-target
-                  audit, and a list row gives screen readers real text. */}
-              <div>
-                <SectionHeader>Regions</SectionHeader>
-                <div className="t-label mb-3 flex gap-1">
-                  {CURRENCIES.map((c) => (
-                    <button
+                  {callouts.map((c) => (
+                    <div
                       key={c.key}
-                      type="button"
-                      onClick={() => setCurrency(c.key)}
-                      aria-pressed={currency === c.key}
-                      className={`hill-btn flex min-h-11 items-center border bg-surface px-3 transition-colors ${
-                        currency === c.key
-                          ? 'border-fg text-fg'
-                          : 'border-border text-muted hover:text-fg'
+                      className={`pointer-events-none absolute max-w-[5.5rem] ${
+                        c.side === 'left' ? 'left-0 text-right' : 'right-0 text-left'
                       }`}
+                      style={{ top: c.top }}
                     >
-                      {c.label}
-                    </button>
+                      <div className="t-label leading-tight text-muted">{c.label}</div>
+                      <div className="font-display text-sm leading-tight tabular-nums text-fg">
+                        {c.pct}%
+                      </div>
+                      <div
+                        className={`mt-1 h-px w-6 bg-border ${c.side === 'left' ? 'ml-auto' : ''}`}
+                      />
+                    </div>
                   ))}
                 </div>
-                <ul className="flex flex-col gap-px bg-border">
-                  {worked.map((r) => (
-                    <li key={r.key}>
-                      <button
-                        type="button"
-                        onClick={() => setSelected(selected === r.key ? null : r.key)}
-                        aria-pressed={selected === r.key}
-                        className={`flex min-h-11 w-full items-center gap-3 bg-surface px-3 py-2 text-left text-sm transition-colors ${
-                          selected === r.key ? 'text-fg' : 'text-subtle hover:text-fg'
-                        }`}
-                      >
-                        <span className="w-24 shrink-0">{r.label}</span>
-                        <span className="flex h-2 flex-1 overflow-hidden bg-elevated">
-                          <span
-                            className="h-full"
-                            style={{
-                              width: `${r.intensity * 100}%`,
-                              backgroundColor: 'var(--color-fg)',
-                              opacity: selected === r.key ? 0.9 : 0.55,
-                            }}
-                          />
-                        </span>
-                        <span className="w-14 shrink-0 text-right tabular-nums text-muted">
-                          {currency === 'minutes'
-                            ? `${formatRound(r.total, 0)}m`
-                            : formatRound(r.total, 0)}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-[0.7rem] text-muted">
-                  {currency === 'minutes'
-                    ? 'Working minutes — how long each region was under work.'
-                    : 'Scaled volume — load × reps × range of motion, with unloaded work priced against your bodyweight. A relative index, not kilograms.'}
+                <p className="mt-3 text-center t-control text-muted">
+                  Drag to turn · {Math.round(systemicShare * 100)}% full-body
                 </p>
               </div>
             </section>
           </Item>
 
           <Item>
-            <section className="mb-8">
-              <SectionHeader>Modality</SectionHeader>
-              <ShareBar
-                rows={MODALITY_KEYS.map((k) => ({
-                  key: k,
-                  label: MOVEMENT_MODALITIES[k].label,
-                  value: summary.modalityMinutes[k],
-                }))}
+            <div className="mb-6">
+              <StatStrip
+                stats={[
+                  { label: 'Working min', value: Math.round(summary.totalMinutes) },
+                  { label: 'Sessions', value: summary.sessions },
+                  { label: 'Mapped', value: `${Math.round(summary.coverage * 100)}%` },
+                ]}
               />
+            </div>
+          </Item>
+
+          {/* Top three, then the rest on request. Region selection lives on
+              these ROWS, not on the SVG paths: a 12px calf path as a
+              role="button" would fail the 44px tap-target audit, and a row
+              gives screen readers real text. */}
+          <Item>
+            <section className="mb-6">
+              <SectionHeader>Most worked</SectionHeader>
+              <ul className="flex flex-col gap-px bg-border">
+                {worked.slice(0, 3).map((r) => (
+                  <RegionRow
+                    key={r.key}
+                    row={r}
+                    currency={currency}
+                    selected={selected === r.key}
+                    onSelect={() => setSelected(selected === r.key ? null : r.key)}
+                  />
+                ))}
+              </ul>
+              {worked.length > 3 ? (
+                <div className="mt-3">
+                  <Disclosure title={`All ${worked.length} regions`}>
+                    <div className="mb-3">
+                      <SegmentedTabs
+                        tabs={CURRENCIES.map((c) => ({ key: c.key, label: c.label }))}
+                        active={currency}
+                        onChange={(k) => setCurrency(k as BodyCurrency)}
+                        ariaLabel="Measure regions by"
+                        size="sm"
+                      />
+                    </div>
+                    <ul className="flex flex-col gap-px bg-border">
+                      {worked.map((r) => (
+                        <RegionRow
+                          key={r.key}
+                          row={r}
+                          currency={currency}
+                          selected={selected === r.key}
+                          onSelect={() => setSelected(selected === r.key ? null : r.key)}
+                        />
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-[0.7rem] text-muted">
+                      {currency === 'minutes'
+                        ? 'Working minutes — how long each region was under work.'
+                        : 'Scaled volume — load × reps × range of motion, with unloaded work priced against your bodyweight. A relative index, not kilograms.'}
+                    </p>
+                  </Disclosure>
+                </div>
+              ) : null}
             </section>
           </Item>
 
+          {/* Eleven separate meters became one bar. The comparison the numbers
+              existed to make is the proportion, and a stacked bar IS that
+              comparison. */}
           <Item>
-            <section className="mb-8">
+            <section className="mb-6">
+              <SectionHeader>How you trained</SectionHeader>
+              <div className="lift border border-border bg-surface p-4">
+                <StackedBar segments={modalitySegments} />
+              </div>
+            </section>
+          </Item>
+
+          {/* Collapsed, not removed: plane of motion, the within-transverse
+              split and the unmapped list with its Map buttons all keep their
+              current behaviour one tap away. */}
+          <Item>
+            <Disclosure title="More detail">
+            <section className="mb-6">
               <SectionHeader>Plane of motion</SectionHeader>
               <ShareBar
                 rows={PLANE_KEYS.map((k) => ({
@@ -349,10 +479,8 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                 </div>
               ) : null}
             </section>
-          </Item>
 
           {summary.unmapped.length > 0 ? (
-            <Item>
               <section>
                 <SectionHeader>Unmapped ({summary.unmapped.length})</SectionHeader>
                 <Card>
@@ -382,8 +510,9 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   import. Mapping one adds it to your Library.
                 </p>
               </section>
-            </Item>
           ) : null}
+            </Disclosure>
+          </Item>
         </>
       )}
 

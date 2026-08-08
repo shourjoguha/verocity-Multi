@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ASPECT_WINDOWS } from '@/app.config';
+import { ASPECT_WINDOWS, type AspectWindowKey } from '@/app.config';
 import { SectionHeader } from '@/components/ui/primitives';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { RadarChart, type RadarSeries } from '@/components/RadarChart';
 import { FitnessCheckIn } from '@/components/FitnessCheckIn';
 import { AspectExplainer } from '@/components/AspectExplainer';
@@ -51,11 +52,6 @@ export function FitnessProfile({
     });
   }
 
-  const toggleClass = (on: boolean) =>
-    `hill-btn flex min-h-11 items-center border bg-surface px-3 t-control transition-colors ${
-      on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-    }`;
-
   return (
     <section className="mb-10">
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -79,7 +75,7 @@ export function FitnessProfile({
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg"
+            className="hill-btn flex min-h-11 items-center rounded-control border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg"
           >
             {latestAssessment ? 'Update' : 'Check in'}
           </button>
@@ -88,18 +84,14 @@ export function FitnessProfile({
 
       {series.length > 0 ? (
         <div className="lift border border-border bg-surface p-4">
-          <div className="mb-4 flex justify-center gap-1">
-            {ASPECT_WINDOWS.map((w) => (
-              <button
-                key={w.key}
-                type="button"
-                aria-pressed={windowKey === w.key}
-                onClick={() => profile.setWindowKey(w.key)}
-                className={toggleClass(windowKey === w.key)}
-              >
-                {w.label}
-              </button>
-            ))}
+          <div className="mx-auto mb-4 max-w-xs">
+            <SegmentedTabs
+              tabs={ASPECT_WINDOWS.map((w) => ({ key: w.key, label: w.label }))}
+              active={windowKey}
+              onChange={(k) => profile.setWindowKey(k as AspectWindowKey)}
+              ariaLabel="Measurement window"
+              size="sm"
+            />
           </div>
 
           <RadarChart series={series} />
@@ -113,24 +105,18 @@ export function FitnessProfile({
           ) : null}
 
           {earliest ? (
-            <div className="mt-3 flex items-center justify-center gap-2">
-              <span className="t-control text-subtle">Compare to</span>
-              {(
-                [
-                  ['prior', prior?.label ?? 'Previous block'],
-                  ['earliest', earliest.label],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={compare === key}
-                  onClick={() => setCompare(key)}
-                  className={toggleClass(compare === key)}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="mt-3">
+              <div className="t-label mb-2 text-center text-muted">Compare to</div>
+              <SegmentedTabs
+                tabs={[
+                  { key: 'prior', label: prior?.label ?? 'Previous block' },
+                  { key: 'earliest', label: earliest.label },
+                ]}
+                active={compare}
+                onChange={(k) => setCompare(k as 'prior' | 'earliest')}
+                ariaLabel="Comparison period"
+                size="sm"
+              />
             </div>
           ) : null}
         </div>

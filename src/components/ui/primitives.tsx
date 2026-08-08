@@ -325,3 +325,251 @@ export function EmptyState({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Layout units from the reference design. These are the shapes the screens are
+// assembled from; keeping them here rather than per-screen is what stopped the
+// five hand-rolled segmented controls and three hand-rolled bar meters that the
+// pre-redesign codebase had accumulated.
+// ---------------------------------------------------------------------------
+
+// A card whose primary action is FLUSH WITH ITS BOTTOM EDGE — the action spans
+// the full width, square at the bottom corners, sitting ON the card's border
+// rather than inside its padding. The most recognisable unit in the design.
+//
+// `action` is a slot, not a label+onClick pair, because the callers differ:
+// Home's is an <a> (so a workout can be opened in a new tab and so it works
+// before hydration), others are <button>. Give whatever you pass
+// `min-h-13 w-full` — the wrapper cannot add it without cloning the element.
+export function HeroCard({
+  children,
+  action,
+  className = '',
+}: {
+  children: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`lift overflow-hidden border border-border bg-surface ${className}`}>
+      <div className="p-4">{children}</div>
+      {action ? <div className="flex border-t border-border">{action}</div> : null}
+    </div>
+  );
+}
+
+// Block progress as a row of segments, one per unit, filled up to `value`.
+// Reads as "3 of 8 weeks" at a glance without a number, and degrades to a
+// plain progress bar at small widths because the segments simply get thinner.
+export function TickProgress({
+  value,
+  total,
+  label,
+}: {
+  value: number;
+  total: number;
+  label?: string;
+}) {
+  return (
+    <div
+      className="flex gap-1"
+      role="img"
+      aria-label={label ?? `${value} of ${total} complete`}
+    >
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          className={`h-[3px] flex-1 rounded-full ${i < value ? 'bg-fg' : 'bg-elevated'}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Completion ring — `value`/`total` in the middle of an SVG arc. Pure geometry
+// via strokeDasharray, no JS and no animation, so it costs nothing on the
+// scroll path and needs no reduced-motion branch.
+export function CompletionRing({
+  value,
+  total,
+  size = 60,
+  label,
+}: {
+  value: number;
+  total: number;
+  size?: number;
+  label?: string;
+}) {
+  const r = size / 2 - 4;
+  const circumference = 2 * Math.PI * r;
+  const filled = total > 0 ? (value / total) * circumference : 0;
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg
+        viewBox={`0 0 ${size} ${size}`}
+        width={size}
+        height={size}
+        role="img"
+        aria-label={label ?? `${value} of ${total} sessions complete`}
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="var(--color-elevated)"
+          strokeWidth="4"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="var(--color-fg)"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray={`${filled} ${circumference}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </svg>
+      <div className="absolute inset-0 grid place-items-center">
+        <span className="font-display text-sm tabular-nums leading-none text-fg">
+          {value}/{total}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// The plain-language headline that goes ABOVE a chart that needs decoding. The
+// second line is muted so the pair reads as one sentence with a subordinate
+// clause rather than as two competing headlines.
+export function Takeaway({
+  lead,
+  trail,
+  detail,
+}: {
+  lead: string;
+  trail?: string;
+  detail?: string;
+}) {
+  return (
+    <div>
+      <h1 className="font-display text-xl leading-[1.2] tracking-[-0.02em] text-fg">
+        {lead}
+        {trail ? (
+          <>
+            <br />
+            <span className="text-muted">{trail}</span>
+          </>
+        ) : null}
+      </h1>
+      {detail ? <p className="mt-2 text-sm leading-relaxed text-muted">{detail}</p> : null}
+    </div>
+  );
+}
+
+// Label + track + one-or-more stacked segments + right-aligned value. Replaces
+// three near-identical hand-rolled meters: BodyView's local ShareBar, its
+// region rows, and StatsView's RPE fingerprint rows. `segments` carrying more
+// than one entry is what the fingerprint needs; a single entry covers the other
+// two. Colours are optional — the default is the ink fill with a per-segment
+// opacity ramp, which is how the monochrome meters read today.
+export function DistributionBar({
+  label,
+  segments,
+  value,
+  labelWidth = 'w-24',
+}: {
+  label: string;
+  segments: { key: string; pct: number; color?: string; opacity?: number }[];
+  value?: string;
+  labelWidth?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className={`t-label shrink-0 truncate text-muted ${labelWidth}`}>{label}</span>
+      <div className="flex h-3 flex-1 overflow-hidden rounded-[2px] bg-elevated">
+        {segments.map((s) => (
+          <div
+            key={s.key}
+            style={{
+              width: `${s.pct}%`,
+              backgroundColor: s.color ?? 'var(--color-fg)',
+              opacity: s.opacity,
+            }}
+          />
+        ))}
+      </div>
+      {value ? (
+        <span className="w-12 shrink-0 text-right text-xs tabular-nums text-fg">{value}</span>
+      ) : null}
+    </div>
+  );
+}
+
+// The week as a slim vertical rail — one circled date per day, today filled,
+// days that hold a session outlined in their activity colour, rest days faint.
+// It exists to get the week's context OUT of the main column so the column can
+// spend its width on the session itself.
+//
+// Presentational: the caller resolves dates and colours (activity colours are
+// domain truth from app.config, never chosen here). `onSelect` is optional —
+// without it the rail renders as a static <ol> rather than a row of buttons,
+// which matters because non-interactive circles must not be reported as
+// sub-44px tap targets by audit:mobile.
+export function WeekRail({
+  days,
+  onSelect,
+  className = '',
+}: {
+  days: { key: string; letter: string; date: number; color?: string; today?: boolean }[];
+  onSelect?: (key: string) => void;
+  className?: string;
+}) {
+  return (
+    <ol className={`flex w-11 shrink-0 flex-col items-center gap-1 ${className}`}>
+      {days.map((d) => {
+        const inner = (
+          <>
+            <span
+              className={`grid h-7 w-7 place-items-center rounded-full border text-[0.6875rem] tabular-nums ${
+                d.today
+                  ? 'border-fg bg-fg text-bg'
+                  : d.color
+                    ? 'text-fg'
+                    : 'border-border text-faint'
+              }`}
+              style={d.color && !d.today ? { borderColor: d.color } : undefined}
+            >
+              {d.date}
+            </span>
+            <span
+              className={`t-nano mt-1 block ${d.today ? 'text-fg' : 'text-faint'}`}
+            >
+              {d.letter}
+            </span>
+          </>
+        );
+        return (
+          <li key={d.key} className="text-center">
+            {onSelect ? (
+              // min-h-11 keeps the cell a legal tap target even though the
+              // circle itself is 28px — the padding does the work.
+              <button
+                type="button"
+                onClick={() => onSelect(d.key)}
+                aria-current={d.today ? 'date' : undefined}
+                className="flex min-h-11 w-11 flex-col items-center justify-center"
+              >
+                {inner}
+              </button>
+            ) : (
+              <div aria-current={d.today ? 'date' : undefined}>{inner}</div>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
