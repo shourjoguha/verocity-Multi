@@ -527,11 +527,20 @@ Single source of truth for blocks/sections, metrics, RPE, timers, activity tags
 
 ## 11. Visual / Design Direction
 
-Keep the **Swiss-minimalist typographic identity** (it's distinctive and ages
-well): Clash Display + Satoshi, monochrome HSL tokens, hairline borders, sharp
-corners, tabular numbers, uppercase tracking, the typographic **Echo Stack**, and
-bold CSS-first motion. **Light** editorial palette (`#f2f2f2` bg / `#111111` fg);
-the provided design spec + reference screenshots take precedence on aesthetics.
+A **flat, typographic identity**: Archivo Black + Space Grotesk, HSL tokens,
+hairline borders, a small radius scale (3px chips / 4px controls / 6px cards),
+tabular numbers, uppercase tracking, the typographic **Echo Stack**, and bold
+CSS-first motion. Monochrome in the chrome; colour only where it carries
+information.
+
+**Light and dark are equals** — both authored against the same token roles
+rather than one derived from the other, and `system` is the default. Light is
+paper (`#f2f2f2` / `#111111`), dark is carbon (`#050505` / white).
+
+This supersedes the earlier "Swiss-minimalist, light editorial, sharp corners,
+3D pillow buttons" direction. Simulated depth is gone: every shadow token
+resolves to `none`, and surfaces separate with a hairline and a surface-tone
+step. `CLAUDE.md`'s hard rules are canonical on all of this.
 
 Elevate via:
 - **Astro View Transitions** for cheap, native page-to-page motion.

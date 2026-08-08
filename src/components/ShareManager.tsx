@@ -6,7 +6,7 @@ import type { Plan, Share, ShareScope, WorkoutLog } from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { track } from '@/lib/analytics';
 import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
 const SCOPES: { key: ShareScope; label: string }[] = [
@@ -115,7 +115,7 @@ export default function ShareManager({ embedded = false }: { embedded?: boolean 
         <EchoText
           text="SHARES"
           as="h1"
-          className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+          className={ECHO_APP_TITLE}
         />
         <p className="mt-4 text-sm text-muted">
           Mint a read-only link to your profile, a plan, or a single workout. Holders can view but

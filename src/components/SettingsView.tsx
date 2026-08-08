@@ -16,7 +16,7 @@ import {
   logsToCsv,
 } from '@/lib/exportData';
 import { toast } from '@/lib/toast';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { SectionHeader } from '@/components/ui/primitives';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -78,7 +78,7 @@ export default function SettingsView() {
         <EchoText
           text="SETTINGS"
           as="h1"
-          className="mb-6 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+          className={`mb-6 ${ECHO_APP_TITLE}`}
         />
       </Item>
 

@@ -6,7 +6,7 @@ import { e1rm } from '@/lib/e1rm';
 import { formatRound } from '@/lib/format';
 import { BLOCKS, type BlockKey } from '@/app.config';
 import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { isSubroutine } from '@/lib/subroutine';
@@ -31,11 +31,11 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
 
   if (!plan) {
     return (
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
         <EchoText
           text="PLAN"
           as="h1"
-          className="mb-6 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+          className={`mb-6 ${ECHO_APP_TITLE}`}
         />
         <EmptyState>
           <p>No active plan.</p>
@@ -93,7 +93,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
             <EchoText
               text={parsed.title}
               as="h1"
-              className="min-w-0 break-words font-display text-4xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+              className={`min-w-0 break-words ${ECHO_APP_TITLE}`}
             />
             {/* min-h-11 + the padded box are the 44px target; the negative
                 margins keep the glyphs sitting where they always did. These

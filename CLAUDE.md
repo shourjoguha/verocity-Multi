@@ -111,11 +111,27 @@ UI audit have both run.
 - **Design tokens only** (HSL); no raw colors in components — **this one MUST
   hold**, because a three-way light/dark/system theme ships (`lib/theme.ts`,
   `ThemeToggle.tsx`) and every dark override is a token value in `global.css`.
-  A hardcoded hex breaks dark mode silently. Identity per the design spec +
-  reference screenshots (these take precedence on aesthetics): Clash Display +
-  Satoshi, monochrome, hairlines, tabular numbers, the typographic Echo Stack,
-  **CSS-first motion** (see the sheet entry in LESSONS for why JS-driven
-  animation was removed from overlays).
+  A hardcoded hex breaks dark mode silently, and light and dark are now
+  authored as **equals** rather than dark being derived — a token defined in
+  only one theme block is the most expensive mistake available in `global.css`.
+  Identity: **Archivo Black + Space Grotesk**, flat hairlines, 4px/6px radius,
+  tabular numbers, the typographic Echo Stack, **CSS-first motion** (see the
+  sheet entry in LESSONS for why JS-driven animation was removed from overlays).
+  Archivo Black ships **one weight** — never pair `font-display` with a weight
+  utility; the `.font-display` rule in `global.css` pins it and kills synthesis,
+  because a synthesised bold is *wider* and blows the StatCard width budget.
+- **Monochrome chrome; colour only on data.** Buttons, tabs, headers, cards,
+  rows and every other piece of chrome stay in the `--color-*` greyscale. Colour
+  is legal only where it *carries information*: activity/tone stripes, modality
+  segments, the consistency grid, and `--color-up` / `--color-down` on a delta.
+  Anything colour-coded must also survive without colour — `Delta` renders an
+  arrow and a signed number, not just a hue.
+- **Default to 3–4 things; collapse the rest.** A data-heavy screen leads with
+  one headline and one primary visual. Everything else goes behind
+  `ui/Disclosure` (native `<details>`, no JS state, no animation to get wrong)
+  or an existing route. **A collapsed default with no expansion is a removed
+  feature** — no audit can tell the two apart, so check by hand that each
+  folded-away thing still opens.
 - **Backdrop & depth.** The full-viewport backdrop is `BackgroundLayer.astro`
   mounted once in `Base.astro`. Six presets — `off`, `grain`, `dots`,
   `hairlines`, `topography`, `aurora` — listed in `lib/background.ts`, which is
@@ -131,22 +147,23 @@ UI audit have both run.
   to the `topography` CSS preset (still a depth cue, no WebGL). Never
   unconditionally default to the 3D scene — the three.js chunk is
   ~170KB gzip and would tank LCP on mobile.
-- **Card depth** is the `.lift` / `.lift-interactive` utility built from
-  `--shadow-lift-rest` / `--shadow-lift-hover` — don't inline a `box-shadow`
-  in a component. `.lift-interactive` adds a perspective tilt on hover
-  (`rotateX(1.4deg) rotateY(-2.2deg) translateZ(6px)`) wrapped in
-  `prefers-reduced-motion: no-preference`; reduced-motion users still get
-  the shadow bump but no rotation. Lists and cards opt into `.lift`; rows
-  inside a hairline-divider container (`gap-px` grids, StatCard grids) stay
-  flat — shadow would muddy the hairlines.
-  **`.lift` is wrong for any surface whose transform is animated**: it sets a
-  `transform` *and* `transition: transform`, which fights the animation. Use
-  **`.lift-fixed`** — same resting shadow, no transform, no transition. Sheet
-  panels use it.
-  **`.lift` is also wrong for anything pinned to the bottom edge**, because
-  every other shadow token in the file casts downward and paints off-screen
-  there. Use **`.ledge`** / `--shadow-ledge` — the one upward-casting member,
-  shadow-only for the same reason as `.lift-fixed`. The bottom tab bar uses it.
+- **Depth is retired; separation is a hairline.** `--shadow-lift-rest`,
+  `--shadow-lift-hover`, `--shadow-ledge` and all six `--hill-btn-*` resolve to
+  `none` in **both** themes. Surfaces separate with a 1px `--color-border` and a
+  surface-tone step — never a cast shadow, and never an inlined `box-shadow` in
+  a component. Two hairline weights, and the distinction carries the look:
+  `--color-border` outlines a card, `--color-border-soft` divides rows *inside*
+  one (see `ListCard`).
+  `.lift` is now the flat card treatment (radius + a fill/border transition);
+  `.lift-interactive` changes fill and border on hover instead of tilting.
+  **The two sibling classes survive on purpose, and their reasons outlive the
+  shadows**: `.lift-fixed` means "no transform and no transform transition on a
+  surface that is already animated" — about compositing, not depth, and just as
+  true the next time someone adds a hover effect to a sheet panel. `.ledge`
+  means "no transform on the bottom bar", which carries
+  `pointer-fine:backdrop-blur-md` and would promote a composited layer.
+  Rows inside a hairline-divider container stay flat; that now describes the
+  default rather than the exception.
 - **The app chrome does not scroll — `[data-scroll-root]` does.** `html`/`body`
   take `height: 100dvh; overflow: hidden` via `.app-shell` (opted into by
   `Base.astro`'s `shell` prop) and the scrolling lives in an inner box inside
@@ -163,23 +180,32 @@ UI audit have both run.
   scroller, not `window` / `<body>` (`src/lib/scrollLock.ts`). Guarded by
   `npm run audit:shell` — see `docs/LESSONS.md` § "The bottom bar detaches" for
   what that check cannot see.
-- **Buttons are 3D pillows.** The `Button` primitive (and most bespoke
-  button-shaped surfaces) carries `.hill-btn`: 4px radius + outer drop
-  shadow + inset highlight (top-left) + inset shadow (bottom-right). On
-  `:active` (or `aria-pressed="true"`) both insets invert and the button
-  drops 1px — it reads as pressed in. Toggle buttons MUST set
-  `aria-pressed` so the pressed-in state lands; the existing styling
-  (border-fg, accent color) stacks on top. `.hill-btn-flush` is the
-  no-outer-shadow variant for buttons inside a popover/modal that already
-  has its own elevation. Ghost variants need a `bg-surface` body — a
-  fully transparent button has nothing for the highlight inset to render
-  against. Tiny icon-only buttons (h-5 to h-8, ✓ checkboxes inside set
-  rows, ↑/↓/× table-cell utilities, text-only link buttons) stay flat by
-  design; the pillow doesn't read at that scale.
-- **EchoText is 3D.** Each shadow layer sits at a real `translateZ` offset
-  behind the foreground (`--echo-tz`, -8px increments) and the parent
-  `.echo` carries `perspective(800px)`. Any new echo layers MUST set both
-  `--echo-dx` and `--echo-tz` so the stack stays coherent.
+- **Buttons are flat.** The `Button` primitive (and most bespoke button-shaped
+  surfaces) carries `.hill-btn`, which is now `--radius-control` plus a
+  fill/border state change — no insets, no outer cast, and **no transform in any
+  state**, because several of these sit inside surfaces carrying
+  `pointer-fine:backdrop-blur-*`.
+  **Toggle buttons MUST still set `aria-pressed`.** That used to be described
+  here as the hook the pressed-in pillow needed, which undersold it: it is an
+  accessibility contract, `ui/SegmentedTabs` depends on it, and the flat pressed
+  state is keyed off it too. It did not go away with the shadows.
+  Ghost variants keep their `bg-surface` body — now for the hover fill rather
+  than a highlight inset. `.hill-btn-flush` is kept for callers that name it.
+- **Segmented controls are `ui/SegmentedTabs`.** A bordered shell holding a
+  filled thumb; five hand-rolled copies were consolidated into it. Do not roll a
+  sixth. It stays `min-h-11` at **both** sizes — `size="sm"` buys compactness
+  with type and padding only, because the reference design's ~30px in-card
+  height is below `TOUCH.minTargetPx`. Use it only for **single**-select: a
+  multi-select filter row is a set of toggle buttons, not a `role="tablist"`.
+- **EchoText is 3D, and has two tiers.** Each shadow layer sits at a real
+  `translateZ` offset behind the foreground (`--echo-tz`, -8px increments) and
+  the parent `.echo` carries `perspective(800px)`. Any new echo layers MUST set
+  both `--echo-dx` and `--echo-tz` so the stack stays coherent.
+  `ECHO_HERO` keeps the full responsive ramp on the surfaces where the wordmark
+  *is* the content — `/login`, `/signup`, `/reset-password`, `/share`, Landing,
+  onboarding. Everything under `/app` uses `ECHO_APP_TITLE`, one size: the
+  header and the tab bar already say where you are, and the ramp was spending
+  ~120px of a 375px screen restating it.
 - **Signup is invite-gated** (caps < 100), redeemed server-side.
 - **The AI coach ships.** `supabase/functions/coach/index.ts` calls the Anthropic
   API with the caller's own logs and writes to `recommendations`; the UI is
@@ -194,6 +220,20 @@ UI audit have both run.
   `pointer: fine` get different behaviour in several places (blur, the 3D
   backdrop, sheet focus, the scroll lock) — check both before assuming a fix
   applies. `npm run audit:mobile` guards the first two only.
+  **It is green, and it is the first time it has been.** Keep it that way: it
+  spent months red on a known set of failures, which meant every change had to
+  argue "same failures, same counts" instead of "passing", and a genuinely new
+  regression would have hidden in the noise. A red baseline is worse than a
+  failing one. The fix for a small target is a bigger *hit box*, not a bigger
+  glyph — wrap it in a `min-h-11` / `h-11 w-11` box and pull the extra back with
+  a negative margin so nothing moves on screen.
+- **Every blur is `pointer-fine:` gated, with no exceptions left.**
+  `backdrop-filter` on anything sticky or fixed over scrolling content makes
+  touch Safari re-sample its backdrop every frame. Touch goes fully opaque.
+  `grep -rn "backdrop-blur" src/ | grep -v "pointer-fine:"` must return nothing
+  — three had slipped through (the Logger's rest-timer bar and Finish bar, and
+  the Landing header), and no audit here can catch it: `audit:flicker` only
+  exercises sheets, and the symptom is WebKit-only.
 - **"Verified" means the symptom was observed to stop.** Naming a check that
   cannot see the bug is not evidence: unit-test counts and an overflow/tap-target
   audit say nothing about a flicker. Cite the check that observes the *symptom*,

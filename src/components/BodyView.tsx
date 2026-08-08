@@ -292,7 +292,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     }));
 
   return (
-    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
+    <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
       <Item>
         <div className="mb-6 flex items-end justify-between gap-4">
           <EchoText

@@ -23,7 +23,7 @@ import {
 import type { ParsedPlan, UserStats } from '@/lib/types';
 import { track } from '@/lib/analytics';
 import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
 type Source = 'markdown' | 'csv';
@@ -242,7 +242,7 @@ export default function PlanUpload() {
         <EchoText
           text="NEW PLAN"
           as="h1"
-          className="mb-8 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+          className={`mb-8 ${ECHO_APP_TITLE}`}
         />
       </Item>
 

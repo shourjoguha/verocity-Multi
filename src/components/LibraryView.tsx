@@ -13,7 +13,7 @@ import type { Movement } from '@/lib/types';
 import { METRICS, type MetricKey } from '@/app.config';
 import { isSubroutine } from '@/lib/subroutine';
 import { Button, EmptyState, LoadingScreen } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
@@ -329,13 +329,13 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
 
   return (
     <>
-    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
+    <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
       <Item>
         <div className="mb-6 flex items-end justify-between gap-4">
           <EchoText
             text="LIBRARY"
             as="h1"
-            className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+            className={ECHO_APP_TITLE}
           />
           {!showcase && !adding ? (
             <div className="flex shrink-0 gap-4 pb-1">

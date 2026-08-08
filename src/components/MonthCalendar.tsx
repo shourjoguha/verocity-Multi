@@ -3,7 +3,7 @@ import type { WorkoutLog } from '@/lib/types';
 import { sessionTagColors } from '@/lib/tags';
 import { formatDuration } from '@/lib/format';
 import { SectionHeader } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { LogList } from '@/components/LogList';
 
 // Presentation-only month grid extracted from the retired CalendarView.
@@ -112,7 +112,7 @@ export function MonthCalendar({
             <EchoText
               text="CALENDAR"
               as="h1"
-              className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+              className={ECHO_APP_TITLE}
             />
             <div className="flex shrink-0 gap-2 pb-1">
               <button onClick={() => shift(-1)} className={navBtn} aria-label="Previous month">

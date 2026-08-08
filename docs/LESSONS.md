@@ -147,24 +147,6 @@ sheets that happen to fit anyway. Confirm with
 eye — an identity matrix looks like nothing in DevTools' visual overlay.
 → `ui/Modal.tsx`, `.stagger-item` / `@keyframes stagger-in` in `global.css`
 
-### A shadow applied to the bottom bar renders nothing at all
-`[measured in Chromium]`
-Every depth token in `global.css` casts **downward** — `--shadow-lift-rest`,
-`--shadow-lift-hover` and all six `--hill-btn-*` values have positive Y. The tab
-bar is pinned to `bottom-0`, so a downward cast paints below the viewport and is
-simply not there. Adding `.lift` or `.lift-fixed` to it looks like a no-op.
-**Use `.ledge` / `--shadow-ledge`** — the one upward-casting member, layers 1-2
-being `--shadow-lift-rest` with Y negated, plus a top inset highlight so the bar
-reads as a raised slab rather than a card that happens to sit at the bottom.
-Both theme blocks define it; a light-only value is a silent dark-mode break.
-`.lift` is doubly wrong here even after fixing the direction: its
-`perspective(900px)` promotes a composited layer on the same element that
-carries `pointer-fine:backdrop-blur-md` (see the touch-flicker entry above), and
-it would make the bar a containing block for any future `fixed` **descendant**.
-It would *not* break the bar's own positioning — only a transformed *ancestor*
-does that, which is the plausible-sounding reason to avoid reaching for.
-→ `src/styles/global.css` (`.ledge`), `src/layouts/App.astro`
-
 ### The page lays out wider than the screen and pans sideways
 `[confirmed in the wild; the same defect measured in Chromium, smaller]`
 Home rendered at **768px inside a 393px phone** — text at the correct size, but
@@ -793,6 +775,41 @@ no active plan that row is the only route to the chooser, so a live session woul
 have left resuming as the single thing you could do.
 → `scripts/flicker-probe.mjs`, `ProfileView.tsx`
 
+### The whole page is blank, and two of the three audits are green on it
+
+`[measured in Chromium]`
+Home and Stats rendered nothing — `main` was empty, the console had a single
+minified **React error #310** ("rendered more hooks than during the previous
+render"). Cause: a new `useMemo` placed BELOW the component's early
+`if (loading) return <LoadingScreen />`. The loading render runs N hooks, the
+loaded render runs N+1, React tears the component down. `ProfileView` already
+carried a comment saying hooks must sit above the early returns; the comment was
+there and the hook still went under it.
+
+**The dangerous part is not the crash, it is what the checks said about it.**
+`npm run audit:shell` and `npm run audit:mobile` were **both fully green on the
+blank build** — and they were right to be. A page that renders nothing has no
+horizontal overflow and no sub-44px tap targets. Every assertion they make is
+vacuously satisfied by an empty DOM.
+
+The only signal came from `npm run audit:flicker`, and it was not a failure:
+three scenarios went from `[ok]` to `[skip]` because their selectors no longer
+matched anything. **A scenario that stops finding its target reads as a pass** —
+the summary line still said "All sheets open and close cleanly", with
+"(3 skipped)" appended.
+
+So: **treat a new `[skip]` as a failure**, and when a layout change lands, assert
+the page rendered rather than inferring it from a green audit. The cheapest
+proof is a headless run that asserts a known selector resolves and dumps
+`main`'s `innerText`; a screenshot is better because it also catches a page that
+renders but renders wrong.
+
+Not a fix, but the reason this was cheap to find at all: the flicker probe
+prints per-scenario status. A probe that only printed a pass/fail total would
+have said "pass".
+→ `src/components/ProfileView.tsx`, `src/components/StatsView.tsx`,
+`scripts/flicker-probe.mjs`
+
 ### What a standing check covers — and what it cannot
 The three checks are deliberately narrow. **A green run means only what the
 check measures.** Four sheet-flicker fixes shipped citing "183 tests, astro
@@ -891,9 +908,24 @@ here means "this was tried and is no longer how the code works."
 
 The sheet flicker took five merged PRs. These were the wrong turns:
 
+- **A shadow on the bottom bar renders nothing — use `.ledge`.** True while
+  depth existed: every token cast downward, so on a `bottom-0` element it
+  painted off-screen and looked like a no-op. The whole hazard class went with
+  the redesign — `--shadow-lift-rest`, `--shadow-lift-hover`, `--shadow-ledge`
+  and all six `--hill-btn-*` now resolve to `none` in both themes, and the bar
+  separates with `border-t` plus an opaque fill. `.ledge` survives, but only to
+  carry the one part that is still true and is NOT about shadows: **never put a
+  transform on that element**, because it carries
+  `pointer-fine:backdrop-blur-md` and a transform there promotes a composited
+  layer. (It would not break the bar's own position — only a transformed
+  *ancestor* does that, which is the plausible-sounding wrong reason.)
+
 - **`.lift` fights JS-driven transforms → use `.lift-fixed`.** True while sheets
-  were Motion-animated. Nothing in a sheet is JS-animated now. `.lift-fixed`
-  survives for its resting shadow only.
+  were Motion-animated. Nothing in a sheet is JS-animated now, and there is no
+  resting shadow left either. `.lift-fixed` survives to carry the rule rather
+  than the styling: **no transform, and no transform transition, on a surface
+  that is already being animated.** That is about compositing, not depth, and
+  will be true again the moment someone adds a hover effect to a sheet panel.
 - **Nested opacity: animate `y` on the panel, let the scrim carry the fade.**
   The scrim no longer fades.
 - **Mount sheets permanently and toggle `open` so `AnimatePresence` can play the
