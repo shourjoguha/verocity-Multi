@@ -426,6 +426,38 @@ Lightning CSS dropped plain `backdrop-filter` from a hand-authored rule and kept
 only `-webkit-`. **Prefer a Tailwind utility/variant** over hand-rolled CSS for
 anything needing prefixes.
 
+### A form saves nothing, and the fields that fail are the newest ones
+`[confirmed against the live project]`
+`/app/you` → Profile silently refused to save experience, disciplines, days-per-week,
+equipment and plan length — all at once, behind one generic "Could not save" toast. The
+client was correct at every line: the controls were wired, `onSave` sent all eleven
+columns, `upsertUserStats` stripped nothing, and the owner-scoped policies permit the
+write.
+`supabase/migrations/0031_onboarding.sql` had been **written but never applied**, so
+`user_stats` had no `disciplines` column. PostgREST answers an unknown key with PGRST204
+and **rejects the entire payload**, not the one bad field — which is why every value on
+the form failed together and none of them looked like the cause. The same drift had
+hidden a second bug: `supabase/migrations/0016_library_subroutines.sql` was missing too,
+so `Movement` promised `kind` and `url` that the table did not have and the library's
+"+ Subroutine" save was dead.
+**Check the schema before you read the component.** Migrations here are applied by hand
+(`docs/HANDOVER.md`), so drift is the default failure and not an unlikely one — it had
+happened twice in thirty-one. The ten-second diff is the Supabase MCP's migration list
+against `ls supabase/migrations/`, matched on the file's NAME: applied rows carry
+timestamp versions, and a few early ones dropped the numeric prefix entirely.
+**Two weaker forms of the same drift exist and are not the same bug.** A migration can be
+applied by hand without writing a history row (0019 — the column and its comment are
+live, the history entry is not), and a table can exist with no file behind it at all
+(`rx_deep_results`), which a fresh clone cannot rebuild. Compare against the live columns
+before calling a gap a missing migration.
+**And the reason it survived for weeks:** `OnboardingView`'s `persist()` discarded the
+boolean `upsertUserStats` returns, so the very first surface to write these columns failed
+in total silence and advanced anyway. **A write path that cannot report failure hides a
+schema fault indefinitely** — which is also why no check here caught it. `npm test` stubs
+the network, and all three browser audits stub Supabase REST, so none of them can see a
+column that does not exist.
+→ `src/components/UserStatsPanel.tsx`, `src/components/OnboardingView.tsx`, `src/lib/queries.ts`
+
 ## Caching
 
 ### A stat is stuck on a round number

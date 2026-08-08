@@ -86,7 +86,7 @@ export function SetRow({
         className="flex min-h-11 min-w-0 flex-1 items-baseline gap-2 text-left"
       >
         {main ? (
-          <span className="truncate font-display text-2xl leading-none tabular-nums text-fg">
+          <span className="truncate font-display text-xl leading-none tabular-nums text-fg">
             {main}
           </span>
         ) : (

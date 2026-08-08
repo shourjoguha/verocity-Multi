@@ -66,8 +66,10 @@ Every clause below is load-bearing:
   never flickered.
 - **Mount/unmount is immediate.** No deferred unmount, no JS-driven animation.
   Entrance is the CSS `sheet-rise` keyframe in `src/styles/global.css`.
-- **The panel uses `lift-fixed`, never `lift`.** `.lift` sets a `transform`
-  *and* `transition: transform`, which fights the entrance animation.
+- **The panel uses `lift-fixed`, never `lift`.** The rule outlives the shadows
+  it was written for: never put a transform, *or a transform transition*, on a
+  surface that is already being animated. `.lift` used to set both and the
+  sheet visibly stuttered.
 - **Focus enters the panel only under `(pointer: fine)`.** On touch, focus stops
   at the panel itself (`tabIndex={-1}`). Focusing a text field raises the iOS
   keyboard mid-animation, which resizes the visual viewport, which relayouts
@@ -89,17 +91,24 @@ of token overrides under `html[data-theme='dark']` in `src/styles/global.css`;
 a hardcoded hex breaks it silently and no check will catch it. Colors are HSL,
 declared in the `@theme` block.
 
-- **Depth** is `.lift` / `.lift-interactive` — never an inline `box-shadow`.
-  `.lift-interactive` adds a perspective tilt wrapped in
-  `prefers-reduced-motion: no-preference`. Rows inside a hairline-divider
-  container (`gap-px` grids, StatCard grids) stay flat.
-  **Any surface whose transform is animated takes `.lift-fixed` instead.**
-- **Buttons are 3D pillows** — `.hill-btn`. Toggle buttons MUST set
-  `aria-pressed` or the pressed-in state never lands. `.hill-btn-flush` is the
-  variant for buttons inside a popover or modal that already has elevation.
-  Ghost variants need a `bg-surface` body — a transparent button has nothing
-  for the highlight inset to render against. Icon-only buttons h-5..h-8 stay
-  flat by design.
+- **Depth is retired — separation is a hairline.** `--shadow-lift-*`,
+  `--shadow-ledge` and all six `--hill-btn-*` resolve to `none` in **both**
+  themes. Surfaces separate with a 1px `--color-border` and a surface-tone step,
+  never a cast shadow and never an inline `box-shadow`. `.lift` is now the flat
+  card treatment (radius + a fill/border transition); `.lift-interactive`
+  changes fill and border on hover instead of tilting. Two hairline weights and
+  the distinction carries the look: `--color-border` outlines a card,
+  `--color-border-soft` divides rows *inside* one (see `ListCard`). Rows inside
+  a hairline-divider container stay flat — that is the default now, not the
+  exception. **Any surface whose transform is animated takes `.lift-fixed`.**
+- **Buttons are flat** — `.hill-btn` is `--radius-control` plus a fill/border
+  state change. No insets, no outer cast, and **no transform in any state**:
+  several of these sit inside surfaces carrying `pointer-fine:backdrop-blur-*`,
+  and a transform there promotes a composited layer. Toggle buttons MUST still
+  set `aria-pressed` — that is an accessibility contract, `ui/SegmentedTabs`
+  depends on it, and the flat pressed state is keyed off it. `.hill-btn-flush`
+  is kept for callers that name it. Ghost variants keep their `bg-surface` body,
+  now for the hover fill. Icon-only buttons h-5..h-8 stay flat by design.
 - **EchoText layers** must set both `--echo-dx` and `--echo-tz`.
 - **Backdrop presets are enumerated only in `src/lib/background.ts`**
   (`BACKGROUNDS`, `BACKGROUND_KEYS`). New presets stay monochrome and derived

@@ -133,6 +133,15 @@ export default function Logger() {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  // Which movements' notes are expanded past the one-line clamp — keyed by
+  // item id, same shape as `collapsed`.
+  const [notesOpen, setNotesOpen] = useState<Set<string>>(new Set());
+  const toggleNotesOpen = (id: string) =>
+    setNotesOpen((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   // Completed groups that have been "parked" into the Done list at the bottom. A
   // fully-complete group parks only once the user starts a DIFFERENT movement
   // (deferred), so nothing jumps away mid-set. Parked groups render collapsed but
@@ -634,6 +643,28 @@ export default function Logger() {
     window.location.href = idRef.current ? `/app/session?id=${idRef.current}` : '/app';
   }
 
+  // Session-wide sets counter for header row 2 and the Finish button. A plain
+  // derived value, not a hook — but declared here, above every early return
+  // in this component, on purpose: see docs/LESSONS.md § "The whole page is
+  // blank, and two of the three audits are green on it" for what a hook
+  // placed below an early return does (React error "rendered more hooks than
+  // during the previous render", a fully blank page, with audit:shell and
+  // audit:mobile both green because an empty DOM vacuously satisfies both).
+  // This isn't a hook, so hook order was never at risk —
+  // the placement is the same discipline anyway, so nobody has to re-derive
+  // that fact the next time something is added near it.
+  const sessionSets = doc.sections
+    .flatMap((s) => s.groups)
+    .flatMap((g) => g.items)
+    .filter((it) => !isSubroutine(it))
+    .reduce(
+      (acc, it) => ({
+        done: acc.done + it.sets.filter((s) => s.actual.completed).length,
+        total: acc.total + it.sets.length,
+      }),
+      { done: 0, total: 0 },
+    );
+
   if (!ready) return <LoadingScreen />;
 
   // Asked to START a workout while another one is still running. Nothing has
@@ -777,6 +808,7 @@ export default function Logger() {
       );
     }
     const allDone = item.sets.length > 0 && item.sets.every((s) => s.actual.completed);
+    const doneCount = item.sets.filter((s) => s.actual.completed).length;
     // A single-movement group collapses via its own header (tap the movement
     // name). Inside a superset the group header owns collapse, so items here
     // always render their sets.
@@ -838,18 +870,31 @@ export default function Logger() {
               {allDone ? ' · done' : ''}
             </span>
           ) : (
-          <div className="flex items-center gap-2 t-control text-muted">
+          <>
+            {/* Per-movement done/total — the mockup's "2/4" between the name
+                and the chip row. Fragment, not a wrapping div, so this and
+                the chip row stay siblings of the name block above and the
+                whole header keeps wrapping as ONE flex-wrap row rather than
+                stacking into two. */}
+            <span className="shrink-0 t-label text-faint tabular-nums">
+              {doneCount}/{item.sets.length}
+            </span>
+            <div className="flex items-center gap-2 t-control text-muted">
             <button
               onClick={() => {
                 activate(groupId);
                 const nextMetric = METRIC_CYCLE[(METRIC_CYCLE.indexOf(item.primaryMetric) + 1) % METRIC_CYCLE.length];
                 setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric));
               }}
-              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 hover:text-fg"
+              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-2 hover:text-fg"
               aria-label="Change metric"
             >
               {item.primaryMetric}
             </button>
+            {/* Voice stays visible at every width — the mockup hides it below
+                sm:, and hiding a control on the primary target platform is
+                removing a feature, not compacting a layout. The row wraps
+                instead (parent is flex-wrap). */}
             {voice.supported && !editing ? (
               <button
                 onClick={() => {
@@ -857,7 +902,7 @@ export default function Logger() {
                   listen(item.id, si, gi, ii);
                 }}
                 aria-pressed={voiceTarget === item.id}
-                className={`hill-btn flex min-h-11 items-center border bg-surface px-3 hover:text-fg ${
+                className={`hill-btn flex min-h-11 items-center border bg-surface px-2 hover:text-fg ${
                   voiceTarget === item.id ? 'border-accent text-accent' : 'border-border'
                 }`}
               >
@@ -870,29 +915,47 @@ export default function Logger() {
                   const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
                   if (restSeconds > 0) rest.start(restSeconds);
                 }}
-                className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 hover:text-fg"
+                className="hill-btn flex min-h-11 items-center border border-border bg-surface px-2 hover:text-fg"
               >
                 Rest
               </button>
             ) : null}
             <button
               onClick={() => setOptionsFor({ si, gi, ii })}
-              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 hover:text-fg"
+              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-2 hover:text-fg"
               aria-label="Movement options"
             >
               ⋯
             </button>
-          </div>
+            </div>
+          </>
           )}
         </div>
         {isCollapsed ? null : (
         <>
         {item.notes ? (
-          <p className="mb-3 whitespace-pre-wrap border-l-2 border-border pl-2 t-control text-muted">
-            {item.notes}
-          </p>
+          // Tap-to-expand, one-line clamp — `line-clamp-1` is a Tailwind v4
+          // core utility, not hand-rolled CSS (see docs/LESSONS.md § "Hand-
+          // written CSS loses its unprefixed property" for why a hand-rolled
+          // -webkit-line-clamp rule is the wrong call here). -my-2 pulls the
+          // min-h-11 tap target back so a one-line note doesn't push the set
+          // list down — same technique as the +Movement/+Subroutine row.
+          <button
+            type="button"
+            onClick={() => toggleNotesOpen(item.id)}
+            aria-expanded={notesOpen.has(item.id)}
+            className="-my-2 flex min-h-11 w-full items-center border-l-2 border-border pl-2 text-left"
+          >
+            <span
+              className={`whitespace-pre-wrap t-control text-muted ${
+                notesOpen.has(item.id) ? '' : 'line-clamp-1'
+              }`}
+            >
+              {item.notes}
+            </span>
+          </button>
         ) : null}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col [&>*+*]:border-t [&>*+*]:border-border-soft">
           {item.sets.map((set, ki) => {
             const prev = ki > 0 ? item.sets[ki - 1] : null;
             const cliff =
@@ -906,7 +969,7 @@ export default function Logger() {
               set.actual.reps != null &&
               prev.actual.reps - set.actual.reps > 2;
             return (
-              <div key={ki} className="flex flex-col gap-2">
+              <div key={ki} className="flex flex-col gap-2 py-2">
                 <SetRow
                   metric={item.primaryMetric}
                   set={set}
@@ -955,7 +1018,13 @@ export default function Logger() {
       const isCollapsed = collapsed.has(group.id);
       const groupDone = !!group.completedAt;
       return (
-        <div key={group.id} className={`border border-accent ${isCollapsed ? 'px-4 py-1' : 'p-4'}`}>
+        // Left accent rule, not an all-round accent border — the mockup's
+        // "superset with previous" cue on an otherwise ordinary bordered
+        // card, matching the single-movement group's border-border below.
+        <div
+          key={group.id}
+          className={`border border-border border-l-2 border-l-accent ${isCollapsed ? 'px-4 py-1' : 'p-4'}`}
+        >
           <div className={`flex items-center justify-between gap-2 t-control ${isCollapsed ? '' : 'mb-3'}`}>
             <button
               type="button"
@@ -1064,52 +1133,81 @@ export default function Logger() {
           having to know the header's height. (`min-h-svh` did know it, and was
           wrong by exactly that much.) The reading column moved in here; the
           outer div is full-bleed so the bar can span the screen. */}
-      <div className="mx-auto w-full max-w-2xl flex-1 px-4 sm:px-6 py-8">
-      {/* Wraps: at 375px a session past the hour mark ("1:05:23" at text-5xl)
-          plus Home and Pause does not fit on one line. */}
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-2">
-        {editing ? (
-          <div>
-            <div className="font-display text-3xl uppercase tracking-tight text-fg">Editing</div>
-            <div className={`t-control ${unsaved ? 'text-accent' : 'text-muted'}`}>
-              {status}
-              {saving ? ' · saving…' : ''}
-              {unsaved && !saving ? ' · not saved' : ''}
-            </div>
-          </div>
-        ) : (
-          <>
+      <div className="mx-auto w-full max-w-2xl flex-1 px-3 sm:px-4 pb-8 pt-4">
+      {/* Recomposed header: row 1 is the clock/status + Home/Pause (or the
+          "Editing" heading), row 2 is the Session details toggle plus the
+          sets count and date — one <header>, replacing the previous two
+          separate blocks (clock row, then a full-width details row) so the
+          hairline between them sits once instead of twice.
+          DELIBERATE DEVIATION from the mockup: the mockup's header is
+          `sticky top-0`. Ours stays IN FLOW, not sticky. App.astro already
+          sticks its own h-12 header at top-0 and auto-hides it on 24px of
+          committed downward scroll, and the rest-timer bar below already
+          sticks at top-12 underneath it — a third sticky bar in the same
+          scroller means either a hard-coded offset that detaches when the
+          app header retracts, or stacked stickies that must know each
+          other's heights. The clock is not what you need mid-set; the rest
+          timer is, and it is already sticky. */}
+      <header className="mb-6">
+        {/* Wraps: at 375px a session past the hour mark ("1:05:23" at
+            text-4xl) plus Home and Pause does not fit on one line. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {editing ? (
             <div>
-              <div className="font-display text-5xl tabular-nums text-fg">{clock(stopwatch.seconds)}</div>
-              <div className={`t-control ${unsaved ? 'text-accent' : 'text-muted'}`}>
+              <div className="font-display text-3xl uppercase tracking-tight text-fg">Editing</div>
+              <div className={`t-label ${unsaved ? 'text-accent' : 'text-muted'}`}>
                 {status}
                 {saving ? ' · saving…' : ''}
                 {unsaved && !saving ? ' · not saved' : ''}
               </div>
             </div>
-            {/* Home leaves the session RUNNING — it is not a third way to end
-                one, which is why it sits up here with the clock rather than in
-                the Finish bar, where both actions stop the workout. */}
-            <div className="flex shrink-0 items-center gap-2">
-              <Button variant="ghost" onClick={goHome}>
-                Home
-              </Button>
-              <Button variant="ghost" onClick={() => (stopwatch.running ? stopwatch.pause() : stopwatch.resume())}>
-                {stopwatch.running ? 'Pause' : 'Resume'}
-              </Button>
-            </div>
-          </>
-        )}
-      </header>
+          ) : (
+            <>
+              <div>
+                <div className="font-display text-4xl tabular-nums text-fg">{clock(stopwatch.seconds)}</div>
+                <div className={`t-label ${unsaved ? 'text-accent' : 'text-muted'}`}>
+                  {status}
+                  {saving ? ' · saving…' : ''}
+                  {unsaved && !saving ? ' · not saved' : ''}
+                </div>
+              </div>
+              {/* Home leaves the session RUNNING — it is not a third way to
+                  end one, which is why it sits up here with the clock rather
+                  than in the Finish bar, where both actions stop the
+                  workout. min-h-11 stays; only the horizontal padding
+                  tightens (px-3! wins over Button's own px-4 — Tailwind has
+                  no class-merge here, so an unmarked override can silently
+                  lose the cascade). */}
+              <div className="flex shrink-0 items-center gap-2">
+                <Button variant="ghost" onClick={goHome} className="px-3!">
+                  Home
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => (stopwatch.running ? stopwatch.pause() : stopwatch.resume())}
+                  className="px-3!"
+                >
+                  {stopwatch.running ? 'Pause' : 'Resume'}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
 
-      <div className="mb-6">
-        <button
-          type="button"
-          onClick={() => setShowDetails((v) => !v)}
-          aria-expanded={showDetails}
-          className="flex min-h-11 w-full items-center justify-between border-y border-border t-control text-muted transition-colors hover:text-fg"
-        >
-          <span className="flex items-center gap-2">
+        {/* `flex-wrap`, and the two meta spans grouped so they wrap as a unit.
+            Without it the row is three non-shrinking children that do not fit
+            at 375px, and the date runs past the hairline — clipped by
+            `[data-scroll-root]`'s `overflow-x-hidden`, which is why
+            audit:mobile stays green on it (docs/LESSONS.md § "A fix silently
+            switched off an existing guard"). Caught by screenshot, not by a
+            check. */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-y border-border">
+          <button
+            type="button"
+            onClick={() => setShowDetails((v) => !v)}
+            aria-expanded={showDetails}
+            className="flex min-h-11 items-center gap-2 t-control text-muted transition-colors hover:text-fg"
+          >
             <span
               aria-hidden
               className={`inline-block text-[0.7rem] transition-transform ${showDetails ? 'rotate-90' : ''}`}
@@ -1117,12 +1215,17 @@ export default function Logger() {
               ▸
             </span>
             Session details
+          </button>
+          <span className="ml-auto flex items-center gap-3">
+            <span className="t-label text-faint tabular-nums">
+              {sessionSets.done}/{sessionSets.total} sets
+            </span>
+            <span className="t-label text-muted tabular-nums">
+              {logDate}
+              {tags.length ? ` · ${tags.length}` : ''}
+            </span>
           </span>
-          <span className="tabular-nums">
-            {logDate}
-            {tags.length ? ` · ${tags.length}` : ''}
-          </span>
-        </button>
+        </div>
 
         {showDetails ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1163,7 +1266,7 @@ export default function Logger() {
             </pre>
           </details>
         ) : null}
-      </div>
+      </header>
 
       {showVibe ? <VibeCheckCard onSave={saveVibe} onSkip={() => setShowVibe(false)} /> : null}
 
@@ -1217,7 +1320,8 @@ export default function Logger() {
                 </div>
               }
             >
-              {sectionLabel(section.key)}
+              {sectionLabel(section.key)}{' '}
+              <span className="text-faint tabular-nums">{groups.length}</span>
             </SectionHeader>
             <div className="flex flex-col gap-4">
               {groups.map((group, gi) => (parked.has(group.id) ? null : renderGroup(si, gi)))}
@@ -1544,7 +1648,7 @@ export default function Logger() {
           whose bottom edge cannot lag. Last in-flow child of the column, so it
           pins until the page ends — which is also why the column dropped its
           `pb-32` bar reserve. */}
-      <div className="pb-safe sticky bottom-0 border-t border-border bg-bg px-4 pt-3 pointer-fine:bg-bg/95 pointer-fine:backdrop-blur sm:px-6">
+      <div className="pb-safe sticky bottom-0 border-t border-border bg-bg px-3 pt-3 pointer-fine:bg-bg/95 pointer-fine:backdrop-blur sm:px-4">
         <div className="mx-auto flex max-w-2xl flex-col items-center gap-1">
           {editing ? (
             <Button onClick={finishEdit} className="w-full">
@@ -1557,6 +1661,9 @@ export default function Logger() {
                   reach for with a shaking hand after a set. */}
               <Button onClick={() => finish('done')} className="w-full">
                 Finish
+                <span className="ml-2 text-bg/45 tabular-nums">
+                  {sessionSets.done}/{sessionSets.total}
+                </span>
               </Button>
               <button
                 type="button"
