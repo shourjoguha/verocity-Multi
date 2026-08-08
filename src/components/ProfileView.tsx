@@ -8,7 +8,7 @@ import {
 } from '@/lib/queries';
 import { getCached, setCached } from '@/lib/queryCache';
 import { activeSessionOf } from '@/lib/activeSession';
-import { currentStreak, ymdLocal } from '@/lib/streak';
+import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
 import type { TimelinePoint } from '@/lib/timeline';
 import { bestE1rm } from '@/lib/e1rm';
@@ -16,20 +16,15 @@ import { currentProgramWeek, planWeekCount } from '@/lib/progression';
 import { completedLogs } from '@/lib/stats';
 import { formatDuration, formatRound } from '@/lib/format';
 import { buildTimeline, DAY_NAMES, dayNameFromLabel, typeFromLabel } from '@/lib/timeline';
-import { sessionTagColors } from '@/lib/tags';
 import {
   Card,
-  CompletionRing,
   EmptyState,
-  HeroCard,
   LoadingScreen,
   SectionHeader,
-  StatStrip,
+  StatCard,
   TickProgress,
-  WeekRail,
 } from '@/components/ui/primitives';
 import { LogList } from '@/components/LogList';
-import { Disclosure } from '@/components/ui/Disclosure';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { DayPreviewDialog } from '@/components/DayPreviewDialog';
@@ -455,32 +450,11 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   // returns below — hooks cannot run conditionally.
   const done = useMemo(() => completedLogs(allLogs), [allLogs]);
 
-  // The seven days of the current week, Monday-first to match MonthCalendar.
-  // A day carries a colour when something was logged on it — the colour is the
-  // session's own activity colour from app.config via sessionTagColors, so the
-  // rail agrees with the calendar and the activity strip rather than inventing
-  // a third palette.
-  const weekDays = useMemo(() => {
-    const now = new Date();
-    const dow = (now.getDay() + 6) % 7; // 0 = Monday
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - dow);
-    const todayKey = ymdLocal(now);
-    return Array.from({ length: 7 }).map((_, i) => {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const key = ymdLocal(d);
-      const onDay = allLogs.filter((l) => l.log_date === key);
-      const colors = onDay.flatMap((l) => sessionTagColors(l.tags ?? [], l.activity_type));
-      return {
-        key,
-        letter: 'MTWTFSS'[i],
-        date: d.getDate(),
-        color: colors[0],
-        today: key === todayKey,
-      };
-    });
-  }, [allLogs]);
+  // Recent sessions starts at five. Declared HERE, above the early returns
+  // below, because hooks cannot run conditionally — putting a hook after
+  // `if (loading)` is what crashed this component with React #310 once
+  // already, and the audits were green on the blank page it produced.
+  const [showAllRecent, setShowAllRecent] = useState(false);
 
   if (loading) {
     return <LoadingScreen />;
@@ -511,7 +485,8 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const totalSeconds = done.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0);
   const top = topE1rm(done);
   const streak = currentStreak(allLogs);
-  const week = plan ? currentProgramWeek(plan.id, allLogs, planWeekCount(plan.parsed)) : null;
+  const totalWeeks = plan ? planWeekCount(plan.parsed) : 0;
+  const week = plan ? currentProgramWeek(plan.id, allLogs, totalWeeks) : null;
   const todayDayName = DAY_NAMES[new Date().getDay()];
 
   const days = plan?.parsed.days ?? [];
@@ -540,21 +515,6 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   // app, so a session left running is impossible to walk past. See
   // .shimmer-resume in global.css.
   const resumeClass = 'bg-teal-deep text-teal-fg shimmer-resume';
-
-
-  // Sessions done this week against the plan's weekly template — the ring's
-  // denominator is what the plan asks for, not how many days exist.
-  const plannedPerWeek = plan?.parsed.weeklyTemplate.length ?? 0;
-  const doneThisWeek = weekDays.filter((d) => d.color).length;
-
-  // The first three movements of the day you are about to do, so Start is an
-  // informed tap rather than a leap. Subroutines carry a title in `movement`
-  // and no sets, so they are skipped here — a "See the video" row is not a
-  // useful preview of what the session asks of you.
-  const previewMovements = (activeDay?.exercises ?? [])
-    .filter((e) => e.kind !== 'subroutine')
-    .slice(0, 3);
-  const movementCount = (activeDay?.exercises ?? []).filter((e) => e.kind !== 'subroutine').length;
 
   return (
     <>
@@ -619,125 +579,99 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           belongs to the unit, not its parts. */}
       {mode === 'app' ? (
         <Item>
-          <section className="mb-6">
-            {/* No section label here on purpose: the card says "Next up" and
-                names the session, so an "Active plan" eyebrow above it was
-                labelling the label. */}
+          <section className="mb-8">
+            <SectionHeader>Active plan</SectionHeader>
             {plan ? (
               <>
-                {/* The week lives on the RAIL, which frees the column beside it
-                    for the session itself — its name, its shape, and its first
-                    three movements, so Start is an informed tap rather than a
-                    leap. The rail is the plan CONDENSED; the full plan (the day
-                    accordion, every exercise, every week) is one tap away at
-                    /app/plan and is not duplicated here. */}
-                <HeroCard
-                  action={
-                    <>
+                <div className="lift flex flex-col gap-px border border-border bg-border">
+                  {/* Row one: which block, how far into it, and the way out to
+                      the full plan. The week now says "of N" and carries the
+                      TickProgress dashes under it — a bare "Week 3" told you
+                      where you were but not how much was left. */}
+                  <div className="bg-surface p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        {/* Wraps rather than truncates: "Endurance & Cut Block"
+                            lost half its name to an ellipsis once the View link
+                            claimed its 44px target. */}
+                        <div className="font-display text-xl font-semibold leading-tight tracking-tight text-fg">
+                          {plan.name}
+                        </div>
+                        {week ? (
+                          <div className="t-label mt-1 text-muted">
+                            Week {week} of {totalWeeks}
+                          </div>
+                        ) : null}
+                      </div>
+                      {/* The glyph stays small; the TARGET may not — inline-flex
+                          + min-h-11 gives it the 44px box without changing how it
+                          reads. A bare text link measured 12px tall here. */}
                       <a
-                        href={
-                          resumeHref ??
-                          (activeDay ? `/app/log?day=${encodeURIComponent(activeDay.dayKey)}` : '/app/log')
-                        }
-                        className={`flex min-h-13 flex-1 items-center justify-center overflow-hidden px-4 transition-colors ${
-                          resumeHref ? resumeClass : 'bg-fg text-bg hover:bg-subtle'
-                        }`}
+                        href="/app/plan"
+                        className="t-eyebrow -my-2 inline-flex min-h-11 shrink-0 items-center text-muted transition-colors hover:text-fg"
                       >
-                        {/* Above the sheen, which is an ::after on the anchor. */}
-                        <span className="t-control relative truncate">
-                          {resumeHref
-                            ? resumeLabel
-                            : activeDay
-                              ? `Start ${typeFromLabel(activeDay.label)}`
-                              : 'Start workout'}
-                        </span>
+                        View →
                       </a>
-                      {/* The chooser is the only route to minis, saved sessions,
-                          past-plan days, a blank workout and Log activity — it
-                          cannot disappear just because the rail took over the
-                          common case. */}
-                      <button
-                        type="button"
-                        onClick={() => setAddOpen(true)}
-                        aria-label="Other ways to start a session"
-                        className="flex min-h-13 w-14 shrink-0 items-center justify-center border-l border-border bg-surface text-muted transition-colors hover:bg-elevated hover:text-fg"
-                      >
-                        <span aria-hidden className="text-base leading-none">⋯</span>
-                      </button>
-                    </>
-                  }
-                >
-                  <div className="flex gap-4">
-                    <WeekRail days={weekDays} />
-                    <div className="min-w-0 flex-1">
-                      <div className="t-label text-muted">Next up</div>
-                      {/* Wraps rather than truncates: a session name losing half
-                          itself to an ellipsis is the bug this replaced. */}
-                      <h3 className="mt-1 font-display text-lg leading-tight tracking-[-0.02em] text-fg">
-                        {activeDay ? activeDay.label : plan.name}
-                      </h3>
-                      {activeDay ? (
-                        <div className="t-label mt-1.5 text-muted">
-                          {movementCount} movements
-                        </div>
-                      ) : null}
-
-                      {previewMovements.length > 0 ? (
-                        <ul className="mt-3 grid gap-1.5">
-                          {previewMovements.map((e) => (
-                            <li key={e.movement} className="flex justify-between gap-2 text-xs">
-                              <span className="truncate text-subtle">{e.movement}</span>
-                              <span className="shrink-0 tabular-nums text-faint">
-                                {week ? (e.plannedByWeek[week] ?? '') : ''}
-                              </span>
-                            </li>
-                          ))}
-                          {movementCount > previewMovements.length ? (
-                            <li className="text-xs text-faint">
-                              + {movementCount - previewMovements.length} more
-                            </li>
-                          ) : null}
-                        </ul>
-                      ) : null}
                     </div>
+                    {week ? (
+                      <div className="mt-3">
+                        <TickProgress
+                          value={week}
+                          total={totalWeeks}
+                          label={`Week ${week} of ${totalWeeks}`}
+                        />
+                      </div>
+                    ) : null}
                   </div>
-                </HeroCard>
 
-                {/* Block progress + the week's completion, as one quiet row.
-                    "View →" is the expansion into the full plan. */}
-                <div className="lift mt-3 border border-border bg-surface p-4">
-                  <div className="flex items-center gap-4">
-                    <CompletionRing
-                      value={doneThisWeek}
-                      total={plannedPerWeek || 7}
-                      label={`${doneThisWeek} of ${plannedPerWeek || 7} sessions this week`}
+                  {days.length > 0 ? (
+                    <DayAccordion
+                      days={days}
+                      activeKey={activeKey}
+                      todayDayName={todayDayName}
+                      onSelect={setActiveDayKey}
+                      onPreview={setPreviewDay}
                     />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-fg">{plan.name}</div>
-                      {week ? (
-                        <div className="t-label mt-1 text-muted">
-                          Week {week} of {planWeekCount(plan.parsed)}
-                        </div>
-                      ) : null}
-                    </div>
-                    <a
-                      href="/app/plan"
-                      className="t-control -my-2 inline-flex min-h-11 shrink-0 items-center text-muted transition-colors hover:text-fg"
-                    >
-                      View →
-                    </a>
-                  </div>
-                  {week ? (
-                    <div className="mt-3">
-                      <TickProgress
-                        value={week}
-                        total={planWeekCount(plan.parsed)}
-                        label={`Week ${week} of ${planWeekCount(plan.parsed)}`}
-                      />
-                    </div>
                   ) : null}
-                </div>
 
+                  {/* Flat, not pillowed. `.hill-btn-flush` carries a 4px radius
+                      and an inset dark edge, which inside a hairline-divider
+                      container reads as a rounded pill floating ON the card
+                      rather than a segment OF it — the same reason rows in a
+                      gap-px grid never take .lift. The unit owns the depth. */}
+                  <div className="flex gap-px bg-border">
+                    <a
+                      href={
+                        resumeHref ??
+                        (activeDay ? `/app/log?day=${encodeURIComponent(activeDay.dayKey)}` : '/app/log')
+                      }
+                      className={`flex min-h-13 flex-1 items-center justify-center overflow-hidden px-4 transition-colors ${
+                        resumeHref ? resumeClass : 'bg-fg text-bg hover:bg-fg/85'
+                      }`}
+                    >
+                      {/* Above the sheen, which is an ::after on the anchor. */}
+                      <span className="t-control relative truncate">
+                        {resumeHref
+                          ? resumeLabel
+                          : activeDay
+                            ? `Start ${typeFromLabel(activeDay.label)}`
+                            : 'Start workout'}
+                      </span>
+                    </a>
+                    {/* The chooser is the only route to minis, saved sessions,
+                        past-plan days, a blank workout and Log activity — it
+                        cannot disappear just because the day cards took over
+                        the common case. */}
+                    <button
+                      type="button"
+                      onClick={() => setAddOpen(true)}
+                      aria-label="Other ways to start a session"
+                      className="flex min-h-13 w-14 items-center justify-center bg-surface text-muted transition-colors hover:bg-elevated hover:text-fg"
+                    >
+                      <span aria-hidden className="text-base leading-none">⋯</span>
+                    </button>
+                  </div>
+                </div>
                 <div className="flex justify-end">
                   <a
                     href="/app/coach"
@@ -784,20 +718,24 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
       ) : null}
 
       <Item>
-        <section className="mb-6">
-          <StatStrip
-            stats={[
-              { label: 'Sessions', value: sessionCount },
-              { label: 'Total time', value: formatDuration(totalSeconds) },
-              {
-                label: 'Top e1RM',
-                value: top != null ? formatRound(top) : '—',
-                unit: top != null ? 'kg' : undefined,
-              },
-            ]}
+        <section className="mb-6 grid grid-cols-3 gap-px bg-border">
+          <StatCard label="Sessions" value={sessionCount} />
+          <StatCard label="Total time" value={formatDuration(totalSeconds)} />
+          <StatCard
+            label="Top e1RM"
+            value={top != null ? formatRound(top) : '—'}
+            unit={top != null ? 'kg' : undefined}
           />
         </section>
       </Item>
+
+      {mode === 'app' ? (
+        <Item>
+          <section className="mb-6">
+            <ActivityStrip plan={plan} logs={allLogs} />
+          </section>
+        </Item>
+      ) : null}
 
       {mode === 'showcase' ? (
         <Item>
@@ -817,75 +755,53 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </Item>
       ) : null}
 
+      {mode === 'app' ? (
+        <Item>
+          <section className="mb-8">
+            <MonthCalendar
+              logs={allLogs}
+              onDayClick={(date, sessions) => {
+                if (sessions.length > 0) setQuickLog(sessions[0]);
+                else {
+                  setAddDate(date);
+                  setAddOpen(true);
+                }
+              }}
+              onSelectLog={setQuickLog}
+            />
+          </section>
+        </Item>
+      ) : null}
+
       <Item>
-        <section className="mb-6">
-          <SectionHeader
-            action={
-              logs.length > 3 ? (
-                <a
-                  href="/app/sessions"
-                  className="t-label -my-2 inline-flex min-h-11 items-center text-fg transition-colors hover:text-muted"
-                >
-                  All →
-                </a>
-              ) : undefined
-            }
-          >
-            Recent
-          </SectionHeader>
+        <section>
+          <SectionHeader>Recent sessions</SectionHeader>
           {logs.length === 0 ? (
             <EmptyState>No sessions logged yet.</EmptyState>
           ) : (
-            <LogList logs={logs.slice(0, 3)} onSelect={mode === 'app' ? setQuickLog : undefined} />
+            <>
+              <LogList
+                logs={logs.slice(0, showAllRecent ? 12 : 5)}
+                onSelect={mode === 'app' ? setQuickLog : undefined}
+              />
+              {/* A plain text button, deliberately not a card and not a
+                  Disclosure: this is one list that grows, not a second
+                  container stacked under the first. min-h-11 keeps it a legal
+                  tap target even though it reads as a link. */}
+              {logs.length > 5 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllRecent((v) => !v)}
+                  aria-expanded={showAllRecent}
+                  className="t-control flex min-h-11 w-full items-center justify-center text-muted transition-colors hover:text-fg"
+                >
+                  {showAllRecent ? 'Show less' : `Show more (${Math.min(logs.length, 12) - 5})`}
+                </button>
+              ) : null}
+            </>
           )}
         </section>
       </Item>
-
-      {/* Everything the condensed default folds away. NOTHING here is removed —
-          the month grid, the full history strip and the plan's day picker all
-          keep their current implementations and their current behaviour; they
-          simply stop competing with today's session for the first screenful.
-          Native <details>, so there is no JS state and no animation to get
-          wrong. */}
-      {mode === 'app' ? (
-        <Item>
-          <div className="mb-3">
-            <Disclosure title="Choose a different day">
-              {days.length > 0 ? (
-                <DayAccordion
-                  days={days}
-                  activeKey={activeKey}
-                  todayDayName={todayDayName}
-                  onSelect={setActiveDayKey}
-                  onPreview={setPreviewDay}
-                />
-              ) : (
-                <EmptyState>This plan has no days.</EmptyState>
-              )}
-            </Disclosure>
-          </div>
-          <div className="mb-3">
-            <Disclosure title="Calendar">
-              <MonthCalendar
-                logs={allLogs}
-                onDayClick={(date, sessions) => {
-                  if (sessions.length > 0) setQuickLog(sessions[0]);
-                  else {
-                    setAddDate(date);
-                    setAddOpen(true);
-                  }
-                }}
-                onSelectLog={setQuickLog}
-              />
-            </Disclosure>
-          </div>
-          <div className="mb-3">
-            <Disclosure title="Full history">
-              <ActivityStrip plan={plan} logs={allLogs} />
-            </Disclosure>
-          </div>
-        </Item>
-      ) : null}
 
     </PageStagger>
 
