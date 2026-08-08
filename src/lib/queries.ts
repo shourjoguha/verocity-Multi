@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { clearQueryCache } from '@/lib/queryCache';
-import { ASPECT_METRICS_VERSION, type MetricKey } from '@/app.config';
+import { ASPECT_METRICS_VERSION, isExperienceKey, type MetricKey } from '@/app.config';
 import { normalizeMovementName } from '@/lib/movementTaxonomy';
 import type {
   AspectScores,
@@ -42,10 +42,40 @@ export async function getCurrentProfile(client: SupabaseClient = supabase): Prom
  * Owner anthropometrics. Returns null for the showcase/public client by design:
  * `user_stats` has no anon RLS policy, so every consumer must degrade to the
  * constants in app.config.ts rather than assume a row exists.
+ *
+ * NORMALISES the row before anyone sees it.
+ *
+ * `UserStats` types `experience` as `ExperienceKey | null` and the four jsonb
+ * columns as arrays, but the database guarantees neither: `experience` is a
+ * bare `text` column with no check constraint (deliberately — see migration
+ * 0031's comment), so any string can be in there, and a row written before a
+ * column existed can still surface a null. The TypeScript type is a claim about
+ * the schema, not about the data.
+ *
+ * That gap crashed `/app/you` to a blank page: the UI indexes straight into
+ * `EXPERIENCE_LEVELS[row.experience]` and reads `.blurb`/`.label` off the
+ * result, and calls `.length` on the arrays. An unrecognised experience string
+ * is `undefined.blurb`; a null array is `null.length`. Either takes the whole
+ * island down, and a user cannot fix their own data from a page that will not
+ * render.
+ *
+ * Normalising HERE rather than at each callsite is the point: this is the one
+ * door the row comes through, so every present and future consumer is covered
+ * instead of whichever ones someone remembered to guard.
  */
 export async function getUserStats(client: SupabaseClient = supabase): Promise<UserStats | null> {
   const { data } = await client.from('user_stats').select('*').maybeSingle();
-  return (data as UserStats) ?? null;
+  if (!data) return null;
+  const row = data as UserStats;
+  const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+  return {
+    ...row,
+    experience: isExperienceKey(row.experience) ? row.experience : null,
+    equipment: arr(row.equipment),
+    disciplines: arr(row.disciplines),
+    goals: arr(row.goals),
+    injuries: arr(row.injuries),
+  };
 }
 
 /**
