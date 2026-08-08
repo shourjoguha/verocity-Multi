@@ -34,6 +34,78 @@ two live answers — see that section for why.
 
 ## Rendering & animation
 
+### One route paints, blinks, and goes blank
+`[reproduced in Chromium, and the symptom observed to stop]`
+`/app/you` showed a blank screen; tapping the tab flashed the page in for about
+half a second and it went blank again. Nothing was wrong with the data layer —
+the server-rendered markup was correct and complete in `dist/app/you/index.html`,
+which is exactly why it painted. Then the island hydrated and tore itself down.
+
+**The ordering is the whole diagnosis.** *paint → blank* means SSR worked and
+hydration killed it, so look for a **throw**, not for a query. React unmounts the
+entire root on an uncaught render- or commit-phase error and leaves an empty
+container; "the db wiring is off" is what it looks like from outside, and it is
+never what it is.
+
+**Two independent throws did it, and they were found by two people at once.**
+Both are real; neither subsumes the other:
+
+1. **Bad row shapes** (fixed first, in `getUserStats`). `user_stats.experience`
+   is bare `text` with no check constraint — 0030 chose config over a constraint
+   deliberately — while `UserStats` *types* it `ExperienceKey | null`. **The type
+   is a claim about the schema, not about the data.** `EXPERIENCE_LEVELS[row.experience]`
+   then read `.label`/`.blurb` off `undefined`. Normalised at the boundary, so
+   one door covers every consumer instead of whichever callsite someone
+   remembers. See `src/lib/userStatsRow.test.ts`.
+2. **A `localStorage` READ that throws.** Not "returns null" — a `SecurityError`,
+   on Safari with site data blocked, in some private-browsing configurations, and
+   behind content blockers. `lib/theme.ts` (`getStoredPref`) and
+   `applyBackground`'s **write** both guarded for this; the background **read**
+   was hand-rolled unguarded in three components instead — `BackgroundPicker`,
+   `BackgroundScene3D` and `YouView`. **Two of those three are mounted by
+   `/app/you` and only by `/app/you`**, which is why one route was blank while
+   every other one was fine. It now lives in one guarded
+   `getStoredBackground()`, deliberately the twin of `getStoredPref()`. Three
+   hand-rolled copies of a read is three chances to forget the `try`.
+
+That two causes hid behind one symptom is the durable part: **stopping at the
+first throw you can reproduce is how a page gets "fixed" twice and stays
+broken.** Neither fix would have cured the other user's device.
+
+**So `/app/you` now has an `ErrorBoundary`, and that matters more than either
+fix.** `<details>` renders its children whether or not it is open, so the page
+MOUNTS all seven of its sections on arrival — each with its own fetch and its own
+render. It is the widest crash surface in the app and was the one heavy island
+with no boundary above it. A boundary does not fix a bug; it converts an
+undiagnosable blank into a message and a reload button — and a user cannot repair
+the data that broke the page from a page that will not render.
+
+To reproduce the storage class of failure at all, stub the **throw**; a fixture
+where storage merely returns `null` exercises the happy path and proves nothing:
+```js
+await context.addInitScript(() => {
+  const proto = Object.getPrototypeOf(window.localStorage);
+  const orig = proto.getItem;
+  proto.getItem = function (k) {
+    if (k === 'verocity:bg') throw new DOMException('insecure', 'SecurityError');
+    return orig.call(this, k);
+  };
+});
+```
+With that installed, `main.innerText` on `/app/you` was **empty** before the fix
+and complete after it, while `/app` was unaffected in both runs. The same shape
+of probe — feed the surface a hostile input, then assert `main` rendered — is
+what found cause 1 as well.
+
+**No standing check here can see any of this.** A blank page has no horizontal
+overflow and no sub-44px tap targets, so `audit:mobile` and `audit:shell` are
+green on it, as recorded below under "The whole page is blank, and two of the
+three audits are green on it".
+→ `src/lib/background.ts`, `src/lib/background.test.ts`,
+`src/components/YouView.tsx`, `src/components/BackgroundPicker.tsx`,
+`src/components/BackgroundScene3D.tsx`, `src/lib/queries.ts`,
+`src/lib/userStatsRow.test.ts`
+
 ### A sheet flickers, stutters, blinks or hangs — and an in-flow form does not
 `[confirmed in the wild]` for the symptom; `[argued — not reproduced]` for the
 compositing mechanism, which was never reproduced outside WebKit.

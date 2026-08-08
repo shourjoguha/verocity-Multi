@@ -3,7 +3,7 @@ import {
   applyBackground,
   BACKGROUNDS,
   BACKGROUND_KEYS,
-  BACKGROUND_STORAGE_KEY,
+  getStoredBackground,
   isBackgroundKey,
   type BackgroundKey,
 } from '@/lib/background';
@@ -15,9 +15,11 @@ export function BackgroundPicker() {
     // Mirror the resolution order used by Base.astro's FOUC script:
     // explicit localStorage wins, otherwise read whatever data-bg ended up
     // as after device-aware defaulting.
-    const raw = window.localStorage.getItem(BACKGROUND_STORAGE_KEY);
-    if (isBackgroundKey(raw)) {
-      setValue(raw);
+    // getStoredBackground, not a bare localStorage read: the read throws where
+    // site data is blocked, and this effect runs inside /app/you's island.
+    const stored = getStoredBackground();
+    if (stored) {
+      setValue(stored);
       return;
     }
     const attr = document.documentElement.getAttribute('data-bg');
