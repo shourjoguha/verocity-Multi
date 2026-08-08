@@ -284,7 +284,7 @@ function DayAccordion({
   onPreview: (day: PlanDay) => void;
 }) {
   return (
-    <div className="flex gap-px bg-border">
+    <div className="flex gap-px bg-border-soft">
       {days.map((d, i) => {
         const isToday = dayNameFromLabel(d.label).toLowerCase() === todayDayName.toLowerCase();
         const isActive = d.dayKey === activeKey;
@@ -583,7 +583,12 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             <SectionHeader>Active plan</SectionHeader>
             {plan ? (
               <>
-                <div className="lift flex flex-col gap-px overflow-hidden border border-border bg-border">
+                {/* The gutters are `--color-border-soft`, not `--color-border`:
+                    the outer line outlines the card, the inner lines divide
+                    rows INSIDE it. Full weight on both made every row read as
+                    its own card, which is the same thing the stat tiles below
+                    were doing. */}
+                <div className="lift flex flex-col gap-px overflow-hidden border border-border bg-border-soft">
                   {/* Row one: which block, how far into it, and the way out to
                       the full plan. The week now says "of N" and carries the
                       TickProgress dashes under it — a bare "Week 3" told you
@@ -639,7 +644,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                       container reads as a rounded pill floating ON the card
                       rather than a segment OF it — the same reason rows in a
                       gap-px grid never take .lift. The unit owns the depth. */}
-                  <div className="flex gap-px bg-border">
+                  <div className="flex gap-px bg-border-soft">
                     <a
                       href={
                         resumeHref ??

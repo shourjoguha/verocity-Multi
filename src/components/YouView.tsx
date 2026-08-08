@@ -27,13 +27,13 @@ import { getStoredPref, THEME_EVENT, type ThemePref } from '@/lib/theme';
 import {
   BACKGROUNDS,
   BACKGROUND_EVENT,
-  BACKGROUND_STORAGE_KEY,
-  isBackgroundKey,
+  getStoredBackground,
   pickDeviceDefault,
   type BackgroundKey,
 } from '@/lib/background';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -69,7 +69,22 @@ function readinessOf(s: UserStats | null): { filled: number; total: number; pct:
 const labelOf = <T extends string>(list: readonly { key: T; label: string }[], key: T) =>
   list.find((i) => i.key === key)?.label ?? key;
 
+// Wrapped, and this page in particular needs it. `<details>` renders its
+// children whether or not it is open, so /app/you MOUNTS all seven of its
+// sections on arrival — UserStatsPanel, GoalsEditor, ThemeToggle,
+// BackgroundPicker, GarminPanel, ShareManager and the export block — each with
+// its own fetch and its own render. It is the widest crash surface in the app,
+// and it was the one heavy island with no boundary above it, so a single throw
+// anywhere in that set left a blank page with nothing on screen to act on.
 export default function YouView() {
+  return (
+    <ErrorBoundary>
+      <YouSurface />
+    </ErrorBoundary>
+  );
+}
+
+function YouSurface() {
   const [email, setEmail] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'json' | 'csv' | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -111,10 +126,13 @@ export default function YouView() {
   );
   useEffect(() => {
     const read = () => {
-      const raw = localStorage.getItem(BACKGROUND_STORAGE_KEY);
+      // Both reads swallow a blocked-storage SecurityError. A bare
+      // `localStorage.getItem` here threw inside this effect and unmounted the
+      // whole island, which is what left the page blank a beat after it
+      // painted — see docs/LESSONS.md.
       setAppearance({
         theme: getStoredPref(),
-        bg: isBackgroundKey(raw) ? raw : pickDeviceDefault(),
+        bg: getStoredBackground() ?? pickDeviceDefault(),
       });
     };
     read();

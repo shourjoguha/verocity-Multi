@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BACKGROUND_EVENT, BACKGROUND_STORAGE_KEY, type BackgroundKey } from '@/lib/background';
+import { BACKGROUND_EVENT, getStoredBackground, type BackgroundKey } from '@/lib/background';
 
 // Hydrates once via client:idle. Stays a ~1KB no-op unless the user is on the
 // 3D preset, at which point it dynamic-imports three + r3f and mounts the
@@ -9,7 +9,10 @@ import { BACKGROUND_EVENT, BACKGROUND_STORAGE_KEY, type BackgroundKey } from '@/
 
 function readPreference(): BackgroundKey {
   if (typeof window === 'undefined') return 'off';
-  const raw = window.localStorage.getItem(BACKGROUND_STORAGE_KEY) as BackgroundKey | null;
+  // getStoredBackground swallows the SecurityError a blocked localStorage read
+  // throws, and falls through to the attribute below rather than taking this
+  // island down with it.
+  const raw = getStoredBackground();
   // Read whatever the FOUC-prevention script in Base.astro decided; it's the
   // authoritative pre-paint default and we don't want to second-guess it here.
   const attr = document.documentElement.getAttribute('data-bg') as BackgroundKey | null;

@@ -25,6 +25,28 @@ export function isBackgroundKey(value: string | null | undefined): value is Back
   return value != null && (BACKGROUND_KEYS as readonly string[]).includes(value);
 }
 
+// The stored preference, or null if there isn't a valid one.
+//
+// READING localStorage THROWS. Not "returns null" — throws a SecurityError, on
+// Safari with site data blocked, in some private-browsing configurations, and
+// behind content blockers. `applyBackground` below has always guarded its
+// WRITE; the read was hand-rolled unguarded in three places instead
+// (BackgroundPicker, BackgroundScene3D, YouView), and two of those three are
+// mounted by /app/you. A throw inside a React effect with no error boundary
+// above it unmounts the whole island, so that page painted its server-rendered
+// markup and then went blank a beat later — see docs/LESSONS.md.
+// `getStoredPref` in lib/theme.ts is the same function for the theme key; this
+// is deliberately its twin.
+export function getStoredBackground(): BackgroundKey | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(BACKGROUND_STORAGE_KEY);
+    return isBackgroundKey(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 // Device gate for the heavyweight 3D default. Touch / narrow / reduced-motion
 // users fall back to the topography CSS preset — still a depth cue, no WebGL.
 export function pickDeviceDefault(): BackgroundKey {
