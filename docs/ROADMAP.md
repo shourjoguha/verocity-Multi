@@ -229,9 +229,6 @@ week-progress dashes and a five-row Recent.
 it had been red on since before this phase are gone.
 
 **Not done here, and deliberately:**
-- **The Logger got presentation only.** Section headers and the blur gating;
-  no change to the Finish bar's positioning, the autosave/rest-timer logic, or
-  the sheet contract. Its information architecture is untouched.
 - **`StatCard`'s size tier is still unmeasured against the real font.** It was
   chosen against Clash Display with 2.2px of headroom; Archivo Black is wider.
   The fonts do not load in the Playwright harness (`document.fonts` is empty),
@@ -239,3 +236,38 @@ it had been red on since before this phase are gone.
   375px in a real browser.
 - **The iOS bottom bar is unverified as ever.** `audit:shell` asserts the
   invariants; only a phone can observe the symptom.
+
+### Phase 9 — Log and Plan layouts  `[shipped]`
+The second Magic Patterns pass, taking the two gaps Phase 8 left open.
+
+**The Logger's information architecture, which Phase 8 explicitly skipped.**
+The clock row and the full-width "Session details" bar are now one header, with
+a session-wide `done/total sets` counter in its meta row and on the Finish
+button; sections carry a group count; each movement card puts its checkbox,
+name, per-movement count and chip row on one line; set rows are a
+hairline-divided list rather than gapped cards; notes clamp to one line and
+expand on tap. The mockup's `sticky top-0` header was **not** taken — `App.astro`
+already sticks a header that auto-hides, and the rest-timer bar already sticks
+beneath it, so a third sticky bar would need a hard offset that detaches. The
+sheet contract, autosave, rest timer and voice input are untouched.
+
+**Plan is a week at a time.** A `role="tablist"` week rail with phase stripes
+and a `set`/`open` state selects the active week; days are collapsible cards
+carrying `All weeks` (which swaps in the original matrix table verbatim) and
+`Start →`. The planned-vs-actual e1RM overlay and the `lastCompletedWeek`
+highlight survive unchanged. The rail is deliberately not `ui/SegmentedTabs`
+and the day header deliberately not `ui/Disclosure`; both carry a comment
+saying why.
+
+**Home** dropped the activity strip's subscript labels and 20px of dead space
+above it.
+
+`npm run audit:mobile` stays green — 24/24, zero sub-44px targets — and
+`audit:flicker` is 8/8 with **zero skips**, which is the assertion that matters:
+the restyle kept `aria-label="Movement options"` and `Edit set — …`, and a
+probe scenario that stops matching prints `[skip]` and still reads as a pass.
+
+**Not done here:** the mockup's inline tap-to-log set rows and its `⋯` dropdown
+(both would have replaced the sheet contract), and its concentric-ring backdrop
+component, which would be a second fixed layer competing with the one preset
+list in `src/lib/background.ts`.

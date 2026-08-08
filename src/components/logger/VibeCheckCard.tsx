@@ -21,24 +21,38 @@ export function VibeCheckCard({
 
   return (
     <div className="mb-8 border border-border p-4">
-      <div className="mb-4 t-eyebrow text-muted">Vibe check</div>
-      <div className="flex flex-col gap-4">
+      <div className="mb-3 t-label text-muted">Vibe check</div>
+      <div className="flex flex-col gap-3">
         {FIELDS.map(({ key, label }) => (
-          <div key={key} className="flex items-center justify-between gap-3">
+          <div
+            key={key}
+            role="radiogroup"
+            aria-label={label}
+            className="flex items-center justify-between gap-3"
+          >
             <span className="text-sm text-subtle">{label}</span>
             <div className="flex gap-1">
               {SCALE.map((n) => (
+                // The glyph stays h-9 w-9 (36px, the mockup's density); the
+                // -my-2 pulls the min-h-11 tap target back so the row doesn't
+                // grow to 44px tall — same technique as the +Movement row.
                 <button
                   key={n}
                   type="button"
-                  onClick={() => setVibe((v) => ({ ...v, [key]: n }))}
-                  className={`flex h-9 w-9 items-center justify-center border text-sm tabular-nums ${
-                    vibe[key] === n ? 'border-fg bg-fg text-bg' : 'border-border text-muted hover:text-fg'
-                  }`}
+                  role="radio"
+                  aria-checked={vibe[key] === n}
                   aria-label={`${label} ${n}`}
-                  aria-pressed={vibe[key] === n}
+                  onClick={() => setVibe((v) => ({ ...v, [key]: n }))}
+                  className="-my-2 flex h-11 w-11 items-center justify-center"
                 >
-                  {n}
+                  <span
+                    aria-hidden
+                    className={`flex h-9 w-9 items-center justify-center border text-sm tabular-nums ${
+                      vibe[key] === n ? 'border-fg bg-fg text-bg' : 'border-border text-muted hover:text-fg'
+                    }`}
+                  >
+                    {n}
+                  </span>
                 </button>
               ))}
             </div>

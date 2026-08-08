@@ -100,10 +100,6 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [peekIndex, setPeekIndex] = useState<number | null>(null);
   const [scale, setScale] = useState(1);
-  // Date at the left edge of what is on screen. Static "first logged day" text
-  // read as if it labelled the view, and stopped being true the moment you
-  // scrolled. Set from the same settle pass, so it costs no extra work.
-  const [fromDate, setFromDate] = useState<string | null>(null);
 
   // buildTimeline always runs through today + 14 days of runway. Those future
   // days are blank by definition and add nothing here, so the strip ends on
@@ -145,7 +141,6 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
       }
       const next = tallest > 0 ? Math.min(MAX_SCALE, STRIP_HEIGHT / tallest) : 1;
       setScale((cur) => (Math.abs(next - cur) / cur > 0.03 ? next : cur));
-      setFromDate(points[first]?.date ?? null);
     };
 
     const onScroll = () => {
@@ -185,9 +180,7 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
           <span className="truncate text-fg">
             {peeked.fullLabel} · {peeked.date}
           </span>
-        ) : (
-          <span>Scroll back</span>
-        )}
+        ) : null}
       </div>
       <div
         ref={scrollRef}
@@ -253,10 +246,6 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
             );
           })}
         </div>
-      </div>
-      <div className="t-label mt-2 flex justify-between text-muted">
-        <span>{fromDate ?? points[0]?.date ?? ''}</span>
-        <span>Today</span>
       </div>
     </div>
   );
@@ -579,7 +568,11 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           belongs to the unit, not its parts. */}
       {mode === 'app' ? (
         <Item>
-          <section className="mb-8">
+          {/* mb-3, not mb-8: the "Coach →" link below already carries a
+              min-h-11 box, which alone supplies ~44px of whitespace under the
+              card. Stacking mb-8 on top of that was 32px of dead space above
+              the activity strip. The link's own tap target is untouched. */}
+          <section className="mb-3">
             <SectionHeader>Active plan</SectionHeader>
             {plan ? (
               <>

@@ -248,7 +248,11 @@ export function OnboardingView() {
 
   async function persist(i: number) {
     const payload = phasePayload(i);
-    if (payload) await upsertUserStats(payload);
+    if (!payload) return;
+    // A rejected upsert used to be completely silent here — no toast, no retry,
+    // and the flow advanced regardless. That is how a PGRST204 from an unapplied
+    // migration went unnoticed for weeks.
+    if (!(await upsertUserStats(payload))) toast('Could not save — try again', 'error');
   }
 
   function next() {
