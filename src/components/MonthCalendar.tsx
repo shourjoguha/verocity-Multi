@@ -149,7 +149,15 @@ export function MonthCalendar({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-px bg-border">
+      {/* One bordered card with hairline dividers, the same treatment as
+          `StatStrip` and the plan unit above it — outer `--color-border`
+          outlines, inner `--color-border-soft` divides. It was previously an
+          unbounded grid whose full-weight gutters made every day read as its
+          own tile, which is what the stat tiles used to do too.
+          `overflow-hidden` is what makes the radius real: the day cells are
+          opaque and square, so without a clip they paint over all four
+          corners. */}
+      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-card border border-border bg-border-soft">
         {cells.map((day, i) => {
           if (day == null) return <div key={`b${i}`} className="aspect-square bg-bg" />;
           const key = ymd(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), day)));
