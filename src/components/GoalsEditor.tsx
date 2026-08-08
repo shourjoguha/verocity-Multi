@@ -24,8 +24,13 @@ const DEFAULTS: Goal[] = GOAL_DEFAULTS.map((g) => ({
   weight: g.weight,
 }));
 
+// 44px, not 32. Three of these per goal row (up / down / remove) is what made
+// /app/you the worst offender in audit:mobile rule 2 — five goals put fifteen
+// sub-44px targets on the page by itself. The glyphs inside are unchanged; only
+// the hit box grew, and -mx-1.5 keeps the wider row from pushing the goal label
+// around. See TOUCH.minTargetPx in app.config.ts.
 const rowBtn =
-  'inline-flex h-8 w-8 items-center justify-center text-muted transition-colors hover:text-fg disabled:opacity-30 disabled:hover:text-muted';
+  '-mx-1.5 inline-flex h-11 w-11 items-center justify-center text-muted transition-colors hover:text-fg disabled:opacity-30 disabled:hover:text-muted';
 
 export function GoalsEditor() {
   const [goals, setGoals] = useState<Goal[]>(DEFAULTS);

@@ -44,9 +44,19 @@ export function InfoPopover({
           e.preventDefault();
           setOpen((v) => !v);
         }}
-        className="inline-flex h-5 w-5 items-center justify-center border border-border text-[0.7rem] font-semibold leading-none text-muted transition-colors hover:border-fg hover:text-fg"
+        // The GLYPH stays 20px; the TARGET is 44. A bare h-5 w-5 button was
+        // 20×20 and is what put ~6 sub-44px targets on /app/you (TOUCH.minTargetPx,
+        // audit:mobile rule 2). The negative margins keep the larger hit box from
+        // pushing the label it sits beside out of line — the box grows, the
+        // layout does not. Same pattern as FitnessProfile's explainer trigger.
+        className="-m-3 inline-flex h-11 w-11 items-center justify-center text-muted transition-colors hover:text-fg"
       >
-        !
+        <span
+          aria-hidden="true"
+          className="flex h-5 w-5 items-center justify-center rounded-chip border border-current text-[0.7rem] font-semibold leading-none"
+        >
+          !
+        </span>
       </button>
       {open ? (
         <span

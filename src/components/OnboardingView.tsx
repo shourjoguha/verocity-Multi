@@ -564,7 +564,11 @@ export function OnboardingView() {
           <button
             type="button"
             onClick={complete}
-            className="p-2 text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-fg"
+            // min-h-11, not p-2: this measured 36px and was the last sub-44px
+            // target in the app (TOUCH.minTargetPx, audit:mobile rule 2). It
+            // reads as a text link, which is exactly why it is easy to miss —
+            // a link still has to be tappable.
+            className="inline-flex min-h-11 items-center px-2 text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-fg"
           >
             Skip for now
           </button>
