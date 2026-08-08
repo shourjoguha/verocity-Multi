@@ -4,6 +4,7 @@ import { PLAN_LENGTH } from '@/app.config';
 import {
   PLAN_CSV_HEADERS,
   buildPlanAiPrompt,
+  buildPlanContextFile,
   buildPlanCsvTemplate,
   buildPlanFixPrompt,
   buildPlanTsvTemplate,
@@ -11,7 +12,7 @@ import {
   parsePlanWorkbook,
   validateParsedPlan,
 } from '@/lib/planTemplate';
-import type { UserStats } from '@/lib/types';
+import type { Movement, UserStats } from '@/lib/types';
 
 /** A fully-populated stats row — every branch of the profile block reachable. */
 const fullStats = (): UserStats => ({
@@ -367,6 +368,77 @@ describe('parsePlanWorkbook (xlsx)', () => {
     ]);
     const { issues } = await parsePlanWorkbook(buf);
     expect(issues.some((i) => i.includes('Could not find header row'))).toBe(true);
+  });
+});
+
+describe('buildPlanContextFile', () => {
+  const mv = (partial: Partial<Movement> & { name: string }): Movement => ({
+    id: partial.id ?? partial.name,
+    name: partial.name,
+    category: partial.category ?? null,
+    tags: partial.tags ?? [],
+    default_metrics: partial.default_metrics ?? [],
+    primary_metric: partial.primary_metric ?? 'weight',
+    default_rest_seconds: partial.default_rest_seconds ?? 120,
+    notes: partial.notes ?? null,
+    owner_user_id: partial.owner_user_id ?? null,
+    kind: partial.kind ?? 'movement',
+    url: partial.url ?? null,
+    taxonomy: partial.taxonomy,
+  });
+
+  it('emits the PROFILE preamble and the LIBRARY header', () => {
+    const file = buildPlanContextFile({ stats: null, movements: [], delimiter: ',' });
+    expect(file).toContain('# --- PROFILE ---');
+    expect(file).toContain('No profile is on file');
+    expect(file).toContain('# --- LIBRARY (0 movements) ---');
+    expect(file).toContain('name,category,kind,primary_metric,regions,modality,planes,rotary,notes,url');
+  });
+
+  it('lists movements alphabetised with a classified row', () => {
+    const file = buildPlanContextFile({
+      stats: null,
+      movements: [mv({ name: 'Back Squat', category: 'strength' }), mv({ name: 'Arnold Press', category: 'strength' })],
+      delimiter: ',',
+    });
+    const lines = file.split('\n');
+    const headerIdx = lines.findIndex((l) => l.startsWith('name,'));
+    expect(lines[headerIdx + 1]).toMatch(/^Arnold Press,/);
+    expect(lines[headerIdx + 2]).toMatch(/^Back Squat,/);
+    // The back squat row should carry a classified region (quads load heavily).
+    const squat = lines[headerIdx + 2];
+    expect(squat).toMatch(/quads:\d\.\d\d/);
+  });
+
+  it('uses tabs when delimiter is \\t and includes the profile', () => {
+    const file = buildPlanContextFile({
+      stats: fullStats(),
+      movements: [mv({ name: 'Back Squat' })],
+      delimiter: '\t',
+      today: new Date('2026-08-01T00:00:00Z'),
+    });
+    expect(file).toContain('# - Bodyweight: 68 kg');
+    expect(file).toContain('name\tcategory\tkind\tprimary_metric\t');
+  });
+
+  it('quotes cells that contain the delimiter', () => {
+    const file = buildPlanContextFile({
+      stats: null,
+      movements: [mv({ name: 'Farmer, Carry', notes: 'Grip, forearms' })],
+      delimiter: ',',
+    });
+    expect(file).toContain('"Farmer, Carry"');
+    expect(file).toContain('"Grip, forearms"');
+  });
+});
+
+describe('buildPlanAiPrompt — context file section', () => {
+  it('tells the AI to read the context file and prefer the library', () => {
+    const prompt = buildPlanAiPrompt();
+    expect(prompt).toContain('CONTEXT FILE');
+    expect(prompt).toContain('PREFERRED MOVEMENT POOL');
+    expect(prompt).toContain('# --- PROFILE ---');
+    expect(prompt).toContain('# --- LIBRARY ---');
   });
 });
 

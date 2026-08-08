@@ -607,12 +607,9 @@ export default function SessionsView() {
             className={ECHO_APP_TITLE}
           />
           {!adding ? (
-            <button
-              onClick={startAdd}
-              className="flex min-h-11 shrink-0 items-center t-control text-muted transition-colors hover:text-fg"
-            >
-              + Session
-            </button>
+            <div className="shrink-0">
+              <Button variant="ghost" onClick={startAdd}>+ Session</Button>
+            </div>
           ) : null}
         </div>
       </Item>

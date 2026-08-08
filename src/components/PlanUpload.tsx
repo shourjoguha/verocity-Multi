@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { adoptPlan, createPlan, createSession, getUserStats } from '@/lib/queries';
+import { adoptPlan, createPlan, createSession, getMovements, getUserStats } from '@/lib/queries';
 import type { SessionInput } from '@/lib/queries';
 import { parsePlanMarkdown, PLAN_FORMAT_HELP } from '@/lib/planParser';
 import {
   buildPlanAiPrompt,
+  buildPlanContextFile,
   buildPlanCsvTemplate,
   buildPlanFixPrompt,
   buildPlanTsvTemplate,
@@ -20,7 +21,7 @@ import {
   parseSessionTabular,
   parseSessionWorkbook,
 } from '@/lib/sessionTemplate';
-import type { ParsedPlan, UserStats } from '@/lib/types';
+import type { Movement, ParsedPlan, UserStats } from '@/lib/types';
 import { track } from '@/lib/analytics';
 import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
@@ -55,8 +56,11 @@ export default function PlanUpload() {
   const [promptCopied, setPromptCopied] = useState(false);
   const [fixCopied, setFixCopied] = useState(false);
   // The athlete's own profile, rendered into the copied prompt. Fetched once on
-  // mount rather than inside the copy handler so the click stays instant.
+  // mount rather than inside the copy handler so the click stays instant. The
+  // movement library rides along: the "Download context" buttons need both and
+  // fetching in parallel avoids a second round-trip when the user clicks.
   const [stats, setStats] = useState<UserStats | null>(null);
+  const [movements, setMovements] = useState<Movement[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -81,6 +85,9 @@ export default function PlanUpload() {
       getUserStats()
         .then(setStats)
         .catch(() => setStats(null));
+      getMovements()
+        .then(setMovements)
+        .catch(() => setMovements([]));
     })();
   }, []);
 
@@ -249,11 +256,23 @@ export default function PlanUpload() {
       <Item>
         <div className="mb-6 border border-border bg-surface p-4">
           <SectionHeader>Generate with an outside AI</SectionHeader>
-          <p className="mt-2 text-sm text-muted">
-            {target === 'session'
-              ? 'Copy the prompt, paste it into an outside AI chat (Claude, ChatGPT, Gemini or similar), and attach the CSV wireframe if that chat lets you upload a file. Ask the AI to produce the sessions, then paste its CSV back in below or upload the file. Every session in the file is saved standalone. Compatibility is checked before save.'
-              : 'Copy the prompt and paste it into an outside AI chat — Claude, ChatGPT, Gemini or similar. It carries your profile and goals, so the AI will propose a plan, ask you a few questions (including how many weeks you want and whether any movements are must-have or off-limits) and then produce the CSV. Paste its final CSV back in below, or upload the file.'}
-          </p>
+          {target === 'session' ? (
+            <p className="mt-2 text-sm text-muted">
+              Copy the prompt, paste it into an outside AI chat (Claude, ChatGPT, Gemini or similar), and attach the CSV wireframe if that chat lets you upload a file. Ask the AI to produce the sessions, then paste its CSV back in below or upload the file. Every session in the file is saved standalone. Compatibility is checked before save.
+            </p>
+          ) : (
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
+              <li>
+                Download your <strong className="font-semibold text-fg">context file</strong> — it carries your profile and every movement in your library, so the AI knows what you own and what you can perform.
+              </li>
+              <li>
+                Copy the <strong className="font-semibold text-fg">AI prompt</strong> and paste it into an outside AI chat (Claude, ChatGPT, Gemini). Attach the context file, or paste its contents into the same message.
+              </li>
+              <li>
+                The AI will ask a few questions and then send back a CSV. Paste that CSV below, or upload the file.
+              </li>
+            </ol>
+          )}
           {target === 'plan' && !profileIsUsable ? (
             <p className="mt-2 text-sm text-muted">
               Nothing is on file about you yet, so the AI will ask for all of it. Filling in{' '}
@@ -284,6 +303,34 @@ export default function PlanUpload() {
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
+            {target === 'plan' ? (
+              <>
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    downloadFile(
+                      'verocity-context.csv',
+                      buildPlanContextFile({ stats, movements, delimiter: ',' }),
+                      'text/csv',
+                    )
+                  }
+                >
+                  Download context (CSV)
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    downloadFile(
+                      'verocity-context.tsv',
+                      buildPlanContextFile({ stats, movements, delimiter: '\t' }),
+                      'text/tab-separated-values',
+                    )
+                  }
+                >
+                  Download context (TSV)
+                </Button>
+              </>
+            ) : null}
             <Button
               variant="ghost"
               onClick={() =>
@@ -292,7 +339,7 @@ export default function PlanUpload() {
                   : downloadFile('verocity-plan-template.csv', buildPlanCsvTemplate(), 'text/csv')
               }
             >
-              Download CSV
+              {target === 'plan' ? 'Download template (CSV)' : 'Download CSV'}
             </Button>
             <Button
               variant="ghost"
@@ -302,7 +349,7 @@ export default function PlanUpload() {
                   : downloadFile('verocity-plan-template.tsv', buildPlanTsvTemplate(), 'text/tab-separated-values')
               }
             >
-              Download TSV
+              {target === 'plan' ? 'Download template (TSV)' : 'Download TSV'}
             </Button>
             <Button variant="ghost" onClick={copyPrompt}>
               {promptCopied ? 'Prompt copied' : 'Copy AI prompt'}
