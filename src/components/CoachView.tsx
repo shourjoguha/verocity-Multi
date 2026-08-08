@@ -12,7 +12,7 @@ import type { Recommendation, RecDisposition } from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { Modal } from '@/components/ui/Modal';
 import DeepEnrichment from '@/components/DeepEnrichment';
@@ -153,7 +153,7 @@ export default function CoachView() {
 
   return (
     <>
-      <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
+      <PageStagger className="mx-auto max-w-3xl px-4 pb-10 pt-5 sm:px-6">
         <Item>
           <header className="mb-8">
             <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">Coach</p>
@@ -161,7 +161,7 @@ export default function CoachView() {
               <EchoText
                 text="COACH"
                 as="h1"
-                className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+                className={ECHO_APP_TITLE}
               />
               <button onClick={analyze} disabled={analyzing} className={`shrink-0 ${inkBtn}`}>
                 {analyzing ? 'Checking in…' : 'Check-in'}

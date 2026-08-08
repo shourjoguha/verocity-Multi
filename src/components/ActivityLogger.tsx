@@ -5,7 +5,7 @@ import { track } from '@/lib/analytics';
 import { ACTIVITY_TAGS, ACTIVITY_TYPES, METRICS } from '@/app.config';
 import type { LogDocument } from '@/lib/types';
 import { Button, LoadingScreen } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -122,7 +122,7 @@ export default function ActivityLogger() {
         <EchoText
           text="LOG ACTIVITY"
           as="h1"
-          className="mb-8 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+          className={`mb-8 ${ECHO_APP_TITLE}`}
         />
       </Item>
 

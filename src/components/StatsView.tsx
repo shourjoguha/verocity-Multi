@@ -347,7 +347,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
   if (all.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
         <EchoText
           text="STATS"
           as="h1"
@@ -360,7 +360,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
   return (
     <>
-      <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
+      <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
         <Item>
           <EchoText
             text="STATS"

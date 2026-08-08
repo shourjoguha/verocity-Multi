@@ -8,7 +8,7 @@ import { tagColor } from '@/lib/tags';
 import { formatDate, formatSetActual } from '@/lib/format';
 import { SECTIONS, type SectionKey } from '@/app.config';
 import { EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { SessionTime } from '@/components/SessionTime';
 import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
@@ -101,7 +101,7 @@ export default function SessionDetail() {
           <EchoText
             text={log.activity_type ?? 'Session'}
             as="h1"
-            className="mt-2 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+            className={`mt-2 ${ECHO_APP_TITLE}`}
           />
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {log.tags.map((t) => (

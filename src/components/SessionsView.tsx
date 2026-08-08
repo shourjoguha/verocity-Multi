@@ -17,7 +17,7 @@ import { distinctSessionMovements, formatSessionMeta, sessionMovementKeys, TYPE_
 import { SessionSheet } from '@/components/SessionSheet';
 import { Button, EmptyState, LoadingScreen, Tag } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { MovementPicker } from '@/components/logger/MovementPicker';
 import { toast } from '@/lib/toast';
@@ -598,13 +598,13 @@ export default function SessionsView() {
   }
 
   return (
-    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
+    <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
       <Item>
         <div className="mb-6 flex items-end justify-between gap-4">
           <EchoText
             text="SESSIONS"
             as="h1"
-            className="font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+            className={ECHO_APP_TITLE}
           />
           {!adding ? (
             <button

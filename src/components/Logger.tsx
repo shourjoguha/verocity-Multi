@@ -1175,7 +1175,7 @@ export default function Logger() {
             animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
             exit={{ opacity: 0, height: 0, marginBottom: 0 }}
             transition={{ duration: 0.3, ease: EASE }}
-            className="sticky top-12 z-30 flex items-center justify-between gap-3 overflow-hidden border border-accent bg-bg/95 px-4 backdrop-blur"
+            className="sticky top-12 z-30 flex items-center justify-between gap-3 overflow-hidden border border-accent bg-bg px-4 pointer-fine:bg-bg/95 pointer-fine:backdrop-blur"
           >
             <span className="t-control text-accent">Rest</span>
             <span className="font-display text-2xl tabular-nums text-fg">{clock(rest.secondsLeft)}</span>
@@ -1194,23 +1194,31 @@ export default function Logger() {
         const groups = doc.sections[si].groups;
         return (
           <section key={section.key} className="mb-6">
-            <div className="mb-3 flex items-center justify-between">
-              <SectionHeader>{sectionLabel(section.key)}</SectionHeader>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setPicker({ mode: 'add', sectionKey: section.key })}
-                  className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
-                >
-                  + Movement
-                </button>
-                <button
-                  onClick={() => setSubEditor({ mode: 'add', sectionKey: section.key })}
-                  className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
-                >
-                  + Subroutine
-                </button>
-              </div>
-            </div>
+            {/* The two add-affordances go in SectionHeader's `action` slot
+                rather than a second flex row around it — SectionHeader is
+                itself a `flex justify-between` with its own mb-3, so wrapping
+                it stacked two of them and left the label sitting in a nested
+                row it did not own. */}
+            <SectionHeader
+              action={
+                <div className="-my-2 flex shrink-0 gap-1">
+                  <button
+                    onClick={() => setPicker({ mode: 'add', sectionKey: section.key })}
+                    className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
+                  >
+                    + Movement
+                  </button>
+                  <button
+                    onClick={() => setSubEditor({ mode: 'add', sectionKey: section.key })}
+                    className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
+                  >
+                    + Subroutine
+                  </button>
+                </div>
+              }
+            >
+              {sectionLabel(section.key)}
+            </SectionHeader>
             <div className="flex flex-col gap-4">
               {groups.map((group, gi) => (parked.has(group.id) ? null : renderGroup(si, gi)))}
               {groups.length === 0 ? (
@@ -1536,7 +1544,7 @@ export default function Logger() {
           whose bottom edge cannot lag. Last in-flow child of the column, so it
           pins until the page ends — which is also why the column dropped its
           `pb-32` bar reserve. */}
-      <div className="pb-safe sticky bottom-0 border-t border-border bg-bg/95 px-4 pt-3 backdrop-blur sm:px-6">
+      <div className="pb-safe sticky bottom-0 border-t border-border bg-bg px-4 pt-3 pointer-fine:bg-bg/95 pointer-fine:backdrop-blur sm:px-6">
         <div className="mx-auto flex max-w-2xl flex-col items-center gap-1">
           {editing ? (
             <Button onClick={finishEdit} className="w-full">

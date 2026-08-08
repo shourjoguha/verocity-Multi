@@ -27,7 +27,7 @@ import { BLOCKS, SECTIONS, SUBROUTINE, type BlockKey, type SectionKey } from '@/
 import type { ParsedPlan } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
 import { Button, EmptyState, LoadingScreen } from '@/components/ui/primitives';
-import { EchoText } from '@/components/EchoText';
+import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
 const SAVE_DEBOUNCE_MS = 1200;
@@ -88,7 +88,7 @@ export default function PlanEditor() {
         <EchoText
           text="EDIT PLAN"
           as="h1"
-          className="mb-8 font-display text-3xl font-bold uppercase leading-[0.9] tracking-[-0.04em] text-fg sm:text-5xl md:text-7xl"
+          className={`mb-8 ${ECHO_APP_TITLE}`}
         />
         <EmptyState>
           No active plan.{' '}
