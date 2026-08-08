@@ -338,19 +338,9 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
             className={ECHO_APP_TITLE}
           />
           {!showcase && !adding ? (
-            <div className="flex shrink-0 gap-4 pb-1">
-              <button
-                onClick={startAdd}
-                className="flex min-h-11 items-center t-control text-muted transition-colors hover:text-fg"
-              >
-                + Movement
-              </button>
-              <button
-                onClick={() => setSubEditing({ mode: 'add' })}
-                className="flex min-h-11 items-center t-control text-muted transition-colors hover:text-fg"
-              >
-                + Subroutine
-              </button>
+            <div className="flex shrink-0 gap-2 pb-1">
+              <Button variant="ghost" onClick={startAdd}>+ Movement</Button>
+              <Button variant="ghost" onClick={() => setSubEditing({ mode: 'add' })}>+ Subroutine</Button>
             </div>
           ) : null}
         </div>

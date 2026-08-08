@@ -18,10 +18,11 @@ import {
   type MetricKey,
   type SectionKey,
 } from '@/app.config';
-import type { ParsedPlan, PlanBlock, PlanDay, PlanExercise, UserStats } from '@/lib/types';
+import type { Movement, ParsedPlan, PlanBlock, PlanDay, PlanExercise, UserStats } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
 import { renderRubric } from '@/lib/planRubric';
 import { ageFrom } from '@/lib/userStats';
+import { classifyMovement } from '@/lib/movementTaxonomy';
 
 export const PLAN_CSV_HEADERS = [
   'kind',
@@ -194,6 +195,100 @@ export function buildPlanTsvTemplate(): string {
   return joinRows(sampleRows(), '\t');
 }
 
+// ---------- the context file (profile + movement library) ----------
+
+const CONTEXT_LIBRARY_HEADERS = [
+  'name',
+  'category',
+  'kind',
+  'primary_metric',
+  'regions',
+  'modality',
+  'planes',
+  'rotary',
+  'notes',
+  'url',
+] as const;
+
+/**
+ * `#` line prefix mirrors the CSV comment style the plan parser already skips,
+ * so a user who pastes the whole context file into the CSV textarea gets a
+ * "no rows" error rather than a confusing schema mismatch.
+ *
+ * The library table is *not* the plan-CSV schema — it uses its own header row
+ * so the AI has one clean list of "movements you can prescribe from" with the
+ * region/modality/plane the app itself computes at read time (via
+ * classifyMovement in movementTaxonomy.ts). Keeping the app's own answer in
+ * the file avoids the AI guessing classifications that the logger will then
+ * silently reclassify.
+ */
+export function buildPlanContextFile({
+  stats,
+  movements,
+  delimiter,
+  today,
+}: {
+  stats: UserStats | null;
+  movements: Movement[];
+  delimiter: ',' | '\t';
+  today?: Date;
+}): string {
+  const lines: string[] = [];
+  lines.push('# VEROCITY CONTEXT — profile + movement library');
+  lines.push('# Attach or paste this file into your AI chat alongside the plan prompt.');
+  lines.push('# Every line beginning with "#" is a comment. The library table below');
+  lines.push('# uses the same delimiter as this file (' + (delimiter === ',' ? 'comma' : 'tab') + ').');
+  lines.push('#');
+  lines.push('# --- PROFILE ---');
+  lines.push('# The profile below is the truth. When it conflicts with anything the');
+  lines.push('# app inlined into the prompt, prefer these values.');
+  lines.push('#');
+  const profileBlock = athleteProfileBlock(stats, today ?? new Date());
+  for (const line of profileBlock.split('\n')) {
+    lines.push(line === '' ? '#' : `# ${line}`);
+  }
+  lines.push('#');
+  lines.push(`# --- LIBRARY (${movements.length} movement${movements.length === 1 ? '' : 's'}) ---`);
+  lines.push('# Treat this as the preferred movement pool. Prescribe from here when the');
+  lines.push('# plan allows it; only propose a new movement if the library genuinely');
+  lines.push('# lacks something the plan needs, and flag it in phase 1 so the athlete');
+  lines.push('# can add it to their library before phase 2.');
+  lines.push('# regions/planes are weighted maps rendered as "key:weight" pairs joined');
+  lines.push('# by "; " — a lift can load more than one region.');
+  lines.push('#');
+  lines.push(CONTEXT_LIBRARY_HEADERS.join(delimiter));
+  for (const m of sorted(movements)) {
+    const cls = classifyMovement(m.name, { overrides: m.taxonomy ? { [m.name]: m.taxonomy } : {} });
+    const row = [
+      m.name,
+      m.category ?? '',
+      m.kind,
+      m.primary_metric,
+      weightMap(cls.profile.regions),
+      cls.profile.modality ?? '',
+      weightMap(cls.profile.planes),
+      cls.profile.rotary ?? '',
+      m.notes ?? '',
+      m.url ?? '',
+    ].map((v) => escapeCell(v, delimiter));
+    lines.push(row.join(delimiter));
+  }
+  return lines.join('\n') + '\n';
+}
+
+function sorted(movements: Movement[]): Movement[] {
+  return [...movements].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function weightMap(map: Partial<Record<string, number>>): string {
+  const entries = Object.entries(map).filter(([, v]) => (v ?? 0) > 0);
+  if (entries.length === 0) return '';
+  return entries
+    .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
+    .map(([k, v]) => `${k}:${(v ?? 0).toFixed(2)}`)
+    .join('; ');
+}
+
 // ---------- the athlete profile block ----------
 
 /**
@@ -323,6 +418,24 @@ failed response, even if the file is perfectly formatted.
 === ATHLETE PROFILE (supplied by the app) ===
 ${athleteProfileBlock(ctx.stats, ctx.today ?? new Date())}
 === END ATHLETE PROFILE ===
+
+CONTEXT FILE (attached or pasted by the athlete alongside this prompt)
+The athlete will attach or paste a "verocity-context" file. It contains two
+things:
+  1. A "# --- PROFILE ---" preamble in "#"-prefixed lines. Treat that as the
+     truth: it comes from the app at download time, whereas the ATHLETE PROFILE
+     block above may be a stale copy inlined into the prompt. Where the two
+     conflict, the context file wins.
+  2. A "# --- LIBRARY ---" table listing every movement already in the
+     athlete's library, with the app's own region/modality/plane classification
+     for each. Treat that library as the PREFERRED MOVEMENT POOL. Prescribe
+     from it whenever the plan allows it, and quote movement names verbatim so
+     the importer's exact-match resolver picks them up. If the plan genuinely
+     needs a movement the library lacks, propose it during phase 1 so the
+     athlete can add it to their library before you emit the CSV in phase 2.
+If no context file has been supplied, ask for it once in phase 1 (a short "did
+you attach the file the app told you to download?") and then continue with the
+inlined ATHLETE PROFILE.
 
 PHASE 1 — PROPOSE, THEN CONFIRM (prose; no CSV)
 1. Read the ATHLETE PROFILE against the PRESCRIPTION RUBRIC below and propose a
