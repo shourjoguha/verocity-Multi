@@ -629,6 +629,20 @@ export type DisciplineKey = (typeof DISCIPLINES)[number]['key'];
 
 export const GENDER_KEYS = Object.keys(GENDERS) as GenderKey[];
 export const EXPERIENCE_KEYS = Object.keys(EXPERIENCE_LEVELS) as ExperienceKey[];
+
+/**
+ * `user_stats.experience` is an unconstrained `text` column, so a stored value
+ * is NOT guaranteed to be one of these keys however the type says otherwise.
+ * Anything that indexes EXPERIENCE_LEVELS with a database value must narrow it
+ * first — `EXPERIENCE_LEVELS[unknown].blurb` is a crash, and it blanked
+ * /app/you. Applied at the boundary in `getUserStats`.
+ */
+export function isExperienceKey(v: unknown): v is ExperienceKey {
+  // hasOwnProperty, not `in`: `in` walks the prototype chain, so `'toString'`
+  // and `'constructor'` would pass and hand callers a Function to read `.label`
+  // off. Caught by userStatsRow.test.ts on the first run.
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(EXPERIENCE_LEVELS, v);
+}
 export const DISCIPLINE_KEYS = DISCIPLINES.map((d) => d.key) as DisciplineKey[];
 
 export const MUSCLE_REGION_KEYS = Object.keys(MUSCLE_REGIONS) as RegionKey[];

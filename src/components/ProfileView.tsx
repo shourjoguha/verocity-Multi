@@ -21,7 +21,7 @@ import {
   EmptyState,
   LoadingScreen,
   SectionHeader,
-  StatCard,
+  StatStrip,
   TickProgress,
 } from '@/components/ui/primitives';
 import { LogList } from '@/components/LogList';
@@ -583,7 +583,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             <SectionHeader>Active plan</SectionHeader>
             {plan ? (
               <>
-                <div className="lift flex flex-col gap-px border border-border bg-border">
+                <div className="lift flex flex-col gap-px overflow-hidden border border-border bg-border">
                   {/* Row one: which block, how far into it, and the way out to
                       the full plan. The week now says "of N" and carries the
                       TickProgress dashes under it — a bare "Week 3" told you
@@ -717,18 +717,9 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </Item>
       ) : null}
 
-      <Item>
-        <section className="mb-6 grid grid-cols-3 gap-px bg-border">
-          <StatCard label="Sessions" value={sessionCount} />
-          <StatCard label="Total time" value={formatDuration(totalSeconds)} />
-          <StatCard
-            label="Top e1RM"
-            value={top != null ? formatRound(top) : '—'}
-            unit={top != null ? 'kg' : undefined}
-          />
-        </section>
-      </Item>
-
+      {/* Activity first, then the totals it sums. The strip is the shape of the
+          history; the three numbers are its summary, and a summary reads better
+          under the thing it summarises than above it. */}
       {mode === 'app' ? (
         <Item>
           <section className="mb-6">
@@ -736,6 +727,25 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           </section>
         </Item>
       ) : null}
+
+      {/* One bordered strip with hairline dividers, not three separately
+          rounded tiles in a gap-px grid — at 4px+ radius the old arrangement
+          read as three floating boxes rather than one unit. */}
+      <Item>
+        <section className="mb-6">
+          <StatStrip
+            stats={[
+              { label: 'Sessions', value: sessionCount },
+              { label: 'Total time', value: formatDuration(totalSeconds) },
+              {
+                label: 'Top e1RM',
+                value: top != null ? formatRound(top) : '—',
+                unit: top != null ? 'kg' : undefined,
+              },
+            ]}
+          />
+        </section>
+      </Item>
 
       {mode === 'showcase' ? (
         <Item>

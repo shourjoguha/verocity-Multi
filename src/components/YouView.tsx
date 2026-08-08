@@ -14,7 +14,13 @@ import {
   logsToCsv,
 } from '@/lib/exportData';
 import { toast } from '@/lib/toast';
-import { DISCIPLINES, EQUIPMENT, EXPERIENCE_LEVELS, PLAN_LENGTH } from '@/app.config';
+import {
+  DISCIPLINES,
+  EQUIPMENT,
+  EXPERIENCE_LEVELS,
+  PLAN_LENGTH,
+  type ExperienceKey,
+} from '@/app.config';
 import type { UserStats } from '@/lib/types';
 import { Tag, TickProgress } from '@/components/ui/primitives';
 import { getStoredPref, THEME_EVENT, type ThemePref } from '@/lib/theme';
@@ -53,8 +59,8 @@ function readinessOf(s: UserStats | null): { filled: number; total: number; pct:
     s?.gender != null,
     s?.experience != null,
     s?.days_per_week != null,
-    (s?.equipment.length ?? 0) > 0,
-    (s?.disciplines.length ?? 0) > 0,
+    (s?.equipment?.length ?? 0) > 0,
+    (s?.disciplines?.length ?? 0) > 0,
   ];
   const filled = checks.filter(Boolean).length;
   return { filled, total: checks.length, pct: Math.round((filled / checks.length) * 100) };
@@ -212,7 +218,7 @@ export default function YouView() {
               ],
               [
                 'Experience',
-                stats?.experience ? EXPERIENCE_LEVELS[stats.experience].label : '—',
+                EXPERIENCE_LEVELS[stats?.experience as ExperienceKey]?.label ?? '—',
               ],
               ['Days / week', stats?.days_per_week != null ? String(stats.days_per_week) : '—'],
               [
@@ -231,7 +237,7 @@ export default function YouView() {
             ))}
           </dl>
 
-          {stats && stats.equipment.length > 0 ? (
+          {stats && (stats.equipment?.length ?? 0) > 0 ? (
             <div className="mt-4 border-t border-border-soft pt-4">
               <div className="t-label mb-2 text-muted">
                 Equipment · {stats.equipment.length} of {EQUIPMENT.length}
@@ -249,7 +255,7 @@ export default function YouView() {
             </div>
           ) : null}
 
-          {stats && stats.disciplines.length > 0 ? (
+          {stats && (stats.disciplines?.length ?? 0) > 0 ? (
             <div className="mt-4">
               <div className="t-label mb-2 text-muted">Disciplines</div>
               <div className="flex flex-wrap gap-1.5">
@@ -309,7 +315,7 @@ export default function YouView() {
               'Rank and weight what you want out of training. Order is priority. These drive the rep ranges and section emphasis the AI proposes when you generate a plan.',
             )}
             headerRight={
-              stats && stats.goals.length > 0
+              stats && (stats.goals?.length ?? 0) > 0
                 ? stats.goals
                     .slice(0, 2)
                     .map((g) => g.label)

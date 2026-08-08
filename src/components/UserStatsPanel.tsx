@@ -320,7 +320,7 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
               </option>
             ))}
           </select>
-          {form.experience ? (
+          {form.experience && EXPERIENCE_LEVELS[form.experience] ? (
             <p className="mt-1 text-[0.7rem] text-muted">{EXPERIENCE_LEVELS[form.experience].blurb}</p>
           ) : null}
         </div>
