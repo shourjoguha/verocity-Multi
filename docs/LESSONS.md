@@ -549,6 +549,22 @@ navigations rather than more patching of the update path.
 
 ## Testing & tooling
 
+### A slim segmented tab shipped a sub-44px tap target and reddened audit:mobile
+`[measured in Chromium, and the symptom observed to stop]`
+A per-instance `[&_button]:min-h-[26px]` override on ProfileView's "Selected
+month / Recent" tabs (the "reduce tab height 40%" commit) dropped those two
+`<button>`s to 26px — so `audit:mobile` failed `/app` with `small-targets=2` at
+both widths, while every other `ui/SegmentedTabs` stayed the chunky 44px it was.
+The lesson is the general one CLAUDE.md states and this proved the hard way: a
+segmented control reads slim by making the **visible thumb** short, never by
+shrinking the button. The fix put the thumb on an inner `<span>` at
+`min-h-[26px]` and kept the `<button>` at `min-h-11`, collapsing its 44px box to
+the 26px thumb with a `-my-[9px]` — slim look, real tap target, and the shell
+measures 36px. Doing it in the shared primitive made every tab slim at once and
+turned `/app` back to `small-targets=0`. **Never chase a slimmer control with a
+button height override; audit:mobile measures the button, not the thumb.**
+→ `src/components/ui/SegmentedTabs.tsx`, `scripts/mobile-audit.mjs`
+
 ### `audit:mobile` never visits `/app/plan/upload`
 `[measured in Chromium]`
 Its `ROUTES` list covers the nav destinations, so the entire plan/session
