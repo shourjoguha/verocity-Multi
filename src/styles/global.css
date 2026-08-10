@@ -45,24 +45,28 @@
   --color-up: hsl(147 46% 30%);
   --color-down: hsl(4 55% 42%);
 
-  /* Bright accent — #49F2E1. Introduced for the "Depth" backdrop; exposed as a
-     token (bg-teal / text-teal / border-teal / var(--color-teal)) so it can be
-     picked up for other accents when appropriate. The monochrome identity is
-     still the default — use this sparingly and intentionally. */
-  --color-teal: hsl(174 87% 62%);
+  /* Bright accent — kept as a single semantic role ("the highlight") but now
+     THEME-AWARE. Dark mode keeps the teal `#49F2E1` that seeded the "Depth"
+     backdrop; light mode flips to a mango / burnt-orange `#C2570A`
+     (≈ hsl(25 90% 40%)) because the teal reads washed out on paper and clears
+     only ~1.8:1 against white. The orange holds ~4.9:1 on the surface token —
+     comfortable AA for the eyebrow / accent text this is used for.
+     Exposed as `bg-teal / text-teal / border-teal / var(--color-teal)`; the
+     name is legacy and kept to avoid churning ~14 call sites. The monochrome
+     identity is still the default — use this sparingly and intentionally. */
+  --color-teal: hsl(25 90% 40%);
 
-  /* The same teal taken down to a surface shade — the one filled treatment it
-     earns. It marks a workout left running: Home's primary CTA turns from
-     "Start" to "Resume" and takes this fill (see .shimmer-resume). Dark in both
-     themes, so no override below and a near-white foreground either way. It is
-     the `slab` shade the "Depth" backdrop already paints in. */
-  --color-teal-deep: hsl(174 84% 24%);
+  /* The same accent taken down to a surface shade — the one filled treatment
+     it earns. It marks a workout left running: Home's primary CTA turns from
+     "Start" to "Resume" and takes this fill (see .shimmer-resume). Foreground
+     stays white in both themes. */
+  --color-teal-deep: hsl(25 90% 28%);
   --color-teal-fg: hsl(0 0% 100%);
 
-  /* Functional accent — the teal promoted to a sparing UI role (keyboard focus
-     now; active/selected cues in later phases). Same hue both themes; reads
-     bright on paper and on carbon. Monochrome stays the default everywhere else. */
-  --color-focus: hsl(174 87% 62%);
+  /* Functional accent — promoted to a sparing UI role (keyboard focus now;
+     active/selected cues in later phases). Follows --color-teal so focus
+     rings flip with the accent. */
+  --color-focus: hsl(25 90% 40%);
 
   /* Echo-stack background layers (#bfbfbf → #d9d9d9) */
   --color-echo-1: hsl(0 0% 75%);
@@ -157,6 +161,16 @@ html[data-theme='dark'] {
   --color-echo-2: hsl(0 0% 17%);
   --color-echo-3: hsl(0 0% 14%);
   --color-echo-4: hsl(0 0% 11%);
+
+  /* Highlight tokens — dark mode keeps the original #49F2E1 teal that seeded
+     the "Depth" backdrop and reads bright on carbon. Restated explicitly here
+     (rather than inherited from the @theme block) so the light-theme orange
+     never leaks through when the dark class is applied. See the light block
+     for why the two themes carry different hues under one token name. */
+  --color-teal: hsl(174 87% 62%);
+  --color-teal-deep: hsl(174 84% 24%);
+  --color-teal-fg: hsl(0 0% 100%);
+  --color-focus: hsl(174 87% 62%);
 
   /* Depth is retired in both themes — see the light block. Restated here rather
      than inherited so the two blocks stay readable as a matched pair. */
@@ -725,10 +739,13 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* Sheen colour follows --color-teal so it flips with the accent (orange in
+     light, cyan in dark). color-mix keeps the 38% alpha the sweep was
+     authored at without hardcoding the hue. */
   background: linear-gradient(
     105deg,
     transparent 35%,
-    hsl(174 87% 62% / 0.38) 50%,
+    color-mix(in hsl, var(--color-teal) 38%, transparent) 50%,
     transparent 65%
   );
   transform: translateX(-100%);
