@@ -863,7 +863,6 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                 onChange={(k) => setSessionsTab(k as 'month' | 'recent')}
                 ariaLabel="Sessions"
                 size="sm"
-                className="[&_button]:min-h-[26px]"
               />
             </div>
           ) : (

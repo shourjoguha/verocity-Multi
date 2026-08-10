@@ -193,10 +193,18 @@ UI audit have both run.
   than a highlight inset. `.hill-btn-flush` is kept for callers that name it.
 - **Segmented controls are `ui/SegmentedTabs`.** A bordered shell holding a
   filled thumb; five hand-rolled copies were consolidated into it. Do not roll a
-  sixth. It stays `min-h-11` at **both** sizes — `size="sm"` buys compactness
-  with type and padding only, because the reference design's ~30px in-card
-  height is below `TOUCH.minTargetPx`. Use it only for **single**-select: a
-  multi-select filter row is a set of toggle buttons, not a `role="tablist"`.
+  sixth. **Slim by default at every size** — the visible thumb is a ~26px inner
+  row (`min-h-[26px]` on a `<span>`), so the whole control reads slim per the
+  reference design. `size` (`md`/`sm`/`compact`) changes **type and padding
+  only**, never height, and font size never shrinks to buy slimness. Do not add
+  a per-caller height override (a `[&_button]:min-h-[26px]` on one instance is
+  exactly what the slim default replaced). The `<button>` itself **stays
+  `min-h-11`** (the real 44px tap target); a negative `-my` collapses that box
+  to the 26px thumb in layout flow, so the control looks slim while the hit box
+  does not — this is CLAUDE.md's "bigger hit box, not a bigger glyph" run in
+  reverse, and audit:mobile rule 2 measures the button, so **never drop the
+  button below `min-h-11`**. Use it only for **single**-select: a multi-select
+  filter row is a set of toggle buttons, not a `role="tablist"`.
 - **EchoText is 3D, and has two tiers.** Each shadow layer sits at a real
   `translateZ` offset behind the foreground (`--echo-tz`, -8px increments) and
   the parent `.echo` carries `perspective(800px)`. Any new echo layers MUST set
