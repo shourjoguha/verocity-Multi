@@ -1,6 +1,29 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useScrollLock } from '@/lib/scrollLock';
+
+// Ported from `logger/SetEntrySheet.tsx` — see its comment for why the inset
+// is applied as padding on the scrim/overlay region and never as a
+// margin/transform on the panel: the panel is what CSS drives the entrance
+// animation on, and disturbing its own box while that runs is the same class
+// of bug as the `.lift` transform fight in docs/LESSONS.md. Opt-in only
+// (`keyboardInset`), so the five existing sheets see no behavior change.
+function useKeyboardInset() {
+  const [inset, setInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const measure = () => setInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    measure();
+    vv.addEventListener('resize', measure);
+    vv.addEventListener('scroll', measure);
+    return () => {
+      vv.removeEventListener('resize', measure);
+      vv.removeEventListener('scroll', measure);
+    };
+  }, []);
+  return inset;
+}
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -103,16 +126,34 @@ export function Modal({
   open,
   onClose,
   title,
+  ariaLabel,
+  keyboardInset = false,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title?: string;
+  // The dialog's accessible name defaults to `title`, which renders as the
+  // header — but a caller that renders its own header in `children` (the meal
+  // drawer) leaves `title` unset, which would leave the dialog with no
+  // accessible name at all. Falls back to `title` when omitted, so none of
+  // the five existing callers change behavior.
+  ariaLabel?: string;
+  // Opt-in only — defaults false so the five existing sheets render exactly as
+  // before. Only the meal drawer (a form, in a drawer, with a software
+  // keyboard) passes true. See docs/MEAL_LOGGING.md §0.3.
+  keyboardInset?: boolean;
   children: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // Called unconditionally (component instance keeps a stable hook order
+  // whether or not `open` or `keyboardInset` are true) — only its RESULT is
+  // conditional, applied as scrim padding below.
+  const measuredInset = useKeyboardInset();
 
   if (!open) return null;
+
+  const scrimPaddingBottom = keyboardInset ? measuredInset : undefined;
 
   // Portalled to <body>, and that is load-bearing rather than tidiness.
   //
@@ -133,9 +174,15 @@ export function Modal({
     // now that nothing locks the document there. See lib/scrollLock.ts.
     <div
       className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain p-0 sm:items-center sm:p-6"
+      // The keyboard inset lands here — on the flex region the panel is
+      // bottom-aligned within — rather than on the panel itself. `data-sheet-scrim`
+      // below is `absolute inset-0` with no content, so padding on it is inert;
+      // this wrapper is the box that actually controls where `items-end` puts
+      // the panel, exactly what SetEntrySheet's EntryOverlay pads.
+      style={scrimPaddingBottom ? { paddingBottom: scrimPaddingBottom } : undefined}
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-label={ariaLabel ?? title}
     >
       <ModalBehavior panelRef={panelRef} onClose={onClose} />
       {/* The scrim does not animate. A full-viewport element changing opacity

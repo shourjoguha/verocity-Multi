@@ -4,9 +4,16 @@ import {
   getActivePlan,
   getAllLogs,
   getCurrentProfile,
+  getMealLogsInRange,
   getRecentLogs,
 } from '@/lib/queries';
 import { getCached, setCached } from '@/lib/queryCache';
+import { todayLocal } from '@/lib/mealPhoto';
+import { draftFor, type MealDraft, type MealPreset } from '@/lib/mealDraft';
+import type { MealLog } from '@/lib/types';
+import { MealChipRail } from '@/components/meals/MealChipRail';
+import { TodaysMeals } from '@/components/meals/TodaysMeals';
+import { MealDrawer } from '@/components/meals/MealDrawer';
 import { activeSessionOf } from '@/lib/activeSession';
 import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
@@ -341,6 +348,12 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   const [allLogs, setAllLogs] = useState<WorkoutLog[]>(
     mode === 'app' ? (getCached<WorkoutLog[]>('logs:all') ?? []) : [],
   );
+  const [mealsToday, setMealsToday] = useState<MealLog[]>(
+    mode === 'app' ? (getCached<MealLog[]>('meals:today') ?? []) : [],
+  );
+  // Hoisted so the chip rail and Today's meals share ONE drawer instance —
+  // one dialog, one focus trap, one scroll lock (docs/MEAL_LOGGING.md §11.3).
+  const [mealDraft, setMealDraft] = useState<MealDraft | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   // Pre-filled date when Add is opened from a specific calendar cell.
   const [addDate, setAddDate] = useState<string | null>(null);
@@ -366,11 +379,17 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             return;
           }
         }
-        const [p, pl, lg, all] = await Promise.all([
+        const today = todayLocal();
+        const [p, pl, lg, all, meals] = await Promise.all([
           getCurrentProfile(client),
           getActivePlan(client),
           getRecentLogs(30, client),
           getAllLogs(client),
+          // Showcase renders through the anon client, which has no read
+          // access to meal_logs by RLS design (no anon policy exists — see
+          // 0032_meal_logs.sql). Skip the read there rather than surface a
+          // permanently-empty widget.
+          mode === 'app' ? getMealLogsInRange(today, today, client) : Promise.resolve([]),
         ]);
         if (!active) return;
         if (mode === 'app') {
@@ -378,11 +397,13 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           setCached('plan:active', pl);
           setCached('logs:recent30', lg);
           setCached('logs:all', all);
+          setCached('meals:today', meals);
         }
         setProfile(p);
         setPlan(pl);
         setLogs(lg);
         setAllLogs(all);
+        setMealsToday(meals);
         setFailed(false);
       } catch {
         // Without this the rejection escaped the async IIFE unhandled and none
@@ -468,6 +489,14 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
     setAllLogs(nextAll);
     setCached('logs:recent30', nextRecent);
     setCached('logs:all', nextAll);
+  };
+
+  const openMealPreset = (preset: MealPreset) => setMealDraft(draftFor(preset));
+  const onMealSaved = (meal: MealLog | null) => {
+    if (!meal) return;
+    const next = [meal, ...mealsToday];
+    setMealsToday(next);
+    setCached('meals:today', next);
   };
 
   const sessionCount = done.length;
@@ -669,6 +698,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                       <span aria-hidden className="text-base leading-none">⋯</span>
                     </button>
                   </div>
+                  <MealChipRail meals={mealsToday} onOpen={openMealPreset} />
                 </div>
                 <div className="flex justify-end">
                   <a
@@ -709,6 +739,9 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                     Coach
                   </a>
                 </div>
+                <div className="mt-3 overflow-hidden rounded-card border border-border">
+                  <MealChipRail meals={mealsToday} onOpen={openMealPreset} />
+                </div>
               </>
             )}
           </section>
@@ -722,6 +755,19 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         <Item>
           <section className="mb-6">
             <ActivityStrip plan={plan} logs={allLogs} />
+          </section>
+        </Item>
+      ) : null}
+
+      {/* mode === 'app' is mandatory, not cosmetic: this component also renders
+          /showcase through the anon client, which has no read access to
+          meal_logs by RLS design (no anon policy — see 0032_meal_logs.sql).
+          Rendering this there would show a permanently-empty widget to the
+          public. */}
+      {mode === 'app' ? (
+        <Item>
+          <section className="mb-6">
+            <TodaysMeals meals={mealsToday} />
           </section>
         </Item>
       ) : null}
@@ -839,6 +885,12 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
               setQuickLog(updated);
             }}
             onDeleted={(id) => applyLogChange((ls) => ls.filter((l) => l.id !== id))}
+          />
+          <MealDrawer
+            draft={mealDraft}
+            onDraftChange={(patch) => setMealDraft((d) => (d ? { ...d, ...patch } : d))}
+            onClose={() => setMealDraft(null)}
+            onSaved={onMealSaved}
           />
         </>
       ) : null}
