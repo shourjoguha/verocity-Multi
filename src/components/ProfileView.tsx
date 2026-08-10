@@ -38,6 +38,7 @@ import { DayPreviewDialog } from '@/components/DayPreviewDialog';
 import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
 import { MonthCalendar } from '@/components/MonthCalendar';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;
@@ -465,6 +466,25 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   // `if (loading)` is what crashed this component with React #310 once
   // already, and the audits were green on the blank page it produced.
   const [showAllRecent, setShowAllRecent] = useState(false);
+  const [showAllMonth, setShowAllMonth] = useState(false);
+  // "This month" and "Recent sessions" used to be two stacked lists; they're
+  // now one tabbed list, so only one is ever on screen. Defaults to 'month'
+  // — it sits directly under the calendar grid it summarises.
+  const [sessionsTab, setSessionsTab] = useState<'month' | 'recent'>('month');
+
+  // The tab means the CURRENT calendar month, not whatever month the grid
+  // above happens to be navigated to — the grid's month state is internal to
+  // MonthCalendar, and coupling this list to it would mean lifting that state
+  // out for a case (browsing a past month) most users never hit.
+  const thisMonthLogs = useMemo(() => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const prefix = `${yyyy}-${mm}`;
+    return allLogs
+      .filter((log) => log.log_date.slice(0, 7) === prefix)
+      .sort((a, b) => b.log_date.localeCompare(a.log_date));
+  }, [allLogs]);
 
   if (loading) {
     return <LoadingScreen />;
@@ -821,7 +841,6 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                   setAddOpen(true);
                 }
               }}
-              onSelectLog={setQuickLog}
             />
           </section>
         </Item>
@@ -829,8 +848,48 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
 
       <Item>
         <section>
-          <SectionHeader>Recent sessions</SectionHeader>
-          {logs.length === 0 ? (
+          {/* This month and Recent sessions used to be two stacked lists —
+              now one list with a tab switcher on top, showcase keeps the
+              plain "Recent sessions" header since it has no calendar grid
+              (and so no "This month" tab) above it. */}
+          {mode === 'app' ? (
+            <div className="mb-3 max-w-xs">
+              <SegmentedTabs
+                tabs={[
+                  { key: 'month', label: 'This month' },
+                  { key: 'recent', label: 'Recent' },
+                ]}
+                active={sessionsTab}
+                onChange={(k) => setSessionsTab(k as 'month' | 'recent')}
+                ariaLabel="Sessions"
+                size="sm"
+              />
+            </div>
+          ) : (
+            <SectionHeader>Recent sessions</SectionHeader>
+          )}
+          {mode === 'app' && sessionsTab === 'month' ? (
+            thisMonthLogs.length === 0 ? (
+              <EmptyState>No sessions logged this month.</EmptyState>
+            ) : (
+              <>
+                <LogList
+                  logs={thisMonthLogs.slice(0, showAllMonth ? 12 : 5)}
+                  onSelect={setQuickLog}
+                />
+                {thisMonthLogs.length > 5 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllMonth((v) => !v)}
+                    aria-expanded={showAllMonth}
+                    className="t-control flex min-h-11 w-full items-center justify-center text-muted transition-colors hover:text-fg"
+                  >
+                    {showAllMonth ? 'Show less' : `Show more (${Math.min(thisMonthLogs.length, 12) - 5})`}
+                  </button>
+                ) : null}
+              </>
+            )
+          ) : logs.length === 0 ? (
             <EmptyState>No sessions logged yet.</EmptyState>
           ) : (
             <>

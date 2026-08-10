@@ -4,12 +4,15 @@ import { sessionTagColors } from '@/lib/tags';
 import { formatDuration } from '@/lib/format';
 import { SectionHeader } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
-import { LogList } from '@/components/LogList';
 
 // Presentation-only month grid extracted from the retired CalendarView.
 // Data (`logs`) is passed in, so a parent that already loaded logs (Home) does
 // not pay for a second query. All day interactions fan out through
 // `onDayClick`, so overlays live in the parent — no double mount.
+//
+// The "This month" list that used to sit below the grid now lives in the
+// parent (ProfileView), tabbed together with Recent sessions — one session
+// list, not two stacked ones. The grid itself is unchanged.
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -31,9 +34,6 @@ export interface MonthCalendarProps {
   // Fired for any day cell tap. Receives the ISO date (YYYY-MM-DD) and the
   // logs on that day so the parent can decide whether to preview or add.
   onDayClick?: (date: string, sessions: WorkoutLog[]) => void;
-  // Fired when the user taps a session inside the "This month" list below the
-  // grid. Omitted → the list rows are non-interactive.
-  onSelectLog?: (log: WorkoutLog) => void;
   className?: string;
 }
 
@@ -43,7 +43,6 @@ export function MonthCalendar({
   interactive = true,
   headerVariant = 'compact',
   onDayClick,
-  onSelectLog,
   className = '',
 }: MonthCalendarProps) {
   const [month, setMonth] = useState(() => {
@@ -73,11 +72,6 @@ export function MonthCalendar({
     }
     return map;
   }, [visible]);
-
-  const monthSessions = useMemo(
-    () => [...visible].sort((a, b) => b.log_date.localeCompare(a.log_date)),
-    [visible],
-  );
 
   const daysInMonth = new Date(
     Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0),
@@ -223,13 +217,6 @@ export function MonthCalendar({
           );
         })}
       </div>
-
-      {monthSessions.length > 0 ? (
-        <section className="mt-6">
-          <SectionHeader>This month</SectionHeader>
-          <LogList logs={monthSessions} onSelect={onSelectLog} />
-        </section>
-      ) : null}
     </div>
   );
 }
