@@ -1,7 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { clearQueryCache } from '@/lib/queryCache';
-import { ASPECT_METRICS_VERSION, isExperienceKey, type MetricKey } from '@/app.config';
+import {
+  ASPECT_METRICS_VERSION,
+  isExperienceKey,
+  isMealKindKey,
+  isMealSizeKey,
+  isMealSourceKey,
+  MEAL_DEFAULTS,
+  type MetricKey,
+} from '@/app.config';
 import { normalizeMovementName } from '@/lib/movementTaxonomy';
 import type {
   AspectScores,
@@ -12,6 +20,8 @@ import type {
   GarminConnectionInfo,
   GarminHealthDaily,
   ItemKind,
+  MealLog,
+  MealLogInput,
   Movement,
   MovementSub,
   MovementTaxonomyOverride,
@@ -657,4 +667,87 @@ export async function getDeepResults(
     .eq('rec_id', recId)
     .order('created_at', { ascending: false });
   return (data as RxDeepResult[]) ?? [];
+}
+
+// ---- meal_logs (owner-only by RLS; deliberately no anon read) ----
+
+/**
+ * The one door meal rows come through, so normalisation lives here rather than
+ * at each callsite — the argument getUserStats makes. Two things are fixed here
+ * and nowhere else:
+ *
+ *   1. Postgres `time` arrives as 'HH:MM:SS'. <input type="time"> requires
+ *      'HH:MM' and renders BLANK for anything else, silently.
+ *   2. size/kind/source are unconstrained text, so a value written by an older
+ *      build may not be a key we know. Unknown falls back to the MEAL_DEFAULTS
+ *      value rather than null — the columns are NOT NULL and the UI always has
+ *      a selection.
+ */
+function normalizeMealLog(row: MealLog): MealLog {
+  return {
+    ...row,
+    eaten_time: row.eaten_time.slice(0, 5),
+    size: isMealSizeKey(row.size) ? row.size : MEAL_DEFAULTS.size,
+    kind: isMealKindKey(row.kind) ? row.kind : MEAL_DEFAULTS.kind,
+    source: isMealSourceKey(row.source) ? row.source : MEAL_DEFAULTS.source,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+  };
+}
+
+export async function getMealLogs(
+  limit = 100,
+  client: SupabaseClient = supabase,
+): Promise<MealLog[]> {
+  const { data } = await client
+    .from('meal_logs')
+    .select('*')
+    .order('log_date', { ascending: false })
+    .order('eaten_time', { ascending: false })
+    .limit(limit);
+  return ((data as MealLog[]) ?? []).map(normalizeMealLog);
+}
+
+export async function getMealLogsInRange(
+  from: string,
+  to: string,
+  client: SupabaseClient = supabase,
+): Promise<MealLog[]> {
+  const { data } = await client
+    .from('meal_logs')
+    .select('*')
+    .gte('log_date', from)
+    .lte('log_date', to)
+    .order('log_date', { ascending: false })
+    .order('eaten_time', { ascending: false });
+  return ((data as MealLog[]) ?? []).map(normalizeMealLog);
+}
+
+export async function createMealLog(input: MealLogInput): Promise<MealLog | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from('meal_logs')
+    .insert({ ...input, owner_user_id: user.id })
+    .select('*')
+    .single();
+  if (error) return null;
+  clearQueryCache();
+  return normalizeMealLog(data as MealLog);
+}
+
+export async function updateMealLog(id: string, patch: Partial<MealLogInput>): Promise<boolean> {
+  const { error } = await supabase
+    .from('meal_logs')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (!error) clearQueryCache();
+  return !error;
+}
+
+export async function deleteMealLog(id: string): Promise<boolean> {
+  const { error } = await supabase.from('meal_logs').delete().eq('id', id);
+  if (!error) clearQueryCache();
+  return !error;
 }

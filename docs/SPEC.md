@@ -260,7 +260,29 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   used_at, expires_at`.
 - **`shares`** *(new)* — read-only share tokens: `id, token_hash, owner_user_id,
   scope (profile|plan|log), resource_id (nullable), label, created_at, expires_at,
-  revoked boolean`. Backs §7B share links and plan adoption.
+  revoked boolean`.
+- **`meal_logs`** *(new, migration 0032)* — capture only, nothing derives
+  anything from these rows: `owner_user_id, log_date (date), eaten_time (time),
+  size, kind, source, tags[], note, hunger_before, hunger_after (1-5),
+  photo_path, created_at, updated_at`. `log_date`/`eaten_time` store the
+  **wall-clock reading**, not a `timestamptz` — you ate at 10:30 wherever you
+  were, and a timestamptz would redisplay that as a different hour after a
+  timezone change. `size`/`kind`/`source` are unconstrained `text`, matched by
+  `MEAL_SIZES`/`MEAL_KINDS`/`MEAL_SOURCES` in `app.config.ts` rather than a
+  check constraint, so adding an option is a config edit; `getMealLogs`
+  normalises an unknown stored value back to `MEAL_DEFAULTS` at the read
+  boundary. Repeat-meal shortcuts on the chip rail are **derived** from the
+  distinct custom tags of recent meals — no second table. Owner-only, all four
+  RLS verbs, **no anon `_select` policy** — `profiles_select_showcase` grants
+  `anon` a whole-row read of the showcase profile and what someone eats must
+  never travel that route (same reasoning as `user_stats` above). Never add
+  one. Photos live in the private `meal-photos` Storage bucket (migration
+  0033, bucket only), path `<owner uuid>/<uuid>.jpg`; reads go through a
+  short-lived signed URL. The bucket's four `storage.objects` policies cannot
+  be created from a migration on this project (`postgres` is not an owner or
+  member of `supabase_storage_admin` here) and must be created by hand from
+  Dashboard → Storage → Policies — see `0033_meal_photos_bucket.sql`'s
+  comment block for the verbatim SQL. Backs §7B share links and plan adoption.
 
 ### 8.1 Movement taxonomy (region · modality · plane)
 

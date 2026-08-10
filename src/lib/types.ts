@@ -5,6 +5,9 @@ import type {
   EquipmentKey,
   ExperienceKey,
   GenderKey,
+  MealKindKey,
+  MealSizeKey,
+  MealSourceKey,
   MetricKey,
   MovementProfile,
   RegionKey,
@@ -558,3 +561,36 @@ export interface RxDeepResult {
   payload: Record<string, unknown>;
   created_at: string;
 }
+
+/**
+ * meal_logs (0032). Capture only — nothing derives anything from these rows.
+ *
+ * `eaten_time` is 'HH:MM' and NOT the raw Postgres value. Postgres `time`
+ * serialises as 'HH:MM:SS'; <input type="time"> only accepts 'HH:MM' and
+ * silently renders BLANK for anything longer. getMealLogs trims it at the read
+ * boundary so no component has to know that.
+ *
+ * `tags` holds suggested and custom tags together; splitTags() in
+ * lib/mealDraft.ts separates them for display.
+ */
+export interface MealLog {
+  id: string;
+  owner_user_id: string;
+  log_date: string; // 'YYYY-MM-DD'
+  eaten_time: string; // 'HH:MM'
+  size: MealSizeKey;
+  kind: MealKindKey;
+  source: MealSourceKey;
+  tags: string[];
+  note: string | null;
+  hunger_before: number;
+  hunger_after: number;
+  photo_path: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** What the form writes. The owner comes from the session, never the caller. */
+export type MealLogInput = Partial<
+  Omit<MealLog, 'id' | 'owner_user_id' | 'created_at' | 'updated_at'>
+> & { log_date: string; eaten_time: string };

@@ -271,3 +271,42 @@ probe scenario that stops matching prints `[skip]` and still reads as a pass.
 (both would have replaced the sheet contract), and its concentric-ring backdrop
 component, which would be a second fixed layer competing with the one preset
 list in `src/lib/background.ts`.
+
+### Phase 10 — Meal logging  `[shipped]`
+Capture only. This phase records when you ate, how big it was, what kind of
+meal, and optionally a photo, tags, hunger before/after and a note — nothing
+here derives a judgment from that data.
+
+**What shipped.** A `meal_logs` table (migration 0032) and a private
+`meal-photos` Storage bucket (migration 0033, bucket only — see `docs/SPEC.md`
+§8 for why the four object policies had to be created by hand instead). A
+`MealChipRail` inside the active-plan card, directly below Start workout:
+Custom → repeat-meal shortcuts (derived, newest-first) → Meal → Snack, each
+opening a bottom drawer (`MealDrawer`) prefilled per preset. `Today's meals`
+sits on Home below the activity chart. A dedicated `/app/meals/log` page
+(`FullMealLogger`) is the drawer's "expand" target and shows every field flat;
+`/app/meals` (`MealsView`) is the day-grouped history, tap to edit, delete
+removes the row and its photo. `ui/Modal` gained an opt-in `keyboardInset`
+prop (default `false`, the five pre-existing sheets are unchanged) so the
+drawer survives the software keyboard; `ui/SegmentedTabs` gained
+`as="radiogroup"` and `size="compact"` for the size/kind/source pickers — 36px
+visual height, 44px hit box, same hit-box-with-negative-margin resolution the
+`sm` variant already used.
+
+`npm run audit:mobile` stays green at 24/24 and `audit:flicker` stays 8/8 with
+zero skips against the production preview build (`npm run build && npm run
+preview` — the dev server does not reproduce the probe's timing).
+
+**Deliberately not done:** no calorie targets, macros, meal scores,
+nutritional judgment or AI recommendations of any kind — this is capture and
+retrieval only. No calendar integration, no Coach input, one photo per meal
+(no multiple photos, cropping or analysis), no offline queue. Repeat-meal
+shortcuts are derived from tags rather than stored in a second table.
+
+**Blocked at ship time:** the four `storage.objects` policies on the
+`meal-photos` bucket could not be created from a migration — `postgres` is not
+the owner of `storage.objects` on this project and holds no membership on
+`supabase_storage_admin`. Until they're created by hand from Dashboard →
+Storage → Policies (verbatim SQL in `0033_meal_photos_bucket.sql`'s comment
+block), every photo upload and signed-URL read is denied by RLS. Everything
+else — the table, the drawer, the full logger, history — works without them.

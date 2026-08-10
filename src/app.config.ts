@@ -232,6 +232,85 @@ export const ACTIVITY_TAGS = {
 // Quick-pick activity types for the lightweight non-strength ActivityLogger.
 export const ACTIVITY_TYPES = ['Run', 'Walk', 'Cycle', 'Row', 'Swim', 'Hike', 'Yoga', 'Mobility'] as const;
 
+// ----------------------------------------------------------------
+// Meals
+// ----------------------------------------------------------------
+// Three INDEPENDENT axes, deliberately not one list. "Takeaway" is a source,
+// not a kind — a takeaway can also be a snack — and collapsing them would make
+// "how often do I eat out?" unanswerable without also answering "how often do I
+// snack?".
+//
+// No check constraints back these (see 0032_meal_logs.sql). Adding an option is
+// a config edit; the read boundary in getMealLogs guards the column.
+
+export const MEAL_SIZES = {
+  light: { label: 'Light' },
+  medium: { label: 'Medium' },
+  heavy: { label: 'Heavy' },
+} as const;
+
+export const MEAL_KINDS = {
+  snack: { label: 'Snack' },
+  meal: { label: 'Meal' },
+} as const;
+
+export const MEAL_SOURCES = {
+  home: { label: 'Home' },
+  out: { label: 'Out' },
+  takeaway: { label: 'Takeaway' },
+} as const;
+
+// Suggested tags. Ordered because the chip row's reading order is the point.
+// Carries NO colour, unlike ACTIVITY_TAGS: activity tone is charted so its
+// hexes carry information. Selected tags use the teal accent per the spec,
+// which is a token (--color-teal), not a per-tag hue.
+export const MEAL_TAGS = [
+  { key: 'protein', label: 'Protein' },
+  { key: 'carbs', label: 'Carbs' },
+  { key: 'veg', label: 'Veg' },
+  { key: 'sweet', label: 'Sweet' },
+  { key: 'coffee', label: 'Coffee' },
+] as const;
+
+// Repeat-meal shortcuts are DERIVED from the distinct custom tags of recent
+// meals (newest first) — no second table. This seed is what a brand-new user
+// sees before they have saved anything, and it disappears from the front of the
+// rail naturally once real custom tags exist. Union, not replacement: if the
+// user has also used 'post-workout', it appears once.
+export const MEAL_REPEAT_SEED = ['post-workout'] as const;
+
+// How many repeat shortcuts the chip rail shows before it stops. The rail
+// scrolls, so this is about signal, not width.
+export const MEAL_REPEAT_LIMIT = 6;
+
+// Hunger before / after. Must stay in step with the check constraints in
+// 0032_meal_logs.sql — widening this without a migration writes rejected rows.
+export const MEAL_SCALE = { min: 1, max: 5 } as const;
+
+// Draft defaults, per the product spec. Unlike most of this app, a meal draft
+// arrives PREFILLED: the whole point is that a common meal is one tap plus
+// Save.
+export const MEAL_DEFAULTS = {
+  size: 'medium',
+  kind: 'meal',
+  source: 'home',
+  hungerBefore: 4,
+  hungerAfter: 1,
+} as const;
+
+// Photo handling. maxEdgePx/quality put a 4000px phone photo at roughly 150KB.
+// maxBytes is the ceiling for the fallback path where the browser cannot decode
+// the file (HEIC from the iOS library) and the original is uploaded as-is.
+export const MEAL_PHOTO = {
+  bucket: 'meal-photos',
+  maxEdgePx: 1280,
+  quality: 0.75,
+  maxBytes: 5_000_000,
+} as const;
+
+// Default time is now, rounded — nobody ate at exactly 10:37.
+export const MEAL_TIME_ROUND_MINUTES = 5;
+
 // Garmin activity-type → ActivityTagKey. Garmin emits lowercase type codes
 // (e.g. "running", "lap_swimming", "strength_training"); these project onto our
 // five activity tags so synced sessions colour correctly across the app. The
@@ -609,6 +688,14 @@ export const appConfig = {
   touch: TOUCH,
   notations: NOTATIONS,
   e1rm: E1RM,
+  mealSizes: MEAL_SIZES,
+  mealKinds: MEAL_KINDS,
+  mealSources: MEAL_SOURCES,
+  mealTags: MEAL_TAGS,
+  mealRepeatSeed: MEAL_REPEAT_SEED,
+  mealScale: MEAL_SCALE,
+  mealDefaults: MEAL_DEFAULTS,
+  mealPhoto: MEAL_PHOTO,
 } as const;
 
 export type MetricKey = keyof typeof METRICS;
@@ -648,6 +735,35 @@ export const DISCIPLINE_KEYS = DISCIPLINES.map((d) => d.key) as DisciplineKey[];
 export const MUSCLE_REGION_KEYS = Object.keys(MUSCLE_REGIONS) as RegionKey[];
 export const MODALITY_KEYS = Object.keys(MOVEMENT_MODALITIES) as ModalityKey[];
 export const PLANE_KEYS = Object.keys(MOVEMENT_PLANES) as PlaneKey[];
+
+export type MealSizeKey = keyof typeof MEAL_SIZES;
+export type MealKindKey = keyof typeof MEAL_KINDS;
+export type MealSourceKey = keyof typeof MEAL_SOURCES;
+export type MealTagKey = (typeof MEAL_TAGS)[number]['key'];
+
+export const MEAL_SIZE_KEYS = Object.keys(MEAL_SIZES) as MealSizeKey[];
+export const MEAL_KIND_KEYS = Object.keys(MEAL_KINDS) as MealKindKey[];
+export const MEAL_SOURCE_KEYS = Object.keys(MEAL_SOURCES) as MealSourceKey[];
+export const MEAL_TAG_KEYS = MEAL_TAGS.map((t) => t.key) as MealTagKey[];
+
+/**
+ * `meal_logs.size` / `.kind` / `.source` are unconstrained `text`, so a stored
+ * value is NOT guaranteed to be one of these keys however the TypeScript says
+ * otherwise. Applied at the boundary in getMealLogs, exactly as isExperienceKey
+ * is applied in getUserStats.
+ *
+ * hasOwnProperty, not `in`: `in` walks the prototype chain, so 'toString' and
+ * 'constructor' would pass and hand callers a Function to read `.label` off.
+ */
+export function isMealSizeKey(v: unknown): v is MealSizeKey {
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(MEAL_SIZES, v);
+}
+export function isMealKindKey(v: unknown): v is MealKindKey {
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(MEAL_KINDS, v);
+}
+export function isMealSourceKey(v: unknown): v is MealSourceKey {
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(MEAL_SOURCES, v);
+}
 
 // Normalised weight maps. Values are ≥0 and sum to 1, so a set's load
 // distributes across regions rather than double-counting.

@@ -276,6 +276,19 @@ p {
   padding-top: env(safe-area-inset-top);
 }
 
+/* ---- Hide the scrollbar, keep the scrolling. The meal chip rail
+   (MealChipRail.tsx) scrolls horizontally inside the active-plan card; a
+   visible scrollbar there reads as a second UI element competing with the
+   card's own hairlines. Touch, wheel, trackpad and keyboard (chips are
+   focusable buttons, so Tab scrolls them into view) all keep working. ---- */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* ---- Type scale — caps tier. The editorial micro-labels (eyebrows, section
    meta, pill/table captions) had drifted across screens into four sizes and
    seven tracking values for what are really two tiers. These collapse them into
