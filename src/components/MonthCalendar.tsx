@@ -34,6 +34,7 @@ export interface MonthCalendarProps {
   // Fired for any day cell tap. Receives the ISO date (YYYY-MM-DD) and the
   // logs on that day so the parent can decide whether to preview or add.
   onDayClick?: (date: string, sessions: WorkoutLog[]) => void;
+  onMonthChange?: (month: Date) => void;
   className?: string;
 }
 
@@ -43,6 +44,7 @@ export function MonthCalendar({
   interactive = true,
   headerVariant = 'compact',
   onDayClick,
+  onMonthChange,
   className = '',
 }: MonthCalendarProps) {
   const [month, setMonth] = useState(() => {
@@ -91,8 +93,11 @@ export function MonthCalendar({
     new Date(Date.UTC(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate())),
   );
 
-  const shift = (delta: number) =>
-    setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + delta, 1)));
+  const shift = (delta: number) => {
+    const next = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + delta, 1));
+    setMonth(next);
+    onMonthChange?.(next);
+  };
 
   const navBtn =
     'hill-btn min-h-11 min-w-11 border border-border bg-surface px-3 text-fg transition-colors hover:border-fg';

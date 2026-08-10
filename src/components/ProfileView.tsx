@@ -471,20 +471,19 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   // now one tabbed list, so only one is ever on screen. Defaults to 'month'
   // — it sits directly under the calendar grid it summarises.
   const [sessionsTab, setSessionsTab] = useState<'month' | 'recent'>('month');
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const d = new Date();
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+  });
 
-  // The tab means the CURRENT calendar month, not whatever month the grid
-  // above happens to be navigated to — the grid's month state is internal to
-  // MonthCalendar, and coupling this list to it would mean lifting that state
-  // out for a case (browsing a past month) most users never hit.
   const thisMonthLogs = useMemo(() => {
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = calendarMonth.getUTCFullYear();
+    const mm = String(calendarMonth.getUTCMonth() + 1).padStart(2, '0');
     const prefix = `${yyyy}-${mm}`;
     return allLogs
       .filter((log) => log.log_date.slice(0, 7) === prefix)
       .sort((a, b) => b.log_date.localeCompare(a.log_date));
-  }, [allLogs]);
+  }, [allLogs, calendarMonth]);
 
   if (loading) {
     return <LoadingScreen />;
@@ -834,6 +833,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           <section className="mb-8">
             <MonthCalendar
               logs={allLogs}
+              onMonthChange={setCalendarMonth}
               onDayClick={(date, sessions) => {
                 if (sessions.length > 0) setQuickLog(sessions[0]);
                 else {
@@ -853,16 +853,17 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
               plain "Recent sessions" header since it has no calendar grid
               (and so no "This month" tab) above it. */}
           {mode === 'app' ? (
-            <div className="mb-3 max-w-xs">
+            <div className="mb-3">
               <SegmentedTabs
                 tabs={[
-                  { key: 'month', label: 'This month' },
+                  { key: 'month', label: 'Selected month' },
                   { key: 'recent', label: 'Recent' },
                 ]}
                 active={sessionsTab}
                 onChange={(k) => setSessionsTab(k as 'month' | 'recent')}
                 ariaLabel="Sessions"
                 size="sm"
+                className="[&_button]:min-h-[26px]"
               />
             </div>
           ) : (
@@ -870,7 +871,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           )}
           {mode === 'app' && sessionsTab === 'month' ? (
             thisMonthLogs.length === 0 ? (
-              <EmptyState>No sessions logged this month.</EmptyState>
+              <EmptyState>No sessions logged in this month.</EmptyState>
             ) : (
               <>
                 <LogList
