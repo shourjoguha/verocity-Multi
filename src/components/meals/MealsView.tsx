@@ -3,9 +3,22 @@ import { getMealLogs, deleteMealLog } from '@/lib/queries';
 import { mealPhotoUrl, deleteMealPhoto } from '@/lib/mealPhoto';
 import { toDraft, type MealDraft } from '@/lib/mealDraft';
 import type { MealLog } from '@/lib/types';
+import { buildDayInsights, macroTags, summarizeTiming } from '@/lib/mealInsights';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
-import { ListCard, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
+import {
+  Card,
+  ListCard,
+  EmptyState,
+  LoadingScreen,
+  SectionHeader,
+  StatStrip,
+  Takeaway,
+} from '@/components/ui/primitives';
 import { MealDrawer } from '@/components/meals/MealDrawer';
+import { MacroChips } from '@/components/meals/MacroChips';
+import { HungerDots } from '@/components/meals/HungerDots';
+import { TimingHeatmap } from '@/components/meals/TimingHeatmap';
+import { TagMix } from '@/components/meals/TagMix';
 import { toast } from '@/lib/toast';
 
 function groupByDay(meals: MealLog[]): [string, MealLog[]][] {
@@ -80,6 +93,14 @@ export default function MealsView() {
   if (meals === null) return <LoadingScreen />;
 
   const groups = groupByDay(meals);
+  const days = buildDayInsights(meals, 7);
+  const summary = summarizeTiming(days);
+  const stats = [
+    { label: 'First meal', value: summary.averageFirstMeal },
+    { label: 'Last meal', value: summary.averageLastMeal },
+    { label: 'Eating window', value: summary.averageGap },
+    { label: 'Meals / day', value: summary.mealsPerDay },
+  ];
 
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
@@ -90,43 +111,85 @@ export default function MealsView() {
       {groups.length === 0 ? (
         <EmptyState>No meals logged yet.</EmptyState>
       ) : (
-        <div className="flex flex-col gap-6">
-          {groups.map(([date, dayMeals]) => (
-            <section key={date}>
-              <SectionHeader>{date}</SectionHeader>
-              <ListCard>
-                {dayMeals.map((m) => (
-                  <div key={m.id} className="flex items-center gap-3 px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(m)}
-                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                    >
-                      {m.photo_path && photoUrls[m.photo_path] ? (
-                        <img
-                          src={photoUrls[m.photo_path]}
-                          alt=""
-                          className="h-10 w-10 shrink-0 rounded-control border border-border object-cover"
-                        />
-                      ) : null}
-                      <span className="tabular-nums text-teal">{m.eaten_time}</span>
-                      <span className="min-w-0 flex-1 truncate text-sm capitalize text-fg">
-                        {m.size} · {m.kind} · {m.source}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete meal at ${m.eaten_time}`}
-                      onClick={() => onDelete(m)}
-                      className="flex min-h-11 min-w-11 shrink-0 items-center justify-center text-muted transition-colors hover:text-fg"
-                    >
-                      <span aria-hidden>🗑</span>
-                    </button>
-                  </div>
-                ))}
-              </ListCard>
-            </section>
-          ))}
+        <div className="flex flex-col gap-8">
+          {/* When eating actually happens across the week — the primary insight. */}
+          <section>
+            <SectionHeader>Meal timing · 7 days</SectionHeader>
+            <Card flat>
+              <Takeaway
+                lead={`You eat between ${summary.averageFirstMeal} and ${summary.averageLastMeal} on average.`}
+                detail={
+                  summary.lateNights > 0
+                    ? `A ${summary.averageGap} window — ${summary.lateNights} of 7 days finished after 21:00.`
+                    : `A ${summary.averageGap} window — no late-night finishes this week.`
+                }
+              />
+              <div className="mt-5">
+                <TimingHeatmap days={days} />
+              </div>
+            </Card>
+          </section>
+
+          <section>
+            <StatStrip stats={stats} />
+          </section>
+
+          {/* Share of meals carrying each tag, coloured per tag. */}
+          <section>
+            <SectionHeader>Tag mix · 7 days</SectionHeader>
+            <Card flat>
+              <p className="mb-4 text-sm text-muted">
+                Share of meals carrying each tag. Hunger moves from{' '}
+                {summary.hungerBefore.toFixed(1)} to {summary.hungerAfter.toFixed(1)} on average.
+              </p>
+              <TagMix meals={meals} />
+            </Card>
+          </section>
+
+          {/* Editable history — unchanged data path, restyled rows. */}
+          <section>
+            <SectionHeader>History</SectionHeader>
+            <div className="flex flex-col gap-6">
+              {groups.map(([date, dayMeals]) => (
+                <section key={date}>
+                  <h3 className="mb-2 px-1 t-label text-muted">{date}</h3>
+                  <ListCard>
+                    {dayMeals.map((m) => (
+                      <div key={m.id} className="flex items-center gap-3 px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(m)}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        >
+                          {m.photo_path && photoUrls[m.photo_path] ? (
+                            <img
+                              src={photoUrls[m.photo_path]}
+                              alt=""
+                              className="h-10 w-10 shrink-0 rounded-control border border-border object-cover"
+                            />
+                          ) : null}
+                          <span className="shrink-0 tabular-nums text-teal">{m.eaten_time}</span>
+                          <MacroChips tags={macroTags(m)} size="xs" />
+                          <span className="min-w-0 flex-1 truncate text-sm capitalize text-fg">
+                            {m.size} · {m.kind} · {m.source}
+                          </span>
+                        </button>
+                        <HungerDots before={m.hunger_before} after={m.hunger_after} compact />
+                        <button
+                          type="button"
+                          aria-label={`Delete meal at ${m.eaten_time}`}
+                          onClick={() => onDelete(m)}
+                          className="flex min-h-11 min-w-11 shrink-0 items-center justify-center text-muted transition-colors hover:text-fg"
+                        >
+                          <span aria-hidden>🗑</span>
+                        </button>
+                      </div>
+                    ))}
+                  </ListCard>
+                </section>
+              ))}
+            </div>
+          </section>
         </div>
       )}
 

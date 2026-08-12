@@ -778,19 +778,6 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </Item>
       ) : null}
 
-      {/* mode === 'app' is mandatory, not cosmetic: this component also renders
-          /showcase through the anon client, which has no read access to
-          meal_logs by RLS design (no anon policy — see 0032_meal_logs.sql).
-          Rendering this there would show a permanently-empty widget to the
-          public. */}
-      {mode === 'app' ? (
-        <Item>
-          <section className="mb-6">
-            <TodaysMeals meals={mealsToday} />
-          </section>
-        </Item>
-      ) : null}
-
       {/* One bordered strip with hairline dividers, not three separately
           rounded tiles in a gap-px grid — at 4px+ radius the old arrangement
           read as three floating boxes rather than one unit. */}
@@ -809,6 +796,19 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           />
         </section>
       </Item>
+
+      {/* The Fuel card sits UNDER the stats strip. mode === 'app' is mandatory,
+          not cosmetic: this component also renders /showcase through the anon
+          client, which has no read access to meal_logs by RLS design (no anon
+          policy — see 0032_meal_logs.sql). Rendering this there would show a
+          permanently-empty widget to the public. */}
+      {mode === 'app' ? (
+        <Item>
+          <section className="mb-6">
+            <TodaysMeals meals={mealsToday} />
+          </section>
+        </Item>
+      ) : null}
 
       {mode === 'showcase' ? (
         <Item>

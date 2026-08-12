@@ -260,17 +260,25 @@ export const MEAL_SOURCES = {
   takeaway: { label: 'Takeaway' },
 } as const;
 
-// Suggested tags. Ordered because the chip row's reading order is the point.
-// Carries NO colour, unlike ACTIVITY_TAGS: activity tone is charted so its
-// hexes carry information. Selected tags use the teal accent per the spec,
-// which is a token (--color-teal), not a per-tag hue.
+// Suggested tags. Ordered because the chip row's reading order is the point —
+// macros (protein/carbs/fat) lead, then the qualitative tags. Each tag carries a
+// generated hue (mealTagColor in lib/tags.ts) so the tag-mix chart and macro
+// chips read at a glance; the colour is derived from the key, not stored here,
+// so a NEW tag — suggested or custom — is auto-coloured with no edit. The macro
+// chips also render a letter, so the hue is never the only signal.
 export const MEAL_TAGS = [
   { key: 'protein', label: 'Protein' },
   { key: 'carbs', label: 'Carbs' },
+  { key: 'fat', label: 'Fat' },
   { key: 'veg', label: 'Veg' },
   { key: 'sweet', label: 'Sweet' },
   { key: 'coffee', label: 'Coffee' },
 ] as const;
+
+// The three tags shown as single-letter macro chips (P/C/F) on meal rows. A
+// subset of MEAL_TAGS — the qualitative tags (veg/sweet/coffee) appear only in
+// the tag-mix chart, not as inline chips.
+export const MEAL_MACRO_TAGS = ['protein', 'carbs', 'fat'] as const;
 
 // Repeat-meal shortcuts are DERIVED from the distinct custom tags of recent
 // meals (newest first) — no second table. This seed is what a brand-new user
