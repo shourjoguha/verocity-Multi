@@ -158,7 +158,7 @@ export function MonthCalendar({
           corners. */}
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded-card border border-border bg-border-soft">
         {cells.map((day, i) => {
-          if (day == null) return <div key={`b${i}`} className="aspect-square bg-bg" />;
+          if (day == null) return <div key={`b${i}`} className="bg-bg" style={{ minHeight: 30 }} />;
           const key = ymd(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), day)));
           const sessions = byDay.get(key) ?? [];
           const isToday = key === todayKey;
@@ -190,34 +190,42 @@ export function MonthCalendar({
                   : undefined
               }
               style={cellStyle}
-              className={`aspect-square bg-surface p-1 ${
+              className={`flex flex-col items-center justify-center gap-0.5 bg-surface py-1 ${
                 isToday ? 'ring-1 ring-inset ring-teal' : ''
               } ${
                 interactive
                   ? 'cursor-pointer transition-colors hover:bg-elevated focus:outline-none focus-visible:ring-1 focus-visible:ring-teal'
                   : ''
               }`}
+              style={{ minHeight: 30 }}
             >
               <div
-                className={`text-[0.65rem] tabular-nums ${
+                className={`text-[0.6rem] leading-none tabular-nums ${
                   isToday ? 'font-semibold text-teal' : 'text-muted'
                 }`}
               >
                 {day}
               </div>
-              <div className="mt-1 flex flex-col gap-[2px]">
-                {sessions.map((s) => (
-                  <span
-                    key={s.id}
-                    title={formatDuration(s.total_seconds)}
-                    className="flex h-1.5 w-full"
-                  >
-                    {sessionTagColors(s.tags, s.activity_type).map((c, ci) => (
-                      <span key={ci} className="h-full flex-1" style={{ backgroundColor: c }} />
-                    ))}
-                  </span>
-                ))}
-              </div>
+              {sessions.length > 0 ? (
+                <div className="flex items-center gap-[2px]" style={{ height: 4 }}>
+                  {sessions.slice(0, 3).map((s) => {
+                    const colors = sessionTagColors(s.tags, s.activity_type);
+                    return (
+                      <span
+                        key={s.id}
+                        title={formatDuration(s.total_seconds)}
+                        className="inline-block h-1 w-1 rounded-full"
+                        style={{ backgroundColor: colors[0] ?? 'var(--color-fg)' }}
+                      />
+                    );
+                  })}
+                  {sessions.length > 3 ? (
+                    <span className="text-[0.4rem] leading-none text-muted">
+                      +{sessions.length - 3}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           );
         })}
