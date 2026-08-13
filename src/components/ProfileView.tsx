@@ -84,7 +84,7 @@ const BAR_MIN = 8;
 // strip, so clamping here as well would flatten every session above two hours to
 // an identical bar and hide exactly the differences this strip exists to show.
 const BAR_NOMINAL_SECONDS = 7200;
-const BAR_W = 8;
+const BAR_W = 12;
 const BAR_GAP = 1;
 // Quiet time before the strip re-normalises. Nothing runs during the gesture.
 const SETTLE_MS = 120;
@@ -115,14 +115,21 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
   const points = useMemo(() => {
     const all = buildTimeline(plan, logs);
     const todayIndex = all.findIndex((p) => p.isToday);
-    return todayIndex >= 0 ? all.slice(0, todayIndex + 1) : all;
+    return todayIndex >= 0 ? all.slice(0, todayIndex + 4) : all;
   }, [plan, logs]);
 
   // Open pinned to today. Layout effect so it is never painted at the left edge
   // — a visible jump from the oldest day to the newest on every mount.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollLeft = el.scrollWidth;
+    if (!el) return;
+    const todayIdx = points.findIndex((p) => p.isToday);
+    if (todayIdx < 0) {
+      el.scrollLeft = el.scrollWidth;
+      return;
+    }
+    const pitch = BAR_W + BAR_GAP;
+    el.scrollLeft = (todayIdx + 1) * pitch - el.clientWidth;
   }, [points.length]);
 
   // Re-normalise AFTER the scroll settles, never during it.
