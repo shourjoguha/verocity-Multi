@@ -4,11 +4,6 @@ import { tagColor } from '@/lib/tags';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
 import { Tag } from '@/components/ui/primitives';
 
-// The shared workout-row list — one source of truth for the session row used on
-// Home and Calendar (and anywhere else). Duration sits UNDER the date so it
-// never competes with the SetShapeStrip reps/sets bars or overflows narrow
-// viewports. Pass `onSelect` for the interactive (app) variant; omit it for a
-// read-only (showcase) list.
 export function LogList({
   logs,
   onSelect,
@@ -22,19 +17,26 @@ export function LogList({
         const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
         const inner = (
           <>
-            <div className="w-16 shrink-0">
-              <div className="text-sm tabular-nums text-subtle">{formatDate(log.log_date)}</div>
+            <div className="w-14 shrink-0">
+              <div className="text-[0.7rem] tabular-nums leading-tight text-subtle">{formatDate(log.log_date)}</div>
               {log.total_seconds ? (
-                <div className="text-[0.7rem] tabular-nums text-muted">
+                <div className="text-[0.6rem] tabular-nums leading-tight text-muted">
                   {formatDuration(log.total_seconds)}
                 </div>
               ) : null}
             </div>
-            <div className="flex flex-1 flex-wrap gap-1">
+            <div className="flex min-w-0 flex-1 items-center gap-1">
               {log.tags.length > 0 ? (
-                log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
+                <>
+                  <Tag label={log.tags[0]} color={tagColor(log.tags[0])} />
+                  {log.tags.length > 1 ? (
+                    <span className="shrink-0 text-[0.6rem] text-muted">
+                      +{log.tags.length - 1}
+                    </span>
+                  ) : null}
+                </>
               ) : (
-                <span className="text-sm text-muted">
+                <span className="truncate text-[0.7rem] text-muted">
                   {log.day_key ?? log.activity_type ?? 'Session'}
                 </span>
               )}
@@ -43,19 +45,19 @@ export function LogList({
           </>
         );
         return (
-          <li key={log.id} className="border-b border-border last:border-b-0">
+          <li key={log.id} className="border-b border-border-soft last:border-b-0">
             {onSelect ? (
               <button
                 type="button"
                 onClick={() => onSelect(log)}
-                className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-elevated"
+                className="flex min-h-11 w-full items-center gap-3 px-3 py-1 text-left transition-colors hover:bg-elevated"
                 style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
               >
                 {inner}
               </button>
             ) : (
               <div
-                className="flex items-center gap-4 px-4 py-3"
+                className="flex min-h-11 items-center gap-3 px-3 py-1"
                 style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
               >
                 {inner}
