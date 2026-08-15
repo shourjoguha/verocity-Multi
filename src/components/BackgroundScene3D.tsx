@@ -9,14 +9,19 @@ import { BACKGROUND_EVENT, getStoredBackground, type BackgroundKey } from '@/lib
 
 function readPreference(): BackgroundKey {
   if (typeof window === 'undefined') return 'off';
-  // getStoredBackground swallows the SecurityError a blocked localStorage read
-  // throws, and falls through to the attribute below rather than taking this
-  // island down with it.
-  const raw = getStoredBackground();
-  // Read whatever the FOUC-prevention script in Base.astro decided; it's the
-  // authoritative pre-paint default and we don't want to second-guess it here.
+  // The `data-bg` attribute is authoritative: the FOUC-prevention script in
+  // Base.astro is the single place that decides the backdrop, and it can decide
+  // something the stored preference does NOT say — the showcase is pinned to
+  // `dots` there regardless of what localStorage holds. Reading localStorage
+  // first (as this once did) re-booted the 3D scene on the showcase for any
+  // visitor whose stored preference was `aurora`, stacking WebGL over the pin.
+  // On an ordinary page the attribute already mirrors the stored value, so this
+  // only changes behaviour where the two intentionally differ.
   const attr = document.documentElement.getAttribute('data-bg') as BackgroundKey | null;
-  return raw ?? attr ?? 'off';
+  // getStoredBackground swallows the SecurityError a blocked localStorage read
+  // throws; it's the fallback for the (browser-only) case where the attribute
+  // somehow isn't set yet.
+  return attr ?? getStoredBackground() ?? 'off';
 }
 
 export default function BackgroundScene3D() {
