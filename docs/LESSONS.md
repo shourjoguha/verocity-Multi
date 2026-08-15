@@ -346,31 +346,58 @@ was observed to stop.
 `src/components/Logger.tsx` (the Finish bar), `scripts/shell-audit.mjs`
 
 ### A canvas wordmark reads on a desktop and is mush on a phone
-`[measured in Chromium at 1280px and 375px]`
+`[measured in Chromium at 1280px and 375px]` — got this wrong twice.
 `ForceFieldCanvas` samples a brightness map — the word rendered into an
-offscreen buffer — on a fixed particle grid. It shipped with a pitch fixed in
-pixels (8px fine pointer / 12px coarse) and `ZEUS` was unreadable at 375px.
-The band's **height** barely changes between a phone and a desktop, but its
-**width halves**, so the word shrinks to fit and its strokes go from ~40px to
-~17px while the pitch does not: barely one particle spanned a stroke.
-**Derive the pitch from the fitted type size, not from the viewport or the
-input device** — `spacing = constrain(fittedSize / 22, 5, 10)` holds the same
-number of particles across a stroke at every width, and the clamp is what keeps
-the particle count bounded at both ends.
-Two things about the *map* bit the same way, and both look like "the effect is
-broken" rather than "the source bitmap is wrong":
-- A blur radius wide enough to soften the edges (5px) also pulls the letter
-  **interiors** below full brightness. Interiors are where the ink and the
-  fattest strokes come from, so the wordmark rendered as a hollow outline.
-  Blur 3px keeps them saturated.
-- A map whose background is pure black leaves every particle off the letters
-  below any threshold, so the band is bare and the cursor does nothing until it
-  crosses a glyph — the "force field" reads as a hole punched in some text. A
-  low floor (26/255) instead of 0 gives the whole band a faint ambient field,
-  which is what makes the *whole* band the interaction surface.
+offscreen buffer — on a particle grid. Its type is sized to the surface, so on
+a phone the word shrinks (a `13vw` heading goes 160px → 48px) while anything
+fixed in **pixels** does not. Every such constant broke the same way, and each
+looks like "the effect is broken" rather than "one number does not scale":
+- **Pitch.** Fixed at 8px/12px, barely one particle spanned a 17px letter
+  stroke. Derive it from the fitted type size, not the viewport and not the
+  input device: `spacing = constrain(fittedSize / 22, 5, 10)` puts the same
+  number of particles across a stroke at every size.
+- **Dot weight.** Fixed at 1.2–5.5px, a 5.5px dot on a 5px pitch overlaps its
+  neighbours and the word turns to porridge. Make it a share of the pitch
+  (`0.16`–`0.85`), which also lands on the old values at the desktop pitch, so
+  nothing that already looked right moves.
+- **Blur.** A radius wide relative to the stroke pulls the letter **interiors**
+  below full brightness — and interiors are where the ink and the fattest dots
+  come from, so the wordmark renders as a hollow outline. 3px was invisible at
+  160px type and hollowed the same word at 48px. Also a share of the pitch.
+Separately, and not a scaling problem: a map whose background is pure black
+leaves every particle off the letters below any threshold, so the band is bare
+and the cursor does nothing until it crosses a glyph — the "force field" reads
+as a hole punched in some text. A low floor (26/255) instead of 0 gives the
+whole band a faint ambient field, which is what makes the *whole* band the
+interaction surface.
 No audit can see any of this: it is legibility, not overflow and not a tap
-target, and `audit:mobile` never visits `/showcase` at all. Screenshot it.
+target, and neither `audit:mobile` nor `audit:flicker` visits `/`. Screenshot
+it, at both widths, in both themes.
 → `src/components/ForceFieldCanvas.tsx`
+
+### A particle wordmark crossfades in and the swap visibly pops
+`[measured in Chromium at 1280px and 375px]`
+The landing hero keeps its real `<h1>` — it is the heading, and it is what a
+reduced-motion or pre-hydration visitor sees — then fades it out as the particle
+field paints the same word. Three things have to coincide or the swap reads as
+a jump, and only the first is obvious:
+- **Position.** Solved by geometry, not measurement: the canvas is a band
+  *wrapping the heading*, and the word is drawn at the canvas centre, so the two
+  coincide by construction. Do not reach for measuring the heading against the
+  section box.
+- **Size.** The heading is `13vw`; the canvas sized its word to the band height.
+  Pass the heading's **computed** `font-size` (a `ResizeObserver`, because it
+  moves with the viewport) rather than trying to express one scale twice.
+- **Tracking.** `g.text()` applies none of the heading's `letter-spacing`, so a
+  tracked heading and an untracked particle word are different widths — 8
+  characters at `-0.05em` is ~20px at desktop size. Set
+  `drawingContext.letterSpacing` on the offscreen buffer.
+And a fourth, which is about the plate rather than the word: an **absolutely
+positioned** backdrop with negative insets paints over its siblings. It ate the
+eyebrow above and the first line of the paragraph below. Give the stage a margin
+that reserves exactly what the plate bleeds into, and fade the plate's edges
+(`mask-image`) so it does not sit on the page as a hard rectangle.
+→ `src/components/Landing.tsx`, `src/components/ForceFieldCanvas.tsx`
 
 ### A stat tile is far taller than its font sizes predict
 `[measured in Chromium at 375px]`
