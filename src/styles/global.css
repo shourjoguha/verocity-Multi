@@ -594,6 +594,19 @@ p {
   box-shadow: var(--hill-btn-disabled); /* `none` — opacity is set by the caller */
 }
 
+/* Inert on the public showcase. Set by readOnlyProps() in ui/ReadOnly.tsx, on
+   whatever element the write control happens to be — a <button>, an <a>, a tab
+   cell — which is why this keys off the attribute rather than :disabled.
+   `aria-disabled` and not `disabled` so the control stays focusable and a
+   keyboard visitor reaches the explanation instead of a dead element. */
+[data-readonly] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+[data-readonly]:hover {
+  border-color: var(--color-border);
+}
+
 /* Flush variant — for buttons inside an already-elevated container (popover,
    modal). With no outer shadow left to double up there is nothing to suppress,
    so it is now the same as .hill-btn; kept because callers name it and because

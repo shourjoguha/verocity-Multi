@@ -2,6 +2,7 @@
 import Base from './Base.astro';
 import LogTabButton from '@/components/LogTabButton';
 import { GROUPS } from '@/lib/appNav';
+import { existsOnShowcase, hrefFor, type Surface } from '@/lib/surface';
 
 interface Props {
   title?: string;
@@ -25,48 +26,40 @@ const home = showcase ? '/showcase' : '/app';
 // /app/activity does NOT belong here — it is an action (log a non-lifting
 // activity), already offered by AddSessionMenu from the ribbon's centre slot
 // and from Home, and this panel lists places.
-type NavGroup = {
-  label: string;
-  items: { href: string; label: string; svgGlyph?: boolean }[];
-};
-const groups: NavGroup[] = showcase
-  ? [
-      {
-        label: 'Today',
-        items: [
-          { href: '/showcase', label: 'Home' },
-          { href: '/showcase/calendar', label: 'Calendar' },
-        ],
-      },
-      {
-        label: 'Training',
-        items: [
-          { href: '/showcase/plan', label: 'Plan' },
-          { href: '/showcase/library', label: 'Library' },
-        ],
-      },
-      { label: 'Progress', items: [{ href: '/showcase/stats', label: 'Stats' }] },
-    ]
-  : [
-      {
-        label: 'Today',
-        items: [
-          { href: '/app', label: 'Home' },
-          { href: '/app/meals', label: 'Meals' },
-        ],
-      },
-      {
-        label: GROUPS.training.label,
-        items: GROUPS.training.tabs.map(({ href, label }) => ({ href, label })),
-      },
-      {
-        label: GROUPS.progress.label,
-        items: GROUPS.progress.tabs.map(({ href, label }) => ({ href, label })),
-      },
-      // One row, no sub-items: You is a single collapsible page
-      // (Settings + Share links + Goals), not a neighbourhood of its own.
-      { label: 'You', items: [{ href: '/app/you', label: 'You', svgGlyph: true }] },
-    ];
+// ONE derivation for both surfaces. There used to be a second hardcoded
+// showcase copy here, and it is why the public showcase sat months behind the
+// app: every new destination had to be remembered twice and never was.
+//
+// Now the app's own structure is the source, and the showcase is that structure
+// with the hrefs rewritten and the destinations it has no data for filtered
+// out. A new tab in `appNav.ts` appears on both at once.
+const surface: Surface = showcase ? 'showcase' : 'app';
+const keep = (href: string) => !showcase || existsOnShowcase(href);
+
+type NavItem = { href: string; label: string; svgGlyph?: boolean };
+type NavGroup = { label: string; items: NavItem[] };
+
+const allGroups: NavGroup[] = [
+  {
+    label: 'Today',
+    items: [
+      { href: '/app', label: 'Home' },
+      { href: '/app/meals', label: 'Meals' },
+    ],
+  },
+  { label: GROUPS.training.label, items: GROUPS.training.tabs.map(({ href, label }) => ({ href, label })) },
+  { label: GROUPS.progress.label, items: GROUPS.progress.tabs.map(({ href, label }) => ({ href, label })) },
+  // One row, no sub-items: You is a single collapsible page
+  // (Settings + Share links + Goals), not a neighbourhood of its own.
+  { label: 'You', items: [{ href: '/app/you', label: 'You', svgGlyph: true }] },
+];
+
+// The drawer lists places you can actually go, so a destination with no
+// showcase counterpart is dropped rather than shown dead. The ribbon below
+// takes the opposite line, and the difference is deliberate — see there.
+const groups: NavGroup[] = allGroups
+  .map((g) => ({ ...g, items: g.items.filter((i) => keep(i.href)).map((i) => ({ ...i, href: hrefFor(i.href, surface) })) }))
+  .filter((g) => g.items.length > 0);
 const isActive = (href: string) => (href === home ? path === home : path.startsWith(href));
 const groupActive = (g: NavGroup) => g.items.some((i) => isActive(i.href));
 
@@ -103,30 +96,46 @@ type Tab = {
   // href is rewritten client-side to the last-viewed sub-page (see the script
   // below) and it is active for any of the group's member routes.
   group?: 'training' | 'progress';
+  // Showcase only: the slot renders identically but refuses. See below.
+  readOnly?: boolean;
 };
-const tabs: Tab[] = showcase
-  ? [
-      { href: '/showcase', label: 'Home', glyph: '', icon: 'home' },
-      { href: '/showcase/calendar', label: 'Calendar', glyph: '▤' },
-      { href: '/showcase/plan', label: 'Plan', glyph: '◈', primary: true },
-      { href: '/showcase/stats', label: 'Stats', glyph: '', icon: 'progress' },
-    ]
-  : [
-      { href: '/app', label: 'Home', glyph: '', icon: 'home' },
-      { href: GROUPS.training.base, label: GROUPS.training.label, glyph: '', icon: 'training', group: 'training' },
-      // Not a destination: opens the "what are you logging?" sheet.
-      { href: '/app/log', label: 'Log', glyph: '', primary: true, action: 'log', icon: 'log' },
-      { href: GROUPS.progress.base, label: GROUPS.progress.label, glyph: '', icon: 'progress', group: 'progress' },
-      // Calendar retired as a standalone destination — it lives on Home now,
-      // above Recent sessions. The trailing slot goes to You (settings, share
-      // links, goals) instead.
-      { href: '/app/you', label: 'You', glyph: '☺', svgGlyph: true },
-    ];
+
+// The ribbon KEEPS ALL FIVE SLOTS on both surfaces, and that is the opposite
+// call to the drawer above, on purpose. The showcase exists to show what the
+// app is; a four-slot ribbon with the centre action missing is the single most
+// obvious way to look like a different, older product — which is exactly the
+// complaint this change answers. So Log and You still render, in the same
+// place with the same icons, and refuse with a read-only cue instead of
+// navigating.
+const allTabs: Tab[] = [
+  { href: '/app', label: 'Home', glyph: '', icon: 'home' },
+  { href: GROUPS.training.base, label: GROUPS.training.label, glyph: '', icon: 'training', group: 'training' },
+  // Not a destination: opens the "what are you logging?" sheet.
+  { href: '/app/log', label: 'Log', glyph: '', primary: true, action: 'log', icon: 'log' },
+  { href: GROUPS.progress.base, label: GROUPS.progress.label, glyph: '', icon: 'progress', group: 'progress' },
+  // Calendar retired as a standalone destination — it lives on Home now,
+  // above Recent sessions. The trailing slot goes to You (settings, share
+  // links, goals) instead.
+  { href: '/app/you', label: 'You', glyph: '☺', svgGlyph: true },
+];
+
+const tabs: Tab[] = allTabs.map((t) => {
+  // A group tab is reachable as long as ANY of its members are — Progress
+  // survives on the showcase without Coach.
+  const reachable = t.group
+    ? GROUPS[t.group].tabs.some((gt) => existsOnShowcase(gt.href))
+    : existsOnShowcase(t.href);
+  const readOnly = showcase && (!reachable || t.action === 'log');
+  return { ...t, readOnly, href: readOnly ? '#' : hrefFor(t.href, surface) };
+});
 
 // A group tab is active for any of its member routes, not just its (possibly
-// stale) href.
+// stale) href. Member hrefs are canonical `/app/*`, so they go through hrefFor
+// or nothing in a group would ever read as active on the showcase.
 const tabActive = (t: Tab) =>
-  t.group ? GROUPS[t.group].tabs.some((gt) => path.startsWith(gt.href)) : isActive(t.href);
+  t.group
+    ? GROUPS[t.group].tabs.some((gt) => path.startsWith(hrefFor(gt.href, surface)))
+    : isActive(t.href);
 ---
 
 <Base title={title} shell>
@@ -328,22 +337,24 @@ const tabActive = (t: Tab) =>
     <div class="mx-auto flex max-w-3xl items-stretch justify-around gap-1 px-2">
       {
         tabs.map((t) =>
-          /* The app-mode centre slot asks what you are logging instead of
-             navigating, so it is the one island in this otherwise static bar.
-             Showcase keeps a plain link: its centre slot is Plan, a real
-             destination, and the showcase mounts no write surfaces. */
+          /* The centre slot asks what you are logging instead of navigating, so
+             it is the one island in this otherwise static bar. On the showcase
+             it is still that island, still in the centre, still the same icon —
+             it just refuses, so the ribbon's shape is identical on both. */
           t.action === 'log' ? (
-            <LogTabButton label={t.label} glyph={t.glyph} client:load />
+            <LogTabButton label={t.label} glyph={t.glyph} readOnly={t.readOnly} client:load />
           ) : (
             <a
               href={t.href}
-              data-group-tab={t.group}
+              data-group-tab={t.readOnly ? undefined : t.group}
+              data-readonly={t.readOnly ? '' : undefined}
+              aria-disabled={t.readOnly ? 'true' : undefined}
               aria-current={tabActive(t) ? 'page' : undefined}
               class:list={[
                 'flex min-h-13 flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-150',
                 /* Primary beats active: the centre slot stays ink even when it
-                   is also the current route (the showcase's Plan tab), and it
-                   paints its own fg/bg pair, so no colour utility here. */
+                   is also the current route, and it paints its own fg/bg pair,
+                   so no colour utility here. */
                 t.primary
                   ? 'tab-bubble-primary'
                   : [tabActive(t) ? 'tab-bubble text-fg' : 'text-muted hover:text-fg'],
@@ -496,15 +507,37 @@ const tabActive = (t: Tab) =>
       { signal },
     );
 
+    // Ribbon slots with no showcase counterpart (Log, You) render in place and
+    // refuse, so the bar's shape matches the app. They are anchors to "#", so
+    // without this a tap would jump the page to the top.
+    document.querySelectorAll<HTMLElement>('[data-readonly]').forEach((el) =>
+      el.addEventListener(
+        'click',
+        (e) => {
+          e.preventDefault();
+          window.dispatchEvent(
+            new CustomEvent('verocity:toast', {
+              detail: { message: 'Read-only showcase — sign in to try this.', type: 'error' },
+            }),
+          );
+        },
+        { signal },
+      ),
+    );
+
     // Training/Progress ribbon tabs reopen whichever sub-page you last viewed
     // in that group, written by GroupPager.tsx on every in-group tab change.
     // Key prefix must match src/lib/appNav.ts's navStorageKey().
+    const base = window.location.pathname.startsWith('/showcase') ? '/showcase' : '/app';
     document.querySelectorAll<HTMLAnchorElement>('[data-group-tab]').forEach((a) => {
       const key = a.dataset.groupTab;
       if (!key) return;
       try {
         const stored = sessionStorage.getItem(`verocity:nav:${key}`);
-        if (stored) a.href = stored;
+        // Both surfaces share one storage key, so a value written on the other
+        // one would navigate a showcase visitor into the private app (or an
+        // owner out of it). Only honour a href for the surface we are on.
+        if (stored && stored.startsWith(base)) a.href = stored;
       } catch {
         /* private mode / quota — falls back to the group's base page */
       }

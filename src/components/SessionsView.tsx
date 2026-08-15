@@ -10,6 +10,7 @@ import {
 } from '@/lib/queries';
 import { firstWeekWithContent, frameFromPlanDay } from '@/lib/logBuilder';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
+import { clientFor, isReadOnly, type Surface } from '@/lib/surface';
 import type { Movement, Plan, PlanDay, Session, SessionExercise, SessionType } from '@/lib/types';
 import { ACTIVITY_TAGS, METRICS, SECTIONS, type ActivityTagKey, type MetricKey, type SectionKey } from '@/app.config';
 import { tagColor } from '@/lib/tags';
@@ -447,10 +448,17 @@ function PlansBrowser({
 
 const byCreated = (a: Session, b: Session) => b.created_at.localeCompare(a.created_at);
 
-export default function SessionsView() {
-  const sessionsQ = useAuthedQuery(() => getSessions(), { key: 'sessions' });
-  const movementsQ = useAuthedQuery(() => getMovements(), { key: 'movements' });
-  const plansQ = useAuthedQuery(() => getAllPlans(), { key: 'plans:all' });
+export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
+  // Showcase: read through the anon client, skip useAuthedQuery's session
+  // guard (it would bounce a visitor to /login), and skip the SWR cache, which
+  // is keyed per surface-blind and would leak the owner's rows into a public
+  // page on a shared browser.
+  const readOnly = isReadOnly(mode);
+  const client = clientFor(mode);
+  const opts = readOnly ? { auth: false } : undefined;
+  const sessionsQ = useAuthedQuery(() => getSessions(client), opts ?? { key: 'sessions' });
+  const movementsQ = useAuthedQuery(() => getMovements(client), opts ?? { key: 'movements' });
+  const plansQ = useAuthedQuery(() => getAllPlans(client), opts ?? { key: 'plans:all' });
 
   const [items, setItems] = useState<Session[] | null>(null);
   const [q, setQ] = useState('');

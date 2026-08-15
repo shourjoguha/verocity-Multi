@@ -1,0 +1,51 @@
+---
+import App from '@/layouts/App.astro';
+import ProfileView from '@/components/ProfileView';
+import TrainingGroup from '@/components/TrainingGroup';
+import ProgressGroup from '@/components/ProgressGroup';
+import SessionDetail from '@/components/SessionDetail';
+
+// The whole public showcase, as ONE route that mounts the same islands
+// `/app/*` does.
+//
+// It replaced five hand-written pages that mounted PlanView / LibraryView /
+// StatsView directly — bypassing TrainingGroup and ProgressGroup, so the
+// showcase had none of the app's segmented pager and none of the sub-tabs.
+// That is most of what "the showcase looks like an old build" meant.
+//
+// Adding a destination is one row in this table plus one in SHOWCASE_ROUTES
+// (`src/lib/surface.ts`, which the nav reads). Everything INSIDE a view then
+// tracks the app with no showcase-side change at all — that is the point.
+export function getStaticPaths() {
+  return [
+    { params: { slug: undefined }, props: { view: 'home', title: 'Showcase' } },
+    { params: { slug: 'plan' }, props: { view: 'training', initial: 'plan', title: 'Plan' } },
+    {
+      params: { slug: 'sessions' },
+      props: { view: 'training', initial: 'sessions', title: 'Sessions' },
+    },
+    {
+      params: { slug: 'library' },
+      props: { view: 'training', initial: 'library', title: 'Library' },
+    },
+    { params: { slug: 'stats' }, props: { view: 'progress', initial: 'stats', title: 'Stats' } },
+    { params: { slug: 'body' }, props: { view: 'progress', initial: 'body', title: 'Body' } },
+    { params: { slug: 'session' }, props: { view: 'session', title: 'Session' } },
+  ];
+}
+
+// Astro cannot infer prop types through getStaticPaths, and `initial` is
+// required by the group pagers.
+const { view, initial = '', title } = Astro.props as {
+  view: 'home' | 'training' | 'progress' | 'session';
+  initial?: string;
+  title: string;
+};
+---
+
+<App title={`${title} · Showcase · Verocity`} showcase>
+  {view === 'home' && <ProfileView mode="showcase" client:load />}
+  {view === 'training' && <TrainingGroup initial={initial} mode="showcase" client:load />}
+  {view === 'progress' && <ProgressGroup initial={initial} mode="showcase" client:load />}
+  {view === 'session' && <SessionDetail mode="showcase" client:load />}
+</App>

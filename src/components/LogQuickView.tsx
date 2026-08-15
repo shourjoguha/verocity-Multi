@@ -1,6 +1,6 @@
 import type { WorkoutLog } from '@/lib/types';
 import { SECTIONS, type SectionKey } from '@/app.config';
-import { formatDate, formatSetActual } from '@/lib/format';
+import { formatDate, formatDuration, formatSetActual } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
 import { Tag } from '@/components/ui/primitives';
 import { SetShapeStrip } from '@/components/SetShapeStrip';
@@ -10,6 +10,7 @@ import { SessionTime } from '@/components/SessionTime';
 import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { Modal } from '@/components/ui/Modal';
+import { hrefFor } from '@/lib/surface';
 
 const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
 
@@ -23,12 +24,17 @@ export function LogQuickView({
   onUpdated,
   onDeleted,
   onAddSession,
+  readOnly = false,
 }: {
   log: WorkoutLog | null;
   open: boolean;
   onClose: () => void;
   onUpdated?: (log: WorkoutLog) => void;
   onDeleted?: (id: string) => void;
+  // Showcase: this is a READ surface, so it opens there in full. Only the
+  // controls that mutate the row — inline time, heart rate, delete, resume —
+  // drop out; "Open" stays because the session page is public too.
+  readOnly?: boolean;
   // Calendar only: a day cell that already has a session opens this view
   // instead of the add menu, so adding a second session lives here.
   onAddSession?: (date: string) => void;
@@ -54,11 +60,17 @@ export function LogQuickView({
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="uppercase tracking-wider text-muted">{log.status}</span>
-              <SessionTime log={log} onUpdate={(s) => onUpdated?.({ ...log, total_seconds: s })} />
+              {readOnly ? (
+                <span className="tabular-nums text-muted">{formatDuration(log.total_seconds ?? 0)}</span>
+              ) : (
+                <SessionTime log={log} onUpdate={(s) => onUpdated?.({ ...log, total_seconds: s })} />
+              )}
             </div>
-            <div className="mt-2 flex justify-end text-sm">
-              <HeartRate log={log} onUpdate={(hr) => onUpdated?.({ ...log, ...hr })} />
-            </div>
+            {!readOnly ? (
+              <div className="mt-2 flex justify-end text-sm">
+                <HeartRate log={log} onUpdate={(hr) => onUpdated?.({ ...log, ...hr })} />
+              </div>
+            ) : null}
             <div className="mt-4">
               <SetShapeStrip data={log.data} />
             </div>
@@ -92,7 +104,7 @@ export function LogQuickView({
               </div>
             ) : null}
 
-            {onAddSession ? (
+            {onAddSession && !readOnly ? (
               <button
                 type="button"
                 onClick={() => onAddSession(log.log_date)}
@@ -104,21 +116,23 @@ export function LogQuickView({
           </div>
           <div className="flex items-center gap-2 border-t border-border p-4">
             <span className="mr-auto">
-              <DeleteLogButton
-                id={log.id}
-                onDeleted={() => {
-                  onDeleted?.(log.id);
-                  onClose();
-                }}
-              />
+              {!readOnly ? (
+                <DeleteLogButton
+                  id={log.id}
+                  onDeleted={() => {
+                    onDeleted?.(log.id);
+                    onClose();
+                  }}
+                />
+              ) : null}
             </span>
             <a
-              href={`/app/session?id=${log.id}`}
+              href={`${hrefFor('/app/session')}?id=${log.id}`}
               className="hill-btn inline-flex min-h-12 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
             >
               Open
             </a>
-            {resumable ? (
+            {resumable && !readOnly ? (
               <a
                 href={`/app/log?logId=${log.id}`}
                 className="hill-btn inline-flex min-h-12 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"

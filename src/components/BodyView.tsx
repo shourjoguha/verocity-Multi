@@ -3,7 +3,6 @@ import { motion } from 'motion/react';
 import { createMovement, getLogsInRange, getMovements, getUserStats } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { supabasePublic } from '@/lib/supabase';
-import { showcaseRefDate } from '@/lib/showcase';
 import type { Movement, WorkoutLog } from '@/lib/types';
 import { regionIntensities, regionTotals, summarizeBodyLoad, type BodyCurrency } from '@/lib/bodyLoad';
 import { unweightedRepKg } from '@/lib/userStats';
@@ -179,7 +178,8 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const [localOverrides, setLocalOverrides] = useState<OverrideMap>({});
 
   const days = WINDOWS.find((w) => w.key === windowKey)!.days;
-  const today = showcase ? showcaseRefDate() : new Date();
+  // Real "now" on both surfaces — the showcase is live (migration 0034).
+  const today = new Date();
   const from = new Date(
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (days - 1)),
   );

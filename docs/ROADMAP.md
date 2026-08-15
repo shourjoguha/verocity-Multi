@@ -356,3 +356,42 @@ not in the repo — until they are, the dialog opens and says "The reel isn't up
 yet." rather than showing a broken player. `/share/:token` still renders
 `display_name`; that is a private link the owner mints deliberately, not the
 public showcase, and was left alone.
+
+### Phase 12 — Showcase as a live mirror  `[shipped, migration pending]`
+`/showcase` looked like an old build because it was one. It was a parallel
+implementation — five hand-written pages against the app's seventeen, a second
+nav and ribbon hardcoded in `App.astro`, and ~34 `mode === 'app'` branches
+stripping the activity strip, day accordion, month calendar and tabbed session
+list. Nothing was broken; it had simply stopped being mirrored.
+
+**What shipped.** `src/lib/surface.ts` is now the single definition of the
+surface: which routes exist on it (`SHOWCASE_ROUTES`), which client to use,
+how to rewrite an app href, and where the name is redacted. One dynamic route
+(`src/pages/showcase/[...slug].astro`) mounts the same islands `/app/*` does —
+including `TrainingGroup` and `ProgressGroup`, whose segmented pagers the old
+pages bypassed entirely. `App.astro` derives its drawer and ribbon from
+`appNav.ts` for both surfaces, so the ribbon keeps its five slots and its icons
+on the showcase and a new tab appears on both at once. Write controls render
+and refuse via `ui/ReadOnly` rather than disappearing, so a visitor sees the
+real product; RLS refuses the write regardless. Progress omits Coach and Today
+omits Meals — data-scope facts (`recommendations` is private by choice;
+`meal_logs` and `user_stats` have no anon policy at all), not layout ones.
+
+**Scope: training only.** Plans, logs, sessions, library, stats, body. Meals,
+anthropometrics, Garmin health and coach output stay private.
+
+**Verified.** `check` 0 errors, `test` 620/620, `audit:mobile` 24/24,
+`audit:shell` and `audit:flicker` 8/8 zero skips, `audit:docs` clean, against
+build + preview. Beyond them, in Chromium with the REST layer mocked: all seven
+showcase routes render with a 5-slot ribbon, the ribbon's labels and icon count
+are byte-identical to `/app`'s in the built HTML, the drawer drops exactly
+Coach/Meals/You, no `/app` href appears anywhere on the showcase, inert
+controls raise the notice without navigating, and the group pager rewrites the
+URL to the showcase's own sessions route rather than into the app.
+
+**Pending, and the showcase is NOT live until it is done:**
+`supabase/migrations/0034_showcase_live.sql` has to be applied by hand — it
+replaces 0009's fixed 2026-04-20…04-29 window on `logs_select_anon` with
+`status <> 'cancelled'`. Until then the UI is current and the data is still the
+frozen April window. Also confirm `is_showcase` is true on the intended
+`profiles` row; every anon policy resolves through `showcase_profile_id()`.
