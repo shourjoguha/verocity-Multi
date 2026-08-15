@@ -3,6 +3,7 @@ import { getActivePlan } from '@/lib/queries';
 import { getCached, setCached } from '@/lib/queryCache';
 import type { Plan } from '@/lib/types';
 import { AddSessionMenu } from '@/components/AddSessionMenu';
+import { readOnlyProps } from '@/components/ui/ReadOnly';
 
 // The ribbon's centre slot. It used to be a plain <a href="/app/log">, which
 // dropped you straight into a blank workout — and since the Logger calls
@@ -18,7 +19,18 @@ import { AddSessionMenu } from '@/components/AddSessionMenu';
 // `glyph` is accepted for callsite compatibility with the Astro layout, but the
 // centre slot now renders the shared scroll-and-quill SVG so the ribbon stays
 // on one icon set. See the ribbon icon block in `src/layouts/App.astro`.
-export function LogTabButton({ label, glyph: _glyph }: { label: string; glyph: string }) {
+export function LogTabButton({
+  label,
+  glyph: _glyph,
+  readOnly = false,
+}: {
+  label: string;
+  glyph: string;
+  // Showcase: the slot keeps its place, its icon and its label, and refuses.
+  // Passed from App.astro rather than derived from the URL because this island
+  // is server-rendered — guessing at hydration would change the markup.
+  readOnly?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   // Seed-then-revalidate, the same idiom ProfileView uses: on a tab navigation
   // the module cache is warm and the sheet opens with the plan already there;
@@ -37,9 +49,9 @@ export function LogTabButton({ label, glyph: _glyph }: { label: string; glyph: s
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
+        {...(readOnly
+          ? readOnlyProps(true)
+          : { onClick: () => setOpen(true), 'aria-haspopup': 'dialog' as const, 'aria-expanded': open })}
         className="tab-bubble-primary flex min-h-13 flex-1 flex-col items-center justify-center gap-0.5"
       >
         {/* Geometry mirrors the plain tabs in App.astro — same min-h-13 cell,

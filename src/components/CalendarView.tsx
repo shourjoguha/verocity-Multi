@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getActivePlan, getLogsInRange } from '@/lib/queries';
 import { getCached, setCached } from '@/lib/queryCache';
-import { showcaseMonthStart } from '@/lib/showcase';
 import type { Plan, WorkoutLog } from '@/lib/types';
 import { sessionTagColors } from '@/lib/tags';
 import { formatDuration } from '@/lib/format';
@@ -31,7 +30,7 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
   const client = showcase ? supabasePublic : supabase;
   const [ready, setReady] = useState(false);
   const [month, setMonth] = useState(() => {
-    const d = showcase ? showcaseMonthStart() : new Date();
+    const d = new Date();
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
   });
   const [logs, setLogs] = useState<WorkoutLog[]>([]);

@@ -5,7 +5,6 @@ import { getLogsInRange, getUserStats } from '@/lib/queries';
 import { bodyweightMultiple } from '@/lib/userStats';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { useAspectProfile } from '@/lib/useAspectProfile';
-import { showcaseRefDate } from '@/lib/showcase';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
 import { flattenSets, familyOf, sessionVolume } from '@/lib/stats';
@@ -256,7 +255,8 @@ function deriveStats(fetched: WorkoutLog[], today: Date, groupBy: 'movement' | '
 
 export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
   const client = mode === 'showcase' ? supabasePublic : supabase;
-  const today = mode === 'showcase' ? showcaseRefDate() : new Date();
+  // Real "now" on both surfaces — the showcase is live (migration 0034).
+  const today = new Date();
   // The radar compares the rolling aspect window against the block before it, so
   // the fetch spans both — wider than the 8 weeks the rest of this page reads.
   const windows = aspectWindows(today);

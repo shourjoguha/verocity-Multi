@@ -345,6 +345,32 @@ was observed to stop.
 `src/layouts/Base.astro`, `src/lib/scrollLock.ts`,
 `src/components/Logger.tsx` (the Finish bar), `scripts/shell-audit.mjs`
 
+### A read-only mirror of the app drifts into an old build
+`[confirmed in the wild]` — the public showcase sat months behind `/app`.
+`/showcase` was not a read-only VIEW of the app, it was a parallel
+implementation: five hand-written pages against the app's seventeen, a second
+nav and ribbon hardcoded in `App.astro`, and thirty-odd `mode === 'app'`
+branches hiding features that read perfectly well without a session. Each of
+those is a place a human has to remember to mirror, and the failure is silent —
+nothing breaks, the public page just quietly stops being the product.
+**A read-only surface must be the SAME code with a different client, never a
+second implementation.** The fix was three collapses, and the shape generalises:
+one module deriving the surface (`src/lib/surface.ts`), one route table the nav
+and the router both read, and views that take a `mode` rather than a private
+copy. What is left to remember is one row per new page instead of four places.
+Two traps inside that:
+- **`mode` defaulting to `'app'`** means every new component is wrong on the
+  showcase until someone notices. Default it to the surface — but pass it
+  EXPLICITLY from the page for anything server-rendered, or the island renders
+  app markup on the server and showcase markup after hydration.
+- **A disabled write control still leaks its `href`.** `preventDefault` stops
+  the click, and the anchor still advertises `/app/log?...` on a public page to
+  anyone reading the DOM or browsing with JS off. Neutralise the href too, not
+  just the handler.
+No audit sees any of this: `audit:mobile` only walks `/app/*`, and every check
+was green for the whole time the showcase was stale.
+→ `src/lib/surface.ts`, `src/layouts/App.astro`, `src/pages/showcase/[...slug].astro`
+
 ### A canvas wordmark reads on a desktop and is mush on a phone
 `[measured in Chromium at 1280px and 375px]` — got this wrong twice.
 `ForceFieldCanvas` samples a brightness map — the word rendered into an

@@ -5,7 +5,7 @@ import { frameFromLogDocument } from '@/lib/logBuilder';
 import { toast } from '@/lib/toast';
 import type { WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
-import { formatDate, formatSetActual } from '@/lib/format';
+import { formatDate, formatDuration, formatSetActual } from '@/lib/format';
 import { SECTIONS, type SectionKey } from '@/app.config';
 import { EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
@@ -13,10 +13,14 @@ import { SessionTime } from '@/components/SessionTime';
 import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { Item, PageStagger } from '@/components/anim';
+import { clientFor, isReadOnly, type Surface } from '@/lib/surface';
 
 const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
 
-export default function SessionDetail() {
+export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
+  // A session is a read surface, so the showcase opens it in full — only the
+  // controls that mutate the row drop out.
+  const readOnly = isReadOnly(mode);
   const [loading, setLoading] = useState(true);
   const [log, setLog] = useState<WorkoutLog | null>(null);
   const [savingSession, setSavingSession] = useState(false);
@@ -42,17 +46,21 @@ export default function SessionDetail() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        window.location.href = '/login';
-        return;
+      // The showcase has no session by design; the guard would bounce every
+      // visitor to /login.
+      if (!readOnly) {
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) {
+          window.location.href = '/login';
+          return;
+        }
       }
       const id = new URLSearchParams(window.location.search).get('id');
       if (!id) {
         setLoading(false);
         return;
       }
-      setLog(await getLogById(id));
+      setLog(await getLogById(id, clientFor(mode)));
       setLoading(false);
     })();
   }, []);
@@ -80,23 +88,27 @@ export default function SessionDetail() {
             <p className="t-eyebrow text-muted">
               {formatDate(log.log_date)} · {log.status}
             </p>
-            <div className="flex items-center gap-3">
-              <a
-                href={`/app/log?logId=${log.id}&edit=1`}
-                className="t-control text-muted transition-colors hover:text-fg"
-              >
-                Edit
-              </a>
-              <button
-                type="button"
-                onClick={() => saveAsSession(log)}
-                disabled={savingSession}
-                className="t-control text-muted transition-colors hover:text-fg disabled:opacity-40"
-              >
-                Save as session
-              </button>
-              <DeleteLogButton id={log.id} onDeleted={() => (window.location.href = '/app')} />
-            </div>
+            {/* Every control in this row writes, so the whole row goes on the
+                showcase rather than rendering three inert stubs. */}
+            {!readOnly ? (
+              <div className="flex items-center gap-3">
+                <a
+                  href={`/app/log?logId=${log.id}&edit=1`}
+                  className="t-control text-muted transition-colors hover:text-fg"
+                >
+                  Edit
+                </a>
+                <button
+                  type="button"
+                  onClick={() => saveAsSession(log)}
+                  disabled={savingSession}
+                  className="t-control text-muted transition-colors hover:text-fg disabled:opacity-40"
+                >
+                  Save as session
+                </button>
+                <DeleteLogButton id={log.id} onDeleted={() => (window.location.href = '/app')} />
+              </div>
+            ) : null}
           </div>
           <EchoText
             text={log.activity_type ?? 'Session'}
@@ -107,8 +119,16 @@ export default function SessionDetail() {
             {log.tags.map((t) => (
               <Tag key={t} label={t} color={tagColor(t)} />
             ))}
-            <SessionTime log={log} onUpdate={(s) => setLog({ ...log, total_seconds: s })} />
-            <HeartRate log={log} onUpdate={(hr) => setLog({ ...log, ...hr })} />
+            {readOnly ? (
+              <span className="t-control tabular-nums text-muted">
+                {formatDuration(log.total_seconds ?? 0)}
+              </span>
+            ) : (
+              <>
+                <SessionTime log={log} onUpdate={(s) => setLog({ ...log, total_seconds: s })} />
+                <HeartRate log={log} onUpdate={(hr) => setLog({ ...log, ...hr })} />
+              </>
+            )}
           </div>
           {vibe ? (
             <div className="mt-3 flex gap-4 t-control text-muted">

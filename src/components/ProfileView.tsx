@@ -39,7 +39,9 @@ import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
 import { MonthCalendar } from '@/components/MonthCalendar';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
-import { SHOWCASE_ALIAS } from '@/lib/showcase';
+import { displayNameFor, hrefFor, isReadOnly, type Surface } from '@/lib/surface';
+import { READ_ONLY_NOTICE, readOnlyProps } from '@/components/ui/ReadOnly';
+import { toast } from '@/lib/toast';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;
@@ -340,8 +342,13 @@ function DayAccordion({
   );
 }
 
-export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
+export default function ProfileView({ mode }: { mode: Surface }) {
   const client = mode === 'showcase' ? supabasePublic : supabase;
+  // The showcase renders this page in full — same plan card, same activity
+  // strip, same calendar, same tabbed session list — and turns the write
+  // controls inert instead of deleting them. RLS refuses those writes anyway;
+  // this only decides what a visitor is offered.
+  const readOnly = isReadOnly(mode);
 
   // Seed from the SWR cache (app mode only) so revisiting Home paints instantly
   // while the effect below revalidates in the background.
@@ -550,7 +557,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   // by its Home button and browse, and this is the way back in. The day cards
   // stay freely browsable; the button keeps naming what is actually live.
   // Free: `allLogs` is already loaded and includes in-progress rows.
-  const running = mode === 'app' ? activeSessionOf(allLogs) : null;
+  const running = readOnly ? null : activeSessionOf(allLogs);
   const runningDay = running?.day_key
     ? (days.find((d) => d.dayKey === running.day_key) ?? null)
     : null;
@@ -570,15 +577,18 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             stat tiles, and a line above the ribbon) saying so at three
             different points down the page. */}
         <header className="mb-6">
+          {/* The date, the week and the streak read the same live data on both
+              surfaces now, so they render on both. Only the leading word
+              differs: the showcase says what it is. */}
           <div className="t-eyebrow flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
-            <span>{mode === 'showcase' ? 'Showcase' : new Date().toDateString()}</span>
-            {mode === 'app' && week ? (
+            <span>{readOnly ? 'Showcase' : new Date().toDateString()}</span>
+            {week ? (
               <>
                 <span aria-hidden>·</span>
                 <span>Week {week}</span>
               </>
             ) : null}
-            {mode === 'app' && streak >= 2 ? (
+            {streak >= 2 ? (
               <>
                 <span aria-hidden>·</span>
                 <span className="flex items-center gap-1.5 text-teal">
@@ -589,11 +599,11 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             ) : null}
           </div>
           <div className="mt-2">
-            {/* The showcase is served to anyone with the URL, so it prints the
-                public alias rather than the owner's real name. The row itself
-                is unchanged — plan, logs and stats are the owner's. */}
+            {/* displayNameFor, not the raw column: the showcase is served to
+                anyone with the URL, and the redaction lives in one place now
+                that every surface renders there. */}
             <EchoText
-              text={mode === 'showcase' ? SHOWCASE_ALIAS : (profile?.display_name ?? 'Athlete')}
+              text={displayNameFor(profile?.display_name, mode)}
               as="h1"
               className={ECHO_APP_TITLE}
             />
@@ -624,9 +634,12 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
           bands (the twin action buttons, the "Active plan" card, and a day rail
           that scrolled off the right edge with no visual tie to the card above
           it). Rows inside a hairline-divider container stay flat; the depth
-          belongs to the unit, not its parts. */}
-      {mode === 'app' ? (
-        <Item>
+          belongs to the unit, not its parts.
+
+          Renders on the SHOWCASE too — it reads live plan data and is most of
+          what the app's Home actually is. Its write controls go inert rather
+          than disappearing (ui/ReadOnly); RLS refuses them regardless. */}
+      <Item>
           {/* mb-3, not mb-8: the "Coach →" link below already carries a
               min-h-11 box, which alone supplies ~44px of whitespace under the
               card. Stacking mb-8 on top of that was 32px of dead space above
@@ -664,7 +677,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                           + min-h-11 gives it the 44px box without changing how it
                           reads. A bare text link measured 12px tall here. */}
                       <a
-                        href="/app/plan"
+                        href={hrefFor('/app/plan', mode)}
                         className="t-eyebrow -my-2 inline-flex min-h-11 shrink-0 items-center text-muted transition-colors hover:text-fg"
                       >
                         View →
@@ -698,10 +711,19 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                       gap-px grid never take .lift. The unit owns the depth. */}
                   <div className="flex gap-px bg-border-soft">
                     <a
+                      // '#' on the showcase, not just a prevented click: the
+                      // href is what a public page LEAKS. Without this the
+                      // read-only CTA still advertises a private /app/log URL,
+                      // and a visitor with JS off follows it.
                       href={
-                        resumeHref ??
-                        (activeDay ? `/app/log?day=${encodeURIComponent(activeDay.dayKey)}` : '/app/log')
+                        readOnly
+                          ? '#'
+                          : (resumeHref ??
+                            (activeDay
+                              ? `/app/log?day=${encodeURIComponent(activeDay.dayKey)}`
+                              : '/app/log'))
                       }
+                      {...readOnlyProps(readOnly)}
                       className={`flex min-h-13 flex-1 items-center justify-center overflow-hidden px-4 transition-colors ${
                         resumeHref ? resumeClass : 'bg-fg text-bg hover:bg-fg/85'
                       }`}
@@ -721,23 +743,29 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                         the common case. */}
                     <button
                       type="button"
-                      onClick={() => setAddOpen(true)}
                       aria-label="Other ways to start a session"
+                      {...(readOnly ? readOnlyProps(true) : { onClick: () => setAddOpen(true) })}
                       className="flex min-h-13 w-14 items-center justify-center bg-surface text-muted transition-colors hover:bg-elevated hover:text-fg"
                     >
                       <span aria-hidden className="text-base leading-none">⋯</span>
                     </button>
                   </div>
-                  <MealChipRail meals={mealsToday} onOpen={openMealPreset} />
+                  {/* Meals and Coach stay app-only, and that is a DATA fact
+                      rather than a design one: meal_logs has no anon policy
+                      (0032) and the coach is deliberately private, so both
+                      would render permanently empty on the showcase. */}
+                  {!readOnly ? <MealChipRail meals={mealsToday} onOpen={openMealPreset} /> : null}
                 </div>
-                <div className="flex justify-end">
-                  <a
-                    href="/app/coach"
-                    className="t-control -mr-2 inline-flex min-h-11 items-center px-2 text-muted transition-colors hover:text-fg"
-                  >
-                    Coach →
-                  </a>
-                </div>
+                {!readOnly ? (
+                  <div className="flex justify-end">
+                    <a
+                      href="/app/coach"
+                      className="t-control -mr-2 inline-flex min-h-11 items-center px-2 text-muted transition-colors hover:text-fg"
+                    >
+                      Coach →
+                    </a>
+                  </div>
+                ) : null}
               </>
             ) : (
               <>
@@ -757,37 +785,38 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
                 <div className="mt-3 flex gap-3">
                   <button
                     type="button"
-                    onClick={() => setAddOpen(true)}
+                    {...(readOnly ? readOnlyProps(true) : { onClick: () => setAddOpen(true) })}
                     className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
                   >
                     Start workout
                   </button>
-                  <a
-                    href="/app/coach"
-                    className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
-                  >
-                    Coach
-                  </a>
+                  {!readOnly ? (
+                    <a
+                      href="/app/coach"
+                      className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+                    >
+                      Coach
+                    </a>
+                  ) : null}
                 </div>
-                <div className="mt-3 overflow-hidden rounded-card border border-border">
-                  <MealChipRail meals={mealsToday} onOpen={openMealPreset} />
-                </div>
+                {!readOnly ? (
+                  <div className="mt-3 overflow-hidden rounded-card border border-border">
+                    <MealChipRail meals={mealsToday} onOpen={openMealPreset} />
+                  </div>
+                ) : null}
               </>
             )}
           </section>
-        </Item>
-      ) : null}
+      </Item>
 
       {/* Activity first, then the totals it sums. The strip is the shape of the
           history; the three numbers are its summary, and a summary reads better
           under the thing it summarises than above it. */}
-      {mode === 'app' ? (
-        <Item>
-          <section className="mb-6">
-            <ActivityStrip plan={plan} logs={allLogs} />
-          </section>
-        </Item>
-      ) : null}
+      <Item>
+        <section className="mb-6">
+          <ActivityStrip plan={plan} logs={allLogs} />
+        </section>
+      </Item>
 
       {/* One bordered strip with hairline dividers, not three separately
           rounded tiles in a gap-px grid — at 4px+ radius the old arrangement
@@ -821,65 +850,42 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
         </Item>
       ) : null}
 
-      {mode === 'showcase' ? (
-        <Item>
-          <section className="mb-6">
-            <SectionHeader>Active plan</SectionHeader>
-            {plan ? (
-              <Card>
-                <div className="font-display text-xl font-semibold tracking-tight text-fg">
-                  {plan.name}
-                </div>
-                {week ? <div className="mt-0.5 text-sm text-muted">Week {week}</div> : null}
-              </Card>
-            ) : (
-              <EmptyState>No active plan.</EmptyState>
-            )}
-          </section>
-        </Item>
-      ) : null}
-
-      {mode === 'app' ? (
-        <Item>
-          <section className="mb-8">
-            <MonthCalendar
-              logs={allLogs}
-              onMonthChange={setCalendarMonth}
-              onDayClick={(date, sessions) => {
-                if (sessions.length > 0) setQuickLog(sessions[0]);
-                else {
-                  setAddDate(date);
-                  setAddOpen(true);
-                }
-              }}
-            />
-          </section>
-        </Item>
-      ) : null}
+      <Item>
+        <section className="mb-8">
+          <MonthCalendar
+            logs={allLogs}
+            onMonthChange={setCalendarMonth}
+            onDayClick={(date, sessions) => {
+              if (sessions.length > 0) setQuickLog(sessions[0]);
+              else if (readOnly) toast(READ_ONLY_NOTICE, 'error');
+              else {
+                setAddDate(date);
+                setAddOpen(true);
+              }
+            }}
+          />
+        </section>
+      </Item>
 
       <Item>
         <section>
-          {/* This month and Recent sessions used to be two stacked lists —
-              now one list with a tab switcher on top, showcase keeps the
-              plain "Recent sessions" header since it has no calendar grid
-              (and so no "This month" tab) above it. */}
-          {mode === 'app' ? (
-            <div className="mb-3">
-              <SegmentedTabs
-                tabs={[
-                  { key: 'month', label: 'Selected month' },
-                  { key: 'recent', label: 'Recent' },
-                ]}
-                active={sessionsTab}
-                onChange={(k) => setSessionsTab(k as 'month' | 'recent')}
-                ariaLabel="Sessions"
-                size="sm"
-              />
-            </div>
-          ) : (
-            <SectionHeader>Recent sessions</SectionHeader>
-          )}
-          {mode === 'app' && sessionsTab === 'month' ? (
+          {/* This month and Recent sessions used to be two stacked lists — now
+              one list with a tab switcher on top. Both filters are reads over
+              `allLogs`, so the showcase gets the same control rather than the
+              flat "Recent sessions" header it used to fall back to. */}
+          <div className="mb-3">
+            <SegmentedTabs
+              tabs={[
+                { key: 'month', label: 'Selected month' },
+                { key: 'recent', label: 'Recent' },
+              ]}
+              active={sessionsTab}
+              onChange={(k) => setSessionsTab(k as 'month' | 'recent')}
+              ariaLabel="Sessions"
+              size="sm"
+            />
+          </div>
+          {sessionsTab === 'month' ? (
             thisMonthLogs.length === 0 ? (
               <EmptyState>No sessions logged in this month.</EmptyState>
             ) : (
@@ -906,7 +912,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             <>
               <LogList
                 logs={logs.slice(0, showAllRecent ? 12 : 5)}
-                onSelect={mode === 'app' ? setQuickLog : undefined}
+                onSelect={setQuickLog}
               />
               {/* A plain text button, deliberately not a card and not a
                   Disclosure: this is one list that grows, not a second
@@ -929,7 +935,28 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
 
     </PageStagger>
 
-      {mode === 'app' ? (
+      {/* Read surfaces render on both: DayPreviewDialog is how a plan day is
+          inspected and LogQuickView is how a session is read. Their own edit
+          and delete controls take the read-only treatment inside LogQuickView.
+          The two genuinely write-only sheets stay app-only. */}
+      <DayPreviewDialog
+        day={previewDay}
+        week={week ?? 1}
+        open={previewDay !== null}
+        onClose={() => setPreviewDay(null)}
+      />
+      <LogQuickView
+        log={quickLog}
+        open={quickLog !== null}
+        onClose={() => setQuickLog(null)}
+        readOnly={readOnly}
+        onUpdated={(updated) => {
+          applyLogChange((ls) => ls.map((l) => (l.id === updated.id ? updated : l)));
+          setQuickLog(updated);
+        }}
+        onDeleted={(id) => applyLogChange((ls) => ls.filter((l) => l.id !== id))}
+      />
+      {!readOnly ? (
         <>
           <AddSessionMenu
             plan={plan}
@@ -939,22 +966,6 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
               setAddOpen(false);
               setAddDate(null);
             }}
-          />
-          <DayPreviewDialog
-            day={previewDay}
-            week={week ?? 1}
-            open={previewDay !== null}
-            onClose={() => setPreviewDay(null)}
-          />
-          <LogQuickView
-            log={quickLog}
-            open={quickLog !== null}
-            onClose={() => setQuickLog(null)}
-            onUpdated={(updated) => {
-              applyLogChange((ls) => ls.map((l) => (l.id === updated.id ? updated : l)));
-              setQuickLog(updated);
-            }}
-            onDeleted={(id) => applyLogChange((ls) => ls.filter((l) => l.id !== id))}
           />
           <MealDrawer
             draft={mealDraft}

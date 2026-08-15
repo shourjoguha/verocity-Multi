@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import SegmentedTabs from './ui/SegmentedTabs';
 import { GROUPS, navStorageKey, type GroupKey } from '@/lib/appNav';
+import { hrefFor, type Surface } from '@/lib/surface';
 
 // A grouped page: one segmented control on top, its sibling views below,
 // switched client-side with a CSS-first directional slide. This is the seamless
@@ -19,12 +20,17 @@ export default function GroupPager({
   groupKey,
   initial,
   views,
+  surface = 'app',
 }: {
   groupKey: GroupKey;
   initial: string;
   views: Record<string, ReactNode>;
+  surface?: Surface;
 }) {
-  const tabs = GROUPS[groupKey].tabs;
+  // Tabs come from the views the caller actually supplied, not from the whole
+  // group: the showcase omits Coach for data-scope reasons, and deriving the
+  // control from `views` means dropping a view drops its tab with it.
+  const tabs = GROUPS[groupKey].tabs.filter((t) => t.key in views);
   const initialKey = tabs.some((t) => t.key === initial) ? initial : tabs[0].key;
 
   const [active, setActive] = useState(initialKey);
@@ -41,9 +47,14 @@ export default function GroupPager({
     activeIndex.current = nextIndex;
     setMounted((m) => (m.has(key) ? m : new Set(m).add(key)));
     setActive(key);
+    // Both go through hrefFor: the group's canonical hrefs are `/app/*`, and
+    // writing one of those from the showcase would rewrite the address bar to
+    // the private app and teach the ribbon's Training/Progress slot to navigate
+    // a visitor straight out of the read-only surface.
+    const href = hrefFor(tabs[nextIndex].href, surface);
     try {
-      window.history.replaceState(window.history.state, '', tabs[nextIndex].href);
-      sessionStorage.setItem(navStorageKey(groupKey), tabs[nextIndex].href);
+      window.history.replaceState(window.history.state, '', href);
+      sessionStorage.setItem(navStorageKey(groupKey), href);
     } catch {
       /* private mode / quota — navigation still works, just not remembered */
     }
