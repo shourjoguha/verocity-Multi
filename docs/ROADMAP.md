@@ -310,3 +310,42 @@ the owner of `storage.objects` on this project and holds no membership on
 Storage → Policies (verbatim SQL in `0033_meal_photos_bucket.sql`'s comment
 block), every photo upload and signed-URL read is denied by RLS. Everything
 else — the table, the drawer, the full logger, history — works without them.
+
+### Phase 11 — Showcase hero  `[shipped]`
+`/showcase` is the one surface served to anyone with the URL, and it was
+printing the owner's real `profiles.display_name` under a one-size app header.
+It now leads with a hero band: an interactive particle field carrying the
+public alias, and the page's one control that opens something.
+
+**What shipped.** `SHOWCASE_ALIAS` (`src/lib/showcase.ts`, alongside
+`SHOWCASE_WINDOW`) is the public identity — the row stays the owner's, only the
+rendered name is swapped, and no showcase surface reads `display_name` any
+more. `ShowcaseHero` replaces the eyebrow + `EchoText` pair for
+`mode === 'showcase'` in `ProfileView` (app mode is untouched) and is the first
+caller of `ECHO_HERO`, which had been declared and used nowhere.
+`ForceFieldCanvas` is a p5 sketch — new dependency, `p5@1.11` — porting a
+reference "force field" effect: a grid of particles takes its shade and weight
+from an offscreen brightness map (the wordmark, drawn in Archivo Black), repels
+from the pointer, and springs back. It is monochrome and token-derived rather
+than the reference's HSL palette, `clear()`s rather than painting black, and
+uses scalars rather than the reference's two `p5.Vector` allocations per
+particle per frame. `ForceField` is the ~1KB gate in front of it: nothing is
+fetched under `prefers-reduced-motion`, and otherwise p5 arrives as its own
+chunk after mount, so it is off the initial payload. `ShowcaseReel` is a
+`ui/Modal` holding a `<video>` for a short film served from `public/showcase/`.
+
+**Verified.** `npm run check` 0 errors, `npm test` 620/620,
+`audit:mobile` 24/24, `audit:shell` and `audit:flicker` 8/8 with zero skips —
+all against `npm run build && npm run preview` (the dev server cannot hydrate;
+see `docs/LESSONS.md`). None of those four watch `/showcase`, so the hero was
+observed directly in Chromium: the field paints ~21k px at 1280px and at 375px,
+disperses 27% of its painted mass under a cursor sweep and settles back, the
+alias renders and the real name never appears, reduced motion mounts no canvas
+and fetches no p5, and the reel dialog opens, closes on Escape and returns
+focus.
+
+**Not done:** the reel's own asset. `public/showcase/reel.mp4` and
+`reel-poster.jpg` are not in the repo — until they are, the dialog opens and
+says "The reel isn't up yet." rather than showing a broken player. `/share/:token`
+still renders `display_name`; that is a private link the owner mints
+deliberately, not the public showcase, and was left alone.
