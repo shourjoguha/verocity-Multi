@@ -57,11 +57,24 @@ const {
       (function () {
         var KEY = 'verocity:theme';
         var mql = window.matchMedia('(prefers-color-scheme: dark)');
+        // The public showcase is pinned to dark, whatever the visitor's own
+        // preference — it is a fixed presentation surface, not their workspace,
+        // and there is no toggle reachable there to change it back. Checked
+        // inside paint() (not once) so it re-decides on every ClientRouter swap
+        // as the visitor moves on and off /showcase.
+        function isShowcase() {
+          var p = window.location.pathname;
+          return p === '/showcase' || p.indexOf('/showcase/') === 0;
+        }
         function paint() {
           try {
             var pref = localStorage.getItem(KEY);
             if (pref !== 'light' && pref !== 'dark' && pref !== 'system') pref = 'system';
-            var r = pref === 'dark' || (pref === 'system' && mql.matches) ? 'dark' : 'light';
+            var r = isShowcase()
+              ? 'dark'
+              : pref === 'dark' || (pref === 'system' && mql.matches)
+                ? 'dark'
+                : 'light';
             document.documentElement.setAttribute('data-theme', r);
             document.documentElement.style.colorScheme = r;
             var m = document.querySelector('meta[name="theme-color"]');
@@ -96,6 +109,13 @@ const {
       (function () {
         function apply() {
           try {
+            // Pinned on the showcase (see the theme script above for why): the
+            // dotted backdrop, always, overriding any stored preference.
+            var p = window.location.pathname;
+            if (p === '/showcase' || p.indexOf('/showcase/') === 0) {
+              document.documentElement.setAttribute('data-bg', 'dots');
+              return;
+            }
             var v = localStorage.getItem('verocity:bg');
             var allowed = ['off', 'grain', 'dots', 'hairlines', 'topography', 'aurora'];
             if (allowed.indexOf(v) === -1) {

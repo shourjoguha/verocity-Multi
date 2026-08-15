@@ -2,10 +2,7 @@
 import Base from '@/layouts/Base.astro';
 import Landing from '@/components/Landing';
 
-const navLinks = [
-  { href: '/showcase', label: 'Showcase' },
-  { href: '/login', label: 'Log in' },
-];
+const navLinks = [{ href: '/login', label: 'Log in' }];
 ---
 
 <Base title="Verocity">
@@ -14,7 +11,12 @@ const navLinks = [
   <header class="sticky top-0 z-50 h-20 border-b border-border bg-bg pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-md">
     <div class="mx-auto flex h-full max-w-6xl items-center justify-between px-6">
       <a href="/" class="font-display text-lg font-semibold uppercase tracking-tight text-fg">Verocity</a>
-      <nav class="flex items-center gap-7 text-sm uppercase tracking-wider" aria-label="Primary">
+      {/* text-xs + tracking-[0.45em] matches the "Strength · Training · Log"
+          eyebrow in the hero — the nav and the buttons below share that one
+          typographic voice. The pill's start padding carries the extra 0.45em
+          that letter-spacing adds after the last glyph, so the label stays
+          optically centred inside the border. */}
+      <nav class="flex items-center gap-7 text-xs uppercase tracking-[0.45em]" aria-label="Primary">
         {
           navLinks.map((l) => (
             <a href={l.href} class="hidden text-fg transition-colors duration-150 hover:text-muted sm:inline">
@@ -24,7 +26,7 @@ const navLinks = [
         }
         <a
           href="/app"
-          class="inline-flex h-10 items-center rounded-full border border-fg px-5 text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
+          class="inline-flex h-10 items-center rounded-full border border-fg pl-[calc(1.25rem+0.45em)] pr-5 text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
           >Open app</a
         >
       </nav>

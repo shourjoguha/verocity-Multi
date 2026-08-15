@@ -156,6 +156,24 @@ modal scrims *and* to the always-present header, tab bar and drawer — the seco
 group is easy to forget and is what would make flicker appear on "every page".
 → `src/layouts/App.astro`, `ui/Modal.tsx`, `logger/SetEntrySheet.tsx`
 
+### A pinned backdrop is set on `<html>` and the 3D scene ignores it
+`[measured in Chromium]` — verified the wrong artefact before the right one.
+The showcase is pinned to the `dots` backdrop by the FOUC script in
+`Base.astro`, which forces `data-bg="dots"` on `<html>`. The attribute was
+correct — a test asserting it passed — and the screenshot still showed the
+`aurora` WebGL scene stacked over the dots. `BackgroundScene3D` is a separate
+island that re-derived the preference from **localStorage first**
+(`raw ?? attr`), so a visitor whose stored preference was `aurora` re-booted the
+3D scene regardless of the pin. On an ordinary page the attribute mirrors the
+stored value, so the two never disagreed and the bug was invisible until a
+surface deliberately overrode the attribute.
+**The pre-paint attribute is the single source of truth for the backdrop; an
+island must read the attribute, not re-read localStorage** — `attr ?? stored`,
+not `stored ?? attr`. And when a pin sets an ancestor attribute, verify the
+thing it is supposed to suppress is gone (a blank/absent canvas), not just that
+the attribute reads what you wrote.
+→ `src/components/BackgroundScene3D.tsx`, `src/layouts/Base.astro`
+
 ### Something repaints constantly while scrolling
 `[measured in Chromium]`
 The header's hide-on-scroll originally compared each frame to the previous with a

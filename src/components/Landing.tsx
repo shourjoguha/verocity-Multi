@@ -39,6 +39,13 @@ const features = [
   },
 ];
 
+// The hero CTAs share the eyebrow's typographic voice — text-xs, uppercase,
+// tracking-[0.45em] — matching "Strength · Training · Log" above the wordmark.
+// The start padding absorbs the trailing 0.45em that letter-spacing adds after
+// the final glyph, so the label reads optically centred inside the pill.
+const HERO_BTN =
+  'inline-flex h-12 items-center rounded-full border border-fg pl-[calc(1.75rem+0.45em)] pr-7 text-xs uppercase tracking-[0.45em] text-fg transition-colors duration-200 hover:bg-fg hover:text-bg';
+
 // The wordmark's own type scale, shared by the DOM heading and the particle
 // field so the two are never described in two places.
 const WORDMARK_CLASS =
@@ -154,29 +161,13 @@ export default function Landing() {
             variants={heroItem}
             className="mt-10 flex flex-wrap items-center justify-center gap-3"
           >
-            <a
-              href="/login"
-              className="inline-flex h-12 items-center rounded-full border border-fg px-7 text-sm uppercase tracking-wider text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
-            >
-              Log in
-            </a>
-            <a
-              href="/showcase"
-              className="inline-flex h-12 items-center rounded-full border border-fg px-7 text-sm uppercase tracking-wider text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
-            >
+            <a href="/showcase" className={HERO_BTN}>
               View showcase
             </a>
-            {/* Wears its neighbours' pill treatment rather than the app's
-                `.hill-btn` — this row is three equals. */}
-            <ReelDialog className="inline-flex h-12 items-center rounded-full border border-fg px-7 text-sm uppercase tracking-wider text-fg transition-colors duration-200 hover:bg-fg hover:text-bg" />
+            {/* Wears its neighbour's pill treatment rather than the app's
+                `.hill-btn` — this row is two equals. */}
+            <ReelDialog className={HERO_BTN} />
           </motion.div>
-          <motion.p variants={heroItem} className="mt-5 text-xs text-subtle">
-            Have an invite code?{' '}
-            <a href="/signup" className="text-fg underline hover:text-subtle">
-              Sign up
-            </a>
-            .
-          </motion.p>
         </motion.section>
 
         {/* Philosophy / narrative — scroll-revealed via Motion */}
