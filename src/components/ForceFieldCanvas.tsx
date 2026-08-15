@@ -1,18 +1,18 @@
 import { useEffect, useRef } from 'react';
 import type P5 from 'p5';
 import { useResolvedTheme, type ResolvedTheme } from '@/lib/theme';
-import { SHOWCASE_ALIAS } from '@/lib/showcase';
 
-// The showcase hero's particle field — a port of the reference p5 "force field"
+// A particle field carrying a word — a port of the reference p5 "force field"
 // sketch, adapted to this design system. A grid of points reads its size and
-// shade from an offscreen brightness map, disperses under the cursor/finger,
-// and springs back.
+// shade from an offscreen brightness map (the word itself, in Archivo Black),
+// disperses under the cursor/finger, and springs back.
 //
 // THE HEAVY MODULE. p5 is ~250KB gzip and touches `window` at import time, so
-// nothing may import this statically: ProfileView is `client:load`, which Astro
-// still server-renders, and a top-level `import p5 from 'p5'` anywhere in that
-// graph crashes SSR. The only entry point is the dynamic import in
-// ForceField.tsx. `import type` above is erased at compile and is safe.
+// nothing may import this statically: the landing island is `client:load`,
+// which Astro still server-renders, and a top-level `import p5 from 'p5'`
+// anywhere in that graph crashes SSR. The only entry point is the dynamic
+// import in ForceField.tsx. `import type` above is erased at compile and is
+// safe.
 //
 // Four deliberate departures from the reference sketch:
 //
@@ -66,8 +66,18 @@ const SPACING_MAX = 10;
 // The reference ships 0 here, which makes its noise lookup a constant.
 const NOISE_SCALE = 0.02;
 
-const MIN_STROKE = 1.2;
-const MAX_STROKE = 5.5;
+// Dot size, as a share of the grid pitch — NOT in pixels.
+//
+// A fixed weight only works at one type size. The landing wordmark is `13vw`,
+// so its pitch drops to the floor on a phone while a 5.5px dot does not: the
+// dots then overlap their neighbours and the word turns to mush. Proportional
+// weights hold the same dot-to-gap ratio at every size, and at the desktop
+// pitch they land on the same values the fixed pair was tuned to.
+// At the top of the ramp the dots very nearly touch, so a letter's interior
+// reads as ink rather than as scattered pepper; at the bottom they stay tiny
+// and the ambient dust stays a texture.
+const MIN_STROKE_RATIO = 0.16;
+const MAX_STROKE_RATIO = 0.85;
 
 // The brightness map's floor — the level OUTSIDE the letterforms. Not zero, and
 // that is the whole ambient field: at zero the band is bare everywhere the word
@@ -76,15 +86,18 @@ const MAX_STROKE = 5.5;
 // faint mark, so the whole band is the interaction surface.
 const FIELD_FLOOR = 26;
 
-// Softens the letterform edges, so stroke weight ramps across the boundary
-// instead of stepping. Deliberately small: p5's BLUR is a JS convolution
-// (quadratic in the radius), and anything wider washes the letter interiors
-// below full brightness — which is where the ink and the fattest strokes come
-// from, and without them the wordmark reads as a hollow outline.
-const BLUR_RADIUS = 3;
+// Edge softening, also a share of the pitch and for the same reason. It ramps
+// stroke weight across a letter's boundary instead of stepping — but a radius
+// wide relative to the stroke washes the letter INTERIORS below full
+// brightness, and interiors are where the ink and the fattest dots come from.
+// Fixed at 3px that was invisible on a 160px desktop wordmark and hollowed out
+// the same word at 48px on a phone. Capped because p5's BLUR is a JS
+// convolution, quadratic in the radius.
+const BLUR_RATIO = 0.42;
+const BLUR_MAX = 4;
 
-// Word height as a share of the band, and the width it may not exceed.
-const WORD = SHOWCASE_ALIAS.toUpperCase();
+// Fallback word height as a share of the band, used only when the caller does
+// not pass a `fontSize`. And the width the word may not exceed, at any size.
 const WORD_HEIGHT = 0.58;
 const WORD_MAX_WIDTH = 0.92;
 
@@ -103,14 +116,39 @@ type Particle = {
   vy: number;
 };
 
-export default function ForceFieldCanvas({ onReady }: { onReady?: () => void }) {
+export type ForceFieldProps = {
+  // The word the particles form. Rendered upper-case.
+  word: string;
+  // Type size in px for the brightness map. Pass the rendered size of the
+  // heading this field stands in for — when the field replaces live type, a
+  // size the caller did not choose is a visible pop at the swap. Omitted, the
+  // word is sized to WORD_HEIGHT of the band instead.
+  fontSize?: number;
+  // Letter-spacing for the map, as a CSS length (e.g. '-0.05em'). Same reason:
+  // g.text() applies none of the heading's tracking, so a tracked heading and
+  // an untracked particle word are different widths.
+  letterSpacing?: string;
+  // Fires on the FIRST PAINTED FRAME, not when the module resolves.
+  onReady?: () => void;
+};
+
+export default function ForceFieldCanvas({
+  word,
+  fontSize,
+  letterSpacing,
+  onReady,
+}: ForceFieldProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const theme = useResolvedTheme();
 
-  // Live theme for the draw loop. The sketch is instantiated once and reads
-  // this every frame, so a theme flip repaints without tearing down p5.
+  // Live values for the draw loop and the map rebuild. The sketch is
+  // instantiated once and reads these rather than closing over them, so a theme
+  // flip or a `13vw` type size changing with the viewport repaints without
+  // tearing down p5.
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const typeRef = useRef({ word, fontSize, letterSpacing });
+  typeRef.current = { word, fontSize, letterSpacing };
 
   // Held in a ref for the same reason Modal holds onClose in one: the caller
   // passes an inline arrow, and depending on it here would tear down and
@@ -143,9 +181,12 @@ export default function ForceFieldCanvas({ onReady }: { onReady?: () => void }) 
         let field: P5.Graphics | null = null;
         let fieldPixels: number[] | Uint8ClampedArray = [];
         let points: Particle[] = [];
-        // Set by buildField() from the fitted type size — the grid and the map
-        // are rebuilt together, in that order, on setup and on every resize.
+        // All set by buildField() from the fitted type size — the grid, the dot
+        // weights and the map are rebuilt together, in that order, on setup and
+        // on every resize.
         let spacing = SPACING_MAX;
+        let minStroke = SPACING_MAX * MIN_STROKE_RATIO;
+        let maxStroke = SPACING_MAX * MAX_STROKE_RATIO;
 
         // Repulsion centre, and whether the pointer is actually driving it.
         // `engaged` exists because p5 initialises mouseX/mouseY to 0,0 — which
@@ -155,6 +196,11 @@ export default function ForceFieldCanvas({ onReady }: { onReady?: () => void }) 
         let cy = PARKED;
         let engaged = false;
         let announced = false;
+        // Signature of the type the current map was built from. A caller whose
+        // heading is sized in viewport units feeds a new `fontSize` as the
+        // window changes, and the resize observer alone would not catch a size
+        // change that leaves the canvas box the same.
+        let builtFrom = '';
 
         // The brightness map: the wordmark, white on black, blurred. Every
         // downstream mapping (shade, stroke weight, the threshold test) reads
@@ -171,22 +217,39 @@ export default function ForceFieldCanvas({ onReady }: { onReady?: () => void }) 
           g.textFont('Archivo Black');
           g.textAlign(p.CENTER, p.CENTER);
 
-          let size = p.height * WORD_HEIGHT;
+          const type = typeRef.current;
+          const text = type.word.toUpperCase();
+          // Canvas letterSpacing is Chromium 99+ / Safari 16.4+ / Firefox 128+.
+          // Where it is missing the assignment is inert and the word is simply a
+          // little wider than the heading it stands in for — a graceful loss,
+          // not a broken render, so no feature test.
+          if (type.letterSpacing) {
+            (g.drawingContext as CanvasRenderingContext2D).letterSpacing = type.letterSpacing;
+          }
+
+          let size = type.fontSize ?? p.height * WORD_HEIGHT;
           g.textSize(size);
           const maxWidth = p.width * WORD_MAX_WIDTH;
           // Shrink to fit rather than letting the word run off the band on a
-          // narrow screen.
-          while (size > 8 && g.textWidth(WORD) > maxWidth) {
+          // narrow screen. Applies to a caller-supplied size too: a heading that
+          // fits because it wraps or clips would otherwise run off this canvas.
+          while (size > 8 && g.textWidth(text) > maxWidth) {
             size -= 2;
             g.textSize(size);
           }
-          g.text(WORD, p.width / 2, p.height / 2);
-          g.filter(p.BLUR, BLUR_RADIUS);
+          g.text(text, p.width / 2, p.height / 2);
+
+          // Pitch first, then everything that has to stay proportional to it.
+          spacing = p.constrain(size / SPACING_RATIO, SPACING_MIN, SPACING_MAX);
+          minStroke = spacing * MIN_STROKE_RATIO;
+          maxStroke = spacing * MAX_STROKE_RATIO;
+
+          g.filter(p.BLUR, Math.min(BLUR_MAX, Math.max(1, spacing * BLUR_RATIO)));
           g.loadPixels();
 
           field = g;
           fieldPixels = g.pixels;
-          spacing = p.constrain(size / SPACING_RATIO, SPACING_MIN, SPACING_MAX);
+          builtFrom = `${text}|${type.fontSize}|${type.letterSpacing}`;
         }
 
         function generatePoints() {
@@ -237,6 +300,12 @@ export default function ForceFieldCanvas({ onReady }: { onReady?: () => void }) 
 
         p.draw = () => {
           p.clear();
+
+          const type = typeRef.current;
+          if (builtFrom !== `${type.word.toUpperCase()}|${type.fontSize}|${type.letterSpacing}`) {
+            buildField();
+            generatePoints();
+          }
           if (points.length === 0) return;
 
           // p5 tracks the pointer window-wide and reports it relative to the
@@ -290,7 +359,7 @@ export default function ForceFieldCanvas({ onReady }: { onReady?: () => void }) 
             if (brightness === undefined) continue;
 
             const t = brightness / 255;
-            let weight = MIN_STROKE + t * (MAX_STROKE - MIN_STROKE);
+            let weight = minStroke + t * (maxStroke - minStroke);
             // Under the cursor everything swells — the "magnifier" half of the
             // reference's effect, and what stops the dispersal reading as a
             // hole punched in the field.

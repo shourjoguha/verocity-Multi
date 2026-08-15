@@ -311,41 +311,48 @@ Storage → Policies (verbatim SQL in `0033_meal_photos_bucket.sql`'s comment
 block), every photo upload and signed-URL read is denied by RLS. Everything
 else — the table, the drawer, the full logger, history — works without them.
 
-### Phase 11 — Showcase hero  `[shipped]`
-`/showcase` is the one surface served to anyone with the URL, and it was
-printing the owner's real `profiles.display_name` under a one-size app header.
-It now leads with a hero band: an interactive particle field carrying the
-public alias, and the page's one control that opens something.
+### Phase 11 — Home-page force field  `[shipped]`
+The landing hero at `/` was a static Echo Stack, and `/showcase` — the one
+surface served to anyone with the URL — was printing the owner's real
+`profiles.display_name`. Both are addressed, on the surfaces they belong to.
 
-**What shipped.** `SHOWCASE_ALIAS` (`src/lib/showcase.ts`, alongside
-`SHOWCASE_WINDOW`) is the public identity — the row stays the owner's, only the
-rendered name is swapped, and no showcase surface reads `display_name` any
-more. `ShowcaseHero` replaces the eyebrow + `EchoText` pair for
-`mode === 'showcase'` in `ProfileView` (app mode is untouched) and is the first
-caller of `ECHO_HERO`, which had been declared and used nowhere.
-`ForceFieldCanvas` is a p5 sketch — new dependency, `p5@1.11` — porting a
-reference "force field" effect: a grid of particles takes its shade and weight
-from an offscreen brightness map (the wordmark, drawn in Archivo Black), repels
-from the pointer, and springs back. It is monochrome and token-derived rather
-than the reference's HSL palette, `clear()`s rather than painting black, and
-uses scalars rather than the reference's two `p5.Vector` allocations per
-particle per frame. `ForceField` is the ~1KB gate in front of it: nothing is
-fetched under `prefers-reduced-motion`, and otherwise p5 arrives as its own
-chunk after mount, so it is off the initial payload. `ShowcaseReel` is a
-`ui/Modal` holding a `<video>` for a short film served from `public/showcase/`.
+**What shipped.** The **home page hero** carries an interactive particle field:
+`ForceFieldCanvas` is a p5 sketch (new dependency, `p5@1.11`) porting a
+reference "force field" effect — a grid of particles takes its shade and weight
+from an offscreen brightness map (the word, drawn in Archivo Black), repels from
+the pointer, and springs back. It is monochrome and token-derived rather than
+the reference's HSL palette, `clear()`s rather than painting black, and uses
+scalars rather than the reference's two `p5.Vector` allocations per particle per
+frame. Its pitch, dot weight and blur are all shares of the fitted type size, so
+one component reads correctly from a 160px desktop wordmark down to a 48px phone
+one. The particles form VEROCITY and the typographic Echo Stack crossfades out
+once they paint — the `<h1>` stays in the DOM, and is what reduced-motion and
+pre-hydration visitors see. `ForceField` is the ~1KB gate in front of it:
+nothing is fetched under `prefers-reduced-motion`, and otherwise p5 arrives as
+its own chunk after mount, so it is off the initial payload. `ReelDialog` is a
+`ui/Modal` holding a `<video>`, opened by a third pill beside "Log in" and
+"View showcase"; its asset paths live in `src/lib/reel.ts`.
 
-**Verified.** `npm run check` 0 errors, `npm test` 620/620,
-`audit:mobile` 24/24, `audit:shell` and `audit:flicker` 8/8 with zero skips —
-all against `npm run build && npm run preview` (the dev server cannot hydrate;
-see `docs/LESSONS.md`). None of those four watch `/showcase`, so the hero was
-observed directly in Chromium: the field paints ~21k px at 1280px and at 375px,
-disperses 27% of its painted mass under a cursor sweep and settles back, the
-alias renders and the real name never appears, reduced motion mounts no canvas
-and fetches no p5, and the reel dialog opens, closes on Escape and returns
-focus.
+**`/showcase` is otherwise untouched.** Its one change is `SHOWCASE_ALIAS`
+(`src/lib/showcase.ts`, alongside `SHOWCASE_WINDOW`) — the row stays the
+owner's, only the rendered name is swapped, and no showcase surface reads
+`display_name` any more. An earlier pass gave that page a hero band of its own;
+that was the wrong surface and it was removed.
 
-**Not done:** the reel's own asset. `public/showcase/reel.mp4` and
-`reel-poster.jpg` are not in the repo — until they are, the dialog opens and
-says "The reel isn't up yet." rather than showing a broken player. `/share/:token`
-still renders `display_name`; that is a private link the owner mints
-deliberately, not the public showcase, and was left alone.
+**Verified.** `npm run check` 0 errors, `npm test` 620/620, `audit:mobile`
+24/24, `audit:shell` and `audit:flicker` 8/8 with zero skips, `audit:docs`
+clean — all against `npm run build && npm run preview` (the dev server cannot
+hydrate; see `docs/LESSONS.md`). None of those four visit `/` or `/showcase`, so
+both were observed directly in Chromium: the particle wordmark lands within 8px
+of the type's width and centre at 1280px and at 375px in both themes, a cursor
+sweep shifts ~11% of the painted mass and settles back to a 0.0% residual,
+reduced motion mounts no canvas and fetches no p5, the reel pill is a 189x48 hit
+box whose dialog opens and closes on Escape returning focus, and `/showcase`
+renders its ordinary header reading Zeus with no canvas, no reel and the real
+name nowhere in the DOM.
+
+**Not done:** the reel's own asset. `public/reel.mp4` and `reel-poster.jpg` are
+not in the repo — until they are, the dialog opens and says "The reel isn't up
+yet." rather than showing a broken player. `/share/:token` still renders
+`display_name`; that is a private link the owner mints deliberately, not the
+public showcase, and was left alone.
