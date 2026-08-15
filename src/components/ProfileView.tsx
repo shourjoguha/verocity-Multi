@@ -39,6 +39,7 @@ import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
 import { MonthCalendar } from '@/components/MonthCalendar';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { ShowcaseHero } from '@/components/ShowcaseHero';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;
@@ -563,21 +564,27 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
   return (
     <>
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
+      {/* The showcase gets a hero band instead of the app's header: a particle
+          field carrying SHOWCASE_ALIAS (never the real display_name — this page
+          is public) and the reel dialog. See ShowcaseHero.tsx. */}
       <Item>
-        {/* The date, the program week and the streak are meta ABOUT the name —
-            they used to be three separate bands (an eyebrow, a line under the
-            stat tiles, and a line above the ribbon) saying so at three
-            different points down the page. */}
+      {mode === 'showcase' ? (
+        <ShowcaseHero />
+      ) : (
+        // The date, the program week and the streak are meta ABOUT the name —
+        // they used to be three separate bands (an eyebrow, a line under the
+        // stat tiles, and a line above the ribbon) saying so at three
+        // different points down the page.
         <header className="mb-6">
           <div className="t-eyebrow flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
-            <span>{mode === 'showcase' ? 'Showcase' : new Date().toDateString()}</span>
-            {mode === 'app' && week ? (
+            <span>{new Date().toDateString()}</span>
+            {week ? (
               <>
                 <span aria-hidden>·</span>
                 <span>Week {week}</span>
               </>
             ) : null}
-            {mode === 'app' && streak >= 2 ? (
+            {streak >= 2 ? (
               <>
                 <span aria-hidden>·</span>
                 <span className="flex items-center gap-1.5 text-teal">
@@ -595,6 +602,7 @@ export default function ProfileView({ mode }: { mode: 'app' | 'showcase' }) {
             />
           </div>
         </header>
+      )}
       </Item>
 
       {failed ? (

@@ -345,6 +345,33 @@ was observed to stop.
 `src/layouts/Base.astro`, `src/lib/scrollLock.ts`,
 `src/components/Logger.tsx` (the Finish bar), `scripts/shell-audit.mjs`
 
+### A canvas wordmark reads on a desktop and is mush on a phone
+`[measured in Chromium at 1280px and 375px]`
+`ForceFieldCanvas` samples a brightness map — the word rendered into an
+offscreen buffer — on a fixed particle grid. It shipped with a pitch fixed in
+pixels (8px fine pointer / 12px coarse) and `ZEUS` was unreadable at 375px.
+The band's **height** barely changes between a phone and a desktop, but its
+**width halves**, so the word shrinks to fit and its strokes go from ~40px to
+~17px while the pitch does not: barely one particle spanned a stroke.
+**Derive the pitch from the fitted type size, not from the viewport or the
+input device** — `spacing = constrain(fittedSize / 22, 5, 10)` holds the same
+number of particles across a stroke at every width, and the clamp is what keeps
+the particle count bounded at both ends.
+Two things about the *map* bit the same way, and both look like "the effect is
+broken" rather than "the source bitmap is wrong":
+- A blur radius wide enough to soften the edges (5px) also pulls the letter
+  **interiors** below full brightness. Interiors are where the ink and the
+  fattest strokes come from, so the wordmark rendered as a hollow outline.
+  Blur 3px keeps them saturated.
+- A map whose background is pure black leaves every particle off the letters
+  below any threshold, so the band is bare and the cursor does nothing until it
+  crosses a glyph — the "force field" reads as a hole punched in some text. A
+  low floor (26/255) instead of 0 gives the whole band a faint ambient field,
+  which is what makes the *whole* band the interaction surface.
+No audit can see any of this: it is legibility, not overflow and not a tap
+target, and `audit:mobile` never visits `/showcase` at all. Screenshot it.
+→ `src/components/ForceFieldCanvas.tsx`
+
 ### A stat tile is far taller than its font sizes predict
 `[measured in Chromium at 375px]`
 `StatCard` in a `grid-cols-3` gives each value ~88px of inner width at 375px. A
