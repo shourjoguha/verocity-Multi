@@ -16,6 +16,7 @@ import { Button, EmptyState, LoadingScreen } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { SubroutineBody } from '@/components/SubroutineBody';
+import { MovementDemoSheet, MovementDemoThumb } from '@/components/MovementDemo';
 import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { TaxonomyEditor } from '@/components/TaxonomyEditor';
 import type { MovementProfile } from '@/app.config';
@@ -163,6 +164,9 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   // Muscle-map override for one owned movement. Corrects what the static rules
   // in lib/movementTaxonomy.ts got wrong; feeds the /app/body map.
   const [mapEditingId, setMapEditingId] = useState<string | null>(null);
+  // Movement whose demo GIF sheet is open, by name (the demo mapping is
+  // name-keyed, not id-keyed).
+  const [demoFor, setDemoFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (data) setItems(data);
@@ -426,6 +430,9 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
             const sub = isSubroutine(m);
             return (
               <li key={m.id} className="flex items-center gap-3 px-4 py-3">
+                {sub ? null : (
+                  <MovementDemoThumb name={m.name} onOpen={() => setDemoFor(m.name)} />
+                )}
                 <div className="min-w-0 flex-1">
                   <div className="capitalize text-fg">{m.name}</div>
                   {sub ? (
@@ -498,6 +505,12 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
         }}
         onSave={handleSaveSubroutine}
         onClose={() => setSubEditing(null)}
+      />
+
+      <MovementDemoSheet
+        name={demoFor}
+        open={demoFor !== null}
+        onClose={() => setDemoFor(null)}
       />
 
       <TaxonomyEditor
