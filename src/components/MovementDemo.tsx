@@ -29,25 +29,48 @@ function PlayGlyph({ className = '' }: { className?: string }) {
   );
 }
 
-/** The inline play/video affordance used in the Logger's movement header. */
-export function DemoTrigger({
-  onClick,
-  expanded,
+// A video-camera glyph — reads as "there's a clip here" next to a movement name.
+function VideoGlyph({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <rect x="2.5" y="6.5" width="12" height="11" rx="2" />
+      <path d="M14.5 10.5l6-3v9l-6-3z" />
+    </svg>
+  );
+}
+
+/**
+ * Inline video-icon button placed next to a movement name (the Logger header).
+ * Renders nothing when the movement has no demo, so the icon only appears where
+ * there's something to show. A 44px hit box holds a small glyph, pulled in with
+ * a negative margin so it sits snug against the name without a vertical offset.
+ */
+export function DemoIconButton({
+  name,
+  onOpen,
   className = '',
 }: {
-  onClick: () => void;
-  expanded: boolean;
+  name: string;
+  onOpen: () => void;
   className?: string;
 }) {
+  if (!getMovementDemo(name)) return null;
   return (
     <button
       type="button"
-      onClick={onClick}
-      aria-expanded={expanded}
-      className={`-my-2 flex min-h-11 items-center gap-1.5 t-control text-muted transition-colors hover:text-fg ${className}`}
+      onClick={onOpen}
+      aria-label={`View ${name} demo`}
+      className={`-mx-1.5 flex h-11 w-11 shrink-0 items-center justify-center text-muted transition-colors hover:text-fg ${className}`}
     >
-      <PlayGlyph className="h-3.5 w-3.5" />
-      {expanded ? 'Hide demo' : 'View demo'}
+      <VideoGlyph className="h-[1.15rem] w-[1.15rem]" />
     </button>
   );
 }

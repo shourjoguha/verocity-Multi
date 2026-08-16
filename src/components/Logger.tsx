@@ -49,8 +49,7 @@ import { isSubroutine } from '@/lib/subroutine';
 import { activeSessionOf } from '@/lib/activeSession';
 import { typeFromLabel } from '@/lib/timeline';
 import { SubroutineBody } from '@/components/SubroutineBody';
-import { DemoTrigger, MovementDemo } from '@/components/MovementDemo';
-import { getMovementDemo } from '@/lib/movementDemos';
+import { DemoIconButton, MovementDemoSheet } from '@/components/MovementDemo';
 import { lastPerformance } from '@/lib/lastPerformance';
 import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
@@ -144,15 +143,9 @@ export default function Logger() {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
-  // Which movements' inline demo GIF is revealed — keyed by item id, same shape
-  // as `notesOpen`. One reveal per movement, never per set.
-  const [demoOpen, setDemoOpen] = useState<Set<string>>(new Set());
-  const toggleDemoOpen = (id: string) =>
-    setDemoOpen((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+  // Movement whose demo GIF popup is open, by name (the demo mapping is
+  // name-keyed). One sheet for the whole logger, opened from the header icon.
+  const [demoFor, setDemoFor] = useState<string | null>(null);
   // Completed groups that have been "parked" into the Done list at the bottom. A
   // fully-complete group parks only once the user starts a DIFFERENT movement
   // (deferred), so nothing jumps away mid-set. Parked groups render collapsed but
@@ -862,7 +855,7 @@ export default function Logger() {
                   activate(groupId);
                   toggleCollapse(groupId);
                 }}
-                className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left text-fg"
+                className="flex min-h-11 min-w-0 items-center gap-2 text-left text-fg"
                 aria-label={isCollapsed ? 'Expand movement' : 'Collapse movement'}
                 aria-expanded={!isCollapsed}
               >
@@ -872,8 +865,12 @@ export default function Logger() {
                 <span className="truncate capitalize">{item.movement}</span>
               </button>
             ) : (
-              <span className="capitalize text-fg">{item.movement}</span>
+              <span className="min-w-0 truncate capitalize text-fg">{item.movement}</span>
             )}
+            {/* Video icon sits inline right after the name, same row, no vertical
+                offset. Renders nothing when the movement has no demo. Opens the
+                popup; tapping the scrim (or Escape) closes it. */}
+            <DemoIconButton name={item.movement} onOpen={() => setDemoFor(item.movement)} />
           </div>
           {isCollapsed ? (
             <span className="t-control shrink-0 text-muted">
@@ -944,19 +941,6 @@ export default function Logger() {
         </div>
         {isCollapsed ? null : (
         <>
-        {getMovementDemo(item.movement) ? (
-          <div>
-            <DemoTrigger
-              onClick={() => toggleDemoOpen(item.id)}
-              expanded={demoOpen.has(item.id)}
-            />
-            {demoOpen.has(item.id) ? (
-              <div className="pt-2">
-                <MovementDemo name={item.movement} />
-              </div>
-            ) : null}
-          </div>
-        ) : null}
         {item.notes ? (
           // Tap-to-expand, one-line clamp — `line-clamp-1` is a Tailwind v4
           // core utility, not hand-rolled CSS (see docs/LESSONS.md § "Hand-
@@ -1445,6 +1429,12 @@ export default function Logger() {
           setEntryFor(null);
         }}
         onClose={() => setEntryFor(null)}
+      />
+
+      <MovementDemoSheet
+        name={demoFor}
+        open={demoFor !== null}
+        onClose={() => setDemoFor(null)}
       />
 
       <Modal open={optionsFor !== null} onClose={() => setOptionsFor(null)} title="Movement">
