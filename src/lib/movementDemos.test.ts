@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   DEMO_ATTRIBUTION,
@@ -6,6 +8,9 @@ import {
   getMovementDemo,
   type MovementDemo,
 } from '@/lib/movementDemos';
+
+const publicPath = (rel: string) =>
+  fileURLToPath(new URL(`../../public/${rel}`, import.meta.url));
 
 // The 63 seeded shared movements (migrations 0024/0028/0029), split into the
 // ones we curated a demo for and the ones with no usable GIF in the set. This
@@ -81,5 +86,13 @@ describe('demo asset urls', () => {
 
   it('carries the required Gym Visual attribution', () => {
     expect(DEMO_ATTRIBUTION).toMatch(/gym\s*visual/i);
+  });
+
+  it('has both a gif and a thumbnail on disk for every mapped movement', () => {
+    for (const name of COVERED) {
+      const demo = getMovementDemo(name) as MovementDemo;
+      expect(existsSync(publicPath(`demos/${demo.asset}.gif`)), `${name} gif`).toBe(true);
+      expect(existsSync(publicPath(`demos/${demo.asset}.jpg`)), `${name} thumb`).toBe(true);
+    }
   });
 });

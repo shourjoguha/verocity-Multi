@@ -49,6 +49,8 @@ import { isSubroutine } from '@/lib/subroutine';
 import { activeSessionOf } from '@/lib/activeSession';
 import { typeFromLabel } from '@/lib/timeline';
 import { SubroutineBody } from '@/components/SubroutineBody';
+import { DemoTrigger, MovementDemo } from '@/components/MovementDemo';
+import { getMovementDemo } from '@/lib/movementDemos';
 import { lastPerformance } from '@/lib/lastPerformance';
 import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
@@ -138,6 +140,15 @@ export default function Logger() {
   const [notesOpen, setNotesOpen] = useState<Set<string>>(new Set());
   const toggleNotesOpen = (id: string) =>
     setNotesOpen((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  // Which movements' inline demo GIF is revealed — keyed by item id, same shape
+  // as `notesOpen`. One reveal per movement, never per set.
+  const [demoOpen, setDemoOpen] = useState<Set<string>>(new Set());
+  const toggleDemoOpen = (id: string) =>
+    setDemoOpen((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
@@ -933,6 +944,19 @@ export default function Logger() {
         </div>
         {isCollapsed ? null : (
         <>
+        {getMovementDemo(item.movement) ? (
+          <div>
+            <DemoTrigger
+              onClick={() => toggleDemoOpen(item.id)}
+              expanded={demoOpen.has(item.id)}
+            />
+            {demoOpen.has(item.id) ? (
+              <div className="pt-2">
+                <MovementDemo name={item.movement} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {item.notes ? (
           // Tap-to-expand, one-line clamp — `line-clamp-1` is a Tailwind v4
           // core utility, not hand-rolled CSS (see docs/LESSONS.md § "Hand-
