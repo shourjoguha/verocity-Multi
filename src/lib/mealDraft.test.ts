@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { MEAL_REPEAT_LIMIT, MEAL_REPEAT_SEED } from '@/app.config';
-import { draftFor, normalizeTag, repeatShortcuts, splitTags, toInput } from '@/lib/mealDraft';
+import {
+  defaultTagMix,
+  draftFor,
+  mixKeysOrdered,
+  normalizeTag,
+  recomputeMix,
+  repeatShortcuts,
+  setMixValue,
+  splitTags,
+  toDraft,
+  toInput,
+} from '@/lib/mealDraft';
 import type { MealLog } from '@/lib/types';
 
 function meal(overrides: Partial<MealLog>): MealLog {
@@ -13,6 +24,7 @@ function meal(overrides: Partial<MealLog>): MealLog {
     kind: 'meal',
     source: 'home',
     tags: [],
+    tag_mix: null,
     note: null,
     hunger_before: 4,
     hunger_after: 1,
@@ -127,5 +139,123 @@ describe('repeatShortcuts', () => {
   it('caps at MEAL_REPEAT_LIMIT', () => {
     const meals = Array.from({ length: MEAL_REPEAT_LIMIT + 5 }, (_, i) => meal({ tags: [`tag-${i}`] }));
     expect(repeatShortcuts(meals)).toHaveLength(MEAL_REPEAT_LIMIT);
+  });
+});
+
+const sum = (m: Record<string, number>) => Object.values(m).reduce((a, b) => a + b, 0);
+
+describe('defaultTagMix', () => {
+  it('is empty for no tags', () => {
+    expect(defaultTagMix([])).toEqual({});
+  });
+
+  it('splits protein-only across protein and fat 80/20', () => {
+    expect(defaultTagMix(['protein'])).toEqual({ protein: 80, fat: 20 });
+  });
+
+  it('splits protein + carbs 60/40', () => {
+    expect(defaultTagMix(['protein', 'carbs'])).toEqual({ protein: 60, carbs: 40 });
+  });
+
+  it('splits protein + carbs + veg 40/40/20', () => {
+    expect(defaultTagMix(['protein', 'carbs', 'veg'])).toEqual({ protein: 40, carbs: 40, veg: 20 });
+  });
+
+  it('gives coffee/sweet a flat 5 each and splits the rest by ratio', () => {
+    const mix = defaultTagMix(['protein', 'carbs', 'coffee']);
+    expect(mix.coffee).toBe(5);
+    // 95 split 60/40 -> 57 / 38
+    expect(mix.protein).toBe(57);
+    expect(mix.carbs).toBe(38);
+    expect(sum(mix)).toBe(100);
+  });
+
+  it('splits an unlisted combo (incl. custom tags) evenly', () => {
+    expect(defaultTagMix(['protein', 'fat'])).toEqual({ protein: 50, fat: 50 });
+    const custom = defaultTagMix(['ramen', 'protein']);
+    expect(sum(custom)).toBe(100);
+    expect(custom.ramen).toBe(50);
+  });
+
+  it('splits a coffee-only meal to 100', () => {
+    expect(defaultTagMix(['coffee'])).toEqual({ coffee: 100 });
+  });
+
+  it('always sums to 100 for a range of combos', () => {
+    for (const combo of [
+      ['protein'],
+      ['carbs'],
+      ['protein', 'carbs'],
+      ['protein', 'carbs', 'veg'],
+      ['protein', 'carbs', 'veg', 'sweet'],
+      ['sweet', 'coffee'],
+      ['protein', 'coffee', 'sweet'],
+      ['a', 'b', 'c'],
+    ]) {
+      expect(sum(defaultTagMix(combo)), combo.join('+')).toBe(100);
+    }
+  });
+});
+
+describe('setMixValue (n-1 auto-balance)', () => {
+  it('drags one tag and the last tag absorbs the difference', () => {
+    const mix = { protein: 60, carbs: 40 };
+    const next = setMixValue(mix, 'protein', 70);
+    expect(next).toEqual({ protein: 70, carbs: 30 });
+    expect(sum(next)).toBe(100);
+  });
+
+  it('clamps so the balancer never goes negative', () => {
+    const mix = { protein: 40, carbs: 40, veg: 20 };
+    // protein pushed past what leaves veg (the balancer) >= 0: carbs stays 40,
+    // so protein maxes at 60 and veg lands at 0.
+    const next = setMixValue(mix, 'protein', 95);
+    expect(next.protein).toBe(60);
+    expect(next.veg).toBe(0);
+    expect(sum(next)).toBe(100);
+  });
+
+  it('ignores a drag on the balancer (last) tag', () => {
+    const mix = { protein: 60, carbs: 40 };
+    expect(setMixValue(mix, 'carbs', 10)).toEqual(mix);
+  });
+
+  it('is a no-op for a single-tag mix', () => {
+    expect(setMixValue({ coffee: 100 }, 'coffee', 40)).toEqual({ coffee: 100 });
+  });
+});
+
+describe('mixKeysOrdered', () => {
+  it('orders known tags by MEAL_TAGS then custom alphabetically, balancer last', () => {
+    expect(mixKeysOrdered({ carbs: 40, protein: 60 })).toEqual(['protein', 'carbs']);
+    expect(mixKeysOrdered({ zeta: 10, protein: 90 })).toEqual(['protein', 'zeta']);
+  });
+});
+
+describe('mix persistence', () => {
+  it('recomputeMix seeds from the current selection', () => {
+    const draft = recomputeMix({ ...draftFor({ kind: 'meal' }), tags: ['protein', 'carbs'] });
+    expect(draft.tagMix).toEqual({ protein: 60, carbs: 40 });
+  });
+
+  it('toInput writes the mix, or null when empty', () => {
+    const base = draftFor({ kind: 'meal' });
+    expect(toInput({ ...base, tagMix: {} }, null).tag_mix).toBeNull();
+    expect(toInput({ ...base, tagMix: { protein: 60, carbs: 40 } }, null).tag_mix).toEqual({
+      protein: 60,
+      carbs: 40,
+    });
+  });
+
+  it('toDraft restores a saved mix and falls back to the default when absent', () => {
+    expect(toDraft(meal({ tags: ['protein', 'carbs'], tag_mix: { protein: 70, carbs: 30 } })).tagMix).toEqual({
+      protein: 70,
+      carbs: 30,
+    });
+    // Older meal: tags but no saved mix -> seeded default.
+    expect(toDraft(meal({ tags: ['protein', 'carbs'], tag_mix: null })).tagMix).toEqual({
+      protein: 60,
+      carbs: 40,
+    });
   });
 });
