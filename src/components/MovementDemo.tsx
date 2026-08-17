@@ -1,10 +1,5 @@
 import { Modal } from '@/components/ui/Modal';
-import {
-  DEMO_ATTRIBUTION,
-  demoGifUrl,
-  demoThumbUrl,
-  getMovementDemo,
-} from '@/lib/movementDemos';
+import { demoGifUrl, demoThumbUrl, getMovementDemo } from '@/lib/movementDemos';
 
 // Two-letter monogram for the placeholder, skipping connective words so
 // "Toes-to-Bar" reads "TB" rather than "TT".
@@ -75,9 +70,9 @@ export function DemoIconButton({
   );
 }
 
-// The animation itself, capped so the 180x180 asset never upscales into mush,
-// plus the attribution the Gym Visual license requires. `note` surfaces the
-// "closest match" caveat for the ~29 movements mapped to a variation.
+// The animation itself, capped so the 180x180 asset never upscales into mush.
+// `note` surfaces the "closest match" caveat for the ~29 movements mapped to a
+// variation.
 function DemoMedia({ asset, note }: { asset: string; note?: string }) {
   return (
     <figure className="mx-auto flex max-w-[220px] flex-col gap-2">
@@ -92,10 +87,7 @@ function DemoMedia({ asset, note }: { asset: string; note?: string }) {
           className="block aspect-square w-full object-contain"
         />
       </div>
-      <figcaption className="flex items-center justify-between gap-2 t-label text-faint">
-        <span>{DEMO_ATTRIBUTION}</span>
-        {note ? <span>{note}</span> : null}
-      </figcaption>
+      {note ? <figcaption className="text-center t-label text-faint">{note}</figcaption> : null}
     </figure>
   );
 }
