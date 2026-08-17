@@ -5,7 +5,12 @@ import Landing from '@/components/Landing';
 const navLinks = [{ href: '/login', label: 'Log in' }];
 ---
 
-<Base title="Verocity">
+{/* noBackdrop: the landing hero paints its own particle field over the entire
+    visible area, and the shared BackgroundLayer's 3D `aurora` preset stacking
+    behind that field is two competing textures — the field is transparent
+    (see ForceFieldCanvas's `p.clear()`), so aurora bleeds straight through it
+    and makes the wordmark unreadable. Same principle as /login opting out. */}
+<Base title="Verocity" noBackdrop>
   <a href="#main" class="skip-link">Skip to content</a>
 
   <header class="sticky top-0 z-50 h-20 border-b border-border bg-bg pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-md">

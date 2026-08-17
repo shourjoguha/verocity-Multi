@@ -443,6 +443,26 @@ that reserves exactly what the plate bleeds into, and fade the plate's edges
 (`mask-image`) so it does not sit on the page as a hard rectangle.
 → `src/components/Landing.tsx`, `src/components/ForceFieldCanvas.tsx`
 
+### p5's `text()` has two signatures that anchor differently
+`[measured in Chromium at 1280px]`
+Making the particle field carry more than one text source needed each source's
+position measured from the DOM and drawn at that position in the offscreen
+buffer. First cut anchored every source with `textAlign(CENTER)` at
+`x + width/2`. The wordmark landed correctly. The paragraph didn't — its centre
+of gravity was ~330px to the right of where the DOM box sat.
+p5 has two `text()` signatures and they anchor differently, and only one of
+them cares about textAlign for POSITIONING:
+- `text(str, x, y, w, h)` — the wrapping form. `(x, y)` is the box's TOP-LEFT.
+  `textAlign` decides how each wrapped line sits inside the box; the box itself
+  does not move.
+- `text(str, x, y)` — the anchor form. `textAlign` moves the anchor point:
+  CENTER means `(x, y)` IS the string's centre.
+Pass a paragraph's DOM `left/top` verbatim to the wrapping form; compute the
+`left + width/2` anchor only for the single-line form. Signal wrapping intent
+with a `height`, not a `width` — a heading with `whitespace-nowrap` also has a
+width, but it must not wrap.
+→ `src/components/ForceFieldCanvas.tsx` (`drawSource`)
+
 ### A stat tile is far taller than its font sizes predict
 `[measured in Chromium at 375px]`
 `StatCard` in a `grid-cols-3` gives each value ~88px of inner width at 375px. A
