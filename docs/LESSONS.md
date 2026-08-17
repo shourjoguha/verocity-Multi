@@ -443,6 +443,33 @@ that reserves exactly what the plate bleeds into, and fade the plate's edges
 (`mask-image`) so it does not sit on the page as a hard rectangle.
 → `src/components/Landing.tsx`, `src/components/ForceFieldCanvas.tsx`
 
+### A canvas particle loop drops to 22fps, and the particle count is only half of it
+`[measured in headless Chromium at 1280x900]`
+Rendering the landing hero's small copy as particles needed a 3px pitch, which
+took a full-hero field from ~18k particles to ~108k, and the loop visibly
+stalled. Reverting the pitch was the obvious half of the fix and it was **not
+enough** — back at ~18k the loop still ran at 22–26fps against a 60fps
+baseline on the same page with the canvas removed.
+**Find out whether it is the maths or the draw calls before optimising
+either.** Commenting out the three draw calls while leaving the physics intact
+took it straight to 60fps: the entire cost was rendering, none of it was the
+force integration. Two things then mattered, in this order:
+- **Draw fewer things.** Sample density should follow INFORMATION density. A
+  uniform grid over a full-hero canvas spends ~85% of itself on ambient dust at
+  the field floor — ~1px dots nobody can resolve, each costing exactly what an
+  ink dot costs. Full grid inside the letterforms, every other cell outside,
+  and the picture is unchanged while the count falls by ~60%. That alone took
+  26fps → 60.
+- **Batch state changes.** `stroke()` + `strokeWeight()` + `point()` per
+  particle is ~54k canvas state changes a frame. Quantising shade and radius to
+  a 16×16 grid and drawing each bucket as one path with one `fillStyle` is a
+  couple of hundred. Worth doing, but on its own it only bought 23→26fps —
+  which is why the measurement above has to come first.
+The eye cannot resolve 18k distinct greys and radii on soft dots, so the
+quantisation is free visually; the thinning is free because the dust it removes
+was below the resolution limit anyway.
+→ `src/components/ForceFieldCanvas.tsx` (`generatePoints`, the BUCKETS block)
+
 ### p5's `text()` has two signatures that anchor differently
 `[measured in Chromium at 1280px]`
 Making the particle field carry more than one text source needed each source's
