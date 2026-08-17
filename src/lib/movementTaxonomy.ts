@@ -414,6 +414,76 @@ export const EXACT: Record<string, MovementProfile> = {
     sagittal: 0.2,
   }),
   'adductor work': p({ quads: 1 }, 'mobility', 'frontal'),
+
+  // --- CrossFit / Hyrox movements the rules leave unknown. Added deliberately,
+  // one anatomy at a time, after cross-checking each primary mover against an
+  // independent exercise dataset (ExerciseDB / Gym Visual). EXACT rather than
+  // rules so they touch only these names and never the burpee/box-jump combos,
+  // which keep their existing classification by longest-fragment.
+  //
+  // Front squat into an overhead press: anterior legs and shoulders lead, with
+  // the trunk bracing the rack-to-lockout path. Full-body, so systemic.
+  thruster: p(
+    { quads: 0.35, shoulders: 0.35, posteriorChain: 0.15, core: 0.15 },
+    'resistance',
+    'sagittal',
+    { systemic: true, rom: ROM.squat },
+  ),
+  // A vertical pull that finishes as a dip — back and arms lead, the plane
+  // starts frontal (pull) and turns sagittal (press over the bar).
+  'muscle up': p(
+    { back: 0.45, arms: 0.3, chest: 0.15, shoulders: 0.1 },
+    'resistance',
+    { frontal: 0.6, sagittal: 0.4 },
+    { systemic: true, rom: ROM.pullVertical },
+  ),
+  // Bodyweight vertical pull carried by grip; legs assist but back/arms move it.
+  'rope climb': p(
+    { back: 0.5, arms: 0.4, core: 0.1 },
+    'resistance',
+    'frontal',
+    { systemic: true, rom: ROM.pullVertical },
+  ),
+  // Dynamic trunk flexion, same shape as the hanging knee raise / ab wheel.
+  'v up': p({ core: 1 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
+  // Jump-rope conditioning: calf/ankle dominant, sustained — endurance, systemic.
+  'double under': p(
+    { calves: 0.55, quads: 0.25, core: 0.2 },
+    'endurance',
+    'sagittal',
+    { systemic: true },
+  ),
+  'single under': p(
+    { calves: 0.55, quads: 0.25, core: 0.2 },
+    'endurance',
+    'sagittal',
+    { systemic: true },
+  ),
+  // Squat-thrust-jump-pushup: whole-body conditioning spanning legs, chest and
+  // trunk. The dumbbell-facing variant loads the same pattern.
+  burpee: p(
+    { quads: 0.3, chest: 0.2, posteriorChain: 0.2, shoulders: 0.15, core: 0.15 },
+    'endurance',
+    'sagittal',
+    { systemic: true },
+  ),
+  'dumbbell facing burpee': p(
+    { quads: 0.3, chest: 0.2, posteriorChain: 0.2, shoulders: 0.15, core: 0.15 },
+    'endurance',
+    'sagittal',
+    { systemic: true },
+  ),
+
+  // Correction: a handstand push-up is a VERTICAL press (shoulders + triceps),
+  // but "push up" is a fragment of the horizontal-push rule, which was filing it
+  // under chest. EXACT beats RULES, so this pins the right anatomy. Not systemic
+  // — it's a strict strength movement, not conditioning.
+  'handstand push up': p(
+    { shoulders: 0.55, arms: 0.3, core: 0.15 },
+    'resistance',
+    'sagittal',
+    { rom: ROM.pushVertical },
+  ),
 };
 
 // ---- the rule list --------------------------------------------------------
