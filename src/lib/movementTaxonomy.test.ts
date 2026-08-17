@@ -80,6 +80,16 @@ const VOCABULARY = [
   'Standing Barbell Military Press',
   'Trap Bar DL',
   'Weighted Dips',
+  // Dataset-informed CrossFit/Hyrox additions.
+  'Thruster',
+  'Muscle-up',
+  'Rope Climb',
+  'V-Up',
+  'Double-Under',
+  'Single-Under',
+  'Burpee',
+  'Dumbbell-Facing Burpee',
+  'Handstand Push-up',
 ];
 
 // Truncated at import — almost certainly "Weighted Pull-up" and "Deficit
@@ -211,6 +221,65 @@ describe('the misfires this taxonomy exists to avoid', () => {
 
   it('classifies Box Jump as plyometric', () => {
     expect(classifyMovement('Box Jump').profile.modality).toBe('plyometric');
+  });
+});
+
+// Dataset-informed additions. These are the anatomies to review by eye — the
+// green tick only proves they resolve and normalise, not that they are right.
+describe('CrossFit/Hyrox movements added from the exercise dataset', () => {
+  const dominant = (name: string) => {
+    const regions = classifyMovement(name).profile.regions;
+    return Object.entries(regions).sort((a, b) => (b[1] as number) - (a[1] as number))[0]?.[0];
+  };
+
+  it('maps Thruster to legs + shoulders (was unknown)', () => {
+    const c = classifyMovement('Thruster');
+    expect(c.source).toBe('exact');
+    expect(c.profile.regions.quads).toBeGreaterThan(0);
+    expect(c.profile.regions.shoulders).toBeGreaterThan(0);
+    expect(c.profile.systemic).toBe(true);
+  });
+
+  it('maps Muscle-up and Rope Climb to a back/arms pull', () => {
+    expect(dominant('Muscle-up')).toBe('back');
+    expect(dominant('Rope Climb')).toBe('back');
+    expect(classifyMovement('Muscle-up').profile.regions.arms).toBeGreaterThan(0);
+  });
+
+  it('maps V-Up to the trunk', () => {
+    expect(classifyMovement('V-Up').profile.regions.core).toBeCloseTo(1, 3);
+  });
+
+  it('maps jump-rope work to calf-dominant endurance', () => {
+    for (const name of ['Double-Under', 'Single-Under']) {
+      const c = classifyMovement(name);
+      expect(dominant(name), name).toBe('calves');
+      expect(c.profile.modality, name).toBe('endurance');
+    }
+  });
+
+  it('maps Burpee to systemic conditioning', () => {
+    const c = classifyMovement('Burpee');
+    expect(c.profile.modality).toBe('endurance');
+    expect(c.profile.systemic).toBe(true);
+  });
+
+  // The correction: a handstand push-up is a vertical press, not a chest press.
+  it('reads Handstand Push-up as a shoulder press, not chest', () => {
+    const c = classifyMovement('Handstand Push-up');
+    expect(c.source).toBe('exact');
+    expect(dominant('Handstand Push-up')).toBe('shoulders');
+    expect(c.profile.regions.chest ?? 0).toBe(0);
+  });
+
+  // Guard: the EXACT burpee entry must NOT swallow the burpee combos, which
+  // keep matching their box-jump/broad-jump anatomy by longest fragment.
+  it('leaves the burpee combos on their existing plyometric classification', () => {
+    for (const name of ['Burpee Box Jump-Over', 'Burpee Broad Jump']) {
+      const c = classifyMovement(name);
+      expect(c.matchedIds, name).toContain('jump-plyo');
+      expect(c.profile.modality, name).toBe('plyometric');
+    }
   });
 });
 
