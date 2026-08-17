@@ -3,10 +3,11 @@ import { toast } from '@/lib/toast';
 import { track } from '@/lib/analytics';
 import { createMealLog } from '@/lib/queries';
 import { uploadMealPhoto } from '@/lib/mealPhoto';
-import { draftFor, toInput, type MealDraft } from '@/lib/mealDraft';
+import { defaultTagMix, draftFor, setMixValue, toInput, type MealDraft } from '@/lib/mealDraft';
 import {
   FieldRow,
   HungerSection,
+  MacroMixSection,
   NotesRow,
   PhotoRow,
   SegmentedChoice,
@@ -25,21 +26,24 @@ export default function FullMealLogger() {
 
   const patch = (p: Partial<MealDraft>) => setDraft((d) => ({ ...d, ...p }));
 
+  // Toggling any tag re-seeds the composition for the new selection.
   const toggleTag = (key: string, isSuggested: boolean) => {
     if (isSuggested) {
-      patch({ tags: draft.tags.includes(key) ? draft.tags.filter((t) => t !== key) : [...draft.tags, key] });
+      const tags = draft.tags.includes(key) ? draft.tags.filter((t) => t !== key) : [...draft.tags, key];
+      patch({ tags, tagMix: defaultTagMix([...tags, ...draft.customTags]) });
     } else {
-      patch({
-        customTags: draft.customTags.includes(key)
-          ? draft.customTags.filter((t) => t !== key)
-          : [...draft.customTags, key],
-      });
+      const customTags = draft.customTags.includes(key)
+        ? draft.customTags.filter((t) => t !== key)
+        : [...draft.customTags, key];
+      patch({ customTags, tagMix: defaultTagMix([...draft.tags, ...customTags]) });
     }
   };
   const addCustomTag = (tag: string) => {
     if (draft.customTags.includes(tag)) return;
-    patch({ customTags: [...draft.customTags, tag] });
+    const customTags = [...draft.customTags, tag];
+    patch({ customTags, tagMix: defaultTagMix([...draft.tags, ...customTags]) });
   };
+  const setMix = (key: string, value: number) => patch({ tagMix: setMixValue(draft.tagMix, key, value) });
 
   async function save() {
     setSaving(true);
@@ -125,6 +129,8 @@ export default function FullMealLogger() {
           onToggle={toggleTag}
           onAddCustom={addCustomTag}
         />
+
+        <MacroMixSection mix={draft.tagMix} onChange={setMix} />
 
         <div>
           <div className="t-label mb-2 text-muted">Notes</div>

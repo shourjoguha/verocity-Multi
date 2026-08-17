@@ -19,6 +19,7 @@ function meal(overrides: Partial<MealLog>): MealLog {
     kind: 'meal',
     source: 'home',
     tags: [],
+    tag_mix: null,
     note: null,
     hunger_before: 4,
     hunger_after: 1,

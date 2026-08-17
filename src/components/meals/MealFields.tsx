@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { MEAL_KINDS, MEAL_SCALE, MEAL_SIZES, MEAL_SOURCES, MEAL_TAGS } from '@/app.config';
 import { Disclosure } from '@/components/ui/Disclosure';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
-import { normalizeTag } from '@/lib/mealDraft';
+import { mixKeysOrdered, normalizeTag } from '@/lib/mealDraft';
+import type { MealTagMix } from '@/lib/types';
 
 // Shared field components for meal capture, used IDENTICALLY by the quick
 // drawer (MealDrawer.tsx) and the full logger (FullMealLogger.tsx) — see
@@ -257,6 +258,54 @@ export function TagsSection({
         >
           Add
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Composition sliders, one per selected tag, sharing 100%. The last tag (in
+// mixKeysOrdered) is the balancer: its slider is read-only and always shows
+// 100 minus the rest, so dragging the first n-1 is all it takes. Rendered only
+// when two or more tags participate — a single tag is trivially 100%.
+export function MacroMixSection({
+  mix,
+  onChange,
+}: {
+  mix: MealTagMix;
+  onChange: (key: string, value: number) => void;
+}) {
+  const keys = mixKeysOrdered(mix);
+  if (keys.length < 2) return null;
+  const balancer = keys[keys.length - 1];
+  const label = (key: string) => MEAL_TAGS.find((t) => t.key === key)?.label ?? key;
+
+  return (
+    <div>
+      <div className="t-label mb-2 text-muted">Composition · sums to 100%</div>
+      <div className="flex flex-col gap-3">
+        {keys.map((key) => {
+          const isBalancer = key === balancer;
+          return (
+            <div key={key} className="flex items-center gap-3">
+              <span className="t-label w-16 shrink-0 truncate capitalize text-muted">{label(key)}</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={mix[key] ?? 0}
+                disabled={isBalancer}
+                onChange={(e) => onChange(key, Number(e.target.value))}
+                aria-label={`${label(key)} percent${isBalancer ? ' (auto-balanced)' : ''}`}
+                className="min-h-11 min-w-0 flex-1 disabled:opacity-50"
+              />
+              <span className="w-9 shrink-0 text-right tabular-nums text-fg">{mix[key] ?? 0}%</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="t-label mt-1.5 text-faint">
+        <span className="capitalize">{label(balancer)}</span> balances the rest to 100%
       </div>
     </div>
   );

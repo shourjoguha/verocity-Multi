@@ -572,7 +572,13 @@ export interface RxDeepResult {
  *
  * `tags` holds suggested and custom tags together; splitTags() in
  * lib/mealDraft.ts separates them for display.
+ *
+ * `tag_mix` is the optional composition: integer percents per tag that sum to
+ * 100 (e.g. { protein: 60, carbs: 40 }). NULL when no mix was recorded. Kept
+ * separate from `tags` so the two can never disagree.
  */
+export type MealTagMix = Record<string, number>;
+
 export interface MealLog {
   id: string;
   owner_user_id: string;
@@ -582,6 +588,7 @@ export interface MealLog {
   kind: MealKindKey;
   source: MealSourceKey;
   tags: string[];
+  tag_mix: MealTagMix | null;
   note: string | null;
   hunger_before: number;
   hunger_after: number;

@@ -4,11 +4,12 @@ import { toast } from '@/lib/toast';
 import { track } from '@/lib/analytics';
 import { createMealLog, updateMealLog } from '@/lib/queries';
 import { uploadMealPhoto } from '@/lib/mealPhoto';
-import { toInput, type MealDraft } from '@/lib/mealDraft';
+import { defaultTagMix, setMixValue, toInput, type MealDraft } from '@/lib/mealDraft';
 import type { MealLog } from '@/lib/types';
 import {
   FieldRow,
   HungerSection,
+  MacroMixSection,
   MoreDetails,
   NotesRow,
   PhotoRow,
@@ -71,22 +72,25 @@ function MealDrawerBody({
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Toggling any tag re-seeds the composition for the new selection (see
+  // recomputeMix): both the tags and the fresh mix go in one patch.
   const toggleTag = (key: string) => {
-    onDraftChange({
-      tags: draft.tags.includes(key) ? draft.tags.filter((t) => t !== key) : [...draft.tags, key],
-    });
+    const tags = draft.tags.includes(key) ? draft.tags.filter((t) => t !== key) : [...draft.tags, key];
+    onDraftChange({ tags, tagMix: defaultTagMix([...tags, ...draft.customTags]) });
   };
   const toggleCustomTag = (key: string) => {
-    onDraftChange({
-      customTags: draft.customTags.includes(key)
-        ? draft.customTags.filter((t) => t !== key)
-        : [...draft.customTags, key],
-    });
+    const customTags = draft.customTags.includes(key)
+      ? draft.customTags.filter((t) => t !== key)
+      : [...draft.customTags, key];
+    onDraftChange({ customTags, tagMix: defaultTagMix([...draft.tags, ...customTags]) });
   };
   const addCustomTag = (tag: string) => {
     if (draft.customTags.includes(tag)) return; // duplicate is a no-op
-    onDraftChange({ customTags: [...draft.customTags, tag] });
+    const customTags = [...draft.customTags, tag];
+    onDraftChange({ customTags, tagMix: defaultTagMix([...draft.tags, ...customTags]) });
   };
+  const setMix = (key: string, value: number) =>
+    onDraftChange({ tagMix: setMixValue(draft.tagMix, key, value) });
 
   async function save() {
     setSaving(true);
@@ -199,6 +203,7 @@ function MealDrawerBody({
                 onToggle={(key, isSuggested) => (isSuggested ? toggleTag(key) : toggleCustomTag(key))}
                 onAddCustom={addCustomTag}
               />
+              <MacroMixSection mix={draft.tagMix} onChange={setMix} />
               <div>
                 <div className="t-label mb-2 text-muted">Notes</div>
                 <NotesRow value={draft.notes} onChange={(notes) => onDraftChange({ notes })} />

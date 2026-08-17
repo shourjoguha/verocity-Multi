@@ -306,6 +306,23 @@ export const MEAL_DEFAULTS = {
   hungerAfter: 1,
 } as const;
 
+// Meal composition defaults — the seed percentages when the mix is first shown
+// for a set of selected tags (defaultTagMix in lib/mealDraft.ts). The user then
+// drags the sliders; these only decide the starting split.
+//
+//   - flatTags each take a fixed `flatShare`; the remainder is split among the
+//     rest by the ratio rules.
+//   - protein alone splits across protein AND fat (fat joins the mix).
+//   - {protein,carbs} and {protein,carbs,veg} have named ratios; any other set
+//     starts as an even split.
+export const MEAL_MIX = {
+  flatTags: ['coffee', 'sweet'],
+  flatShare: 5,
+  proteinOnly: { protein: 80, fat: 20 },
+  proteinCarbs: { protein: 60, carbs: 40 },
+  proteinCarbsVeg: { protein: 40, carbs: 40, veg: 20 },
+} as const;
+
 // Photo handling. maxEdgePx/quality put a 4000px phone photo at roughly 150KB.
 // maxBytes is the ceiling for the fallback path where the browser cannot decode
 // the file (HEIC from the iOS library) and the original is uploaded as-is.

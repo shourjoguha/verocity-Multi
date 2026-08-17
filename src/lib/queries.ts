@@ -691,6 +691,12 @@ function normalizeMealLog(row: MealLog): MealLog {
     kind: isMealKindKey(row.kind) ? row.kind : MEAL_DEFAULTS.kind,
     source: isMealSourceKey(row.source) ? row.source : MEAL_DEFAULTS.source,
     tags: Array.isArray(row.tags) ? row.tags : [],
+    // Missing (pre-migration rows) or malformed reads as "no mix". Guarded here
+    // so no component has to defend against a non-object.
+    tag_mix:
+      row.tag_mix && typeof row.tag_mix === 'object' && !Array.isArray(row.tag_mix)
+        ? row.tag_mix
+        : null,
   };
 }
 
