@@ -54,16 +54,18 @@ const INERTIA = 0.14;
 
 // Grid pitch, derived from the SMALLEST text source in the field.
 //
-// A uniform pitch has to be legible for the finest text on the canvas — a
-// pitch tuned to the 160px wordmark leaves 12px eyebrow copy as three fat
-// blobs. `smallest / SPACING_RATIO` puts ~5 dots across the smallest stroke
-// (Archivo Black stroke ≈ fontSize / 6), so the small text is at least readable
-// as text. The clamp is the floor on cost (a phone-sized hero at pitch 2 is
-// 100k+ particles) and the ceiling on coarseness.
-const SPACING_RATIO = 6;
-const SPACING_MIN_FINE = 3;
-const SPACING_MIN_COARSE = 4;
-const SPACING_MAX = 8;
+// The ratio is tuned for DISPLAY type — the wordmark this field exists to
+// carry. It was briefly dropped to 6 (with a 3px floor) so that 12px body copy
+// could also be rendered as particles, and that was a mistake twice over: the
+// particle count is quadratic in the pitch, so a full-hero canvas went from
+// ~18k particles to ~108k and the loop visibly stalled, and 12px text at ANY
+// pitch is unreadable as dots because the strokes are thinner than the gaps.
+// Small copy belongs above the canvas as real DOM text; only display type
+// belongs in the field. The clamp is the floor on cost and the ceiling on
+// coarseness.
+const SPACING_RATIO = 22;
+const SPACING_MIN = 5;
+const SPACING_MAX = 10;
 // Placement jitter, so the grid reads as a field rather than as graph paper.
 const NOISE_SCALE = 0.02;
 
@@ -85,18 +87,49 @@ const MAX_STROKE_RATIO = 0.85;
 // point a faint mark, so the whole canvas is the interaction surface.
 const FIELD_FLOOR = 26;
 
+// Anything at or below this brightness is ambient dust rather than picture, and
+// gets sampled every DUST_STRIDE cells instead of every cell (see
+// generatePoints). Sits a little above FIELD_FLOOR so the blur's outermost
+// falloff — which is still structure — stays at full density.
+const DUST_CEILING = FIELD_FLOOR + 10;
+const DUST_STRIDE = 2;
+
 // Edge softening, also a share of the pitch and for the same reason. It ramps
 // stroke weight across a letter's boundary instead of stepping — but a radius
 // wide relative to the stroke washes the letter INTERIORS below full
 // brightness, and interiors are where the ink and the fattest dots come from.
 // Capped because p5's BLUR is a JS convolution, quadratic in the radius.
-const BLUR_RATIO = 0.5;
+const BLUR_RATIO = 0.42;
 const BLUR_MAX = 4;
 
 // Parked far outside the canvas: the resting state of the repulsion centre when
 // the pointer is elsewhere. Snapped to, never lerped to — lerping out would
 // sweep the force across the whole field on the way.
 const PARKED = -10000;
+
+// BUCKETS — the difference between this running at 60fps and at 22.
+//
+// The reference sketch draws every particle with its own `stroke()` +
+// `strokeWeight()` + `point()`. Each of those is a canvas state change, and
+// state changes are what a 2D context is slow at: at ~18k particles that is
+// ~54k of them per frame. Measured in headless Chromium, disabling the draw
+// calls while leaving the physics intact took the loop from 22fps to 60 — so
+// the entire cost was here, not in the maths.
+//
+// So quantise instead. Shade and radius are both continuous functions of the
+// sampled brightness (and, near the cursor, of distance), but the eye cannot
+// resolve 18k distinct greys and radii on a field of soft dots. Snapping to a
+// 16×16 grid of (shade, radius) pairs lets every particle in a bucket be drawn
+// as one path with a single fillStyle — a couple of hundred state changes a
+// frame regardless of particle count.
+//
+// The step counts are the visible-banding floor: 16 shades across the
+// dust→ink ramp is ~12 levels apart, below the JND on these soft edges, and 16
+// radii across a ~1–12px span is sub-pixel. Raising them costs almost nothing
+// (a few more state changes); lowering them starts to band.
+const SHADE_STEPS = 16;
+const WEIGHT_STEPS = 16;
+const TAU = Math.PI * 2;
 
 type Particle = {
   x: number;
@@ -199,13 +232,17 @@ export default function ForceFieldCanvas({ sources, onReady }: ForceFieldProps) 
         let spacing = SPACING_MAX;
         let minStroke = SPACING_MAX * MIN_STROKE_RATIO;
         let maxStroke = SPACING_MAX * MAX_STROKE_RATIO;
-        // Coarse pointers get a bigger pitch floor, both because the extra
-        // resolution isn't visible on the touch DPRs anyway and because the
-        // devices with coarse pointers are the ones least able to pay for
-        // 100k+ particles.
-        const pitchFloor = window.matchMedia('(pointer: coarse)').matches
-          ? SPACING_MIN_COARSE
-          : SPACING_MIN_FINE;
+        // The full radius range a particle can land in: base weight runs
+        // minStroke→maxStroke, and the magnifier doubles it at the cursor.
+        // Bucket indices are computed against this span, so it has to move
+        // with the pitch.
+        let weightSpan = maxStroke * 2 - minStroke;
+        // Reused across frames — cleared with `length = 0` rather than
+        // reallocated, so a 60fps loop allocates nothing.
+        const buckets: number[][] = Array.from(
+          { length: SHADE_STEPS * WEIGHT_STEPS },
+          () => [],
+        );
 
         // Repulsion centre, and whether the pointer is actually driving it.
         // `engaged` exists because p5 initialises mouseX/mouseY to 0,0 — which
@@ -240,9 +277,10 @@ export default function ForceFieldCanvas({ sources, onReady }: ForceFieldProps) 
           // readable, and the clamp bounds cost either way.
           const smallest =
             list.length > 0 ? Math.min(...list.map((s) => s.fontSize)) : SPACING_MAX * 6;
-          spacing = p.constrain(smallest / SPACING_RATIO, pitchFloor, SPACING_MAX);
+          spacing = p.constrain(smallest / SPACING_RATIO, SPACING_MIN, SPACING_MAX);
           minStroke = spacing * MIN_STROKE_RATIO;
           maxStroke = spacing * MAX_STROKE_RATIO;
+          weightSpan = maxStroke * 2 - minStroke;
 
           for (const src of list) drawSource(g, src);
 
@@ -302,10 +340,38 @@ export default function ForceFieldCanvas({ sources, onReady }: ForceFieldProps) 
           g.pop();
         }
 
+        // Sample density follows INFORMATION density.
+        //
+        // A uniform grid over the whole canvas spends most of itself on the
+        // ambient floor: the wordmark covers ~15% of a full-hero stage, so
+        // ~85% of a uniform field is dust that renders as a ~1px dot nobody
+        // can resolve — and costs exactly as much to draw as an ink dot. At
+        // full-hero size that was 18k particles for 2.8k-worth of picture, and
+        // the loop could not hold 60fps.
+        //
+        // So the letters keep the full grid and the dust is sampled every
+        // DUST_STRIDE cells. The ambient field survives — it is what makes the
+        // whole canvas an interaction surface rather than a hole punched in
+        // some text (see FIELD_FLOOR) — it is just no denser than it needs to
+        // be. Thinning is a regular lattice rather than random so the dust
+        // stays even; the per-point noise jitter below is what stops that
+        // lattice reading as graph paper.
         function generatePoints() {
           points = [];
-          for (let y = 0; y < p.height; y += spacing) {
-            for (let x = 0; x < p.width; x += spacing) {
+          const w = p.width;
+          const h = p.height;
+          let ix = 0;
+          for (let y = 0; y < h; y += spacing, ix++) {
+            let jx = 0;
+            for (let x = 0; x < w; x += spacing, jx++) {
+              // Sample the map at the cell's origin. `field` is always built
+              // before this runs (both callers do buildField() first), so the
+              // brightness is the one this particle would render at.
+              const sx = x < 0 ? 0 : x > w - 1 ? w - 1 : x | 0;
+              const sy = y < 0 ? 0 : y > h - 1 ? h - 1 : y | 0;
+              const brightness = fieldPixels[(sx + sy * w) * 4] ?? 0;
+              if (brightness <= DUST_CEILING && (ix % DUST_STRIDE || jx % DUST_STRIDE)) continue;
+
               const nx = p.noise(x * NOISE_SCALE, y * NOISE_SCALE) - 0.5;
               const ny = p.noise((x + 500) * NOISE_SCALE, (y + 500) * NOISE_SCALE) - 0.5;
               const px = x + nx * spacing;
@@ -327,7 +393,9 @@ export default function ForceFieldCanvas({ sources, onReady }: ForceFieldProps) 
           // device pixel ratios; rendering at 1x here is the single biggest
           // saving available and is invisible on a field of soft points.
           if (window.matchMedia('(pointer: coarse)').matches) p.pixelDensity(1);
-          p.noFill();
+          // Particles are FILLED arcs now, not stroked points (see BUCKETS),
+          // so the p5-level stroke would only paint an unwanted outline.
+          p.noStroke();
           buildField();
           generatePoints();
         };
@@ -383,6 +451,9 @@ export default function ForceFieldCanvas({ sources, onReady }: ForceFieldProps) 
 
           const { dust, ink } = RAMP[themeRef.current];
           const w = p.width;
+          const h = p.height;
+
+          for (const bucket of buckets) bucket.length = 0;
 
           for (const pt of points) {
             // Repel, damp, spring back — the reference's three forces, in
@@ -402,8 +473,8 @@ export default function ForceFieldCanvas({ sources, onReady }: ForceFieldProps) 
             pt.x += pt.vx;
             pt.y += pt.vy;
 
-            const px = p.constrain(Math.floor(pt.x), 0, w - 1);
-            const py = p.constrain(Math.floor(pt.y), 0, p.height - 1);
+            const px = pt.x < 0 ? 0 : pt.x > w - 1 ? w - 1 : pt.x | 0;
+            const py = pt.y < 0 ? 0 : pt.y > h - 1 ? h - 1 : pt.y | 0;
             // Greyscale buffer, so the red channel is the brightness.
             const brightness = fieldPixels[(px + py * w) * 4];
             if (brightness === undefined) continue;
@@ -413,11 +484,49 @@ export default function ForceFieldCanvas({ sources, onReady }: ForceFieldProps) 
             // Under the cursor everything swells — the "magnifier" half of the
             // reference's effect, and what stops the dispersal reading as a
             // hole punched in the field.
-            if (d < MAGNIFIER_RADIUS) weight *= p.map(d, 0, MAGNIFIER_RADIUS, 2, 1);
+            if (d < MAGNIFIER_RADIUS) weight *= 2 - d / MAGNIFIER_RADIUS;
 
-            p.stroke(dust + t * (ink - dust));
-            p.strokeWeight(weight);
-            p.point(pt.x, pt.y);
+            // Bucket rather than draw. See the BUCKET comment above the
+            // declarations for why this is not just micro-optimisation.
+            let si = (t * SHADE_STEPS) | 0;
+            if (si >= SHADE_STEPS) si = SHADE_STEPS - 1;
+            let wi = (((weight - minStroke) / weightSpan) * (WEIGHT_STEPS - 1) + 0.5) | 0;
+            if (wi < 0) wi = 0;
+            else if (wi >= WEIGHT_STEPS) wi = WEIGHT_STEPS - 1;
+            const bucket = buckets[si * WEIGHT_STEPS + wi];
+            bucket.push(pt.x, pt.y);
+          }
+
+          // One fillStyle assignment and one fill() per populated bucket,
+          // instead of a stroke + strokeWeight + point per particle. At ~18k
+          // particles that is ~54k canvas state changes a frame collapsing to
+          // a couple of hundred.
+          const ctx = p.drawingContext as CanvasRenderingContext2D;
+          for (let si = 0; si < SHADE_STEPS; si++) {
+            // Bucket centre, so quantisation does not bias the ramp darker or
+            // lighter — the same reason a histogram plots bin midpoints.
+            const t = (si + 0.5) / SHADE_STEPS;
+            const level = Math.round(dust + t * (ink - dust));
+            let styled = false;
+            for (let wi = 0; wi < WEIGHT_STEPS; wi++) {
+              const bucket = buckets[si * WEIGHT_STEPS + wi];
+              if (bucket.length === 0) continue;
+              if (!styled) {
+                ctx.fillStyle = `rgb(${level},${level},${level})`;
+                styled = true;
+              }
+              const radius = (minStroke + (wi / (WEIGHT_STEPS - 1)) * weightSpan) / 2;
+              ctx.beginPath();
+              for (let i = 0; i < bucket.length; i += 2) {
+                const x = bucket[i];
+                const y = bucket[i + 1];
+                // moveTo before arc, or every dot is joined to the last by a
+                // straight line — one continuous subpath instead of N circles.
+                ctx.moveTo(x + radius, y);
+                ctx.arc(x, y, radius, 0, TAU);
+              }
+              ctx.fill();
+            }
           }
 
           if (!announced) {

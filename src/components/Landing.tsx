@@ -54,7 +54,8 @@ const WORDMARK_CLASS =
 
 // Text that fades out once the field paints. Kept in the DOM either way — it
 // is the page's real copy, and it is what reduced-motion, no-JS and
-// pre-hydration visitors see.
+// pre-hydration visitors see. Only the WORDMARK uses this — every other piece
+// of hero copy stays opaque DOM above the field (see the stage comment).
 function faded(base: string, live: boolean): string {
   return `${base} transition-opacity duration-500 ${live ? 'opacity-0' : ''}`;
 }
@@ -66,7 +67,7 @@ function faded(base: string, live: boolean): string {
  */
 function measureSources(
   hostEl: HTMLElement,
-  entries: { el: HTMLElement | null; letterSpacing?: string; text?: string; multiline?: boolean }[],
+  entries: { el: HTMLElement | null; letterSpacing?: string; text?: string }[],
 ): TextSource[] {
   const host = hostEl.getBoundingClientRect();
   const out: TextSource[] = [];
@@ -96,16 +97,16 @@ function measureSources(
     const alignRaw = cs.textAlign;
     const align: 'left' | 'center' | 'right' =
       alignRaw === 'center' || alignRaw === 'right' ? alignRaw : 'left';
-    // Always pass width. p5 uses it BOTH to anchor a centred/right-aligned
-    // single line (see the drawSource comment) AND to wrap a paragraph. A
-    // caller marks a source `multiline` to opt into wrapping; otherwise the
-    // width is anchor-only and height stays undefined.
+    // Width is passed so ForceFieldCanvas can anchor a centred/right-aligned
+    // single line against the DOM box (see its drawSource comment). No height:
+    // that is what signals wrapping intent there, and every source here is
+    // display type on one line. ForceFieldCanvas still supports wrapping if a
+    // caller ever needs it.
     out.push({
       text,
       x: r.left - host.left,
       y: r.top - host.top,
       width: r.width,
-      height: entry.multiline ? r.height : undefined,
       fontSize: parseFloat(cs.fontSize),
       fontFamily: cs.fontFamily.split(',')[0].replace(/["']/g, '').trim(),
       letterSpacing:
@@ -120,13 +121,10 @@ export default function Landing() {
   // The canvas host — a wrapper around the hero that the canvas fills. Every
   // measurement is relative to this so the sources land where the DOM does.
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const eyebrowRef = useRef<HTMLParagraphElement | null>(null);
   const wordmarkRef = useRef<HTMLDivElement | null>(null);
-  const descRef = useRef<HTMLParagraphElement | null>(null);
   const [sources, setSources] = useState<TextSource[]>([]);
-  // Flipped by the field's first painted frame, not by p5 resolving. Every
-  // measured text element crossfades to opacity 0 in step so the swap reads
-  // as one motion.
+  // Flipped by the field's first painted frame, not by p5 resolving. Only the
+  // wordmark crossfades on it — it is the one element the field replaces.
   const [fieldLive, setFieldLive] = useState(false);
 
   // Re-measure on any layout shift. ResizeObserver on the stage covers viewport
@@ -140,21 +138,18 @@ export default function Landing() {
       // EchoText — the h1 is what actually carries the type scale, so read it
       // out here rather than depending on the outer wrapper's box.
       const h1 = wordmarkRef.current?.querySelector('h1') ?? null;
+      // The wordmark is the ONLY particle source. Small copy rendered as dots
+      // is unreadable at any pitch — its strokes are thinner than the gaps —
+      // and the pitch it would demand costs ~6x the particles. See the
+      // SPACING_RATIO comment in ForceFieldCanvas.
       setSources(
         measureSources(stage, [
-          { el: eyebrowRef.current, textAlign: 'center' },
           {
             el: h1,
-            textAlign: 'center',
             // The DOM h1 carries tracking-[-0.05em]; g.text() ignores that.
             // Pass it explicitly so the particle word matches the type's width.
             letterSpacing: '-0.05em',
             text: 'VEROCITY',
-          },
-          {
-            el: descRef.current,
-            textAlign: 'center',
-            multiline: true,
           },
         ]),
       );
@@ -162,9 +157,7 @@ export default function Landing() {
     remeasure();
     const ro = new ResizeObserver(remeasure);
     ro.observe(stage);
-    if (eyebrowRef.current) ro.observe(eyebrowRef.current);
     if (wordmarkRef.current) ro.observe(wordmarkRef.current);
-    if (descRef.current) ro.observe(descRef.current);
     // Fonts landing after first render change every element's box. `fonts.ready`
     // resolves once; re-measure after it fires so the sources match the
     // rendered type rather than the fallback.
@@ -183,16 +176,22 @@ export default function Landing() {
       <main id="main">
         {/* The stage is where the canvas lives. `relative` so the canvas can
             `absolute inset-0` inside it; `overflow-hidden` so particles
-            dispersed near the edges cannot leak into the page below. The hero
-            covers the entire visible section: eyebrow, wordmark, description
-            and the CTA row all live inside this box, and all except the CTAs
-            crossfade out once the field paints.
+            dispersed near the edges cannot leak into the page below. The field
+            spans the whole hero, so its ambient dust is the section's texture
+            and the cursor drives it anywhere in the box.
+
+            ONLY THE WORDMARK IS MADE OF PARTICLES. The eyebrow, the
+            description and the CTAs float above the field as ordinary DOM.
+            Rendering small copy as dots was tried and reverted: 12px text has
+            strokes thinner than the gaps between particles, so it is
+            unreadable at any pitch, and the pitch it demands is quadratic in
+            cost — a full-hero canvas went from ~18k particles to ~108k and the
+            loop stalled. Display type is what this effect is for.
 
             Below-the-fold philosophy content is deliberately NOT inside this
-            stage — a single canvas that tall exceeds ~350k particles at a
-            small pitch and thrashes on a phone. If that content should also
-            become particles, it needs its own stage below (a second field
-            instance), not one covering the whole page. */}
+            stage either — same arithmetic, worse, because the canvas would be
+            document-tall. If it should also carry a field it needs its own
+            stage and its own instance. */}
         <div ref={stageRef} className="relative isolate overflow-hidden">
           {/* The field. `pointer-events-auto` inherited from the browser
               default lets the cursor drive the repulsion; the overlay above
@@ -211,8 +210,7 @@ export default function Landing() {
           >
             <motion.p
               variants={heroItem}
-              ref={eyebrowRef}
-              className={faded('mb-7 text-xs uppercase tracking-[0.45em] text-subtle', fieldLive)}
+              className="mb-7 text-xs uppercase tracking-[0.45em] text-subtle"
             >
               Strength · Training · Log
             </motion.p>
@@ -225,8 +223,7 @@ export default function Landing() {
             </motion.div>
             <motion.p
               variants={heroItem}
-              ref={descRef}
-              className={faded('mt-8 max-w-xl text-balance text-base text-subtle md:text-lg', fieldLive)}
+              className="mt-8 max-w-xl text-balance text-base text-subtle md:text-lg"
             >
               A faster, multi-profile training logger. Private by default, with a read-only public
               showcase. Built on Astro islands and Supabase.
