@@ -1,8 +1,9 @@
 import { motion, MotionConfig, type Variants } from 'motion/react';
-import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EchoText } from '@/components/EchoText';
 import { EASE } from '@/components/anim';
 import ForceField from '@/components/ForceField';
+import type { TextSource } from '@/components/ForceFieldCanvas';
 import { ReelDialog } from '@/components/ReelDialog';
 
 const fadeUp: Variants = {
@@ -50,127 +51,206 @@ const HERO_BTN =
 // field so the two are never described in two places.
 const WORDMARK_CLASS =
   'whitespace-nowrap font-display text-[13vw] font-bold leading-[0.9] tracking-[-0.05em] text-fg md:text-[10rem]';
-const WORDMARK_TRACKING = '-0.05em';
-// Breathing room above and below the heading's own box, so dispersed particles
-// have somewhere to go instead of piling against the canvas edge.
-//
-// The stage reserves exactly this much margin, because the plate is absolutely
-// positioned: without the margin its negative insets paint straight over the
-// eyebrow above and the first line of the paragraph below, which is what it did
-// on the first pass.
-const FIELD_BLEED = '-inset-y-10 sm:-inset-y-16';
-const FIELD_RESERVE = 'my-10 sm:my-16';
 
-// The plate is opaque because the canvas never paints its own ground and this
-// page mounts the shared BackgroundLayer — a transparent field over the dots or
-// the 3D preset is two textures fighting. But a hard-edged opaque rectangle
-// sitting on the backdrop is its own eyesore, so the plate dissolves at top and
-// bottom instead of ending on a cut. Same device as the activity strip's edge
-// fade in ProfileView.
-const plateFade: CSSProperties = {
-  WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 18%, #000 82%, transparent 100%)',
-  maskImage: 'linear-gradient(to bottom, transparent 0, #000 18%, #000 82%, transparent 100%)',
-};
+// Text that fades out once the field paints. Kept in the DOM either way — it
+// is the page's real copy, and it is what reduced-motion, no-JS and
+// pre-hydration visitors see.
+function faded(base: string, live: boolean): string {
+  return `${base} transition-opacity duration-500 ${live ? 'opacity-0' : ''}`;
+}
 
-// The heading and the particle word have to coincide exactly — the two
-// crossfade in the same place, and any difference in size, tracking or position
-// reads as a pop at the swap. Position comes from wrapping the heading (the
-// word is drawn at the canvas centre, so the canvas IS the alignment). Tracking
-// is a constant above. Size has to be measured: `13vw` changes with the
-// viewport, so this reports the heading's live computed font-size.
-function useMeasuredFontSize(ref: RefObject<HTMLElement | null>): number | undefined {
-  const [size, setSize] = useState<number | undefined>(undefined);
-  useEffect(() => {
-    // The type scale sits on the heading EchoText renders, not on the wrapper
-    // this ref is attached to — EchoText forwards no ref, and measuring the
-    // wrapper would read the inherited body size.
-    const el = ref.current?.querySelector('h1');
-    if (!el) return;
-    const read = () => setSize(parseFloat(getComputedStyle(el).fontSize) || undefined);
-    read();
-    const ro = new ResizeObserver(read);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [ref]);
-  return size;
+/**
+ * Read the layout of every text element that becomes a particle source, in
+ * canvas-host coordinates. Called on layout change; the result feeds the
+ * ForceField below.
+ */
+function measureSources(
+  hostEl: HTMLElement,
+  entries: { el: HTMLElement | null; letterSpacing?: string; text?: string; multiline?: boolean }[],
+): TextSource[] {
+  const host = hostEl.getBoundingClientRect();
+  const out: TextSource[] = [];
+  for (const entry of entries) {
+    const el = entry.el;
+    if (!el) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) continue;
+    const cs = getComputedStyle(el);
+    // textContent, not innerText: innerText normalises to what the layout
+    // shows and can miss child whitespace and fragments. textContent is the
+    // raw string and matches what should be rendered as particles.
+    const raw = entry.text ?? el.textContent ?? '';
+    // The DOM applies text-transform at render time; canvas text does not.
+    // Fold uppercase/lowercase into the source string so the buffer matches
+    // the DOM.
+    const text =
+      cs.textTransform === 'uppercase'
+        ? raw.toUpperCase()
+        : cs.textTransform === 'lowercase'
+          ? raw.toLowerCase()
+          : raw;
+    // Read text-align off the ELEMENT rather than threading it as a prop.
+    // The DOM already carries this via `text-align: center` on the section,
+    // and duplicating it in JS is exactly the drift trap the CSS-first
+    // approach is meant to avoid.
+    const alignRaw = cs.textAlign;
+    const align: 'left' | 'center' | 'right' =
+      alignRaw === 'center' || alignRaw === 'right' ? alignRaw : 'left';
+    // Always pass width. p5 uses it BOTH to anchor a centred/right-aligned
+    // single line (see the drawSource comment) AND to wrap a paragraph. A
+    // caller marks a source `multiline` to opt into wrapping; otherwise the
+    // width is anchor-only and height stays undefined.
+    out.push({
+      text,
+      x: r.left - host.left,
+      y: r.top - host.top,
+      width: r.width,
+      height: entry.multiline ? r.height : undefined,
+      fontSize: parseFloat(cs.fontSize),
+      fontFamily: cs.fontFamily.split(',')[0].replace(/["']/g, '').trim(),
+      letterSpacing:
+        entry.letterSpacing ?? (cs.letterSpacing !== 'normal' ? cs.letterSpacing : undefined),
+      textAlign: align,
+    });
+  }
+  return out;
 }
 
 export default function Landing() {
+  // The canvas host — a wrapper around the hero that the canvas fills. Every
+  // measurement is relative to this so the sources land where the DOM does.
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const eyebrowRef = useRef<HTMLParagraphElement | null>(null);
   const wordmarkRef = useRef<HTMLDivElement | null>(null);
-  const fontSize = useMeasuredFontSize(wordmarkRef);
-  // Flipped by the field's first painted frame, not by p5 resolving.
+  const descRef = useRef<HTMLParagraphElement | null>(null);
+  const [sources, setSources] = useState<TextSource[]>([]);
+  // Flipped by the field's first painted frame, not by p5 resolving. Every
+  // measured text element crossfades to opacity 0 in step so the swap reads
+  // as one motion.
   const [fieldLive, setFieldLive] = useState(false);
+
+  // Re-measure on any layout shift. ResizeObserver on the stage covers viewport
+  // resizes and font swaps; the observer callback runs synchronously with
+  // layout so the sources always match what's on screen.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const remeasure = () => {
+      // The wordmark ref points at the outer motion.div that contains
+      // EchoText — the h1 is what actually carries the type scale, so read it
+      // out here rather than depending on the outer wrapper's box.
+      const h1 = wordmarkRef.current?.querySelector('h1') ?? null;
+      setSources(
+        measureSources(stage, [
+          { el: eyebrowRef.current, textAlign: 'center' },
+          {
+            el: h1,
+            textAlign: 'center',
+            // The DOM h1 carries tracking-[-0.05em]; g.text() ignores that.
+            // Pass it explicitly so the particle word matches the type's width.
+            letterSpacing: '-0.05em',
+            text: 'VEROCITY',
+          },
+          {
+            el: descRef.current,
+            textAlign: 'center',
+            multiline: true,
+          },
+        ]),
+      );
+    };
+    remeasure();
+    const ro = new ResizeObserver(remeasure);
+    ro.observe(stage);
+    if (eyebrowRef.current) ro.observe(eyebrowRef.current);
+    if (wordmarkRef.current) ro.observe(wordmarkRef.current);
+    if (descRef.current) ro.observe(descRef.current);
+    // Fonts landing after first render change every element's box. `fonts.ready`
+    // resolves once; re-measure after it fires so the sources match the
+    // rendered type rather than the fallback.
+    let cancelled = false;
+    document.fonts?.ready?.then(() => {
+      if (!cancelled) remeasure();
+    });
+    return () => {
+      cancelled = true;
+      ro.disconnect();
+    };
+  }, []);
 
   return (
     <MotionConfig reducedMotion="user">
       <main id="main">
-        {/* Hero: typographic Echo Stack, entrance driven by Motion */}
-        <motion.section
-          className="flex min-h-[86vh] flex-col items-center justify-center overflow-x-hidden px-6 text-center"
-          variants={heroContainer}
-          initial="hidden"
-          animate="show"
-        >
-          <motion.p
-            variants={heroItem}
-            className="mb-7 text-xs uppercase tracking-[0.45em] text-subtle"
-          >
-            Strength · Training · Log
-          </motion.p>
-          {/* The wordmark stage. `relative` so the canvas wraps the heading —
-              that IS the alignment between the type and the particle word, and
-              it is why nothing has to measure the heading against the section.
-              The margin reserves the space the plate bleeds into. */}
-          <motion.div
-            variants={heroItem}
-            ref={wordmarkRef}
-            className={`relative w-full ${FIELD_RESERVE}`}
-          >
-            <div
-              className={`absolute ${FIELD_BLEED} inset-x-0 overflow-hidden bg-bg`}
-              style={plateFade}
-            >
-              <ForceField
-                word="VEROCITY"
-                fontSize={fontSize}
-                letterSpacing={WORDMARK_TRACKING}
-                onReady={() => setFieldLive(true)}
-              />
-            </div>
-            {/* Always in the DOM — it is the page's heading, it is what a
-                reduced-motion visitor sees, and it is what everyone else sees
-                until p5 has loaded and built its map. It crossfades out rather
-                than being pulled from the layout, so the stage never resizes.
-                Opacity, not `hidden`: it stays in the accessibility tree. */}
-            <EchoText
-              text="VEROCITY"
-              as="h1"
-              className={`relative ${WORDMARK_CLASS} transition-opacity duration-500 ${
-                fieldLive ? 'opacity-0' : ''
-              }`}
-            />
-          </motion.div>
-          <motion.p
-            variants={heroItem}
-            className="mt-8 max-w-xl text-balance text-base text-subtle md:text-lg"
-          >
-            A faster, multi-profile training logger. Private by default, with a read-only public
-            showcase. Built on Astro islands and Supabase.
-          </motion.p>
-          <motion.div
-            variants={heroItem}
-            className="mt-10 flex flex-wrap items-center justify-center gap-3"
-          >
-            <a href="/showcase" className={HERO_BTN}>
-              View showcase
-            </a>
-            {/* Wears its neighbour's pill treatment rather than the app's
-                `.hill-btn` — this row is two equals. */}
-            <ReelDialog className={HERO_BTN} />
-          </motion.div>
-        </motion.section>
+        {/* The stage is where the canvas lives. `relative` so the canvas can
+            `absolute inset-0` inside it; `overflow-hidden` so particles
+            dispersed near the edges cannot leak into the page below. The hero
+            covers the entire visible section: eyebrow, wordmark, description
+            and the CTA row all live inside this box, and all except the CTAs
+            crossfade out once the field paints.
 
-        {/* Philosophy / narrative — scroll-revealed via Motion */}
+            Below-the-fold philosophy content is deliberately NOT inside this
+            stage — a single canvas that tall exceeds ~350k particles at a
+            small pitch and thrashes on a phone. If that content should also
+            become particles, it needs its own stage below (a second field
+            instance), not one covering the whole page. */}
+        <div ref={stageRef} className="relative isolate overflow-hidden">
+          {/* The field. `pointer-events-auto` inherited from the browser
+              default lets the cursor drive the repulsion; the overlay above
+              is pointer-events-none except on the buttons. */}
+          <ForceField sources={sources} onReady={() => setFieldLive(true)} />
+
+          {/* Content overlay. `pointer-events-none` at the section level so
+              the canvas beneath receives the cursor everywhere except the
+              button row, which opts back in below. `relative z-10` so the
+              text and CTAs paint on top of the canvas. */}
+          <motion.section
+            className="pointer-events-none relative z-10 flex min-h-[86vh] flex-col items-center justify-center px-6 text-center"
+            variants={heroContainer}
+            initial="hidden"
+            animate="show"
+          >
+            <motion.p
+              variants={heroItem}
+              ref={eyebrowRef}
+              className={faded('mb-7 text-xs uppercase tracking-[0.45em] text-subtle', fieldLive)}
+            >
+              Strength · Training · Log
+            </motion.p>
+            <motion.div variants={heroItem} ref={wordmarkRef} className="relative w-full">
+              <EchoText
+                text="VEROCITY"
+                as="h1"
+                className={faded(WORDMARK_CLASS, fieldLive)}
+              />
+            </motion.div>
+            <motion.p
+              variants={heroItem}
+              ref={descRef}
+              className={faded('mt-8 max-w-xl text-balance text-base text-subtle md:text-lg', fieldLive)}
+            >
+              A faster, multi-profile training logger. Private by default, with a read-only public
+              showcase. Built on Astro islands and Supabase.
+            </motion.p>
+            {/* The two buttons stay opaque and receive the cursor. `pointer-
+                events-auto` opts this row back in from the section's
+                `pointer-events-none`; the buttons themselves sit above the
+                field visually because their parent carries z-10. */}
+            <motion.div
+              variants={heroItem}
+              className="pointer-events-auto mt-10 flex flex-wrap items-center justify-center gap-3"
+            >
+              <a href="/showcase" className={HERO_BTN}>
+                View showcase
+              </a>
+              {/* Wears its neighbour's pill treatment rather than the app's
+                  `.hill-btn` — this row is two equals. */}
+              <ReelDialog className={HERO_BTN} />
+            </motion.div>
+          </motion.section>
+        </div>
+
+        {/* Philosophy / narrative — scroll-revealed via Motion. Deliberately
+            outside the particle stage above; see the comment there for why. */}
         <section className="mx-auto max-w-5xl px-4 sm:px-6 pb-32">
           <motion.div
             className="mx-auto mb-14 h-16 w-px bg-fg/15"

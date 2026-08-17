@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react';
 import type P5 from 'p5';
 import { useResolvedTheme, type ResolvedTheme } from '@/lib/theme';
 
-// A particle field carrying a word — a port of the reference p5 "force field"
-// sketch, adapted to this design system. A grid of points reads its size and
-// shade from an offscreen brightness map (the word itself, in Archivo Black),
-// disperses under the cursor/finger, and springs back.
+// A particle field carrying arbitrary text — a port of the reference p5 "force
+// field" sketch, adapted to this design system. A grid of points reads its
+// size and shade from an offscreen brightness map (arbitrary text, drawn in
+// arbitrary fonts at arbitrary positions), disperses under the cursor/finger,
+// and springs back.
 //
 // THE HEAVY MODULE. p5 is ~250KB gzip and touches `window` at import time, so
 // nothing may import this statically: the landing island is `client:load`,
@@ -19,30 +20,30 @@ import { useResolvedTheme, type ResolvedTheme } from '@/lib/theme';
 // 1. No hue/saturation palette. A hero backdrop is chrome, and chrome is
 //    monochrome here (CLAUDE.md). The HSL ramp becomes a greyscale ramp
 //    mirrored from the --color-* tokens.
-// 2. No CDN image. The brightness map is the wordmark itself, drawn into an
-//    offscreen buffer in Archivo Black — so the particle mass IS the name.
+// 2. No CDN image. The brightness map is a caller-supplied set of text
+//    sources, each drawn at its own position in the offscreen buffer.
 // 3. No `background(0)`. `clear()` instead, so --color-bg and whichever
 //    backdrop preset is active show through, and light mode is not silently
 //    black.
 // 4. No p5.Vector. The reference allocates two vectors per particle per frame;
-//    at ~3000 particles that is 350k allocations a second. Plain numbers.
+//    at ~100k particles that would be 12M allocations a second. Plain numbers.
 
 // Greyscale ramp endpoints, as 0-255 canvas levels. MIRRORS --color-* in
 // global.css and must move with it — canvas cannot read CSS custom properties
 // (same constraint, and the same fix, as the DEPTH block in
 // BackgroundScene3DCanvas.tsx).
 //
-// `dust` is where the map is black (outside the letters): --color-echo-4, the
-// faintest grey that still reads. `ink` is where it is white (inside them):
-// --color-fg. Both themes are authored here as equals — a ramp defined for only
-// one is the silent break global.css warns about.
+// `dust` is where the map is at its ambient floor (outside every text source):
+// --color-echo-4, the faintest grey that still reads. `ink` is where it is
+// fully white (inside a letter): --color-fg. Both themes are authored here as
+// equals — a ramp defined for only one is the silent break global.css warns
+// about.
 const RAMP: Record<ResolvedTheme, { dust: number; ink: number }> = {
   light: { dust: 217, ink: 18 }, // echo-4 85% → fg 7%
   dark: { dust: 28, ink: 255 }, // echo-4 11% → fg 100%
 };
 
-// Physics. The reference's defaults, retuned for a ~300px band rather than a
-// full viewport.
+// Physics. The reference's defaults.
 const FORCE_STRENGTH = 12;
 const MAGNIFIER_RADIUS = 150;
 const FRICTION = 0.9;
@@ -51,55 +52,46 @@ const RESTORE_SPEED = 0.05;
 // drags a wake through the field instead of teleporting.
 const INERTIA = 0.14;
 
-// Grid pitch, derived from the FITTED TYPE SIZE rather than fixed in pixels.
+// Grid pitch, derived from the SMALLEST text source in the field.
 //
-// The band's height barely changes between a phone and a desktop, but its width
-// halves — so the word shrinks to fit and its strokes get thinner while a fixed
-// pitch does not. At a constant 12px pitch a 375px screen put barely one
-// particle across a letter stroke and ZEUS was unreadable. One particle per
-// (size / SPACING_RATIO) keeps the same number of particles across a stroke at
-// every width; the clamp is the floor on cost and the ceiling on coarseness.
-const SPACING_RATIO = 22;
-const SPACING_MIN = 5;
-const SPACING_MAX = 10;
+// A uniform pitch has to be legible for the finest text on the canvas — a
+// pitch tuned to the 160px wordmark leaves 12px eyebrow copy as three fat
+// blobs. `smallest / SPACING_RATIO` puts ~5 dots across the smallest stroke
+// (Archivo Black stroke ≈ fontSize / 6), so the small text is at least readable
+// as text. The clamp is the floor on cost (a phone-sized hero at pitch 2 is
+// 100k+ particles) and the ceiling on coarseness.
+const SPACING_RATIO = 6;
+const SPACING_MIN_FINE = 3;
+const SPACING_MIN_COARSE = 4;
+const SPACING_MAX = 8;
 // Placement jitter, so the grid reads as a field rather than as graph paper.
-// The reference ships 0 here, which makes its noise lookup a constant.
 const NOISE_SCALE = 0.02;
 
 // Dot size, as a share of the grid pitch — NOT in pixels.
 //
-// A fixed weight only works at one type size. The landing wordmark is `13vw`,
-// so its pitch drops to the floor on a phone while a 5.5px dot does not: the
-// dots then overlap their neighbours and the word turns to mush. Proportional
-// weights hold the same dot-to-gap ratio at every size, and at the desktop
-// pitch they land on the same values the fixed pair was tuned to.
+// A fixed weight only works at one pitch: at a small pitch the dots overlap
+// and the text turns to porridge, at a large pitch they are lost between
+// letters. Proportional weights hold the same dot-to-gap ratio at every pitch.
 // At the top of the ramp the dots very nearly touch, so a letter's interior
 // reads as ink rather than as scattered pepper; at the bottom they stay tiny
 // and the ambient dust stays a texture.
 const MIN_STROKE_RATIO = 0.16;
 const MAX_STROKE_RATIO = 0.85;
 
-// The brightness map's floor — the level OUTSIDE the letterforms. Not zero, and
-// that is the whole ambient field: at zero the band is bare everywhere the word
-// isn't, so the cursor does nothing until it crosses a letter and the "force
-// field" reads as a hole punched in some text. A low floor gives every point a
-// faint mark, so the whole band is the interaction surface.
+// The brightness map's floor — the level BETWEEN text sources. Not zero, and
+// that is the whole ambient field: at zero the canvas is bare everywhere the
+// text isn't, so the cursor does nothing until it crosses a glyph and the
+// "force field" reads as a hole punched in some text. A low floor gives every
+// point a faint mark, so the whole canvas is the interaction surface.
 const FIELD_FLOOR = 26;
 
 // Edge softening, also a share of the pitch and for the same reason. It ramps
 // stroke weight across a letter's boundary instead of stepping — but a radius
 // wide relative to the stroke washes the letter INTERIORS below full
 // brightness, and interiors are where the ink and the fattest dots come from.
-// Fixed at 3px that was invisible on a 160px desktop wordmark and hollowed out
-// the same word at 48px on a phone. Capped because p5's BLUR is a JS
-// convolution, quadratic in the radius.
-const BLUR_RATIO = 0.42;
+// Capped because p5's BLUR is a JS convolution, quadratic in the radius.
+const BLUR_RATIO = 0.5;
 const BLUR_MAX = 4;
-
-// Fallback word height as a share of the band, used only when the caller does
-// not pass a `fontSize`. And the width the word may not exceed, at any size.
-const WORD_HEIGHT = 0.58;
-const WORD_MAX_WIDTH = 0.92;
 
 // Parked far outside the canvas: the resting state of the repulsion centre when
 // the pointer is elsewhere. Snapped to, never lerped to — lerping out would
@@ -116,39 +108,61 @@ type Particle = {
   vy: number;
 };
 
-export type ForceFieldProps = {
-  // The word the particles form. Rendered upper-case.
-  word: string;
-  // Type size in px for the brightness map. Pass the rendered size of the
-  // heading this field stands in for — when the field replaces live type, a
-  // size the caller did not choose is a visible pop at the swap. Omitted, the
-  // word is sized to WORD_HEIGHT of the band instead.
-  fontSize?: number;
-  // Letter-spacing for the map, as a CSS length (e.g. '-0.05em'). Same reason:
-  // g.text() applies none of the heading's tracking, so a tracked heading and
-  // an untracked particle word are different widths.
+/**
+ * One piece of text to render into the brightness map at an explicit position.
+ *
+ * `x, y` are the top-left of the text's bounding box in canvas coordinates —
+ * usually a `getBoundingClientRect()` relative to the canvas host. The buffer
+ * draws with `textBaseline = 'top'` so this stays intuitive.
+ *
+ * `width` (optional) enables word-wrapping via p5's `text(str, x, y, w, h)`.
+ * Callers passing a paragraph must pass a width; single-word sources can omit
+ * it.
+ */
+export type TextSource = {
+  text: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  fontSize: number;
+  fontFamily?: string;
   letterSpacing?: string;
-  // Fires on the FIRST PAINTED FRAME, not when the module resolves.
+  textAlign?: 'left' | 'center' | 'right';
+};
+
+export type ForceFieldProps = {
+  sources: TextSource[];
   onReady?: () => void;
 };
 
-export default function ForceFieldCanvas({
-  word,
-  fontSize,
-  letterSpacing,
-  onReady,
-}: ForceFieldProps) {
+const DEFAULT_FONT = 'Archivo Black';
+
+// A hash the sketch compares against to decide whether to rebuild the map.
+// The `sources` array is mutated by the caller (`ResizeObserver` re-measures
+// on every layout change), so the reference alone doesn't tell us anything.
+function sourceSignature(sources: TextSource[]): string {
+  return sources
+    .map(
+      (s) =>
+        `${s.text}|${Math.round(s.x)}|${Math.round(s.y)}|${Math.round(s.width ?? 0)}|` +
+        `${Math.round(s.height ?? 0)}|${Math.round(s.fontSize)}|${s.fontFamily ?? ''}|` +
+        `${s.letterSpacing ?? ''}|${s.textAlign ?? 'left'}`,
+    )
+    .join('#');
+}
+
+export default function ForceFieldCanvas({ sources, onReady }: ForceFieldProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const theme = useResolvedTheme();
 
   // Live values for the draw loop and the map rebuild. The sketch is
   // instantiated once and reads these rather than closing over them, so a theme
-  // flip or a `13vw` type size changing with the viewport repaints without
-  // tearing down p5.
+  // flip or a layout change repaints without tearing down p5.
   const themeRef = useRef(theme);
   themeRef.current = theme;
-  const typeRef = useRef({ word, fontSize, letterSpacing });
-  typeRef.current = { word, fontSize, letterSpacing };
+  const sourcesRef = useRef(sources);
+  sourcesRef.current = sources;
 
   // Held in a ref for the same reason Modal holds onClose in one: the caller
   // passes an inline arrow, and depending on it here would tear down and
@@ -165,10 +179,10 @@ export default function ForceFieldCanvas({
     let detach: (() => void) | null = null;
 
     (async () => {
-      // Wait for Archivo Black before drawing the map. Canvas text takes the
-      // font from the document's loaded set, so racing this paints the wordmark
-      // in the fallback sans and bakes it into the particle positions — where,
-      // unlike DOM text, it never re-lays-out once the real font arrives.
+      // Wait for fonts before drawing the map. Canvas text takes the font from
+      // the document's loaded set, so racing this paints the text in the
+      // fallback sans and bakes it into the particle positions — where, unlike
+      // DOM text, it never re-lays-out once the real font arrives.
       try {
         await document.fonts.ready;
       } catch {
@@ -181,12 +195,17 @@ export default function ForceFieldCanvas({
         let field: P5.Graphics | null = null;
         let fieldPixels: number[] | Uint8ClampedArray = [];
         let points: Particle[] = [];
-        // All set by buildField() from the fitted type size — the grid, the dot
-        // weights and the map are rebuilt together, in that order, on setup and
-        // on every resize.
+        // All set by buildField() from the caller-supplied sources.
         let spacing = SPACING_MAX;
         let minStroke = SPACING_MAX * MIN_STROKE_RATIO;
         let maxStroke = SPACING_MAX * MAX_STROKE_RATIO;
+        // Coarse pointers get a bigger pitch floor, both because the extra
+        // resolution isn't visible on the touch DPRs anyway and because the
+        // devices with coarse pointers are the ones least able to pay for
+        // 100k+ particles.
+        const pitchFloor = window.matchMedia('(pointer: coarse)').matches
+          ? SPACING_MIN_COARSE
+          : SPACING_MIN_FINE;
 
         // Repulsion centre, and whether the pointer is actually driving it.
         // `engaged` exists because p5 initialises mouseX/mouseY to 0,0 — which
@@ -196,16 +215,16 @@ export default function ForceFieldCanvas({
         let cy = PARKED;
         let engaged = false;
         let announced = false;
-        // Signature of the type the current map was built from. A caller whose
-        // heading is sized in viewport units feeds a new `fontSize` as the
-        // window changes, and the resize observer alone would not catch a size
-        // change that leaves the canvas box the same.
+        // Signature of the sources the current map was built from. Compared on
+        // every draw so a layout change (viewport resize, font swap) forces a
+        // rebuild without depending on ResizeObserver alone.
         let builtFrom = '';
 
-        // The brightness map: the wordmark, white on black, blurred. Every
-        // downstream mapping (shade, stroke weight, the threshold test) reads
-        // it exactly as the reference read its photo.
+        // The brightness map: every text source drawn where it lives, white on
+        // an ambient floor, blurred. The particle draw then samples this.
         function buildField() {
+          const list = sourcesRef.current;
+
           field?.remove();
           const g = p.createGraphics(p.width, p.height);
           // 1:1 with the point grid — the pixel index arithmetic below assumes
@@ -214,42 +233,73 @@ export default function ForceFieldCanvas({
           g.background(FIELD_FLOOR);
           g.noStroke();
           g.fill(255);
-          g.textFont('Archivo Black');
-          g.textAlign(p.CENTER, p.CENTER);
 
-          const type = typeRef.current;
-          const text = type.word.toUpperCase();
-          // Canvas letterSpacing is Chromium 99+ / Safari 16.4+ / Firefox 128+.
-          // Where it is missing the assignment is inert and the word is simply a
-          // little wider than the heading it stands in for — a graceful loss,
-          // not a broken render, so no feature test.
-          if (type.letterSpacing) {
-            (g.drawingContext as CanvasRenderingContext2D).letterSpacing = type.letterSpacing;
-          }
-
-          let size = type.fontSize ?? p.height * WORD_HEIGHT;
-          g.textSize(size);
-          const maxWidth = p.width * WORD_MAX_WIDTH;
-          // Shrink to fit rather than letting the word run off the band on a
-          // narrow screen. Applies to a caller-supplied size too: a heading that
-          // fits because it wraps or clips would otherwise run off this canvas.
-          while (size > 8 && g.textWidth(text) > maxWidth) {
-            size -= 2;
-            g.textSize(size);
-          }
-          g.text(text, p.width / 2, p.height / 2);
-
-          // Pitch first, then everything that has to stay proportional to it.
-          spacing = p.constrain(size / SPACING_RATIO, SPACING_MIN, SPACING_MAX);
+          // Pitch is derived FROM THE SMALLEST source. A pitch tuned to the
+          // largest one would leave every smaller heading as a handful of
+          // fat dots; deriving from the smallest keeps everything at least
+          // readable, and the clamp bounds cost either way.
+          const smallest =
+            list.length > 0 ? Math.min(...list.map((s) => s.fontSize)) : SPACING_MAX * 6;
+          spacing = p.constrain(smallest / SPACING_RATIO, pitchFloor, SPACING_MAX);
           minStroke = spacing * MIN_STROKE_RATIO;
           maxStroke = spacing * MAX_STROKE_RATIO;
+
+          for (const src of list) drawSource(g, src);
 
           g.filter(p.BLUR, Math.min(BLUR_MAX, Math.max(1, spacing * BLUR_RATIO)));
           g.loadPixels();
 
           field = g;
           fieldPixels = g.pixels;
-          builtFrom = `${text}|${type.fontSize}|${type.letterSpacing}`;
+          builtFrom = sourceSignature(list);
+        }
+
+        function drawSource(g: P5.Graphics, src: TextSource) {
+          g.push();
+          g.textFont(src.fontFamily ?? DEFAULT_FONT);
+          g.textSize(src.fontSize);
+          g.textAlign(
+            src.textAlign === 'center' ? p.CENTER : src.textAlign === 'right' ? p.RIGHT : p.LEFT,
+            p.TOP,
+          );
+          // Canvas letterSpacing is Chromium 99+ / Safari 16.4+ / Firefox 128+.
+          // Where it is missing the assignment is inert and the text is simply
+          // a little wider than the DOM it stands in for — a graceful loss,
+          // not a broken render, so no feature test.
+          if (src.letterSpacing) {
+            (g.drawingContext as CanvasRenderingContext2D).letterSpacing = src.letterSpacing;
+          }
+          // p5's two `text()` signatures anchor DIFFERENTLY, and this trips.
+          //
+          // - text(str, x, y, w, h) — the WRAPPING form. (x, y) is the box's
+          //   top-left; textAlign controls how each wrapped line sits WITHIN
+          //   that box, not where the box itself sits. So for a centred
+          //   paragraph we pass the DOM rect's left/top verbatim.
+          //
+          // - text(str, x, y) — the anchor form. textAlign moves the anchor
+          //   point: CENTER means (x, y) is the string's centre. Passing the
+          //   DOM rect's left edge here with textAlign CENTER draws the string
+          //   centred on the left edge — half of it off-canvas.
+          //
+          // Wrapping intent is signalled by `height`, not `width`: a caller
+          // passes width on both so a single-line source can compute its
+          // anchor without wrapping (a heading with whitespace-nowrap would
+          // otherwise wrap below its container width).
+          if (src.height !== undefined) {
+            g.text(src.text, src.x, src.y, src.width!, src.height);
+          } else {
+            const w = src.width ?? 0;
+            const anchorX =
+              w === 0
+                ? src.x
+                : src.textAlign === 'center'
+                  ? src.x + w / 2
+                  : src.textAlign === 'right'
+                    ? src.x + w
+                    : src.x;
+            g.text(src.text, anchorX, src.y);
+          }
+          g.pop();
         }
 
         function generatePoints() {
@@ -283,7 +333,7 @@ export default function ForceFieldCanvas({
         };
 
         // p5 prevents the default touch action unless the handler returns true,
-        // which would make the band swallow vertical scrolling on a phone.
+        // which would make the field swallow vertical scrolling on a phone.
         p.touchMoved = () => {
           engaged = true;
           return true;
@@ -301,8 +351,8 @@ export default function ForceFieldCanvas({
         p.draw = () => {
           p.clear();
 
-          const type = typeRef.current;
-          if (builtFrom !== `${type.word.toUpperCase()}|${type.fontSize}|${type.letterSpacing}`) {
+          const sig = sourceSignature(sourcesRef.current);
+          if (sig !== builtFrom) {
             buildField();
             generatePoints();
           }
@@ -310,8 +360,8 @@ export default function ForceFieldCanvas({
 
           // p5 tracks the pointer window-wide and reports it relative to the
           // canvas, so "outside" is a bounds test rather than a mouseleave
-          // listener — and it covers leaving via any edge, including the one
-          // under the overlay text.
+          // listener — and it covers leaving via any edge, including under an
+          // overlay button.
           const inside =
             p.mouseX >= 0 && p.mouseX <= p.width && p.mouseY >= 0 && p.mouseY <= p.height;
 
@@ -376,10 +426,9 @@ export default function ForceFieldCanvas({
           }
         };
 
-        // Resize is debounced and rebuilds both the map and the grid: the map
-        // is 1:1 with the canvas, so a stale one would map particles to the
-        // wrong letters. p5's own windowResized would miss a container that
-        // changes width without the window doing so (the sm: gutter step).
+        // Resize is debounced and rebuilds both the map and the grid. The
+        // sources move with layout too, and the caller updates them via its
+        // own ResizeObserver — the signature check in draw() covers that path.
         let resizeTimer: number | undefined;
         const ro = new ResizeObserver(() => {
           window.clearTimeout(resizeTimer);
@@ -426,7 +475,7 @@ export default function ForceFieldCanvas({
     <div
       ref={hostRef}
       aria-hidden="true"
-      // touch-pan-y so a vertical flick over the band still scrolls the page.
+      // touch-pan-y so a vertical flick over the canvas still scrolls the page.
       className="absolute inset-0 touch-pan-y [&>canvas]:block"
     />
   );
