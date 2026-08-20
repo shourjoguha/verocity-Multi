@@ -49,9 +49,37 @@ import type { MealLog, Recommendation, UserStats, WorkoutLog, Plan } from '@/lib
  */
 export const COOLDOWN_DAYS = { dismissed: 42, acted: 14 } as const;
 
-/** At most this many findings per check-in, highest confidence first. A page of
- *  nine true things is read as a wall and actioned as none of them. */
+/** At most this many findings per check-in. A page of nine true things is read
+ *  as a wall and actioned as none of them. */
 export const MAX_FINDINGS = 4;
+
+/**
+ * And at most this many from any one family, so the loudest family cannot take
+ * the whole page.
+ *
+ * Without it, training rules — which are the most numerous and the best
+ * measured — filled every slot and the athlete never saw the nutrition or goal
+ * findings at all. Coverage of the three things the coach claims to look at
+ * beats ranking purity.
+ */
+export const MAX_PER_FAMILY = 2;
+
+/** `goal.underserved.mobility` -> `goal`; `training.hypertrophy.x` -> `training`. */
+function family(ruleId: string): string {
+  return ruleId.split('.')[0];
+}
+
+/**
+ * Ranking score. Confidence ALONE is the wrong order: the standing protein
+ * target is the most certain thing the coach knows and also the least urgent —
+ * it is drift 0 by construction — so sorting on confidence put an informational
+ * card above a confidently-measured problem. Multiplying by drift ranks by
+ * "how sure are we AND how far off is it", and leaves drift-0 items to fill
+ * whatever room is left.
+ */
+function score(f: Finding): number {
+  return f.confidence * f.drift;
+}
 
 export interface CoachInput {
   logs: WorkoutLog[];
@@ -166,6 +194,8 @@ export function runCoach(input: CoachInput): {
       heavyFraction: T.strengthIntensity.value,
       strengthRepMax: T.strengthReps.value,
       hypertrophyReps: T.hypertrophyReps.value,
+      nearFailureRpe: T.hypertrophyProximityToFailure.value,
+      heavyRestSeconds: T.strengthRest.value,
       overrides: input.overrides,
       // Prices unweighted work against the athlete's own mass rather than the
       // flat constant, exactly as the radar does. Falls back on its own when
@@ -205,9 +235,25 @@ export function runCoach(input: CoachInput): {
     return true;
   });
 
-  const write = live
-    .sort((a, b) => b.confidence - a.confidence || b.drift - a.drift)
-    .slice(0, MAX_FINDINGS)
+  const ranked = [...live].sort((a, b) => score(b) - score(a) || b.confidence - a.confidence);
+  const perFamily = new Map<string, number>();
+  const chosen: Finding[] = [];
+  // Two passes: fill respecting the per-family cap, then top up from whatever
+  // is left if the cap left the page short. A cap that produced a half-empty
+  // page would be a worse outcome than a slightly lopsided one.
+  for (const f of ranked) {
+    if (chosen.length >= MAX_FINDINGS) break;
+    const k = family(f.ruleId);
+    if ((perFamily.get(k) ?? 0) >= MAX_PER_FAMILY) continue;
+    perFamily.set(k, (perFamily.get(k) ?? 0) + 1);
+    chosen.push(f);
+  }
+  for (const f of ranked) {
+    if (chosen.length >= MAX_FINDINGS) break;
+    if (!chosen.includes(f)) chosen.push(f);
+  }
+
+  const write = chosen
     .map((f) => ({
       rule_id: f.ruleId,
       period_key: f.periodKey,

@@ -20,43 +20,143 @@ function goalWeight(stats: UserStats | null, id: string): number {
 }
 
 /**
- * The main lift is being loaded like accessory work.
+ * Loaded work rarely reaching the intensity the strength adaptation needs.
+ *
+ * Reads every resistance section, not just `primary` — see the note on
+ * `loadedIntensity` in ../signals.ts for why that distinction cost this rule its
+ * voice in the first version.
  *
  * Gated on the athlete actually claiming strength as a goal: a lifter who ranked
- * strength at zero and trains their primary slot at 70% is not making a mistake,
- * they are training for something else, and telling them otherwise is the coach
- * imposing a goal they did not set.
+ * strength at zero and works at 60% is not making a mistake, they are training
+ * for something else, and telling them otherwise is the coach imposing a goal
+ * they did not set.
  */
-export function primaryTooLight(
+export function loadedTooLight(
   s: TrainingSignals,
   stats: UserStats | null,
   periodKey: string,
 ): Finding | null {
-  const intensity = s.primaryIntensity;
+  const intensity = s.loadedIntensity;
   if (intensity.sufficiency === 'insufficient') return null;
   const weight = goalWeight(stats, 'strength');
   if (weight < 25) return null;
 
-  const { share, atOrAboveHeavy, total } = intensity.value;
+  const { share, atOrAboveHeavy, total, topMovement, topMovementBestKg, topMovementMeanFraction } =
+    intensity.value;
   const heavy = TRAINING.strengthIntensity.value;
-  // A third of main-lift sets landing heavy is the product's line for "there is
-  // real strength work in here", not a number from the corpus. It is placed low
-  // on purpose — Galpin's own Prilipin discussion has even a strength-focused
-  // lifter spending most of their reps below 80%, so a high bar here would fire
-  // on a correctly-programmed block.
-  if (share >= 1 / 3) return null;
+  // A fifth of loaded sets landing heavy is the product's line for "there is
+  // real strength work in here", not a number from the corpus, and it is set
+  // low on purpose. Galpin's own Prilipin discussion has even a strength-focused
+  // lifter spending roughly a third of their reps at 55-65% of max, so a high
+  // bar here would fire on a correctly-programmed block.
+  if (share >= 0.2) return null;
+
+  const lift =
+    topMovement && topMovementMeanFraction != null && topMovementBestKg != null
+      ? ` Your highest estimated 1RM in the window is ${topMovement} at ${topMovementBestKg} kg, and your working sets on it average ${pct(topMovementMeanFraction)} of that.`
+      : '';
 
   return {
-    ruleId: 'training.intent.primary-too-light',
+    ruleId: 'training.intent.loaded-too-light',
     periodKey,
-    tldr: `Main lifts rarely reach ${pct(heavy)}`,
-    action: `Take one main lift per session to ${pct(heavy)} of its best for sets of ${TRAINING.strengthReps.value} or fewer.`,
-    body: `Only ${atOrAboveHeavy} of ${total} main-lift sets in the last ${s.windowDays} days were loaded at or above ${pct(heavy)} of that movement's own best estimate. ${TRAINING.strengthIntensity.source === 'galpinStrength' ? 'Galpin' : 'The source'} puts true strength work ${TRAINING.strengthIntensity.quote} at ${TRAINING.strengthReps.value} reps or fewer — below that the adaptation on offer is size, not force. You ranked strength at ${weight}/100, so this is work that is not paying into the goal you set for it.`,
-    drift: round(Math.min(1, (1 / 3 - share) / (1 / 3)), 2),
+    tldr: `${pct(share)} of loaded sets reach ${pct(heavy)}`,
+    action: `Take one lift per session to ${pct(heavy)} of its best for sets of ${TRAINING.strengthReps.value} or fewer.`,
+    body: `${atOrAboveHeavy} of ${total} loaded sets in the last ${s.windowDays} days sat at or above ${pct(heavy)} of that movement's own best estimate.${lift} Galpin puts true strength work "${TRAINING.strengthIntensity.quote}" at ${TRAINING.strengthReps.value} reps or fewer — below that the adaptation on offer is size, not force. You ranked strength at ${weight}/100, so this is work that is not paying into the goal you set for it. His caveat: that 85% is for the moderately-to-highly trained; at a lower training age far less will do.`,
+    drift: round(Math.min(1, (0.2 - share) / 0.2), 2),
     confidence: intensity.sufficiency === 'ok' ? 0.7 : 0.45,
     sufficiency: intensity.sufficiency,
     claims: [TRAINING.strengthIntensity, TRAINING.strengthReps],
-    observed: { heavySets: atOrAboveHeavy, loadedSets: total, share: round(share, 2), goalWeight: weight },
+    observed: {
+      heavySets: atOrAboveHeavy,
+      loadedSets: total,
+      share: round(share, 2),
+      topMovement,
+      topMovementBestKg,
+      goalWeight: weight,
+    },
+  };
+}
+
+/**
+ * Hypertrophy-range sets that are not being taken near failure.
+ *
+ * The rep range is only half of what the source prescribes; its stated caveat is
+ * that the set must reach muscular failure. RPE is recorded on effectively every
+ * set in real logs, which makes this the best-measured finding available — and
+ * it is the one the rep-band rule alone would miss entirely, because the reps
+ * look correct.
+ *
+ * The RPE-to-failure translation is the app's, not Galpin's, and the body says
+ * so. He speaks in failure; RPE 8.5 is roughly one to two reps in reserve.
+ */
+export function hypertrophyEffortLow(
+  s: TrainingSignals,
+  stats: UserStats | null,
+  periodKey: string,
+): Finding | null {
+  const effort = s.hypertrophyEffort;
+  if (effort.sufficiency === 'insufficient') return null;
+  if (goalWeight(stats, 'hypertrophy') < 25) return null;
+
+  const mark = TRAINING.hypertrophyProximityToFailure.value;
+  const { meanRpe, nearFailure, total } = effort.value;
+  if (meanRpe >= mark - 0.5) return null;
+
+  return {
+    ruleId: 'training.hypertrophy.effort-low',
+    periodKey,
+    tldr: `Hypertrophy sets average RPE ${round(meanRpe, 1)}`,
+    action: `Take the last set of each movement to RPE ${mark} or beyond — one or two reps left, not three or four.`,
+    body: `Across ${total} sets in the ${TRAINING.hypertrophyReps.value[0]}–${TRAINING.hypertrophyReps.value[1]} rep range you logged an average RPE of ${round(meanRpe, 1)}, and ${nearFailure} of them reached RPE ${mark} or higher. The rep range on its own is not the prescription — Galpin's stated caveat is "${TRAINING.hypertrophyProximityToFailure.quote}". At RPE ${round(meanRpe, 1)} you are leaving roughly ${round(10 - meanRpe, 1)} reps in reserve, which is the one variable that would make correct-looking sets under-deliver. RPE ${mark} as the near-failure mark is this app's translation; he speaks in failure, not in RPE.`,
+    drift: round(Math.min(1, (mark - meanRpe) / 3), 2),
+    confidence: effort.sufficiency === 'ok' ? 0.7 : 0.45,
+    sufficiency: effort.sufficiency,
+    claims: [TRAINING.hypertrophyProximityToFailure, TRAINING.hypertrophyReps],
+    observed: {
+      meanRpe: round(meanRpe, 1),
+      nearFailureSets: nearFailure,
+      hypertrophySets: total,
+      nearFailureMark: mark,
+    },
+  };
+}
+
+/**
+ * Heavy low-rep sets prescribed less rest than the strength band names.
+ *
+ * `restSeconds` is the PRESCRIBED rest on the item or its group; nothing in this
+ * app records the rest actually taken. So this reads programming intent and the
+ * body says as much rather than claiming to have timed anything.
+ */
+export function heavyRestTooShort(
+  s: TrainingSignals,
+  stats: UserStats | null,
+  periodKey: string,
+): Finding | null {
+  const rest = s.heavyRest;
+  if (rest.sufficiency === 'insufficient') return null;
+  if (goalWeight(stats, 'strength') < 25) return null;
+
+  const [floor, ceil] = TRAINING.strengthRest.value;
+  const { meanSeconds, belowBand, total } = rest.value;
+  if (meanSeconds >= floor) return null;
+
+  return {
+    ruleId: 'training.strength.rest-too-short',
+    periodKey,
+    tldr: `Heavy sets rest ${Math.round(meanSeconds)}s, not ${floor / 60}–${ceil / 60} min`,
+    action: `Set ${floor}–${ceil}s rest on your heavy low-rep work, and superset something unrelated to fill it.`,
+    body: `${belowBand} of ${total} heavy low-rep sets in the last ${s.windowDays} days were prescribed under ${floor}s rest, averaging ${Math.round(meanSeconds)}s. Galpin's figure is "${TRAINING.strengthRest.quote}", and his reason is that intensity rather than volume drives strength — fatigue carried into the next set costs exactly the signal you came for. He is explicit that the rest need not be idle: superset an unrelated muscle group through it. Note this reads the rest you PRESCRIBED; the app does not record the rest you took. For hypertrophy work the advice inverts — he prefers "${TRAINING.hypertrophyRest.quote}".`,
+    drift: round(Math.min(1, (floor - meanSeconds) / floor), 2),
+    confidence: rest.sufficiency === 'ok' ? 0.55 : 0.35,
+    sufficiency: rest.sufficiency,
+    claims: [TRAINING.strengthRest, TRAINING.hypertrophyRest],
+    observed: {
+      meanRestSeconds: Math.round(meanSeconds),
+      setsBelowBand: belowBand,
+      heavySets: total,
+      bandSeconds: `${floor}-${ceil}`,
+    },
   };
 }
 
@@ -248,7 +348,9 @@ export function frequencyBelowTarget(
 }
 
 export const TRAINING_RULES = [
-  primaryTooLight,
+  loadedTooLight,
+  hypertrophyEffortLow,
+  heavyRestTooShort,
   hypertrophyVolumeShort,
   zone2Short,
   intervalOrdering,

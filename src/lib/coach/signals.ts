@@ -123,12 +123,50 @@ export interface TrainingSignals {
    */
   repBands: Measured<{ strength: number; blended: number; hypertrophy: number; endurance: number }>;
   /**
-   * Of sets in the plan's PRIMARY slot that recorded both load and reps, the
-   * fraction loaded at or above the strength threshold. Measured against each
-   * movement's own best e1RM in the window — so it is a claim about intent,
-   * not about absolute strength.
+   * Of RESISTANCE sets that recorded both load and reps, the fraction loaded at
+   * or above the strength threshold, measured against each movement's own best
+   * e1RM in the window. A claim about intent, not about absolute strength.
+   *
+   * WHY ALL RESISTANCE SECTIONS AND NOT JUST `primary`. The first version of
+   * this read the `primary` slot only, on the assumption that is where the main
+   * lift lives. In real logs it is not: across a four-week window the `primary`
+   * section held 17 sets of which 4 recorded load and reps, while `accessory`
+   * held 144 sets with 117 loaded and `secondary` held the actual heavy work —
+   * Back Squat to 100 kg on three-minute rests. Filtering to `primary` threw
+   * away 142 of the 146 usable loaded sets and made the rule permanently
+   * silent, which read as "nothing to say" rather than "looking in the wrong
+   * place". Section is a layout choice in the logger, not a statement about
+   * what the set was for; the load and the reps are the statement.
    */
-  primaryIntensity: Measured<{ atOrAboveHeavy: number; total: number; share: number }>;
+  loadedIntensity: Measured<{
+    atOrAboveHeavy: number;
+    total: number;
+    share: number;
+    /**
+     * Movement with the highest estimated 1RM in the window, and how its working
+     * sets sat against it. NOT necessarily "the main lift" — a hip-thrust
+     * machine outranks a back squat on raw e1RM — so callers must describe it as
+     * what it is, the heaviest estimate, and never promote it to a claim about
+     * programming priority.
+     */
+    topMovement: string | null;
+    topMovementBestKg: number | null;
+    topMovementMeanFraction: number | null;
+  }>;
+  /**
+   * Mean RPE of sets landing in the hypertrophy rep band, and how many of them
+   * reached the near-failure mark. The rep range is only half the prescription —
+   * its cited caveat is that the set must be taken to or near failure — and RPE
+   * is recorded on effectively every set in real logs, so this is measurable.
+   */
+  hypertrophyEffort: Measured<{ meanRpe: number; nearFailure: number; total: number }>;
+  /**
+   * Rest between sets on HEAVY low-rep work, where the evidence names a band.
+   * `restSeconds` is the PRESCRIBED rest on the item or its group — the app
+   * never records actual rest taken — so this reads intent, and rules must say
+   * so rather than claiming to have timed anything.
+   */
+  heavyRest: Measured<{ meanSeconds: number; belowBand: number; total: number }>;
   /** Share of classified minutes the taxonomy could actually resolve, 0..1. */
   coverage: number;
   /** Sessions that logged a conditioning block AND a resistance block. */
@@ -145,6 +183,10 @@ export interface TrainingOptions {
   heavyFraction: number;
   strengthRepMax: number;
   hypertrophyReps: [number, number];
+  /** RPE at or above which a set reads as taken near failure. */
+  nearFailureRpe: number;
+  /** Seconds of rest the evidence puts under heavy low-rep work. */
+  heavyRestSeconds: [number, number];
   overrides?: OverrideMap;
   unweightedKg?: number;
 }
@@ -200,9 +242,27 @@ export function measureTraining(
   const bands = { strength: 0, blended: 0, hypertrophy: 0, endurance: 0 };
   let bandTotal = 0;
   let heavy = 0;
-  let primaryLoaded = 0;
+  let loaded = 0;
+  let hypRpeSum = 0;
+  let hypRpeCount = 0;
+  let hypNearFailure = 0;
+  let heavyRestSum = 0;
+  let heavyRestCount = 0;
+  let heavyRestBelow = 0;
+  const topFractions: number[] = [];
   let mixed = 0;
   let conditioningFirst = 0;
+
+  // Highest estimated 1RM in the window, whichever section it was logged in.
+  // Deliberately not called "the main lift" — see the note on the field.
+  let topMovement: string | null = null;
+  let topBest = 0;
+  for (const [name, best] of bests) {
+    if (best > topBest) {
+      topBest = best;
+      topMovement = name;
+    }
+  }
 
   for (const log of logs) {
     const sections = log.data?.sections ?? [];
@@ -230,21 +290,47 @@ export function measureTraining(
                 sawResistance = true;
                 firstResistanceIdx = idx;
               }
+              const inHypBand =
+                a.reps != null &&
+                a.reps >= opts.hypertrophyReps[0] &&
+                a.reps <= opts.hypertrophyReps[1];
               if (a.reps != null) {
                 bandTotal += 1;
                 if (a.reps <= opts.strengthRepMax) bands.strength += 1;
                 else if (a.reps < opts.hypertrophyReps[0]) bands.blended += 1;
-                else if (a.reps <= opts.hypertrophyReps[1]) bands.hypertrophy += 1;
+                else if (inHypBand) bands.hypertrophy += 1;
                 else bands.endurance += 1;
               }
-            }
-            if (section.key === 'primary' && a.weight != null && a.reps != null) {
-              const best = bests.get(item.movement);
-              // No best for this movement means no denominator. Skipping is the
-              // only honest read — assuming the set was light would invent one.
-              if (best != null && best > 0) {
-                primaryLoaded += 1;
-                if (a.weight / best >= opts.heavyFraction) heavy += 1;
+              if (inHypBand && a.rpe != null) {
+                hypRpeSum += a.rpe;
+                hypRpeCount += 1;
+                if (a.rpe >= opts.nearFailureRpe) hypNearFailure += 1;
+              }
+
+              if (a.weight != null && a.reps != null) {
+                const best = bests.get(item.movement);
+                // No best for this movement means no denominator. Skipping is
+                // the only honest read — assuming the set was light would
+                // invent one.
+                if (best != null && best > 0) {
+                  loaded += 1;
+                  const fraction = a.weight / best;
+                  if (fraction >= opts.heavyFraction) heavy += 1;
+                  if (item.movement === topMovement) topFractions.push(fraction);
+
+                  // Rest is only interesting where the evidence names a band:
+                  // heavy, low-rep work. `restSeconds` is PRESCRIBED — item
+                  // first, then the group it sits in. Absent rest is absent
+                  // data, never a zero.
+                  const isHeavyLowRep =
+                    fraction >= opts.heavyFraction && a.reps <= opts.strengthRepMax;
+                  const rest = item.restSeconds ?? group.restSeconds ?? null;
+                  if (isHeavyLowRep && rest != null && rest > 0) {
+                    heavyRestSum += rest;
+                    heavyRestCount += 1;
+                    if (rest < opts.heavyRestSeconds[0]) heavyRestBelow += 1;
+                  }
+                }
               }
             }
           }
@@ -307,15 +393,40 @@ export function measureTraining(
       30,
       `only ${bandTotal} sets recorded a rep count`,
     ),
-    primaryIntensity: measured(
+    loadedIntensity: measured(
       {
         atOrAboveHeavy: heavy,
-        total: primaryLoaded,
-        share: primaryLoaded ? heavy / primaryLoaded : 0,
+        total: loaded,
+        share: loaded ? heavy / loaded : 0,
+        topMovement,
+        topMovementBestKg: topMovement ? Math.round(topBest) : null,
+        topMovementMeanFraction: topFractions.length
+          ? topFractions.reduce((a, b) => a + b, 0) / topFractions.length
+          : null,
       },
-      primaryLoaded,
-      12,
-      `only ${primaryLoaded} main-lift sets recorded both load and reps`,
+      loaded,
+      20,
+      `only ${loaded} resistance sets recorded both load and reps`,
+    ),
+    hypertrophyEffort: measured(
+      {
+        meanRpe: hypRpeCount ? hypRpeSum / hypRpeCount : 0,
+        nearFailure: hypNearFailure,
+        total: hypRpeCount,
+      },
+      hypRpeCount,
+      25,
+      `only ${hypRpeCount} sets in the hypertrophy rep range recorded an RPE`,
+    ),
+    heavyRest: measured(
+      {
+        meanSeconds: heavyRestCount ? heavyRestSum / heavyRestCount : 0,
+        belowBand: heavyRestBelow,
+        total: heavyRestCount,
+      },
+      heavyRestCount,
+      8,
+      `only ${heavyRestCount} heavy low-rep sets carried a prescribed rest`,
     ),
     coverage: body.coverage,
     mixedSessions: mixed,

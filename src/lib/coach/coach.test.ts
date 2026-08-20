@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import logsFixture from './__fixtures__/logs.json';
 import mealsFixture from './__fixtures__/meals.json';
 import statsFixture from './__fixtures__/userStats.json';
-import { COOLDOWN_DAYS, MAX_FINDINGS, isSuppressed, runCoach } from '@/lib/coach/evaluate';
+import {
+  COOLDOWN_DAYS,
+  MAX_FINDINGS,
+  MAX_PER_FAMILY,
+  isSuppressed,
+  runCoach,
+} from '@/lib/coach/evaluate';
 import { measureGoals, measureNutrition, measureTraining } from '@/lib/coach/signals';
 import { CLAIMS, KNOWLEDGE_PACK_VERSION, NUTRITION, SOURCES, TRAINING } from '@/lib/coach/knowledge';
 import { carbTimingWindow } from '@/lib/coach/rules/nutrition';
@@ -20,6 +26,8 @@ const trainingOpts = {
   heavyFraction: TRAINING.strengthIntensity.value,
   strengthRepMax: TRAINING.strengthReps.value,
   hypertrophyReps: TRAINING.hypertrophyReps.value,
+  nearFailureRpe: TRAINING.hypertrophyProximityToFailure.value,
+  heavyRestSeconds: TRAINING.strengthRest.value,
 };
 
 function rec(over: Partial<Recommendation>): Recommendation {
@@ -82,12 +90,28 @@ describe('signals', () => {
     expect(elapsed).toBeGreaterThan(working * 1.5);
   });
 
-  it('reports insufficiency instead of guessing on thin inputs', () => {
-    // Four main-lift sets in the window recorded both load and reps. That is not
-    // enough to claim anything about training intensity.
-    expect(training.primaryIntensity.samples).toBeLessThan(12);
-    expect(training.primaryIntensity.sufficiency).toBe('insufficient');
-    expect(training.primaryIntensity.shortfall).toBeTruthy();
+  it('reads loaded work from every resistance section, not just `primary`', () => {
+    // The bug this replaced: filtering to the `primary` section found 4 usable
+    // sets and went permanently silent, while `accessory` and `secondary` held
+    // 142 more — including the athlete's actual heavy lift.
+    expect(training.loadedIntensity.samples).toBeGreaterThan(100);
+    expect(training.loadedIntensity.sufficiency).toBe('ok');
+    expect(training.loadedIntensity.value.topMovement).toBeTruthy();
+    expect(training.loadedIntensity.value.topMovementBestKg).toBeGreaterThan(0);
+  });
+
+  it('measures effort and prescribed rest, which real logs actually carry', () => {
+    expect(training.hypertrophyEffort.samples).toBeGreaterThan(25);
+    expect(training.hypertrophyEffort.value.meanRpe).toBeGreaterThan(5);
+    expect(training.hypertrophyEffort.value.meanRpe).toBeLessThanOrEqual(10);
+    // Rest is PRESCRIBED, never timed — absent rest must not read as zero.
+    expect(training.heavyRest.value.meanSeconds).not.toBeNaN();
+  });
+
+  it('reports insufficiency instead of guessing when a signal really is thin', () => {
+    const thin = measureTraining(LOGS.slice(0, 1), trainingOpts, TODAY);
+    expect(thin.sessionsPerWeek.sufficiency).toBe('insufficient');
+    expect(thin.sessionsPerWeek.shortfall).toBeTruthy();
   });
 
   it('keeps goal shares summing to one so over- and under-service are one fact', () => {
@@ -150,16 +174,68 @@ describe('runCoach', () => {
     }
   });
 
+  it('finds the effort problem the rep range alone would hide', () => {
+    // The reps look correct — 125 sets land in 8-15 — but they average RPE 7.2,
+    // roughly three reps in reserve. This is the finding that only exists
+    // because RPE is read, and it is why the rep-band count is not enough.
+    const f = runCoach(base).findings.find(
+      (x) => x.ruleId === 'training.hypertrophy.effort-low',
+    );
+    expect(f).toBeTruthy();
+    expect(f!.observed.meanRpe).toBeLessThan(8);
+    expect(f!.observed.hypertrophySets).toBeGreaterThan(50);
+    // The RPE-to-failure translation is ours; the body must not attribute it.
+    expect(f!.body).toContain("this app's translation");
+  });
+
+  it('finds under-loading now that it reads every resistance section', () => {
+    const f = runCoach(base).findings.find(
+      (x) => x.ruleId === 'training.intent.loaded-too-light',
+    );
+    expect(f).toBeTruthy();
+    expect(f!.observed.loadedSets).toBeGreaterThan(100);
+  });
+
+  it('does not promote the highest e1RM to "your main lift"', () => {
+    // A hip-thrust machine outranks a back squat on raw e1RM. Calling it the
+    // main lift would be a programming claim the number cannot support.
+    const bodies = runCoach(base).findings.map((f) => f.body).join(' ');
+    expect(bodies).not.toMatch(/your (heaviest|main) lift/i);
+  });
+
+  it('ranks by how far off it is, not by how sure it is', () => {
+    // The standing protein target is the most certain thing the coach knows and
+    // also drift 0. It must never head the page ahead of a measured problem.
+    const write = runCoach(base).write;
+    expect(write[0].drift_score).toBeGreaterThan(0);
+    expect(write[0].rule_id).not.toBe('nutrition.dose.protein-target');
+  });
+
+  it('stops one family taking the whole page', () => {
+    const out = runCoach(base);
+    // Training rules are the most numerous and best measured; uncapped they
+    // filled every slot and nutrition never appeared.
+    const trainingFindings = out.findings.filter((f) => f.ruleId.startsWith('training.'));
+    expect(trainingFindings.length).toBeGreaterThan(MAX_PER_FAMILY);
+    const counts = new Map<string, number>();
+    for (const r of out.write) {
+      const fam = r.rule_id.split('.')[0];
+      counts.set(fam, (counts.get(fam) ?? 0) + 1);
+    }
+    expect(Math.max(...counts.values())).toBeLessThanOrEqual(MAX_PER_FAMILY);
+    expect(counts.size).toBeGreaterThanOrEqual(3);
+  });
+
   it('says something about training AND about nutrition', () => {
     const ids = runCoach(base).write.map((r) => r.rule_id);
     expect(ids.some((i) => i.startsWith('training.') || i.startsWith('goal.'))).toBe(true);
     expect(ids.some((i) => i.startsWith('nutrition.'))).toBe(true);
   });
 
-  it('stays silent about main-lift intensity when the sample is four sets', () => {
-    // primaryTooLight would otherwise fire loudly: 0 of 4 sets were heavy.
-    expect(runCoach(base).findings.map((f) => f.ruleId)).not.toContain(
-      'training.intent.primary-too-light',
+  it('stays silent on a rule whose inputs are too thin, without erroring', () => {
+    const oneLog = runCoach({ ...base, logs: LOGS.slice(0, 1) });
+    expect(oneLog.findings.map((f) => f.ruleId)).not.toContain(
+      'training.frequency.below-target',
     );
   });
 });

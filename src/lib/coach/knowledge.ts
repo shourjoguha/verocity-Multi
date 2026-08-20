@@ -177,6 +177,37 @@ export const TRAINING = {
     caveat:
       'Galpin puts the effective band far wider (5–30, fading to ~4) and says the range only works taken to or near muscular failure. Outside 8–15 is not wasted work.',
   }),
+  hypertrophyProximityToFailure: claim({
+    id: 'hypertrophy.proximityToFailure',
+    statement: 'The rep range only works if the set is taken to or near muscular failure.',
+    value: 8.5,
+    unit: 'RPE at which a set reads as near failure',
+    source: 'galpinStrength',
+    quote: 'The only caveat for hypertrophy is you have to take it to muscular failure',
+    caveat:
+      'The RPE number is the APP\'S translation of "near failure", not Galpin\'s — he speaks in failure, not in RPE. RPE 8.5 is roughly 1-2 reps in reserve. He also notes the higher the rep range, the harder genuine failure is to reach: "It is very challenging to maintain the focus required at rep 27 to actually get sufficient failure by rep 30."',
+  }),
+  strengthRest: claim({
+    id: 'strength.rest',
+    statement: 'Heavy low-rep work needs two to four minutes between sets.',
+    value: [120, 240] as [number, number],
+    unit: 'seconds of rest between sets',
+    source: 'galpinStrength',
+    quote: "So the number we're going to throw out typically is like two to four minutes",
+    caveat:
+      'The reason is that intensity, not volume, drives strength, so any fatigue carried into the next set costs the adaptation. Galpin explicitly allows the rest to be filled by supersetting an unrelated muscle group — resting is not the same as standing still. For HYPERTROPHY he says the opposite: stay "in the two minute range at most".',
+  }),
+  hypertrophyRest: claim({
+    id: 'hypertrophy.rest',
+    statement: 'Hypertrophy work is best kept to about two minutes of rest at most.',
+    value: 120,
+    unit: 'seconds of rest between sets (max)',
+    source: 'galpinProtocols',
+    quote:
+      "if you're gonna train for hypertrophy, it's probably best to stay in the two minute range at most",
+    caveat:
+      'Galpin immediately adds that longer rest is fine if the load or the volume goes up to compensate: "you can\'t lower one of the variables, keep everything else the same and expect the same result." So this is a trade, not a limit.',
+  }),
   zone2Weekly: claim({
     id: 'endurance.zone2Weekly',
     statement: 'Around 150–180 minutes a week of conversational-pace cardio.',
