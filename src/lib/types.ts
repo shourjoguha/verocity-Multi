@@ -541,6 +541,17 @@ export interface Recommendation {
   linked_log_id: string | null;
   snooze_until: string | null;
   created_at: string;
+  // ---- migration 0036, deterministic coach. NULL on every row written before
+  // it and on anything the AI edge function writes, which is why the unique
+  // index on (owner, rule_id, period_key) is partial. ----
+  /** Stable dotted slug of the rule that produced this. See Finding.ruleId. */
+  rule_id: string | null;
+  /** ISO week ('2026-W34') or month ('2026-08') the finding is about. */
+  period_key: string | null;
+  /** Knowledge-pack version the thresholds came from. */
+  pack_version: string | null;
+  /** Frozen citation payload — EvidencePayload in lib/coach/types.ts. */
+  evidence: unknown | null;
 }
 
 // ---- rx deep enrichment (retrieval-depth cross-door porting) ----

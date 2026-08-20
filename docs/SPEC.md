@@ -459,8 +459,8 @@ Function, which validates the token and performs scoped read-only queries.
 > the record of what v2 set out to match. **It is not a list of what ships** —
 > roughly a third of the current app was built after it and never added here.
 > For what exists now, read the source: `src/pages/` for routes,
-> `src/components/` for surfaces. Shipped since and absent below: the AI coach
-> (`/app/coach`, `supabase/functions/coach`), Garmin integration
+> `src/components/` for surfaces. Shipped since and absent below: the coach
+> (`/app/coach`, `src/lib/coach/`), Garmin integration
 > (`garmin-connect` / `garmin-ingest` + `GarminPanel`), heart-rate and fitness
 > assessments, library subroutines, PR detection, the three-way theme toggle,
 > and `/app/settings`.
@@ -603,19 +603,41 @@ animated transform. One owner, one place to change.
 
 ---
 
-## 12. AI Features (shipped — Coach)
+## 12. Coach (shipped — deterministic)
 
-**What shipped**, and it is not what this section originally predicted:
-- **The coach is a Supabase Edge Function, not Railway.** On-demand rather than
-  scheduled: `supabase/functions/coach/index.ts` computes training-drift signals
-  from the caller's own logs, asks Claude for recommendations, and writes them
-  back to `recommendations` (see `supabase/migrations/0007_recs_owner_writes.sql`).
-  It returns `{ok:false,error:'no_key'}` when `ANTHROPIC_API_KEY` is unset, so the
-  UI degrades instead of erroring.
-- **The UI** is `CoachView.tsx` at `/app/coach`, with `lib/coach.ts` and
-  `DeepEnrichment.tsx`. Claims the model may make are bounded deterministically
-  in `lib/deepGovernors.ts` — enforce those in the UI rather than trusting the
-  model's output.
+**What shipped**, and it is not what this section originally predicted — twice.
+
+- **The coach is deterministic and runs in the browser.** `src/lib/coach/` reads
+  the athlete's own workout logs, meals and `user_stats` (all RLS-scoped), and
+  emits findings by arithmetic. Same rows in, same findings out, every time. It
+  covers three families: training-type adequacy, goal alignment, and nutrition
+  timing/style.
+- **Every threshold is cited.** `lib/coach/knowledge.ts` is a versioned pack in
+  which each number carries the verbatim quote, the *named speaker*, the episode
+  and the vault path it came from, plus the caveat that speaker put on it. This
+  is how the coach holds an absolute at all without breaking the rule in
+  `lib/aspects.ts` against invented reference values. A threshold with no quote
+  does not go in the pack, and a citation never says "research shows".
+- **Rules honour their caveats even when it costs them a finding.**
+  `nutrition.timing.carb-window` is gated on Galpin's own precondition (timing
+  starts to matter at daily training) and is therefore silent for an athlete
+  training three or four times a week, by construction.
+- **Nutrition is timing and style only.** `meal_logs` holds no grams (migration
+  0032), so no rule tests a meal against a g/kg threshold. The dose evidence
+  appears once, converted into the athlete's own bodyweight as a target to aim
+  at, and says so.
+- **Identity and silence.** Migration 0036 adds `rule_id`, `period_key`,
+  `pack_version` and `evidence` to `recommendations`, with a partial unique index
+  so a repeated check-in upserts. Dismissing, acting on or snoozing a finding
+  buys a COOLDOWN (`lib/coach/evaluate.ts`), because the data behind a finding
+  cannot change for weeks and a uniqueness constraint alone would build a nag
+  that survives being told no.
+- **The AI edge function is off the path.** `supabase/functions/coach/index.ts`
+  is still deployed and still works, but `CoachView` no longer calls it: its
+  output could not be reproduced, could not carry a citation, and was fitness-only
+  by its own system prompt. Claims a model may make are still bounded in
+  `lib/deepGovernors.ts` for the `DeepEnrichment.tsx` surface.
+- **The UI** is `CoachView.tsx` at `/app/coach`.
 - **parse-plan is still not built.** `lib/planTemplate.ts` gives the user a
   copyable authoring prompt instead, so the strict local parser in `PlanUpload`
   stays the only ingest path. That trade has held well; revisit only with a
