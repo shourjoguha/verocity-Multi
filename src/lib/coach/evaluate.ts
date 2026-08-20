@@ -19,16 +19,19 @@ import { KNOWLEDGE_PACK_VERSION } from '@/lib/coach/knowledge';
 import {
   COACH_WINDOW_DAYS,
   isoWeekKey,
+  measureFuelTiming,
   measureGoals,
   measureNutrition,
   measureTraining,
 } from '@/lib/coach/signals';
-import { TRAINING as T } from '@/lib/coach/knowledge';
+import { NUTRITION as N, TRAINING as T } from '@/lib/coach/knowledge';
 import { TRAINING_RULES } from '@/lib/coach/rules/training';
 import { goalDrift } from '@/lib/coach/rules/goals';
 import {
   arrivingHungry,
+  carbSourceConcentration,
   carbTimingWindow,
+  longSessionUnfed,
   proteinGapDays,
   proteinTarget,
 } from '@/lib/coach/rules/nutrition';
@@ -195,6 +198,7 @@ export function runCoach(input: CoachInput): {
       strengthRepMax: T.strengthReps.value,
       hypertrophyReps: T.hypertrophyReps.value,
       nearFailureRpe: T.hypertrophyProximityToFailure.value,
+      allOutRpe: T.vo2AllOut.value,
       heavyRestSeconds: T.strengthRest.value,
       overrides: input.overrides,
       // Prices unweighted work against the athlete's own mass rather than the
@@ -207,6 +211,13 @@ export function runCoach(input: CoachInput): {
   );
   const goals = measureGoals(input.stats, training);
   const nutrition = measureNutrition(input.meals, input.logs, today, windowDays);
+  const fuel = measureFuelTiming(
+    input.logs,
+    input.meals,
+    N.fastedDuration.value,
+    today,
+    windowDays,
+  );
 
   const findings: Finding[] = [];
   for (const rule of TRAINING_RULES) {
@@ -223,6 +234,11 @@ export function runCoach(input: CoachInput): {
     proteinGapDays(nutrition, input.meals, weekKey),
     arrivingHungry(nutrition, weekKey),
     carbTimingWindow(nutrition, training, input.stats, weekKey),
+    longSessionUnfed(fuel, input.stats, weekKey),
+    // Monthly: what your carbohydrate is made of moves on the scale of habits,
+    // not weeks, and restating it weekly would be the monotony this engine is
+    // most prone to.
+    carbSourceConcentration(nutrition, monthKey),
   ];
   for (const f of nutritionFindings) if (f) findings.push(f);
 

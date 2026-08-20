@@ -26,10 +26,11 @@
 
 import { NUTRITION } from '@/lib/coach/knowledge';
 import type { Finding } from '@/lib/coach/types';
-import type { NutritionSignals, TrainingSignals } from '@/lib/coach/signals';
+import type { FuelTimingSignals, NutritionSignals, TrainingSignals } from '@/lib/coach/signals';
 import type { MealLog, UserStats } from '@/lib/types';
 
 const round = (n: number, d = 0) => Number(n.toFixed(d));
+const pct = (v: number) => `${Math.round(v * 100)}%`;
 const clock = (h: number) =>
   `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
 
@@ -198,6 +199,108 @@ export function carbTimingWindow(
       unfuelledDays: unfuelled,
       carbGrams: carbs,
       proteinGrams: protein,
+    },
+  };
+}
+
+/**
+ * Long sessions started with nothing logged beforehand.
+ *
+ * Gated on DURATION, which is where Galpin puts the line: unfed training is fine
+ * up to about an hour and gets harder past it. Below that threshold this stays
+ * silent, because he is explicit that a shorter fasted session is not a problem
+ * — and because plenty of people prefer it.
+ *
+ * Only days where the athlete logged meals can answer this. A training day with
+ * no meals logged is absent data, not a fasted session, and is excluded upstream
+ * in `measureFuelTiming`.
+ */
+export function longSessionUnfed(
+  fuel: FuelTimingSignals,
+  stats: UserStats | null,
+  periodKey: string,
+): Finding | null {
+  // Three paired days is the floor for a pattern; below it this is one odd
+  // morning, and the athlete already knows about it.
+  if (fuel.pairedDays < 3) return null;
+  if (fuel.unfedLongSessions < 2) return null;
+
+  const kg = stats?.body_weight_kg ?? null;
+  const mins = NUTRITION.fastedDuration.value;
+
+  return {
+    ruleId: 'nutrition.timing.long-session-unfed',
+    periodKey,
+    tldr: `${fuel.unfedLongSessions} long sessions started unfed`,
+    action: `Put something in ${mins < 90 ? 'an hour' : 'ninety minutes'} before the sessions that run past ${mins} minutes.`,
+    body: `On ${fuel.unfedLongSessions} of the ${fuel.pairedDays} training days where you logged both a start time and meals, nothing was eaten before a session that ran past ${mins} minutes${fuel.meanStartHour != null ? `; your sessions start around ${clock(fuel.meanStartHour)} on average` : ''}. Galpin's line is duration-dependent — "${NUTRITION.fastedDuration.quote}" — and past that it gets harder. His caveat matters here: it also depends on the day before, since topped-off glycogen buys you a fighting chance. He separates can from should, seeing no scenario where training fasted improves performance${kg ? `, and around a hard session his starting figure is ${Math.round(kg * 2.20462 * NUTRITION.hardSessionFuel.value.carbPerLb)} g of carbohydrate` : ''}.`,
+    drift: round(Math.min(1, fuel.unfedLongSessions / Math.max(1, fuel.pairedDays)), 2),
+    confidence: fuel.pairedDays >= 6 ? 0.55 : 0.35,
+    sufficiency: fuel.pairedDays >= 6 ? 'ok' : 'partial',
+    claims: [NUTRITION.fastedDuration, NUTRITION.hardSessionFuel],
+    observed: {
+      unfedLongSessions: fuel.unfedLongSessions,
+      unfedSessions: fuel.unfedSessions,
+      pairedDays: fuel.pairedDays,
+      meanStartHour: fuel.meanStartHour != null ? clock(fuel.meanStartHour) : null,
+      thresholdMinutes: mins,
+    },
+  };
+}
+
+/**
+ * What the free text says the carbohydrate actually was.
+ *
+ * DESCRIPTIVE, AND IT SAYS SO. There is no claim in the corpus about rice versus
+ * bread versus oats that this could test against, and the operator's own
+ * position is that their carbohydrate generally carries fibre — high-fibre bread
+ * and so on — so a rule scoring carb "quality" would be inventing both the
+ * threshold and the deficiency. What is genuinely useful and genuinely
+ * supportable is the mirror: your carbohydrate is overwhelmingly these two or
+ * three things, and here is how often a vegetable appeared alongside it.
+ *
+ * Fires on CONCENTRATION rather than on any source being wrong, and only when
+ * enough notes exist to make the share mean something.
+ */
+export function carbSourceConcentration(
+  n: NutritionSignals,
+  periodKey: string,
+): Finding | null {
+  const t = n.text;
+  // Notes are optional. Anything under half the meals described and the top
+  // share is a fact about note-taking, not about eating.
+  if (t.described < 12 || t.described / Math.max(1, t.total) < 0.5) return null;
+  if (t.withCarbSource < 8) return null;
+
+  const top = t.carbCounts[0];
+  if (!top) return null;
+  const share = top.count / t.withCarbSource;
+  if (share < 0.5) return null;
+
+  const named = t.carbCounts
+    .slice(0, 3)
+    .map((c) => `${c.label} (${c.count})`)
+    .join(', ');
+  const vegShare = t.total ? t.vegMeals / t.total : 0;
+
+  return {
+    ruleId: 'nutrition.style.carb-concentration',
+    periodKey,
+    tldr: `${pct(share)} of your carbs are ${top.label}`,
+    action: `Rotate one ${top.label} meal a week to a different source — variety costs nothing here.`,
+    body: `Across the ${t.described} meals you described in words, ${t.withCarbSource} named a carbohydrate and ${top.count} of those were ${top.label}: ${named}. A vegetable was tagged or named in ${t.vegMeals} of ${t.total} intakes (${pct(vegShare)})${t.friedMeals > 0 ? `, and ${t.friedMeals} meal${t.friedMeals === 1 ? ' was' : 's were'} described as fried` : ''}. This is a mirror, not a verdict — nothing in the coach's evidence base ranks one carbohydrate source above another, so there is no target here to miss. Notes are optional, so treat this as a read of what you wrote down.`,
+    drift: round(Math.min(1, (share - 0.5) / 0.5), 2),
+    confidence: 0.4,
+    sufficiency: t.described >= 20 ? 'ok' : 'partial',
+    claims: [],
+    observed: {
+      topSource: top.label,
+      topCount: top.count,
+      topShare: round(share, 2),
+      describedMeals: t.described,
+      totalMeals: t.total,
+      vegMeals: t.vegMeals,
+      friedMeals: t.friedMeals,
     },
   };
 }

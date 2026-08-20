@@ -13,5 +13,10 @@ nulled. Nothing in `src/lib/coach/` reads those fields, so the fixtures behave
 identically. The numbers, timestamps, tags and JSONB structure are untouched —
 they are the point.
 
+Because free text is scrubbed, `mealText.ts` and the rules that read notes are
+tested on literals in `mealText.test.ts` instead — modelled on the vocabulary
+that actually appears in the log, typos included. That is also the only way to
+assert on a specific phrase.
+
 Anchor date for every test using these: **2026-08-21**. The newest row is
 2026-08-20, so the 28-day window is stable and the tests do not rot.

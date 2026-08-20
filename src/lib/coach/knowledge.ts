@@ -228,6 +228,24 @@ export const TRAINING = {
     caveat:
       'Total working minutes only — rest between bouts is excluded. Galpin puts it at 4–8 bouts, and separately at as little as one 90-second bout a week near max HR.',
   }),
+  vo2AllOut: claim({
+    id: 'endurance.vo2AllOut',
+    statement: 'The interval only counts if it actually reaches maximum heart rate.',
+    value: 9,
+    unit: 'RPE at which a bout reads as all-out',
+    source: 'galpinStrength',
+    quote: "as long as you touch that max heart rate, I'm good",
+    caveat:
+      "The RPE number is the APP'S translation of touching max heart rate — Galpin speaks in heart rate, and the athlete's own hr_max is the better read whenever the session logged one. He is explicit that the bout LENGTH does not matter (\"If that takes you 20 seconds or 90 seconds, it's fine\"); only the intensity reached does.",
+  }),
+  vo2Bouts: claim({
+    id: 'endurance.vo2Bouts',
+    statement: 'Four to eight all-out bouts in a single session.',
+    value: [4, 8] as [number, number],
+    unit: 'bouts per session',
+    source: 'galpinStrength',
+    quote: 'Ideal world probably four to eight in that single session',
+  }),
   vo2Ordering: claim({
     id: 'endurance.vo2Ordering',
     statement: 'In a session that mixes both, the hard interval goes after the steady-state work.',
@@ -266,6 +284,38 @@ export const TRAINING = {
       'more than probably, in my opinion, five days in a row of decrement, then I might start paying attention.',
     caveat:
       'Galpin wants three signals together — performance, a biomarker and symptoms — before calling it overreaching. A single-axis read is weaker than the quote alone suggests.',
+  }),
+} as const;
+
+// ---------------------------------------------------------------------------
+// Readiness — the SYMPTOM channel, and only that
+// ---------------------------------------------------------------------------
+// The logger's vibe check records sleep, energy and soreness on a 1-5 scale.
+// In Galpin's framework that is exactly ONE of the three signals he wants before
+// anyone says the word overreaching; the other two are a performance decrement
+// and a moving biomarker. Rules built on vibe alone must therefore be phrased as
+// a question, and gain confidence only when a load signal agrees with them.
+
+export const READINESS = {
+  threeSignals: claim({
+    id: 'recovery.threeSignals',
+    statement: 'Overreaching needs a performance drop, a biomarker and a symptom together.',
+    value: 3,
+    unit: 'concurrent signal types',
+    source: 'galpinRecovery',
+    quote: 'If you see all three of these popping up, you have reason to believe',
+    caveat:
+      'The app can read symptoms (the vibe check) and a load proxy (training density). It has no biomarker unless Garmin is connected, so it can never reach three on its own and must not claim to.',
+  }),
+  respondLighter: claim({
+    id: 'recovery.respondLighter',
+    statement: 'The response to a bad day is a lighter session, not a cancelled one.',
+    value: 6,
+    unit: 'RPE to fall back to',
+    source: 'galpinProtocols',
+    quote: "can we go real light? Let's go to six out of 10 RPE",
+    caveat:
+      'Said with hypertrophy as the goal, where volume is the driver and keeping some volume in matters. For a strength block the same logic favours cutting volume and keeping load.',
   }),
 } as const;
 
@@ -323,6 +373,16 @@ export const NUTRITION = {
     caveat:
       'The converse is the load-bearing half: with two or more days between sessions, Galpin says glycogen restores on its own and timing can be ignored. Any carb-timing rule MUST gate on this.',
   }),
+  fastedDuration: claim({
+    id: 'nutrition.fastedDuration',
+    statement: 'Training unfed is fine up to about an hour; past that it gets harder.',
+    value: 60,
+    unit: 'minutes of unfed training before fuelling starts to matter',
+    source: 'galpinNutrition',
+    quote: "So are you really talking 30, 45 minutes, 60 minutes, you're probably fine",
+    caveat:
+      'Conditional on the day before: "if you ate sufficient calories a day before, didn\'t train and your glycogen stores are topped off, you have a fighting chance." Galpin also separates CAN from SHOULD — he sees no scenario where fasting improves performance, only ones where it does not hurt it.',
+  }),
   hardSessionFuel: claim({
     id: 'nutrition.hardSessionFuel',
     statement: 'Around a hard session, roughly 0.5 g carbohydrate and 0.25 g protein per pound.',
@@ -337,5 +397,7 @@ export const NUTRITION = {
 
 /** Every claim in the pack, by id — the lookup `evidence` payloads resolve against. */
 export const CLAIMS: Record<string, Claim<unknown>> = Object.fromEntries(
-  [...Object.values(TRAINING), ...Object.values(NUTRITION)].map((c) => [c.id, c as Claim<unknown>]),
+  [...Object.values(TRAINING), ...Object.values(READINESS), ...Object.values(NUTRITION)].map(
+    (c) => [c.id, c as Claim<unknown>],
+  ),
 );

@@ -9,9 +9,19 @@ import {
   isSuppressed,
   runCoach,
 } from '@/lib/coach/evaluate';
-import { measureGoals, measureNutrition, measureTraining } from '@/lib/coach/signals';
+import {
+  measureFuelTiming,
+  measureGoals,
+  measureNutrition,
+  measureTraining,
+} from '@/lib/coach/signals';
 import { CLAIMS, KNOWLEDGE_PACK_VERSION, NUTRITION, SOURCES, TRAINING } from '@/lib/coach/knowledge';
-import { carbTimingWindow } from '@/lib/coach/rules/nutrition';
+import {
+  carbSourceConcentration,
+  carbTimingWindow,
+  longSessionUnfed,
+} from '@/lib/coach/rules/nutrition';
+import { readinessAndLoad } from '@/lib/coach/rules/training';
 import type { MealLog, Recommendation, UserStats, WorkoutLog } from '@/lib/types';
 
 // Anchored one day after the newest fixture row so the 28-day window is stable.
@@ -27,6 +37,7 @@ const trainingOpts = {
   strengthRepMax: TRAINING.strengthReps.value,
   hypertrophyReps: TRAINING.hypertrophyReps.value,
   nearFailureRpe: TRAINING.hypertrophyProximityToFailure.value,
+  allOutRpe: TRAINING.vo2AllOut.value,
   heavyRestSeconds: TRAINING.strengthRest.value,
 };
 
@@ -129,6 +140,126 @@ describe('signals', () => {
     expect(n.lastMealHour.value).toBeGreaterThan(n.firstMealHour.value);
     expect(n.meanHungerBefore.value).toBeGreaterThanOrEqual(1);
     expect(n.meanHungerBefore.value).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('conditioning and vibe', () => {
+  const training = measureTraining(LOGS, trainingOpts, TODAY);
+
+  it('separates interval work from steady state, and reads how hard it went', () => {
+    const iv = training.intervals.value;
+    // 30-second Ski-Erg bouts. Counting minutes alone would read these as
+    // VO2max work; the RPE is what says they are not.
+    expect(iv.bouts).toBeGreaterThan(10);
+    expect(iv.meanBoutSeconds).toBeLessThan(120);
+    expect(iv.meanRpe).toBeLessThan(TRAINING.vo2AllOut.value);
+    expect(iv.allOutBouts).toBe(0);
+  });
+
+  it('does not count a 45-minute ride as an interval bout', () => {
+    const iv = training.intervals.value;
+    // Every bout must be under the cap; a steady-state block logged as one
+    // timed set would blow boutMinutes up on its own.
+    expect(iv.boutMinutes).toBeLessThan(iv.bouts * 5);
+  });
+
+  it('reads every metric the conditioning block recorded', () => {
+    const c = training.conditioning;
+    expect(c.sets).toBeGreaterThan(20);
+    expect(c.minutes).toBeGreaterThan(0);
+    expect(c.distanceMeters).toBeGreaterThan(0);
+    // Sets that recorded nothing are counted, not silently dropped.
+    expect(c.bareSets).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reads the vibe check and reports how much of the window it covers', () => {
+    const r = training.readiness.value;
+    expect(r.rated).toBeGreaterThan(5);
+    expect(r.coverage).toBeGreaterThan(0);
+    expect(r.coverage).toBeLessThanOrEqual(1);
+    for (const v of [r.meanSleep, r.meanEnergy, r.meanSoreness]) {
+      expect(v).toBeGreaterThanOrEqual(1);
+      expect(v).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it('will not call symptoms overreaching without a load signal agreeing', () => {
+    // Galpin wants three concurrent signals. This app has two channels at best,
+    // so a symptom on its own must stay silent.
+    expect(readinessAndLoad(training, STATS, '2026-W34')).toBeNull();
+
+    const loaded = { ...training, longestConsecutiveDays: 6 };
+    const symptomatic = {
+      ...loaded,
+      readiness: {
+        ...training.readiness,
+        value: { ...training.readiness.value, lowSleepSessions: 3, highSorenessSessions: 2 },
+      },
+    };
+    const f = readinessAndLoad(symptomatic, STATS, '2026-W34');
+    expect(f).toBeTruthy();
+    // It must name the signal it does not have rather than implying three.
+    expect(f!.body).toContain('biomarker');
+    expect(f!.confidence).toBeLessThan(0.6);
+  });
+});
+
+describe('workout and meal timing', () => {
+  it('compares session start to meals in local clock hours', () => {
+    const fuel = measureFuelTiming(LOGS, MEALS, 60, TODAY);
+    expect(fuel.pairedDays).toBeGreaterThan(0);
+    expect(fuel.meanStartHour).toBeGreaterThan(6);
+    expect(fuel.meanStartHour).toBeLessThan(23);
+  });
+
+  it('treats a training day with no meals logged as absent data, not a fast', () => {
+    const fuel = measureFuelTiming(LOGS, [], 60, TODAY);
+    expect(fuel.pairedDays).toBe(0);
+    expect(fuel.unfedSessions).toBe(0);
+    expect(longSessionUnfed(fuel, STATS, '2026-W34')).toBeNull();
+  });
+
+  it('stays quiet when the athlete does eat before training', () => {
+    const fuel = measureFuelTiming(LOGS, MEALS, 60, TODAY);
+    expect(fuel.unfedLongSessions).toBe(0);
+    expect(longSessionUnfed(fuel, STATS, '2026-W34')).toBeNull();
+  });
+});
+
+describe('meal free text', () => {
+  const base34 = (note: string, i: number) => ({
+    ...(MEALS[i % MEALS.length] as MealLog),
+    note,
+  });
+
+  it('mirrors a concentrated carb source without calling it wrong', () => {
+    const meals = Array.from({ length: 20 }, (_, i) =>
+      base34(i < 15 ? 'Fish and rice' : 'Eggs and toast', i),
+    );
+    const n = measureNutrition(meals, LOGS, TODAY);
+    const f = carbSourceConcentration(n, '2026-08');
+    expect(f).toBeTruthy();
+    expect(f!.observed.topSource).toBe('rice');
+    // No corpus claim ranks carbohydrate sources, so it must not imply one.
+    expect(f!.claims).toHaveLength(0);
+    expect(f!.body).toContain('mirror, not a verdict');
+  });
+
+  it('says nothing when most meals were never described', () => {
+    const meals = (MEALS as MealLog[]).map((m) => ({ ...m, note: null }));
+    const n = measureNutrition(meals, LOGS, TODAY);
+    expect(n.text.described).toBe(0);
+    expect(carbSourceConcentration(n, '2026-08')).toBeNull();
+  });
+
+  it('reports tag_mix coverage without turning a percentage into a gram', () => {
+    const n = measureNutrition(MEALS, LOGS, TODAY);
+    expect(n.mixCoverage).toBeGreaterThan(0);
+    expect(n.mixCoverage).toBeLessThanOrEqual(1);
+    if (n.meanProteinMixPct != null) {
+      expect(n.meanProteinMixPct).toBeGreaterThanOrEqual(0);
+      expect(n.meanProteinMixPct).toBeLessThanOrEqual(100);
+    }
   });
 });
 

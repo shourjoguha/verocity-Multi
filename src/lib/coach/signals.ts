@@ -29,6 +29,7 @@ import { completedLogs } from '@/lib/stats';
 import { buildDayInsights, summarizeTiming, toHours } from '@/lib/mealInsights';
 import type { OverrideMap } from '@/lib/movementTaxonomy';
 import type { MealLog, UserStats, WorkoutLog } from '@/lib/types';
+import { summarizeMealText, type MealTextSummary } from '@/lib/coach/mealText';
 import type { Measured, Sufficiency } from '@/lib/coach/types';
 
 // --- windowing -------------------------------------------------------------
@@ -42,6 +43,11 @@ export const COACH_WINDOW_DAYS = 28;
  *  a short session. Real logs carry 0 and 203 from sessions that were started
  *  and abandoned; neither is five minutes of training. */
 export const MIN_PLAUSIBLE_SESSION_MINUTES = 5;
+
+/** Longest timed conditioning set still read as an interval bout rather than a
+ *  steady-state block. Five minutes covers everything from a 20-second sprint to
+ *  a San-Millán four-by-four and excludes a 45-minute ride logged as one set. */
+export const MAX_BOUT_SECONDS = 300;
 
 /** ISO-week key, e.g. '2026-W34'. The default `periodKey` for weekly rules. */
 export function isoWeekKey(d: Date): string {
@@ -175,12 +181,66 @@ export interface TrainingSignals {
   mixedConditioningFirst: number;
   /** Longest run of consecutive calendar days with a completed session. */
   longestConsecutiveDays: number;
+  /**
+   * Conditioning-block interval work: bouts, their length, and how hard they
+   * actually went.
+   *
+   * The whole point is the last part. A log full of "Ski-Erg Intervals" looks
+   * like VO2max work until you read the RPE — 30-second bouts at RPE 7 are not
+   * the thing the 5-6 minutes-a-week prescription is about, and a rule counting
+   * only minutes would congratulate the athlete for them. `allOutMinutes` counts
+   * WORKING time in bouts that reached the all-out mark; `boutMinutes` counts
+   * every timed bout, so a rule can say "you did the work, at the wrong
+   * intensity" rather than "you did no intervals".
+   */
+  intervals: Measured<{
+    bouts: number;
+    boutMinutes: number;
+    allOutBouts: number;
+    allOutMinutes: number;
+    meanBoutSeconds: number;
+    meanRpe: number | null;
+    /** Sessions that contained at least one timed conditioning bout. */
+    sessions: number;
+  }>;
+  /**
+   * Everything else the conditioning block recorded, so nothing logged goes
+   * unread: distance, calories and time totals across conditioning work.
+   */
+  conditioning: {
+    sets: number;
+    minutes: number;
+    distanceMeters: number;
+    calories: number;
+    /** Sets that recorded no metric at all beyond being completed. */
+    bareSets: number;
+  };
+  /**
+   * The vibe check — sleep, energy, soreness, 1-5 — averaged over sessions that
+   * recorded one, plus the counts that make a rule possible. SYMPTOMS ONLY: see
+   * READINESS in ../knowledge.ts on why this can never on its own support a
+   * claim about overreaching.
+   */
+  readiness: Measured<{
+    meanSleep: number;
+    meanEnergy: number;
+    meanSoreness: number;
+    lowSleepSessions: number;
+    highSorenessSessions: number;
+    rated: number;
+    /** Sessions with a vibe check / sessions in the window. */
+    coverage: number;
+  }>;
+  /** Local clock hour each session started, for sessions that recorded one. */
+  startHours: number[];
 }
 
 /** Fraction of 1RM at which a set is being treated as strength work. Passed in
  *  by the rule from the knowledge pack — signals never hold a threshold. */
 export interface TrainingOptions {
   heavyFraction: number;
+  /** RPE at or above which a conditioning bout reads as all-out. */
+  allOutRpe: number;
   strengthRepMax: number;
   hypertrophyReps: [number, number];
   /** RPE at or above which a set reads as taken near failure. */
@@ -253,6 +313,29 @@ export function measureTraining(
   let mixed = 0;
   let conditioningFirst = 0;
 
+  // Conditioning: intervals plus every other metric the block recorded.
+  let bouts = 0;
+  let boutSeconds = 0;
+  let allOutBouts = 0;
+  let allOutSeconds = 0;
+  let boutRpeSum = 0;
+  let boutRpeCount = 0;
+  const boutSessions = new Set<string>();
+  let condSets = 0;
+  let condSeconds = 0;
+  let condDistance = 0;
+  let condCalories = 0;
+  let condBare = 0;
+
+  // Vibe check — symptoms only.
+  let sleepSum = 0;
+  let energySum = 0;
+  let sorenessSum = 0;
+  let rated = 0;
+  let lowSleep = 0;
+  let highSoreness = 0;
+  const startHours: number[] = [];
+
   // Highest estimated 1RM in the window, whichever section it was logged in.
   // Deliberately not called "the main lift" — see the note on the field.
   let topMovement: string | null = null;
@@ -281,9 +364,37 @@ export function measureTraining(
           for (const set of item.sets ?? []) {
             const a = set.actual;
             if (!a.completed) continue;
-            if (isConditioning && !sawConditioning) {
-              sawConditioning = true;
-              firstConditioningIdx = idx;
+            if (isConditioning) {
+              if (!sawConditioning) {
+                sawConditioning = true;
+                firstConditioningIdx = idx;
+              }
+              condSets += 1;
+              if (a.time != null) condSeconds += a.time;
+              if (a.distance != null) condDistance += a.distance;
+              if (a.calories != null) condCalories += a.calories;
+              if (a.time == null && a.distance == null && a.calories == null && a.reps == null) {
+                condBare += 1;
+              }
+              // A BOUT is a timed conditioning set short enough to be an
+              // interval rather than a steady-state block. The upper bound is
+              // this file's, not the corpus's — Galpin is explicit that bout
+              // LENGTH does not matter, only the intensity reached — but a
+              // 45-minute ride logged as one timed set is plainly not a bout,
+              // and without a bound it would be counted as one.
+              if (a.time != null && a.time > 0 && a.time <= MAX_BOUT_SECONDS) {
+                bouts += 1;
+                boutSeconds += a.time;
+                boutSessions.add(log.id);
+                if (a.rpe != null) {
+                  boutRpeSum += a.rpe;
+                  boutRpeCount += 1;
+                  if (a.rpe >= opts.allOutRpe) {
+                    allOutBouts += 1;
+                    allOutSeconds += a.time;
+                  }
+                }
+              }
             }
             if (isResistance) {
               if (!sawResistance) {
@@ -341,6 +452,26 @@ export function measureTraining(
     if (sawResistance && sawConditioning) {
       mixed += 1;
       if (firstConditioningIdx < firstResistanceIdx) conditioningFirst += 1;
+    }
+
+    const vibe = log.data?.session?.vibe;
+    if (vibe) {
+      rated += 1;
+      sleepSum += vibe.sleep;
+      energySum += vibe.energy;
+      sorenessSum += vibe.soreness;
+      // 1-5 scales. Two or below on sleep, four or above on soreness, are the
+      // second-from-worst points on the athlete's OWN scale — the same shape of
+      // read as `arrivingHungry`, and for the same reason: no external norm is
+      // involved, so no citation is needed to state it.
+      if (vibe.sleep <= 2) lowSleep += 1;
+      if (vibe.soreness >= 4) highSoreness += 1;
+    }
+    if (log.started_at) {
+      // LOCAL clock hour: the question is "did you train before breakfast?",
+      // which is a wall-clock question, and meal_logs already stores wall clock.
+      const d = new Date(log.started_at);
+      startHours.push(d.getHours() + d.getMinutes() / 60);
     }
   }
 
@@ -432,6 +563,42 @@ export function measureTraining(
     mixedSessions: mixed,
     mixedConditioningFirst: conditioningFirst,
     longestConsecutiveDays: longest,
+    intervals: measured(
+      {
+        bouts,
+        boutMinutes: boutSeconds / 60,
+        allOutBouts,
+        allOutMinutes: allOutSeconds / 60,
+        meanBoutSeconds: bouts ? boutSeconds / bouts : 0,
+        meanRpe: boutRpeCount ? boutRpeSum / boutRpeCount : null,
+        sessions: boutSessions.size,
+      },
+      bouts,
+      6,
+      `only ${bouts} timed conditioning bouts in the last ${windowDays} days`,
+    ),
+    conditioning: {
+      sets: condSets,
+      minutes: condSeconds / 60,
+      distanceMeters: condDistance,
+      calories: condCalories,
+      bareSets: condBare,
+    },
+    readiness: measured(
+      {
+        meanSleep: rated ? sleepSum / rated : 0,
+        meanEnergy: rated ? energySum / rated : 0,
+        meanSoreness: rated ? sorenessSum / rated : 0,
+        lowSleepSessions: lowSleep,
+        highSorenessSessions: highSoreness,
+        rated,
+        coverage: logs.length ? rated / logs.length : 0,
+      },
+      rated,
+      6,
+      `only ${rated} of ${logs.length} sessions recorded a vibe check`,
+    ),
+    startHours,
   };
 }
 
@@ -534,6 +701,106 @@ export interface NutritionSignals {
   /** Training days in the window that recorded any intake after the session. */
   trainingDays: number;
   trainingDaysFuelled: number;
+  /** What the free-text notes named. Descriptive only — see ./mealText.ts. */
+  text: MealTextSummary;
+  /**
+   * Meals whose `tag_mix` was actually filled in, and the mean protein share
+   * across those. A COMPOSITION the athlete dragged sliders to set, never a
+   * measurement — no gram follows from it, and no rule may treat it as one.
+   */
+  mixCoverage: number;
+  meanProteinMixPct: number | null;
+}
+
+/**
+ * Where sessions sit relative to meals — the one question neither log can answer
+ * alone.
+ *
+ * `workout_logs.started_at` is an absolute instant and `meal_logs.eaten_time` is
+ * a wall-clock reading, so this compares them in LOCAL clock hours. That is the
+ * right frame and not merely the convenient one: migration 0032 chose wall clock
+ * for meals precisely because "do I eat late?" and "did I train before
+ * breakfast?" are wall-clock questions, and converting either side to an instant
+ * would answer a different one.
+ *
+ * Sessions with no `started_at` are skipped rather than assumed — roughly a
+ * fifth of real rows have none, and placing them at noon would invent the very
+ * fact being measured.
+ */
+export interface FuelTimingSignals {
+  /** Training days where BOTH a start time and that day's meals are known. */
+  pairedDays: number;
+  /** Of those, days with no intake logged before the session started. */
+  unfedSessions: number;
+  /** Unfed sessions that also ran past the duration the evidence cares about. */
+  unfedLongSessions: number;
+  /** Mean hours from the last pre-session intake to the session start. */
+  meanHoursSincePreMeal: number | null;
+  /** Mean hours from session start to the next intake after it. */
+  meanHoursToPostMeal: number | null;
+  /** Days where nothing at all was logged after the session. */
+  daysWithNoPostMeal: number;
+  meanStartHour: number | null;
+}
+
+export function measureFuelTiming(
+  allLogs: WorkoutLog[],
+  allMeals: MealLog[],
+  longSessionMinutes: number,
+  today: Date = new Date(),
+  windowDays: number = COACH_WINDOW_DAYS,
+): FuelTimingSignals {
+  const start = windowStart(today, windowDays);
+  const logs = completedLogs(allLogs).filter(
+    (l) => l.log_date.slice(0, 10) >= start && l.started_at != null,
+  );
+  const mealsByDay = new Map<string, number[]>();
+  for (const m of allMeals) {
+    if (m.log_date < start) continue;
+    mealsByDay.set(m.log_date, [...(mealsByDay.get(m.log_date) ?? []), toHours(m.eaten_time)]);
+  }
+
+  let paired = 0;
+  let unfed = 0;
+  let unfedLong = 0;
+  let noPost = 0;
+  const preGaps: number[] = [];
+  const postGaps: number[] = [];
+  const starts: number[] = [];
+
+  for (const log of logs) {
+    const day = log.log_date.slice(0, 10);
+    const hours = mealsByDay.get(day);
+    const d = new Date(log.started_at as string);
+    const startHour = d.getHours() + d.getMinutes() / 60;
+    starts.push(startHour);
+    // No meals logged that day is absent data, not a fasted session. Only a day
+    // the athlete DID log meals can tell us whether they ate before training.
+    if (!hours || hours.length === 0) continue;
+    paired += 1;
+
+    const before = hours.filter((h) => h <= startHour);
+    const after = hours.filter((h) => h > startHour);
+    if (before.length === 0) {
+      unfed += 1;
+      if ((log.total_seconds ?? 0) / 60 >= longSessionMinutes) unfedLong += 1;
+    } else {
+      preGaps.push(startHour - Math.max(...before));
+    }
+    if (after.length === 0) noPost += 1;
+    else postGaps.push(Math.min(...after) - startHour);
+  }
+
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  return {
+    pairedDays: paired,
+    unfedSessions: unfed,
+    unfedLongSessions: unfedLong,
+    meanHoursSincePreMeal: mean(preGaps),
+    meanHoursToPostMeal: mean(postGaps),
+    daysWithNoPostMeal: noPost,
+    meanStartHour: mean(starts),
+  };
 }
 
 export function measureNutrition(
@@ -566,6 +833,7 @@ export function measureNutrition(
   const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
   const realMeals = meals.filter((x) => x.kind === 'meal');
+  const mixed = meals.filter((x) => x.tag_mix != null && Object.keys(x.tag_mix).length > 0);
   const proteinMeals = realMeals.filter((x) => x.tags.includes('protein'));
   const proteinAll = meals.filter((x) => x.tags.includes('protein'));
 
@@ -612,5 +880,10 @@ export function measureNutrition(
     ),
     trainingDays: withMeals.filter((d) => trainedDays.has(d.date)).length,
     trainingDaysFuelled: fuelled,
+    text: summarizeMealText(meals),
+    mixCoverage: meals.length ? mixed.length / meals.length : 0,
+    meanProteinMixPct: mixed.length
+      ? mixed.reduce((sum, m) => sum + (Number(m.tag_mix?.protein) || 0), 0) / mixed.length
+      : null,
   };
 }

@@ -6,7 +6,7 @@
 // from becoming a weekly recital of the same four complaints — see the cooldown
 // in ../evaluate.ts for the other half of that problem.
 
-import { TRAINING } from '@/lib/coach/knowledge';
+import { READINESS, TRAINING } from '@/lib/coach/knowledge';
 import type { Finding } from '@/lib/coach/types';
 import type { TrainingSignals } from '@/lib/coach/signals';
 import type { UserStats } from '@/lib/types';
@@ -300,11 +300,15 @@ export function intervalOrdering(
  */
 export function consecutiveDays(
   s: TrainingSignals,
-  _stats: UserStats | null,
+  stats: UserStats | null,
   periodKey: string,
 ): Finding | null {
   const run = TRAINING.overreachingRun.value;
   if (s.longestConsecutiveDays < run) return null;
+  // Defer when the symptom channel is also speaking: `readinessAndLoad` says
+  // the same thing with two signals instead of one, and emitting both would put
+  // the weaker version of a finding next to the stronger one.
+  if (readinessAndLoad(s, stats, periodKey) != null) return null;
 
   return {
     ruleId: 'training.recovery.consecutive-days',
@@ -347,7 +351,113 @@ export function frequencyBelowTarget(
   };
 }
 
+/**
+ * Interval work being done, but not hard enough to be the thing it looks like.
+ *
+ * This is the rule the minute-counting version could not reach. A log full of
+ * "Ski-Erg Intervals" reads as VO2max work; the RPE on those bouts says
+ * otherwise, and a coach that counted only the minutes would congratulate the
+ * athlete for training they are not actually getting.
+ *
+ * Fires only when bouts EXIST — the point is intensity, not absence. An athlete
+ * doing no intervals at all is a different finding and, on this corpus, not
+ * obviously a problem: Galpin puts the requirement as low as one 90-second bout
+ * a week.
+ */
+export function intervalsNotAllOut(
+  s: TrainingSignals,
+  stats: UserStats | null,
+  periodKey: string,
+): Finding | null {
+  const iv = s.intervals;
+  if (iv.sufficiency === 'insufficient') return null;
+  const { bouts, boutMinutes, allOutBouts, allOutMinutes, meanBoutSeconds, meanRpe } = iv.value;
+  if (bouts === 0 || meanRpe == null) return null;
+  const [floorMin] = TRAINING.vo2Weekly.value;
+  const perWeek = allOutMinutes / s.weeks;
+  if (perWeek >= floorMin) return null;
+  const mark = TRAINING.vo2AllOut.value;
+  if (meanRpe >= mark) return null;
+
+  return {
+    ruleId: 'training.endurance.intervals-not-all-out',
+    periodKey,
+    tldr: `Intervals average RPE ${round(meanRpe, 1)}, not all-out`,
+    action: `Take ${TRAINING.vo2Bouts.value[0]}–${TRAINING.vo2Bouts.value[1]} bouts to genuinely maximal effort, resting until you can breathe through your nose again.`,
+    body: `You logged ${bouts} timed conditioning bouts averaging ${Math.round(meanBoutSeconds)}s over the last ${s.windowDays} days — ${round(boutMinutes, 1)} minutes of interval work — but ${allOutBouts === 0 ? 'none of them reached' : `only ${allOutBouts} reached`} RPE ${mark}. The prescription is ${floorMin}–${TRAINING.vo2Weekly.value[1]} minutes a week, and it is about intensity rather than volume: Galpin's bar is "${TRAINING.vo2AllOut.quote}". He is equally explicit that the bout LENGTH does not matter — your ${Math.round(meanBoutSeconds)}-second format is fine — only the effort reached does. RPE ${mark} as the all-out mark is this app's translation; he speaks in heart rate, so a session that logs hr_max is the better read.`,
+    drift: round(Math.min(1, (mark - meanRpe) / 3), 2),
+    confidence: iv.sufficiency === 'ok' ? 0.6 : 0.4,
+    sufficiency: iv.sufficiency,
+    claims: [TRAINING.vo2Weekly, TRAINING.vo2AllOut, TRAINING.vo2Bouts],
+    observed: {
+      bouts,
+      boutMinutes: round(boutMinutes, 1),
+      allOutBouts,
+      allOutMinutesPerWeek: round(perWeek, 1),
+      meanBoutSeconds: Math.round(meanBoutSeconds),
+      meanRpe: round(meanRpe, 1),
+    },
+  };
+}
+
+/**
+ * Symptoms and load pointing the same way.
+ *
+ * DELIBERATELY WEAK ON ITS OWN. Galpin wants three concurrent signals —
+ * performance, a biomarker, and symptoms — before anyone says overreaching. The
+ * vibe check is the symptom channel and training density is a load proxy; there
+ * is no biomarker here unless Garmin is connected. So this fires only when BOTH
+ * available channels agree, tops out at moderate confidence, and says in the
+ * body which signal is missing. It supersedes the bare consecutive-days read
+ * when it fires, which is why that rule defers to it.
+ */
+export function readinessAndLoad(
+  s: TrainingSignals,
+  _stats: UserStats | null,
+  periodKey: string,
+): Finding | null {
+  const r = s.readiness;
+  if (r.sufficiency === 'insufficient') return null;
+  const { meanSleep, meanEnergy, meanSoreness, lowSleepSessions, highSorenessSessions, rated } =
+    r.value;
+
+  // Symptom channel: the athlete's own scale, at its second-worst points.
+  const symptom = lowSleepSessions + highSorenessSessions;
+  if (symptom < 2) return null;
+  // Load channel: a run of consecutive training days, or a week above their own
+  // stated frequency. Without one of these there is only a symptom, and a
+  // symptom alone is a mood, not a training signal.
+  const loadFlag =
+    s.longestConsecutiveDays >= TRAINING.overreachingRun.value - 1 ||
+    s.sessionsPerWeek.value >= 5;
+  if (!loadFlag) return null;
+
+  return {
+    ruleId: 'training.recovery.symptoms-and-load',
+    periodKey,
+    tldr: `${symptom} sessions on poor sleep or high soreness`,
+    action: `Keep the session but drop it to RPE ${READINESS.respondLighter.value} — lighter, not cancelled.`,
+    body: `Of the ${rated} sessions that recorded a vibe check, ${lowSleepSessions} started on sleep rated 2 or worse and ${highSorenessSessions} on soreness rated 4 or more; your averages are sleep ${round(meanSleep, 1)}, energy ${round(meanEnergy, 1)}, soreness ${round(meanSoreness, 1)} out of 5. Alongside that you trained ${s.longestConsecutiveDays} days in a row. Galpin wants three signals before calling this overreaching — "${TRAINING.overreachingRun.quote.slice(0, 60)}…" is only the load half, and the missing one is a biomarker this app cannot see without a wearable. His response to a bad day is not a cancelled session: "${READINESS.respondLighter.quote}".`,
+    drift: round(Math.min(1, symptom / Math.max(1, rated)), 2),
+    confidence: 0.45,
+    sufficiency: r.sufficiency,
+    claims: [READINESS.threeSignals, READINESS.respondLighter],
+    observed: {
+      lowSleepSessions,
+      highSorenessSessions,
+      ratedSessions: rated,
+      vibeCoverage: round(r.value.coverage, 2),
+      meanSleep: round(meanSleep, 1),
+      meanEnergy: round(meanEnergy, 1),
+      meanSoreness: round(meanSoreness, 1),
+      longestConsecutiveDays: s.longestConsecutiveDays,
+    },
+  };
+}
+
 export const TRAINING_RULES = [
+  intervalsNotAllOut,
+  readinessAndLoad,
   loadedTooLight,
   hypertrophyEffortLow,
   heavyRestTooShort,
