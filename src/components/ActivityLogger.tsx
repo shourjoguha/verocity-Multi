@@ -3,12 +3,26 @@ import { supabase } from '@/lib/supabase';
 import { createLog } from '@/lib/queries';
 import { track } from '@/lib/analytics';
 import { ACTIVITY_TAGS, ACTIVITY_TYPES, METRICS } from '@/app.config';
-import type { LogDocument } from '@/lib/types';
+import type { LogDocument, VibeCheck } from '@/lib/types';
 import { Button, LoadingScreen } from '@/components/ui/primitives';
+import { Disclosure } from '@/components/ui/Disclosure';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+// Post-session heart rate, clamped to the same range as HeartRate.tsx.
+const MIN_BPM = 30;
+const MAX_BPM = 230;
+const clampBpm = (n: number) => Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(n)));
+
+const VIBE_SCALE = [1, 2, 3, 4, 5];
+const VIBE_FIELDS: { key: keyof VibeCheck; label: string }[] = [
+  { key: 'sleep', label: 'Sleep' },
+  { key: 'energy', label: 'Energy' },
+  { key: 'soreness', label: 'Soreness' },
+];
+type PartialVibe = { [K in keyof VibeCheck]: number | null };
 
 // Build a contract-faithful log: a single conditioning movement carrying the
 // session's distance/time, so the activity shows up in stats like any session.
@@ -65,6 +79,12 @@ export default function ActivityLogger() {
   const [distance, setDistance] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
+  // Optional readiness + HR, mirroring what workouts capture (VibeCheck on
+  // doc.session.vibe; hr_avg / hr_max columns). Each vibe field is nullable so
+  // an untouched section attaches nothing.
+  const [vibe, setVibe] = useState<PartialVibe>({ sleep: null, energy: null, soreness: null });
+  const [hrAvg, setHrAvg] = useState('');
+  const [hrMax, setHrMax] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -91,6 +111,16 @@ export default function ActivityLogger() {
     setError(null);
     const durationSec = Math.round((parseFloat(minutes) || 0) * 60);
     const distanceM = Math.round(parseFloat(distance) || 0);
+    const doc = buildActivityDoc(type.trim(), durationSec, distanceM);
+    // Attach the vibe check only if the user set at least one field; unset
+    // fields fall back to the neutral 3 the workout logger also defaults to.
+    if (vibe.sleep != null || vibe.energy != null || vibe.soreness != null) {
+      doc.session = {
+        vibe: { sleep: vibe.sleep ?? 3, energy: vibe.energy ?? 3, soreness: vibe.soreness ?? 3 },
+      };
+    }
+    const hr_avg = hrAvg.trim() === '' ? null : clampBpm(Number(hrAvg));
+    const hr_max = hrMax.trim() === '' ? null : clampBpm(Number(hrMax));
     const created = await createLog({
       log_date: date,
       status: 'done',
@@ -98,9 +128,11 @@ export default function ActivityLogger() {
       total_seconds: durationSec || null,
       started_at: null,
       ended_at: new Date().toISOString(),
+      hr_avg,
+      hr_max,
       tags,
       notes: notes.trim() || null,
-      data: buildActivityDoc(type.trim(), durationSec, distanceM),
+      data: doc,
     });
     setSaving(false);
     if (!created) {
@@ -204,6 +236,75 @@ export default function ActivityLogger() {
         rows={3}
         className="mb-5 w-full border border-border bg-surface p-3 text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
       />
+
+      <div className="mb-5">
+        <Disclosure title="Readiness & heart rate" headerRight="optional">
+          <div className="flex flex-col gap-3">
+            {VIBE_FIELDS.map(({ key, label }) => (
+              <div
+                key={key}
+                role="radiogroup"
+                aria-label={label}
+                className="flex items-center justify-between gap-3"
+              >
+                <span className="text-sm text-subtle">{label}</span>
+                <div className="flex gap-1">
+                  {VIBE_SCALE.map((n) => (
+                    // Glyph stays h-9 w-9 (36px); the -my-2 h-11 w-11 wrapper
+                    // keeps the 44px tap target without growing the row.
+                    <button
+                      key={n}
+                      type="button"
+                      role="radio"
+                      aria-checked={vibe[key] === n}
+                      aria-label={`${label} ${n}`}
+                      onClick={() => setVibe((v) => ({ ...v, [key]: v[key] === n ? null : n }))}
+                      className="-my-2 flex h-11 w-11 items-center justify-center"
+                    >
+                      <span
+                        aria-hidden
+                        className={`flex h-9 w-9 items-center justify-center border text-sm tabular-nums ${
+                          vibe[key] === n
+                            ? 'border-fg bg-fg text-bg'
+                            : 'border-border text-muted hover:text-fg'
+                        }`}
+                      >
+                        {n}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-2 block t-control text-muted">Avg HR (bpm)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={hrAvg}
+                onChange={(e) => setHrAvg(e.target.value)}
+                placeholder="140"
+                aria-label="Average heart rate (BPM)"
+                className="min-h-11 w-full border border-border bg-surface px-3 text-base tabular-nums text-fg outline-none placeholder:text-muted focus:border-subtle"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block t-control text-muted">Max HR (bpm)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={hrMax}
+                onChange={(e) => setHrMax(e.target.value)}
+                placeholder="175"
+                aria-label="Max heart rate (BPM)"
+                className="min-h-11 w-full border border-border bg-surface px-3 text-base tabular-nums text-fg outline-none placeholder:text-muted focus:border-subtle"
+              />
+            </div>
+          </div>
+        </Disclosure>
+      </div>
 
       {error ? <p className="mb-3 text-sm text-accent">{error}</p> : null}
 
