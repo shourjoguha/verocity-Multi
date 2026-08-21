@@ -12,16 +12,18 @@ import {
 import {
   measureFuelTiming,
   measureGoals,
+  rpeWasRated,
   measureNutrition,
   measureTraining,
 } from '@/lib/coach/signals';
 import { CLAIMS, KNOWLEDGE_PACK_VERSION, NUTRITION, SOURCES, TRAINING } from '@/lib/coach/knowledge';
+import { RPE, RPE_LADDER } from '@/app.config';
 import {
   carbSourceConcentration,
   carbTimingWindow,
   longSessionUnfed,
 } from '@/lib/coach/rules/nutrition';
-import { readinessAndLoad } from '@/lib/coach/rules/training';
+import { readinessAndLoad, rpeCalibration } from '@/lib/coach/rules/training';
 import type { MealLog, Recommendation, UserStats, WorkoutLog } from '@/lib/types';
 
 // Anchored one day after the newest fixture row so the 28-day window is stable.
@@ -140,6 +142,62 @@ describe('signals', () => {
     expect(n.lastMealHour.value).toBeGreaterThan(n.firstMealHour.value);
     expect(n.meanHungerBefore.value).toBeGreaterThanOrEqual(1);
     expect(n.meanHungerBefore.value).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('RPE is a prefill before it is a measurement', () => {
+  const training = measureTraining(LOGS, trainingOpts, TODAY);
+
+  it('does not mistake the logger default for a rating', () => {
+    // RPE.default is 7 and the logger fills it in, so 72.6% of sets in this real
+    // log read exactly 7.0 whether or not anyone rated them. A session that
+    // never moved the dial is missing data, not easy training.
+    const allDefault = LOGS.find((l) => !rpeWasRated(l));
+    expect(allDefault, 'fixture should contain an unrated session').toBeTruthy();
+    expect(training.hypertrophyEffort.value.unratedSessions).toBeGreaterThan(0);
+    expect(training.rpeCalibration.value.defaultShare).toBeGreaterThan(0.5);
+  });
+
+  it('counts a session that moved the dial even once as rated', () => {
+    const rated = LOGS.find((l) => rpeWasRated(l));
+    expect(rated).toBeTruthy();
+    expect(training.rpeCalibration.value.ratedSessions).toBeGreaterThan(0);
+  });
+
+  it('judges only the last movement to hit each muscle group', () => {
+    // Stacking several movements on one region forces the earlier ones to be
+    // held back so the later ones stay performable. The unit is now one reading
+    // per region per rated session, so it must be far smaller than the raw set
+    // count while still being enough to reason from.
+    const e = training.hypertrophyEffort.value;
+    expect(e.total).toBeGreaterThan(10);
+    expect(e.total).toBeLessThan(training.repBands.value.hypertrophy);
+  });
+
+  it('answers whether the RPE is low or merely unlogged, using soreness', () => {
+    const f = rpeCalibration(training, '2026-W34');
+    expect(f).toBeTruthy();
+    const o = f!.observed;
+    expect(o.sorenessAfterRated).not.toBeNull();
+    expect(o.sorenessAfterUnrated).not.toBeNull();
+    // On this athlete the rated sessions are followed by MORE soreness, which
+    // means the dial is honest. The rule must report that direction rather than
+    // collapsing it into "about the same" — the bug the first version had.
+    expect(o.sorenessAfterRated as number).toBeGreaterThan(o.sorenessAfterUnrated as number);
+    expect(f!.body).toContain('tracking honestly');
+    expect(f!.body).not.toContain('cannot currently be read');
+  });
+
+  it('never tells this athlete to chase RPE 9', () => {
+    // Their own calibration: 9 is almost-failure and deliberately avoided.
+    // Chasing it would be coaching against their stated practice.
+    for (const f of runCoach(base).findings) {
+      if (f.ruleId.startsWith('training.hypertrophy')) {
+        expect(f.action, f.ruleId).not.toMatch(/RPE 9|RPE 9\.5|RPE 10/);
+      }
+    }
+    expect(RPE_LADDER.nearFailure).toBeLessThan(RPE_LADDER.allOut);
+    expect(RPE.default).toBeLessThan(RPE_LADDER.nearFailure);
   });
 });
 
@@ -306,17 +364,15 @@ describe('runCoach', () => {
   });
 
   it('finds the effort problem the rep range alone would hide', () => {
-    // The reps look correct — 125 sets land in 8-15 — but they average RPE 7.2,
-    // roughly three reps in reserve. This is the finding that only exists
-    // because RPE is read, and it is why the rep-band count is not enough.
     const f = runCoach(base).findings.find(
       (x) => x.ruleId === 'training.hypertrophy.effort-low',
     );
     expect(f).toBeTruthy();
-    expect(f!.observed.meanRpe).toBeLessThan(8);
-    expect(f!.observed.hypertrophySets).toBeGreaterThan(50);
-    // The RPE-to-failure translation is ours; the body must not attribute it.
-    expect(f!.body).toContain("this app's translation");
+    expect(f!.observed.meanTerminalRpe).toBeLessThan(RPE_LADDER.nearFailure);
+    // Judged against the athlete's own ladder — 8 is their last good rep — and
+    // NOT 9, which they avoid by design.
+    expect(f!.observed.mark).toBe(8);
+    expect(f!.body).toContain('not 9');
   });
 
   it('finds under-loading now that it reads every resistance section', () => {

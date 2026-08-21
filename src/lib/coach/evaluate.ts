@@ -25,7 +25,7 @@ import {
   measureTraining,
 } from '@/lib/coach/signals';
 import { NUTRITION as N, TRAINING as T } from '@/lib/coach/knowledge';
-import { TRAINING_RULES } from '@/lib/coach/rules/training';
+import { TRAINING_RULES, rpeCalibration } from '@/lib/coach/rules/training';
 import { goalDrift } from '@/lib/coach/rules/goals';
 import {
   arrivingHungry,
@@ -37,6 +37,7 @@ import {
 } from '@/lib/coach/rules/nutrition';
 import type { EvidencePayload, Finding } from '@/lib/coach/types';
 import { SOURCES, CLAIMS } from '@/lib/coach/knowledge';
+import { RPE_LADDER } from '@/app.config';
 import { unweightedRepKg } from '@/lib/userStats';
 import type { OverrideMap } from '@/lib/movementTaxonomy';
 import type { MealLog, Recommendation, UserStats, WorkoutLog, Plan } from '@/lib/types';
@@ -197,8 +198,8 @@ export function runCoach(input: CoachInput): {
       heavyFraction: T.strengthIntensity.value,
       strengthRepMax: T.strengthReps.value,
       hypertrophyReps: T.hypertrophyReps.value,
-      nearFailureRpe: T.hypertrophyProximityToFailure.value,
-      allOutRpe: T.vo2AllOut.value,
+      nearFailureRpe: RPE_LADDER.nearFailure,
+      allOutRpe: RPE_LADDER.allOut,
       heavyRestSeconds: T.strengthRest.value,
       overrides: input.overrides,
       // Prices unweighted work against the athlete's own mass rather than the
@@ -226,6 +227,8 @@ export function runCoach(input: CoachInput): {
   }
   const g = goalDrift(goals, training, weekKey);
   if (g) findings.push(g);
+  const cal = rpeCalibration(training, weekKey);
+  if (cal) findings.push(cal);
 
   // Monthly cadence for the standing protein target — it restates a number that
   // only moves when bodyweight does. Everything else is weekly.

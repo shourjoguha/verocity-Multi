@@ -637,6 +637,23 @@ animated transform. One owner, one place to change.
   output could not be reproduced, could not carry a citation, and was fitness-only
   by its own system prompt. Claims a model may make are still bounded in
   `lib/deepGovernors.ts` for the `DeepEnrichment.tsx` surface.
+- **RPE is a prefill before it is a measurement.** `RPE.default` is 7 and the
+  logger fills it in, so 72.6% of sets in a real log read exactly 7.0 whether or
+  not anyone rated them. Sessions that never move the dial are excluded as
+  MISSING data (`rpeWasRated`), never counted as easy training, and
+  `training.effort.rpe-calibration` answers the athlete's own question — is the
+  RPE genuinely low, or unlogged? — by comparing soreness on the session AFTER a
+  rated one against after an unrated one, since soreness cannot be left at a
+  default.
+- **Effort is judged fatigue-aware.** Stacking several movements on one muscle
+  region forces the earlier ones to be held back so the later ones stay
+  performable, so only the LAST movement to load each region in a session is
+  judged. Averaging every set penalised correct programming.
+- **The RPE ladder is operator calibration, not evidence** (`RPE_LADDER` in
+  `app.config.ts`, deliberately not in the knowledge pack): 7 is three reps in
+  reserve, 8 is the last good rep, 9 is almost-failure and avoided by design. So
+  8 is the bar for hypertrophy work and 9 is never a target — the higher mark
+  applies only to timed conditioning bouts, where all-out is the point.
 - **The UI** is `CoachView.tsx` at `/app/coach`.
 - **parse-plan is still not built.** `lib/planTemplate.ts` gives the user a
   copyable authoring prompt instead, so the strict local parser in `PlanUpload`
