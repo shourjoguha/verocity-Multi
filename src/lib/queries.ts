@@ -610,8 +610,16 @@ export async function upsertCoachFindings(rows: CoachRecInput[]): Promise<boolea
   if (!user) return false;
   const { error } = await supabase.from('recommendations').upsert(
     rows.map((r) => ({ ...r, owner_user_id: user.id, status: 'open' })),
+    // The conflict target is `recommendations_rule_period_idx`, which migration
+    // 0038 had to make NON-PARTIAL: PostgREST can only send a column list here,
+    // and Postgres refuses to infer a partial index without repeating its
+    // predicate (42P10). Do not re-add a `where` clause to that index.
     { onConflict: 'owner_user_id,rule_id,period_key', ignoreDuplicates: false },
   );
+  // Log the real Postgres error. Returning a bare boolean is what let 42P10
+  // reach the user as an unexplained "Check-in failed" for every run between
+  // 0036 and 0038, with nothing anywhere saying why.
+  if (error) console.error('upsertCoachFindings failed', error);
   return !error;
 }
 
