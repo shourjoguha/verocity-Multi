@@ -50,7 +50,7 @@ import { activeSessionOf } from '@/lib/activeSession';
 import { typeFromLabel } from '@/lib/timeline';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { DemoIconButton, MovementDemoSheet } from '@/components/MovementDemo';
-import { lastPerformance } from '@/lib/lastPerformance';
+import { lastPerformance, plannedReps } from '@/lib/lastPerformance';
 import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
@@ -361,10 +361,21 @@ export default function Logger() {
           for (const item of group.items) {
             const last = lastPerformance(recent, item.movement);
             if (!last) continue;
-            item.sets = item.sets.map((set) => ({
-              ...set,
-              actual: { ...set.actual, weight: last.weight, reps: last.reps, prefilled: true },
-            }));
+            item.sets = item.sets.map((set) => {
+              // Weight prefills from last session; reps come from the target
+              // when the prescription states one, so a programmed rep increase
+              // is not overwritten by what was lifted last time.
+              const target = plannedReps(set.planned, item.primaryMetric);
+              return {
+                ...set,
+                actual: {
+                  ...set.actual,
+                  weight: last.weight,
+                  reps: target ?? last.reps,
+                  prefilled: true,
+                },
+              };
+            });
           }
         }
       }
