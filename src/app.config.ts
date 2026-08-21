@@ -54,6 +54,39 @@ export const METRICS = {
 
 export const RPE = { min: 5, max: 10, step: 0.5, default: 7 } as const;
 
+/**
+ * What the points on the RPE dial mean to THIS athlete, and how much of the
+ * scale is actually in play.
+ *
+ * THIS IS OPERATOR CALIBRATION, NOT EVIDENCE. It does not belong in
+ * lib/coach/knowledge.ts, which holds external claims with a named speaker and a
+ * quote. The coaching literature talks in reps-in-reserve and in failure; this is
+ * the athlete's own reading of their own dial, and the coach must use it rather
+ * than impose a generic mapping:
+ *
+ *   7  three reps in reserve — "not too bad", ordinary working effort
+ *   8  the last GOOD rep — the practical near-failure mark
+ *   9  almost failure, half a rep — deliberately avoided on resistance work
+ *
+ * `nearFailure: 8` is therefore the bar a hypertrophy set should clear, and 9 is
+ * NOT a target to push toward: a rule that chased it would be pushing the athlete
+ * into something they consciously avoid. Conditioning is a separate case — an
+ * all-out interval is meant to be all-out — so `allOut` stays higher and is
+ * applied only to timed conditioning bouts.
+ *
+ * `default` above is the logger's PREFILL, and that is what makes this block
+ * load-bearing rather than decorative: a set left at 7 is indistinguishable from
+ * a set never rated, so anything reading effort must treat a session that never
+ * moved the dial as missing data rather than as easy work. See
+ * `rpeWasRated` in lib/coach/signals.ts.
+ */
+export const RPE_LADDER = {
+  nearFailure: 8,
+  allOut: 9,
+  /** Below this many distinct RPE values, a session never really used the dial. */
+  minDistinctPerSession: 2,
+} as const;
+
 // Timer tunables (seconds).
 export const TIMERS = {
   defaultRestSeconds: 120,

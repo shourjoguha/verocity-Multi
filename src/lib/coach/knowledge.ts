@@ -180,12 +180,12 @@ export const TRAINING = {
   hypertrophyProximityToFailure: claim({
     id: 'hypertrophy.proximityToFailure',
     statement: 'The rep range only works if the set is taken to or near muscular failure.',
-    value: 8.5,
+    value: 8,
     unit: 'RPE at which a set reads as near failure',
     source: 'galpinStrength',
     quote: 'The only caveat for hypertrophy is you have to take it to muscular failure',
     caveat:
-      'The RPE number is the APP\'S translation of "near failure", not Galpin\'s — he speaks in failure, not in RPE. RPE 8.5 is roughly 1-2 reps in reserve. He also notes the higher the rep range, the harder genuine failure is to reach: "It is very challenging to maintain the focus required at rep 27 to actually get sufficient failure by rep 30."',
+      'Galpin speaks in FAILURE, never in RPE. The number here is the athlete\'s own calibration of their own dial (RPE_LADDER in app.config.ts): 8 is the last good rep, 9 is almost-failure and deliberately avoided. So 8 is the bar a set should clear and 9 is NOT a target to chase — a rule pushing toward it would be pushing this athlete into something they consciously avoid. He also notes the higher the rep range, the harder genuine failure is to reach: "It is very challenging to maintain the focus required at rep 27 to actually get sufficient failure by rep 30."',
   }),
   strengthRest: claim({
     id: 'strength.rest',
