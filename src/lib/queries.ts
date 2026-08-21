@@ -216,6 +216,11 @@ export async function getAllLogs(client: SupabaseClient = supabase): Promise<Wor
   const { data } = await client
     .from('workout_logs')
     .select('*')
+    // Matches getRecentLogs / getLogsInRange. This was the one log query of the
+    // three that did not filter cancelled, which is how a discarded session
+    // still reached /app/you. Discard now deletes the row outright, so this is
+    // for rows cancelled before that change.
+    .neq('status', 'cancelled')
     .order('log_date', { ascending: true });
   return (data as WorkoutLog[]) ?? [];
 }

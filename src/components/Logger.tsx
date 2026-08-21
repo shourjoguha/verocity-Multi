@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import {
   bumpMovementSub,
   createLog,
+  deleteLog,
   dismissMovementSub,
   getActivePlan,
   getAllLogs,
@@ -585,14 +586,14 @@ export default function Logger() {
     setPicker(null);
   }
 
-  async function finish(next: 'done' | 'cancelled') {
-    setStatus(next);
+  async function finish() {
+    setStatus('done');
     stopwatch.pause();
     if (idRef.current) {
       const ok = await updateLog(idRef.current, {
         data: docRef.current,
         total_seconds: secondsRef.current,
-        status: next,
+        status: 'done',
         ended_at: new Date().toISOString(),
         log_date: logDateRef.current,
         tags: tagsRef.current,
@@ -602,13 +603,33 @@ export default function Logger() {
         return;
       }
     }
-    if (next === 'done') {
-      track('workout_completed', { duration_seconds: secondsRef.current, tags: tagsRef.current });
-    } else {
-      track('workout_cancelled', { duration_seconds: secondsRef.current });
+    track('workout_completed', { duration_seconds: secondsRef.current, tags: tagsRef.current });
+    window.location.href = idRef.current ? `/app/session?id=${idRef.current}` : '/app';
+  }
+
+  // Discard DELETES the row. It used to flip status to 'cancelled' and leave it
+  // behind, which surfaced the discarded session on /app/you and made the user
+  // delete it a second time by hand — `getAllLogs` was the one log query of the
+  // three that did not filter cancelled out. The confirm copy has always said
+  // "This deletes everything logged in this session"; now that is true.
+  async function discard() {
+    if (idRef.current) {
+      const ok = await deleteLog(idRef.current);
+      if (!ok) {
+        toast('Discard failed — check your connection and try again', 'error');
+        return;
+      }
     }
-    window.location.href =
-      next === 'done' && idRef.current ? `/app/session?id=${idRef.current}` : '/app';
+    // Only once the row is actually gone, and imperatively as well as through
+    // state: autosave and the unload warning read the REF, which React refreshes
+    // on the next render, so setStatus alone leaves a window in which a tick
+    // could fire against a row that no longer exists.
+    statusRef.current = 'cancelled';
+    setStatus('cancelled');
+    leavingRef.current = true;
+    stopwatch.pause();
+    track('workout_cancelled', { duration_seconds: secondsRef.current });
+    window.location.href = '/app';
   }
 
   // Leave the Logger WITHOUT ending the session: the row stays `in_progress`,
@@ -707,7 +728,7 @@ export default function Logger() {
                   minute: '2-digit',
                 })}
               </span>
-              . Starting a new one leaves it behind.
+              . Discarding it deletes everything logged in it, and can't be undone.
             </p>
             <div className="flex flex-col gap-2">
               <Button
@@ -721,16 +742,13 @@ export default function Logger() {
               <Button
                 variant="ghost"
                 onClick={async () => {
-                  const ok = await updateLog(blockedBy.log.id, {
-                    status: 'cancelled',
-                    ended_at: new Date().toISOString(),
-                  });
+                  const ok = await deleteLog(blockedBy.log.id);
                   if (!ok) {
-                    toast('Save failed — check your connection and try again', 'error');
+                    toast('Discard failed — check your connection and try again', 'error');
                     return;
                   }
                   // Re-enter through the front door: with the old session
-                  // cancelled the gate no longer trips, and the build path
+                  // deleted the gate no longer trips, and the build path
                   // runs exactly as it would have.
                   window.location.reload();
                 }}
@@ -1684,7 +1702,7 @@ export default function Logger() {
               {/* Finish owns the full width; discarding is a deliberate,
                   confirmed act rather than a button 12px from the one you
                   reach for with a shaking hand after a set. */}
-              <Button onClick={() => finish('done')} className="w-full">
+              <Button onClick={() => finish()} className="w-full">
                 Finish
                 <span className="ml-2 text-bg/45 tabular-nums">
                   {sessionSets.done}/{sessionSets.total}
@@ -1711,7 +1729,7 @@ export default function Logger() {
             <Button
               onClick={() => {
                 setConfirmDiscard(false);
-                finish('cancelled');
+                discard();
               }}
               className="w-full"
             >
