@@ -1,0 +1,38 @@
+-- Metrics v5: the HR-spread term stops crediting resistance training to the
+-- endurance axis.
+--
+-- WHAT CHANGED IN THE DEFINITION. `endurance` is (aerobic + density + spread).
+-- The `spread` term multiplied hr_max − hr_avg by the WHOLE SESSION's wall clock
+-- and by a 1.5x boost when a conditioning block was present, 1x when it was not.
+-- v5 gates it on a conditioning block existing and scales it by the endurance
+-- minutes inside that session instead.
+--
+-- WHY, measured on a real 60-day window rather than argued from the code:
+--   * 26% of the endurance metric was resistance-derived — 3.9% via `density`
+--     (which is deliberate and documented) and 22.3% via `spread` attributable
+--     to non-endurance session time (which was not).
+--   * Adding three pure lifting sessions raised endurance by 11.0%. Adding three
+--     pure rides raised strength by 0.0%. The leak ran one way only.
+--   * The term was inverted against its own intent. Resistance work is
+--     intermittent so hr_max − hr_avg is wide by construction; steady-state
+--     cardio is narrow by definition. Strength sessions averaged a 44 bpm spread
+--     against 24 bpm for endurance sessions, so the "interval signature" fired
+--     hardest on the session type least like an interval.
+--
+-- WHY THE ROWS MUST GO, per 0019's header: the radar scores each axis against
+-- the MEDIAN of the owner's own past values for that metric, so a baseline
+-- holding both v4 and v5 endurance yields a median describing neither, and
+-- nothing on screen would reveal it. This is the two-line migration in the shape
+-- 0019 prescribed, and it is idempotent — re-running it deletes nothing once
+-- every row carries the current version.
+--
+-- Snapshots rebuild themselves: ASPECT_BACKFILL_WEEKS reconstructs a quarter in
+-- one pass, which clears ASPECT_MIN_BASELINE immediately, and the span thickens
+-- a week at a time from there.
+--
+-- NOTE ON NUMBERING: 0036 is taken by the deterministic-coach branch
+-- (recommendations.rule_id + evidence). These two are independent; whichever
+-- lands second may need renumbering, but neither touches the other's tables.
+
+-- 5 = HR spread scaled by endurance minutes and gated on a conditioning block.
+delete from public.aspect_snapshots where metrics_version < 5;
