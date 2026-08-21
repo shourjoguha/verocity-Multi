@@ -21,6 +21,7 @@ import {
   ACWR,
   ENDURANCE,
   ASPECT_GOOD_BASELINE,
+  ASPECT_MAX_Z,
   ASPECT_MIN_BASELINE,
   ASPECT_OVERRIDE_DAYS,
   ASPECT_SCALE,
@@ -279,14 +280,51 @@ export function computeAspectMetrics(
 
     // 2. Heart-rate spread. hr_max − hr_avg is the interval signature: it is the
     // only thing separating a threshold session from steady state at the same
-    // average HR, and it was being discarded entirely. Scaled by session length
-    // so a wide spread across an hour outweighs the same spread across ten
-    // minutes, and boosted when a conditioning block was actually logged.
+    // average HR.
+    //
+    // SCALED BY ENDURANCE MINUTES, NOT SESSION MINUTES (metrics v5). It used to
+    // multiply by the whole session's wall clock, which made this the largest
+    // single channel by which resistance training scored as endurance: a
+    // 62-minute lift at 141/185 bpm donated its full hour to this axis. Measured
+    // on a real 60-day window, 22% of the endurance metric was spread
+    // attributable to non-endurance session time, and adding three pure lifting
+    // sessions raised endurance by 11% while adding three pure rides raised
+    // strength by 0%.
+    //
+    // The term was also INVERTED against its own intent. Resistance work is
+    // intermittent, so hr_max − hr_avg is wide by construction; steady-state
+    // cardio is narrow by definition. On the same real data, strength sessions
+    // averaged a 44 bpm spread against 24 bpm for endurance sessions — so an
+    // "interval signature" fired hardest on the session type least like an
+    // interval, and credited endurance for it.
+    //
+    // THE FIX IS AN ENDURANCE SHARE, and it took three attempts to get right.
+    //
+    // Gating on a conditioning block being present was wrong for the same reason
+    // a `primary`-section filter is wrong elsewhere: a section is a layout
+    // choice in the logger, not a statement about what the work was, and a rower
+    // interval is endurance work wherever it was typed.
+    //
+    // Scaling by endurance MINUTES instead was worse — it makes this term
+    // collinear with the aerobic term above. Both would scale by the same
+    // minutes, and since intensity + ratio is hr_avg/ref + (hr_max − hr_avg)/ref,
+    // the two sum to exactly 1 whenever hr_max is the reference. Endurance then
+    // stops depending on hr_avg at all: a 170 bpm session and a 120 bpm session
+    // of equal length score identically. Two existing tests caught it.
+    //
+    // So the scale stays the session's wall clock — which is what makes a wide
+    // spread across an hour outweigh the same spread across ten minutes — and is
+    // weighted by how much of that session was ENDURANCE work. A pure lifting
+    // session has an endurance share near zero and now contributes near zero
+    // spread; a pure rowing session has a share of 1 and is unchanged.
     if (log.hr_avg != null && log.hr_max != null && hrMaxRef > 0) {
       const ratio = clamp01((log.hr_max - log.hr_avg) / hrMaxRef);
       const sessionMinutes = (log.total_seconds ?? 0) / 60;
+      const one = summarizeBodyLoad([log], overrides);
+      const enduranceShare =
+        one.totalMinutes > 0 ? one.modalityMinutes.endurance / one.totalMinutes : 0;
       const boost = hasConditioningBlock(log) ? ENDURANCE.conditioningBoost : 1;
-      spread += ratio * sessionMinutes * boost;
+      spread += ratio * sessionMinutes * enduranceShare * boost;
     }
   }
   // 3. Dense strength work — high volume on short rests is conditioning.
@@ -373,9 +411,24 @@ export function scoreAgainstBaseline(
   // A perfectly flat history has no spread to judge against — mid-scale is the
   // honest answer, and it keeps the divide from producing Infinity/NaN.
   const z = dispersion > 0 ? (value - med) / dispersion : 0;
+  // A baseline can be thick in SAMPLES and still have nothing to say about this
+  // value. An athlete who logged no cardio at all for two months has an
+  // endurance history of [0.9, 1.0, 1.6, 1.8, …]; its MAD is ~0.75, so the first
+  // real 40-minute ride lands at z ≈ 34 and the logistic rounds to a flat 10.0.
+  // Six consecutive weeks of a real profile read exactly that way, which is the
+  // pinning the relative model was built to abolish, arriving through the
+  // dispersion term instead of through a clamp.
+  //
+  // The score is still returned — it is not wrong that the value is far above
+  // this athlete's own history, and `stays inside the scale for absurd inputs`
+  // depends on a number coming back. What is wrong is reading it as settled, so
+  // the axis is reported LOW CONFIDENCE and the chart draws it hollow, the same
+  // signal it already uses for a thin baseline.
+  const offBaseline = Math.abs(z) > ASPECT_MAX_Z;
   return {
     score: toScale(z / ASPECT_SOFTNESS.z),
-    confidence: samples.length < ASPECT_GOOD_BASELINE ? 'low' : 'ok',
+    confidence:
+      offBaseline || samples.length < ASPECT_GOOD_BASELINE ? 'low' : 'ok',
   };
 }
 

@@ -548,7 +548,10 @@ export const ENDURANCE = {
   // most consequential constant here.
   densityWeight: 0.6,
   // Multiplier on the HR-spread term when the session logged a conditioning
-  // block, where a wide spread is most clearly interval work.
+  // block, where a wide spread is most clearly interval work. Unchanged in v5 —
+  // what v5 changed is what the spread is scaled BY (endurance minutes rather
+  // than the whole session's wall clock), not this weighting between sessions
+  // that already carry endurance minutes.
   conditioningBoost: 1.5,
 } as const;
 
@@ -648,6 +651,22 @@ export const ASPECT_MIN_BASELINE = 4;
 // samples is the point at which a median is worth trusting without a caveat.
 export const ASPECT_GOOD_BASELINE = 26;
 
+// Beyond this many robust z-scores from the baseline median, an axis is scored
+// but reported LOW CONFIDENCE — the baseline is thick enough to use and still
+// contains nothing resembling the current value.
+//
+// Why it is needed at all: sample COUNT and sample SPREAD are different things.
+// An athlete who logged no cardio for two months has an endurance baseline of
+// near-identical near-zero values; its MAD is a fraction of a unit, so the first
+// real ride lands tens of z-scores out and the logistic rounds to a flat 10.0
+// for weeks. ASPECT_MIN_BASELINE cannot catch that — the samples are all there.
+//
+// 8 is chosen from the scale's own geometry rather than picked: z ≈ 4.3 already
+// prints 9.5 and z ≈ 6.9 prints 9.9, so anything past 8 is deep in the asymptote
+// where the score has stopped carrying information and is only reporting "off
+// the top of your history".
+export const ASPECT_MAX_Z = 8;
+
 // A check-in speaks for itself while it is fresh. Past this many days before the
 // window end, the derived score takes back over rather than letting a months-old
 // self-rating masquerade as current.
@@ -664,7 +683,10 @@ export const ASPECT_OVERRIDE_DAYS = 21;
 //   2 — scaled training volume for strength/power, three-component endurance
 //   3 — unweighted work priced against the owner's bodyweight; HR ceiling from age
 //   4 — volume scaled by each movement's range of motion (ROM)
-export const ASPECT_METRICS_VERSION = 4;
+//   5 — HR spread scaled by a session's ENDURANCE minutes rather than its whole
+//       wall clock, ending the channel by which resistance training scored as
+//       endurance
+export const ASPECT_METRICS_VERSION = 5;
 
 // Softness of the logistic that maps a robust z-score onto ASPECT_SCALE: ±1.5
 // lands roughly ±2.2 points. The logistic is asymptotic, so scores approach 1

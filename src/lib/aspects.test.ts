@@ -287,6 +287,36 @@ describe('computeAspectMetrics', () => {
     expect(metrics([session(185)]).endurance!).toBeGreaterThan(metrics([session(150)]).endurance!);
   });
 
+  it('does not credit a lifting session to endurance through the spread term', () => {
+    // Metrics v5. The spread used to scale by the WHOLE session's wall clock, so
+    // a 62-minute lift at 141/185 bpm donated its full hour to this axis. On a
+    // real 60-day window that was 22% of the endurance metric, and adding three
+    // pure lifting sessions raised endurance 11% while three rides raised
+    // strength 0%. Weighting by the session's endurance SHARE closes it.
+    const lifting = (hr_max: number) =>
+      log('2026-07-20', [{ movement: 'Back Squat', section: 'primary', sets: squatSets(6) }], {
+        hr_avg: 140,
+        hr_max,
+        total_seconds: 3600,
+      });
+    // Resistance work is intermittent, so hr_max − hr_avg is wide by
+    // construction. A wider spread on a session with no endurance work in it
+    // must not move endurance at all.
+    const wide = metrics([lifting(190)]).endurance!;
+    const narrow = metrics([lifting(150)]).endurance!;
+    expect(wide).toBeCloseTo(narrow, 5);
+  });
+
+  it('still counts the spread in full for a session that is all endurance', () => {
+    const rowing = (hr_max: number) =>
+      log(
+        '2026-07-20',
+        [{ movement: 'Rower Interval', metric: 'time', section: 'conditioning', sets: [{ time: 3600 }] }],
+        { hr_avg: 140, hr_max, total_seconds: 3600 },
+      );
+    expect(metrics([rowing(185)]).endurance!).toBeGreaterThan(metrics([rowing(150)]).endurance!);
+  });
+
   it('endurance weights the spread up when a conditioning block was logged', () => {
     const sets = [{ time: 1800 }];
     const withBlock = log(
@@ -444,6 +474,26 @@ describe('scoreAgainstBaseline', () => {
       expect(s).toBeGreaterThanOrEqual(ASPECT_SCALE.min);
       expect(s).toBeLessThanOrEqual(ASPECT_SCALE.max);
     }
+  });
+
+  it('flags a value the baseline has never seen anything like as low confidence', () => {
+    // Sample COUNT and sample SPREAD are different things. This is the athlete's
+    // real endurance history: two months of logging no cardio at all, then real
+    // rides. MAD is a fraction of a unit, so the first ride lands ~34 z-scores
+    // out and the logistic rounds to a flat 10.0 — six consecutive weeks of a
+    // real profile read exactly that way. ASPECT_MIN_BASELINE cannot catch it;
+    // every sample is present.
+    const degenerate = [1.7, 1.6, 1.8, 1.6, 0.9, 1.0, 20.2, 20.1];
+    const pinned = scoreAgainstBaseline(66.8, degenerate)!;
+    expect(pinned.score).toBe(ASPECT_SCALE.max);
+    // Still scored — it is not wrong that the value is far above this athlete's
+    // own history — but drawn hollow rather than read as settled.
+    expect(pinned.confidence).toBe('low');
+  });
+
+  it('leaves an ordinary reading on a thick baseline at full confidence', () => {
+    const thickSpread = Array.from({ length: ASPECT_GOOD_BASELINE }, (_, i) => 10 + i * 10);
+    expect(scoreAgainstBaseline(120, thickSpread)!.confidence).toBe('ok');
   });
 
   it('survives a perfectly flat history without dividing by zero', () => {
