@@ -2,12 +2,16 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   getActivePlan,
+  getMealLogs,
+  getMovements,
   getRecentLogs,
   getRecommendations,
-  insertRecommendations,
+  getUserStats,
   updateRecommendation,
+  upsertCoachFindings,
 } from '@/lib/queries';
-import { generateRecommendations } from '@/lib/coach';
+import { runCoach } from '@/lib/coach/evaluate';
+import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
 import type { Recommendation, RecDisposition } from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { toast } from '@/lib/toast';
@@ -78,29 +82,60 @@ export default function CoachView() {
     });
   }, []);
 
+  /**
+   * Check-in: run the deterministic engine over the athlete's own rows and
+   * upsert what it finds.
+   *
+   * NO NETWORK CALL TO A MODEL. The `coach` edge function is still deployed and
+   * still works, but it is deliberately not on this path any more: it returned
+   * free-text advice that could not be reproduced, could not carry a citation,
+   * and was fitness-only by its own system prompt. Everything here is computed
+   * in the browser from rows RLS already scopes to this user, so the same data
+   * always produces the same findings and each one can name the claim it rests
+   * on. See src/lib/coach/knowledge.ts.
+   *
+   * Upsert, not insert: re-running in the same week refreshes the live row for a
+   * rule instead of minting a duplicate, and anything the athlete has already
+   * dismissed, acted on or snoozed is filtered out before we get here by the
+   * cooldown in lib/coach/evaluate.ts.
+   */
   async function analyze() {
     if (analyzing) return;
     setAnalyzing(true);
     try {
-      // Phase 2: try the AI coach edge function first; fall back to the
-      // rule-based generator when it's unavailable (no key / not deployed / error).
-      let aiHandled = false;
-      try {
-        const { data, error } = await supabase.functions.invoke('coach');
-        if (!error && (data as { ok?: boolean } | null)?.ok) aiHandled = true;
-      } catch {
-        /* fall through to rule-based */
+      const [plan, logs, meals, stats, movements, existing] = await Promise.all([
+        getActivePlan(),
+        getRecentLogs(80),
+        getMealLogs(200),
+        getUserStats(),
+        getMovements(),
+        getRecommendations(),
+      ]);
+      // Per-user taxonomy corrections, keyed by normalised name — the same map
+      // BodyView builds. Without it a movement the athlete has remapped would be
+      // classified one way on the body map and another way here.
+      const overrides: OverrideMap = {};
+      for (const m of movements) {
+        if (m.taxonomy) overrides[normalizeMovementName(m.name)] = m.taxonomy;
       }
-      if (!aiHandled) {
-        const [plan, logs] = await Promise.all([getActivePlan(), getRecentLogs(50)]);
-        const ok = await insertRecommendations(generateRecommendations(logs, plan));
-        if (!ok) {
-          toast('Analysis failed — try again', 'error');
-          return;
-        }
+      const { write, findings, suppressed } = runCoach({
+        logs,
+        meals,
+        stats,
+        plan,
+        overrides,
+        existing,
+      });
+      if (write.length > 0 && !(await upsertCoachFindings(write))) {
+        toast('Check-in failed — try again', 'error');
+        return;
       }
       setRecs(await getRecommendations());
-      toast('Analysis complete', 'success');
+      // Distinguish "nothing to say" from "said it recently and you told me to
+      // stop", so a quiet coach never reads as a broken one.
+      if (write.length > 0) toast(`${write.length} new`, 'success');
+      else if (suppressed.length > 0) toast('Nothing new since last check-in', 'success');
+      else if (findings.length === 0) toast('Nothing to flag — keep logging', 'success');
     } finally {
       setAnalyzing(false);
     }

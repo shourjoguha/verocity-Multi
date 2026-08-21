@@ -1,0 +1,523 @@
+import { describe, expect, it } from 'vitest';
+import logsFixture from './__fixtures__/logs.json';
+import mealsFixture from './__fixtures__/meals.json';
+import statsFixture from './__fixtures__/userStats.json';
+import {
+  COOLDOWN_DAYS,
+  MAX_FINDINGS,
+  MAX_PER_FAMILY,
+  isSuppressed,
+  runCoach,
+} from '@/lib/coach/evaluate';
+import {
+  measureFuelTiming,
+  measureGoals,
+  measureNutrition,
+  measureTraining,
+} from '@/lib/coach/signals';
+import { CLAIMS, KNOWLEDGE_PACK_VERSION, NUTRITION, SOURCES, TRAINING } from '@/lib/coach/knowledge';
+import {
+  carbSourceConcentration,
+  carbTimingWindow,
+  longSessionUnfed,
+} from '@/lib/coach/rules/nutrition';
+import { readinessAndLoad } from '@/lib/coach/rules/training';
+import type { MealLog, Recommendation, UserStats, WorkoutLog } from '@/lib/types';
+
+// Anchored one day after the newest fixture row so the 28-day window is stable.
+const TODAY = new Date('2026-08-21T00:00:00Z');
+const LOGS = logsFixture as unknown as WorkoutLog[];
+const MEALS = mealsFixture as unknown as MealLog[];
+const STATS = statsFixture as unknown as UserStats;
+
+const base = { logs: LOGS, meals: MEALS, stats: STATS, existing: [], today: TODAY };
+
+const trainingOpts = {
+  heavyFraction: TRAINING.strengthIntensity.value,
+  strengthRepMax: TRAINING.strengthReps.value,
+  hypertrophyReps: TRAINING.hypertrophyReps.value,
+  nearFailureRpe: TRAINING.hypertrophyProximityToFailure.value,
+  allOutRpe: TRAINING.vo2AllOut.value,
+  heavyRestSeconds: TRAINING.strengthRest.value,
+};
+
+function rec(over: Partial<Recommendation>): Recommendation {
+  return {
+    id: crypto.randomUUID(),
+    owner_user_id: 'u',
+    status: 'open',
+    drift_score: 0,
+    confidence: 0,
+    tldr: null,
+    action: null,
+    body_md: null,
+    disposition: null,
+    disposition_note: null,
+    linked_log_id: null,
+    snooze_until: null,
+    created_at: TODAY.toISOString(),
+    rule_id: null,
+    period_key: null,
+    pack_version: null,
+    evidence: null,
+    ...over,
+  };
+}
+
+describe('knowledge pack', () => {
+  it('attributes every claim to a person, never to "research"', () => {
+    for (const claim of Object.values(CLAIMS)) {
+      const src = SOURCES[claim.source];
+      expect(src, `${claim.id} has no source`).toBeTruthy();
+      expect(src.speaker).not.toMatch(/research|stud(y|ies)|science/i);
+      expect(src.url).toMatch(/^https:\/\//);
+      expect(src.vaultPath).toMatch(/\.md$/);
+    }
+  });
+
+  it('gives every claim a non-empty verbatim quote', () => {
+    for (const claim of Object.values(CLAIMS)) {
+      expect(claim.quote.length, `${claim.id} has no quote`).toBeGreaterThan(10);
+      // A quote is pasted, not written. Ellipsis is the tell that it was edited.
+      expect(claim.quote).not.toContain('…');
+    }
+  });
+
+  it('has unique claim ids', () => {
+    const ids = Object.values(CLAIMS).map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('signals', () => {
+  const training = measureTraining(LOGS, trainingOpts, TODAY);
+
+  it('measures elapsed and working minutes as DIFFERENT numbers', () => {
+    // The bug this engine shipped with once: an hour of lifting is ~20 working
+    // minutes and ~60 elapsed. If these ever converge, the attribution in
+    // sessionMinutesPerWeek has silently stopped doing anything.
+    const working = training.modalityMinutesPerWeek.value.resistance;
+    const elapsed = training.sessionMinutesPerWeek.value.resistance;
+    expect(elapsed).toBeGreaterThan(working * 1.5);
+  });
+
+  it('reads loaded work from every resistance section, not just `primary`', () => {
+    // The bug this replaced: filtering to the `primary` section found 4 usable
+    // sets and went permanently silent, while `accessory` and `secondary` held
+    // 142 more — including the athlete's actual heavy lift.
+    expect(training.loadedIntensity.samples).toBeGreaterThan(100);
+    expect(training.loadedIntensity.sufficiency).toBe('ok');
+    expect(training.loadedIntensity.value.topMovement).toBeTruthy();
+    expect(training.loadedIntensity.value.topMovementBestKg).toBeGreaterThan(0);
+  });
+
+  it('measures effort and prescribed rest, which real logs actually carry', () => {
+    expect(training.hypertrophyEffort.samples).toBeGreaterThan(25);
+    expect(training.hypertrophyEffort.value.meanRpe).toBeGreaterThan(5);
+    expect(training.hypertrophyEffort.value.meanRpe).toBeLessThanOrEqual(10);
+    // Rest is PRESCRIBED, never timed — absent rest must not read as zero.
+    expect(training.heavyRest.value.meanSeconds).not.toBeNaN();
+  });
+
+  it('reports insufficiency instead of guessing when a signal really is thin', () => {
+    const thin = measureTraining(LOGS.slice(0, 1), trainingOpts, TODAY);
+    expect(thin.sessionsPerWeek.sufficiency).toBe('insufficient');
+    expect(thin.sessionsPerWeek.shortfall).toBeTruthy();
+  });
+
+  it('keeps goal shares summing to one so over- and under-service are one fact', () => {
+    const shares = measureGoals(STATS, training).value;
+    const sum = shares.reduce((s, g) => s + g.actual, 0);
+    expect(sum).toBeCloseTo(1, 5);
+    expect(shares.reduce((s, g) => s + g.intent, 0)).toBeCloseTo(1, 5);
+    // `skill` is ranked 0 and has no modality — it must not appear as neglected.
+    expect(shares.map((g) => g.id)).not.toContain('skill');
+  });
+
+  it('counts nutrition timing from wall clock and never from portion size', () => {
+    const n = measureNutrition(MEALS, LOGS, TODAY);
+    expect(n.firstMealHour.value).toBeGreaterThan(6);
+    expect(n.lastMealHour.value).toBeGreaterThan(n.firstMealHour.value);
+    expect(n.meanHungerBefore.value).toBeGreaterThanOrEqual(1);
+    expect(n.meanHungerBefore.value).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('conditioning and vibe', () => {
+  const training = measureTraining(LOGS, trainingOpts, TODAY);
+
+  it('separates interval work from steady state, and reads how hard it went', () => {
+    const iv = training.intervals.value;
+    // 30-second Ski-Erg bouts. Counting minutes alone would read these as
+    // VO2max work; the RPE is what says they are not.
+    expect(iv.bouts).toBeGreaterThan(10);
+    expect(iv.meanBoutSeconds).toBeLessThan(120);
+    expect(iv.meanRpe).toBeLessThan(TRAINING.vo2AllOut.value);
+    expect(iv.allOutBouts).toBe(0);
+  });
+
+  it('does not count a 45-minute ride as an interval bout', () => {
+    const iv = training.intervals.value;
+    // Every bout must be under the cap; a steady-state block logged as one
+    // timed set would blow boutMinutes up on its own.
+    expect(iv.boutMinutes).toBeLessThan(iv.bouts * 5);
+  });
+
+  it('reads every metric the conditioning block recorded', () => {
+    const c = training.conditioning;
+    expect(c.sets).toBeGreaterThan(20);
+    expect(c.minutes).toBeGreaterThan(0);
+    expect(c.distanceMeters).toBeGreaterThan(0);
+    // Sets that recorded nothing are counted, not silently dropped.
+    expect(c.bareSets).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reads the vibe check and reports how much of the window it covers', () => {
+    const r = training.readiness.value;
+    expect(r.rated).toBeGreaterThan(5);
+    expect(r.coverage).toBeGreaterThan(0);
+    expect(r.coverage).toBeLessThanOrEqual(1);
+    for (const v of [r.meanSleep, r.meanEnergy, r.meanSoreness]) {
+      expect(v).toBeGreaterThanOrEqual(1);
+      expect(v).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it('will not call symptoms overreaching without a load signal agreeing', () => {
+    // Galpin wants three concurrent signals. This app has two channels at best,
+    // so a symptom on its own must stay silent.
+    expect(readinessAndLoad(training, STATS, '2026-W34')).toBeNull();
+
+    const loaded = { ...training, longestConsecutiveDays: 6 };
+    const symptomatic = {
+      ...loaded,
+      readiness: {
+        ...training.readiness,
+        value: { ...training.readiness.value, lowSleepSessions: 3, highSorenessSessions: 2 },
+      },
+    };
+    const f = readinessAndLoad(symptomatic, STATS, '2026-W34');
+    expect(f).toBeTruthy();
+    // It must name the signal it does not have rather than implying three.
+    expect(f!.body).toContain('biomarker');
+    expect(f!.confidence).toBeLessThan(0.6);
+  });
+});
+
+describe('workout and meal timing', () => {
+  it('compares session start to meals in local clock hours', () => {
+    const fuel = measureFuelTiming(LOGS, MEALS, 60, TODAY);
+    expect(fuel.pairedDays).toBeGreaterThan(0);
+    expect(fuel.meanStartHour).toBeGreaterThan(6);
+    expect(fuel.meanStartHour).toBeLessThan(23);
+  });
+
+  it('treats a training day with no meals logged as absent data, not a fast', () => {
+    const fuel = measureFuelTiming(LOGS, [], 60, TODAY);
+    expect(fuel.pairedDays).toBe(0);
+    expect(fuel.unfedSessions).toBe(0);
+    expect(longSessionUnfed(fuel, STATS, '2026-W34')).toBeNull();
+  });
+
+  it('stays quiet when the athlete does eat before training', () => {
+    const fuel = measureFuelTiming(LOGS, MEALS, 60, TODAY);
+    expect(fuel.unfedLongSessions).toBe(0);
+    expect(longSessionUnfed(fuel, STATS, '2026-W34')).toBeNull();
+  });
+});
+
+describe('meal free text', () => {
+  const base34 = (note: string, i: number) => ({
+    ...(MEALS[i % MEALS.length] as MealLog),
+    note,
+  });
+
+  it('mirrors a concentrated carb source without calling it wrong', () => {
+    const meals = Array.from({ length: 20 }, (_, i) =>
+      base34(i < 15 ? 'Fish and rice' : 'Eggs and toast', i),
+    );
+    const n = measureNutrition(meals, LOGS, TODAY);
+    const f = carbSourceConcentration(n, '2026-08');
+    expect(f).toBeTruthy();
+    expect(f!.observed.topSource).toBe('rice');
+    // No corpus claim ranks carbohydrate sources, so it must not imply one.
+    expect(f!.claims).toHaveLength(0);
+    expect(f!.body).toContain('mirror, not a verdict');
+  });
+
+  it('says nothing when most meals were never described', () => {
+    const meals = (MEALS as MealLog[]).map((m) => ({ ...m, note: null }));
+    const n = measureNutrition(meals, LOGS, TODAY);
+    expect(n.text.described).toBe(0);
+    expect(carbSourceConcentration(n, '2026-08')).toBeNull();
+  });
+
+  it('reports tag_mix coverage without turning a percentage into a gram', () => {
+    const n = measureNutrition(MEALS, LOGS, TODAY);
+    expect(n.mixCoverage).toBeGreaterThan(0);
+    expect(n.mixCoverage).toBeLessThanOrEqual(1);
+    if (n.meanProteinMixPct != null) {
+      expect(n.meanProteinMixPct).toBeGreaterThanOrEqual(0);
+      expect(n.meanProteinMixPct).toBeLessThanOrEqual(100);
+    }
+  });
+});
+
+describe('runCoach', () => {
+  it('is deterministic — same input, same rows', () => {
+    const a = runCoach(base);
+    const b = runCoach(base);
+    expect(JSON.stringify(a.write)).toBe(JSON.stringify(b.write));
+  });
+
+  it('caps how much it says at once', () => {
+    const out = runCoach(base);
+    expect(out.write.length).toBeLessThanOrEqual(MAX_FINDINGS);
+    expect(out.findings.length).toBeGreaterThanOrEqual(out.write.length);
+  });
+
+  it('stamps every row with a rule id, a period and the pack version', () => {
+    for (const row of runCoach(base).write) {
+      expect(row.rule_id).toMatch(/^[a-z][a-z0-9]*(\.[a-z0-9-]+)+$/);
+      expect(row.period_key).toMatch(/^\d{4}(-W\d{2}|-\d{2})$/);
+      expect(row.pack_version).toBe(KNOWLEDGE_PACK_VERSION);
+    }
+  });
+
+  it('freezes resolved citations into evidence rather than referencing them', () => {
+    const cited = runCoach(base).write.filter((r) => r.evidence.claims.length > 0);
+    expect(cited.length).toBeGreaterThan(0);
+    for (const row of cited) {
+      for (const c of row.evidence.claims) {
+        // Resolved: the row can render itself after the pack moves on.
+        expect(c.quote.length).toBeGreaterThan(10);
+        expect(c.speaker.length).toBeGreaterThan(0);
+        expect(c.url).toMatch(/^https:\/\//);
+      }
+    }
+  });
+
+  it('quotes the number it fired on inside the body', () => {
+    for (const row of runCoach(base).write) {
+      expect(row.body_md.length).toBeGreaterThan(80);
+      expect(row.tldr.length).toBeLessThanOrEqual(200);
+      expect(/\d/.test(row.body_md), `${row.rule_id} body has no numbers`).toBe(true);
+    }
+  });
+
+  it('finds the effort problem the rep range alone would hide', () => {
+    // The reps look correct — 125 sets land in 8-15 — but they average RPE 7.2,
+    // roughly three reps in reserve. This is the finding that only exists
+    // because RPE is read, and it is why the rep-band count is not enough.
+    const f = runCoach(base).findings.find(
+      (x) => x.ruleId === 'training.hypertrophy.effort-low',
+    );
+    expect(f).toBeTruthy();
+    expect(f!.observed.meanRpe).toBeLessThan(8);
+    expect(f!.observed.hypertrophySets).toBeGreaterThan(50);
+    // The RPE-to-failure translation is ours; the body must not attribute it.
+    expect(f!.body).toContain("this app's translation");
+  });
+
+  it('finds under-loading now that it reads every resistance section', () => {
+    const f = runCoach(base).findings.find(
+      (x) => x.ruleId === 'training.intent.loaded-too-light',
+    );
+    expect(f).toBeTruthy();
+    expect(f!.observed.loadedSets).toBeGreaterThan(100);
+  });
+
+  it('does not promote the highest e1RM to "your main lift"', () => {
+    // A hip-thrust machine outranks a back squat on raw e1RM. Calling it the
+    // main lift would be a programming claim the number cannot support.
+    const bodies = runCoach(base).findings.map((f) => f.body).join(' ');
+    expect(bodies).not.toMatch(/your (heaviest|main) lift/i);
+  });
+
+  it('ranks by how far off it is, not by how sure it is', () => {
+    // The standing protein target is the most certain thing the coach knows and
+    // also drift 0. It must never head the page ahead of a measured problem.
+    const write = runCoach(base).write;
+    expect(write[0].drift_score).toBeGreaterThan(0);
+    expect(write[0].rule_id).not.toBe('nutrition.dose.protein-target');
+  });
+
+  it('stops one family taking the whole page', () => {
+    const out = runCoach(base);
+    // Training rules are the most numerous and best measured; uncapped they
+    // filled every slot and nutrition never appeared.
+    const trainingFindings = out.findings.filter((f) => f.ruleId.startsWith('training.'));
+    expect(trainingFindings.length).toBeGreaterThan(MAX_PER_FAMILY);
+    const counts = new Map<string, number>();
+    for (const r of out.write) {
+      const fam = r.rule_id.split('.')[0];
+      counts.set(fam, (counts.get(fam) ?? 0) + 1);
+    }
+    expect(Math.max(...counts.values())).toBeLessThanOrEqual(MAX_PER_FAMILY);
+    expect(counts.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it('says something about training AND about nutrition', () => {
+    const ids = runCoach(base).write.map((r) => r.rule_id);
+    expect(ids.some((i) => i.startsWith('training.') || i.startsWith('goal.'))).toBe(true);
+    expect(ids.some((i) => i.startsWith('nutrition.'))).toBe(true);
+  });
+
+  it('stays silent on a rule whose inputs are too thin, without erroring', () => {
+    const oneLog = runCoach({ ...base, logs: LOGS.slice(0, 1) });
+    expect(oneLog.findings.map((f) => f.ruleId)).not.toContain(
+      'training.frequency.below-target',
+    );
+  });
+});
+
+describe('caveat gates', () => {
+  it('will not raise carb timing below the training frequency its source names', () => {
+    const training = measureTraining(LOGS, trainingOpts, TODAY);
+    const nutrition = measureNutrition(MEALS, LOGS, TODAY);
+    expect(training.sessionsPerWeek.value).toBeLessThan(
+      NUTRITION.carbTimingPrecondition.value,
+    );
+    expect(carbTimingWindow(nutrition, training, STATS, '2026-W34')).toBeNull();
+  });
+
+  it('raises it once training frequency clears the precondition', () => {
+    const training = measureTraining(LOGS, trainingOpts, TODAY);
+    const daily = {
+      ...training,
+      sessionsPerWeek: { value: 8, samples: 32, sufficiency: 'ok' as const },
+    };
+    const nutrition = {
+      ...measureNutrition(MEALS, LOGS, TODAY),
+      trainingDays: 10,
+      trainingDaysFuelled: 4,
+    };
+    const f = carbTimingWindow(nutrition, daily, STATS, '2026-W34');
+    expect(f?.ruleId).toBe('nutrition.timing.carb-window');
+    // The gate itself must be visible to the athlete, not just enforced in code.
+    expect(f?.body).toContain('precondition');
+  });
+
+  it('never derives a gram from a logged meal', () => {
+    // The only rule allowed to name grams is the standing target, and it must
+    // reach them from bodyweight — never from size or tag_mix.
+    const out = runCoach(base);
+    const gramRules = out.findings.filter((f) => /\d+\s?g\b|grams/.test(f.body));
+    for (const f of gramRules) {
+      expect(f.ruleId).toBe('nutrition.dose.protein-target');
+      expect(f.observed.bodyWeightKg).toBe(86);
+      expect(f.body).toContain('records no grams');
+    }
+  });
+});
+
+describe('suppression', () => {
+  const ruleId = 'training.endurance.zone2-short';
+
+  it('lets a rule update its own open row inside the same period', () => {
+    const existing = [rec({ rule_id: ruleId, period_key: '2026-W34', status: 'open' })];
+    expect(isSuppressed(ruleId, '2026-W34', existing, TODAY)).toBe(false);
+  });
+
+  it('does not mint a second row while an older one is still open', () => {
+    const existing = [rec({ rule_id: ruleId, period_key: '2026-W33', status: 'open' })];
+    expect(isSuppressed(ruleId, '2026-W34', existing, TODAY)).toBe(true);
+  });
+
+  it('honours a dismissal for weeks, even though the data has not changed', () => {
+    // The failure this exists to prevent: a finding the athlete rejected
+    // reappearing on the next check-in because the underlying measurement
+    // cannot move for another fortnight.
+    const justNow = rec({
+      rule_id: ruleId,
+      period_key: '2026-W33',
+      status: 'dismissed',
+      created_at: new Date(TODAY.getTime() - 7 * 86_400_000).toISOString(),
+    });
+    expect(isSuppressed(ruleId, '2026-W34', [justNow], TODAY)).toBe(true);
+
+    const longAgo = rec({
+      rule_id: ruleId,
+      period_key: '2026-W20',
+      status: 'dismissed',
+      created_at: new Date(
+        TODAY.getTime() - (COOLDOWN_DAYS.dismissed + 1) * 86_400_000,
+      ).toISOString(),
+    });
+    expect(isSuppressed(ruleId, '2026-W34', [longAgo], TODAY)).toBe(false);
+  });
+
+  it('gives acted-on advice time to land before grading it', () => {
+    const acted = rec({
+      rule_id: ruleId,
+      status: 'acted',
+      disposition: 'acted_as_prescribed',
+      created_at: new Date(TODAY.getTime() - 3 * 86_400_000).toISOString(),
+    });
+    expect(isSuppressed(ruleId, '2026-W34', [acted], TODAY)).toBe(true);
+  });
+
+  it('respects an unexpired snooze and releases an expired one', () => {
+    const future = rec({
+      rule_id: ruleId,
+      status: 'snoozed',
+      snooze_until: new Date(TODAY.getTime() + 2 * 86_400_000).toISOString(),
+    });
+    expect(isSuppressed(ruleId, '2026-W34', [future], TODAY)).toBe(true);
+
+    const past = rec({
+      rule_id: ruleId,
+      status: 'snoozed',
+      snooze_until: new Date(TODAY.getTime() - 86_400_000).toISOString(),
+    });
+    expect(isSuppressed(ruleId, '2026-W34', [past], TODAY)).toBe(false);
+  });
+
+  it('reads only the newest decision for a rule', () => {
+    const existing = [
+      rec({
+        rule_id: ruleId,
+        status: 'dismissed',
+        created_at: new Date(TODAY.getTime() - 90 * 86_400_000).toISOString(),
+      }),
+      rec({
+        rule_id: ruleId,
+        status: 'acted',
+        created_at: new Date(TODAY.getTime() - 2 * 86_400_000).toISOString(),
+      }),
+    ];
+    // The dismissal has long expired; the recent action still buys silence.
+    expect(isSuppressed(ruleId, '2026-W34', existing, TODAY)).toBe(true);
+  });
+
+  it('drops suppressed findings from the write set and reports why', () => {
+    const dismissAll = runCoach(base).findings.map((f) =>
+      rec({ rule_id: f.ruleId, period_key: '2026-W33', status: 'dismissed' }),
+    );
+    const out = runCoach({ ...base, existing: dismissAll });
+    expect(out.write).toHaveLength(0);
+    expect(out.suppressed.length).toBe(out.findings.length);
+  });
+});
+
+describe('cold start', () => {
+  it('says nothing at all rather than guessing from no data', () => {
+    const out = runCoach({ logs: [], meals: [], stats: null, existing: [], today: TODAY });
+    expect(out.write).toHaveLength(0);
+  });
+
+  it('does not invent a protein target without a bodyweight', () => {
+    const noWeight = { ...STATS, body_weight_kg: null };
+    const ids = runCoach({ ...base, stats: noWeight }).findings.map((f) => f.ruleId);
+    expect(ids).not.toContain('nutrition.dose.protein-target');
+  });
+
+  it('does not accuse an athlete of neglecting a goal they never set', () => {
+    const noGoals = { ...STATS, goals: [] };
+    const ids = runCoach({ ...base, stats: noGoals }).findings.map((f) => f.ruleId);
+    expect(ids.filter((i) => i.startsWith('goal.'))).toHaveLength(0);
+    // Goal-gated training rules go quiet too.
+    expect(ids).not.toContain('training.hypertrophy.total-volume-short');
+    expect(ids).not.toContain('training.hypertrophy.region-volume-short');
+  });
+});

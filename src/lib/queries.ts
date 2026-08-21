@@ -38,6 +38,7 @@ import type {
   UserStats,
   WorkoutLog,
 } from '@/lib/types';
+import type { CoachRecInput } from '@/lib/coach/evaluate';
 
 // All queries rely on RLS for scoping: the authenticated client returns the
 // user's own rows; the session-less public client returns the showcase
@@ -577,14 +578,6 @@ export async function revokeShare(id: string): Promise<boolean> {
 // ---- recommendations (Coach). Reads are owner-scoped by RLS; owner insert/
 // update enabled in migration 0007 for on-demand generation + dispositions. ----
 
-export type RecInput = {
-  tldr: string;
-  action: string;
-  body_md: string;
-  drift_score: number | null;
-  confidence: number | null;
-};
-
 export async function getRecommendations(
   client: SupabaseClient = supabase,
 ): Promise<Recommendation[]> {
@@ -595,14 +588,30 @@ export async function getRecommendations(
   return (data as Recommendation[]) ?? [];
 }
 
-export async function insertRecommendations(rows: RecInput[]): Promise<boolean> {
+/**
+ * Write the deterministic coach's findings, one row per (rule, period).
+ *
+ * UPSERT, NOT INSERT. Re-running a check-in the same week must refresh the live
+ * row for a rule rather than mint a second one; the conflict target is the
+ * partial unique index added in migration 0036. (The `coach` edge function still
+ * inserts its own rows server-side, with no rule_id, which is why that index is
+ * partial rather than a table constraint.)
+ *
+ * `status` is set only ON INSERT. Re-opening a row the athlete has already
+ * acted on or dismissed would undo their decision, and the cooldown in
+ * lib/coach/evaluate.ts is what keeps the coach quiet in that case — so the
+ * update path deliberately leaves status, disposition and snooze_until alone.
+ */
+export async function upsertCoachFindings(rows: CoachRecInput[]): Promise<boolean> {
+  if (rows.length === 0) return true;
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return false;
-  const { error } = await supabase
-    .from('recommendations')
-    .insert(rows.map((r) => ({ ...r, owner_user_id: user.id, status: 'open' })));
+  const { error } = await supabase.from('recommendations').upsert(
+    rows.map((r) => ({ ...r, owner_user_id: user.id, status: 'open' })),
+    { onConflict: 'owner_user_id,rule_id,period_key', ignoreDuplicates: false },
+  );
   return !error;
 }
 
