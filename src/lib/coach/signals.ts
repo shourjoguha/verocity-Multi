@@ -20,6 +20,8 @@
 import {
   MODALITY_KEYS,
   MUSCLE_REGION_KEYS,
+  RPE,
+  RPE_LADDER,
   type ModalityKey,
   type RegionKey,
 } from '@/app.config';
@@ -27,7 +29,7 @@ import { summarizeBodyLoad } from '@/lib/bodyLoad';
 import { bestE1rmByMovement } from '@/lib/prs';
 import { completedLogs } from '@/lib/stats';
 import { buildDayInsights, summarizeTiming, toHours } from '@/lib/mealInsights';
-import type { OverrideMap } from '@/lib/movementTaxonomy';
+import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import type { MealLog, UserStats, WorkoutLog } from '@/lib/types';
 import { summarizeMealText, type MealTextSummary } from '@/lib/coach/mealText';
 import type { Measured, Sufficiency } from '@/lib/coach/types';
@@ -48,6 +50,52 @@ export const MIN_PLAUSIBLE_SESSION_MINUTES = 5;
  *  steady-state block. Five minutes covers everything from a 20-second sprint to
  *  a San-Millán four-by-four and excludes a 45-minute ride logged as one set. */
 export const MAX_BOUT_SECONDS = 300;
+
+/**
+ * Did this session actually use the RPE dial, or just leave the prefill alone?
+ *
+ * `RPE.default` is 7 and the logger prefills it, so a set reading 7 carries no
+ * information on its own. A session counts as RATED when it used at least
+ * `RPE_LADDER.minDistinctPerSession` distinct values, or recorded any value that
+ * is not the default. Anything else is missing data — never easy training.
+ */
+export function rpeWasRated(log: WorkoutLog): boolean {
+  const values: number[] = [];
+  for (const section of log.data?.sections ?? []) {
+    for (const group of section.groups ?? []) {
+      for (const item of group.items ?? []) {
+        for (const set of item.sets ?? []) {
+          if (set.actual.completed && set.actual.rpe != null) values.push(set.actual.rpe);
+        }
+      }
+    }
+  }
+  if (values.length === 0) return false;
+  if (values.some((v) => v !== RPE.default)) return true;
+  return new Set(values).size >= RPE_LADDER.minDistinctPerSession;
+}
+
+/**
+ * Mean soreness reported on the session AFTER each session of a given kind.
+ *
+ * The question this answers is the athlete's own: is the RPE genuinely low, or
+ * is the dial simply not being moved? Soreness is a body signal that cannot be
+ * left at a default, so if the sessions that never used the dial are followed by
+ * MORE soreness than the ones that did, the effort was there and the log missed
+ * it. Returns null when there is nothing to average — never 0, which would read
+ * as "no soreness".
+ */
+function meanSorenessAfter(logs: WorkoutLog[], rated: boolean): number | null {
+  // Oldest first, so "the next session" is the following element.
+  const ordered = [...logs].sort((a, b) => (a.log_date < b.log_date ? -1 : 1));
+  const values: number[] = [];
+  for (let i = 0; i < ordered.length - 1; i += 1) {
+    if (rpeWasRated(ordered[i]) !== rated) continue;
+    const next = ordered[i + 1].data?.session?.vibe?.soreness;
+    if (next != null) values.push(next);
+  }
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+}
 
 /** ISO-week key, e.g. '2026-W34'. The default `periodKey` for weekly rules. */
 export function isoWeekKey(d: Date): string {
@@ -160,12 +208,44 @@ export interface TrainingSignals {
     topMovementMeanFraction: number | null;
   }>;
   /**
-   * Mean RPE of sets landing in the hypertrophy rep band, and how many of them
-   * reached the near-failure mark. The rep range is only half the prescription —
-   * its cited caveat is that the set must be taken to or near failure — and RPE
-   * is recorded on effectively every set in real logs, so this is measurable.
+   * Effort on the sets where effort is actually decidable.
+   *
+   * TWO CORRECTIONS ARE BAKED IN HERE, both of which the first version got wrong
+   * badly enough to emit a false finding.
+   *
+   * 1. RPE 7 IS THE LOGGER'S PREFILL (`RPE.default`). In a real log 72.6% of all
+   *    sets sit at exactly 7.0, so "mean RPE 7.2" was largely measuring the
+   *    default, not the training. Sessions that never moved the dial —
+   *    `rpeWasRated` below — are excluded as MISSING data rather than counted as
+   *    easy work.
+   *
+   * 2. FATIGUE IS PROGRAMMED, NOT ACCIDENTAL. Several movements in one session
+   *    hitting the same muscle region accumulate fatigue, and the earlier ones
+   *    are deliberately held back so the later ones remain performable at all.
+   *    Averaging RPE across every set therefore penalises correct programming.
+   *    Only the LAST movement to load a given region in a session is judged —
+   *    that is the one with no downstream cost to going hard.
    */
-  hypertrophyEffort: Measured<{ meanRpe: number; nearFailure: number; total: number }>;
+  hypertrophyEffort: Measured<{
+    meanRpe: number;
+    nearFailure: number;
+    total: number;
+    /** Sessions excluded because the dial was never moved off its default. */
+    unratedSessions: number;
+  }>;
+  /**
+   * Whether the RPE column can be believed at all, and what the body says about
+   * it. Feeds the calibration finding rather than any effort judgement.
+   */
+  rpeCalibration: Measured<{
+    defaultShare: number;
+    ratedSessions: number;
+    unratedSessions: number;
+    /** Mean soreness reported on the session AFTER an unrated one, and after a
+     *  rated one. A gap between them is the tell that effort outran the log. */
+    sorenessAfterUnrated: number | null;
+    sorenessAfterRated: number | null;
+  }>;
   /**
    * Rest between sets on HEAVY low-rep work, where the evidence names a band.
    * `restSeconds` is the PRESCRIBED rest on the item or its group — the app
@@ -306,6 +386,10 @@ export function measureTraining(
   let hypRpeSum = 0;
   let hypRpeCount = 0;
   let hypNearFailure = 0;
+  let ratedSessions = 0;
+  let unratedSessions = 0;
+  let rpeSetsTotal = 0;
+  let rpeSetsAtDefault = 0;
   let heavyRestSum = 0;
   let heavyRestCount = 0;
   let heavyRestBelow = 0;
@@ -349,6 +433,12 @@ export function measureTraining(
 
   for (const log of logs) {
     const sections = log.data?.sections ?? [];
+    const sessionRated = rpeWasRated(log);
+    if (sessionRated) ratedSessions += 1;
+    else unratedSessions += 1;
+    // region -> { order of the last item that loaded it, best RPE on that item }
+    const terminalByRegion = new Map<string, { order: number; rpe: number }>();
+    let itemOrder = 0;
     let sawResistance = false;
     let sawConditioning = false;
     let firstConditioningIdx = -1;
@@ -361,6 +451,7 @@ export function measureTraining(
       for (const group of section.groups ?? []) {
         for (const item of group.items ?? []) {
           if (item.kind === 'subroutine') continue;
+          itemOrder += 1;
           for (const set of item.sets ?? []) {
             const a = set.actual;
             if (!a.completed) continue;
@@ -405,6 +496,10 @@ export function measureTraining(
                 a.reps != null &&
                 a.reps >= opts.hypertrophyReps[0] &&
                 a.reps <= opts.hypertrophyReps[1];
+              if (a.rpe != null) {
+                rpeSetsTotal += 1;
+                if (a.rpe === RPE.default) rpeSetsAtDefault += 1;
+              }
               if (a.reps != null) {
                 bandTotal += 1;
                 if (a.reps <= opts.strengthRepMax) bands.strength += 1;
@@ -412,10 +507,23 @@ export function measureTraining(
                 else if (inHypBand) bands.hypertrophy += 1;
                 else bands.endurance += 1;
               }
-              if (inHypBand && a.rpe != null) {
-                hypRpeSum += a.rpe;
-                hypRpeCount += 1;
-                if (a.rpe >= opts.nearFailureRpe) hypNearFailure += 1;
+              // Terminal-effort collection. Record the best RPE this ITEM
+              // reached against every region it loads, keyed by region; the last
+              // item to touch a region overwrites the earlier ones, which is
+              // exactly the fatigue-aware read — see the note on
+              // `hypertrophyEffort`. Only hypertrophy-band sets from a session
+              // that actually used the dial are eligible.
+              if (inHypBand && a.rpe != null && sessionRated) {
+                const profile = classifyMovement(item.movement, { overrides }).profile;
+                for (const region of Object.keys(profile.regions)) {
+                  const prev = terminalByRegion.get(region);
+                  if (!prev || prev.order <= itemOrder) {
+                    terminalByRegion.set(region, {
+                      order: itemOrder,
+                      rpe: prev && prev.order === itemOrder ? Math.max(prev.rpe, a.rpe) : a.rpe,
+                    });
+                  }
+                }
               }
 
               if (a.weight != null && a.reps != null) {
@@ -448,6 +556,12 @@ export function measureTraining(
         }
       }
     });
+
+    for (const { rpe } of terminalByRegion.values()) {
+      hypRpeSum += rpe;
+      hypRpeCount += 1;
+      if (rpe >= opts.nearFailureRpe) hypNearFailure += 1;
+    }
 
     if (sawResistance && sawConditioning) {
       mixed += 1;
@@ -544,10 +658,25 @@ export function measureTraining(
         meanRpe: hypRpeCount ? hypRpeSum / hypRpeCount : 0,
         nearFailure: hypNearFailure,
         total: hypRpeCount,
+        unratedSessions,
       },
       hypRpeCount,
-      25,
-      `only ${hypRpeCount} sets in the hypertrophy rep range recorded an RPE`,
+      // Far lower than the old floor of 25, because the unit changed: this now
+      // counts one reading per muscle region per rated session, not every set.
+      10,
+      `only ${hypRpeCount} region-terminal sets came from sessions that used the RPE dial`,
+    ),
+    rpeCalibration: measured(
+      {
+        defaultShare: rpeSetsTotal ? rpeSetsAtDefault / rpeSetsTotal : 0,
+        ratedSessions,
+        unratedSessions,
+        sorenessAfterUnrated: meanSorenessAfter(logs, false),
+        sorenessAfterRated: meanSorenessAfter(logs, true),
+      },
+      rpeSetsTotal,
+      30,
+      `only ${rpeSetsTotal} sets recorded an RPE at all`,
     ),
     heavyRest: measured(
       {

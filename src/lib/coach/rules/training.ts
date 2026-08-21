@@ -6,6 +6,7 @@
 // from becoming a weekly recital of the same four complaints — see the cooldown
 // in ../evaluate.ts for the other half of that problem.
 
+import { RPE, RPE_LADDER } from '@/app.config';
 import { READINESS, TRAINING } from '@/lib/coach/knowledge';
 import type { Finding } from '@/lib/coach/types';
 import type { TrainingSignals } from '@/lib/coach/signals';
@@ -78,16 +79,24 @@ export function loadedTooLight(
 }
 
 /**
- * Hypertrophy-range sets that are not being taken near failure.
+ * Hypertrophy work not reaching the last good rep.
  *
- * The rep range is only half of what the source prescribes; its stated caveat is
- * that the set must reach muscular failure. RPE is recorded on effectively every
- * set in real logs, which makes this the best-measured finding available — and
- * it is the one the rep-band rule alone would miss entirely, because the reps
- * look correct.
+ * REWRITTEN AFTER IT EMITTED A FALSE FINDING. The first version reported "sets
+ * average RPE 7.2" across every hypertrophy-band set, which was measuring two
+ * things that are not effort:
  *
- * The RPE-to-failure translation is the app's, not Galpin's, and the body says
- * so. He speaks in failure; RPE 8.5 is roughly one to two reps in reserve.
+ *   1. THE PREFILL. `RPE.default` is 7 and the logger fills it in, so 72.6% of
+ *      sets in a real log read exactly 7.0 whether or not anyone rated them.
+ *      Sessions that never moved the dial are now excluded upstream as missing
+ *      data — see `rpeWasRated` in ../signals.ts.
+ *   2. PROGRAMMED FATIGUE. Several movements hitting one region in a session
+ *      accumulate fatigue, and the earlier ones are deliberately held back so
+ *      the later ones stay performable. Averaging every set penalised correct
+ *      programming; only the last movement to load each region is judged now.
+ *
+ * The bar is `RPE_LADDER.nearFailure` (8, the athlete's last good rep) and NOT
+ * 9 — on their own calibration 9 is almost-failure and deliberately avoided, so
+ * chasing it would be coaching against their stated practice.
  */
 export function hypertrophyEffortLow(
   s: TrainingSignals,
@@ -98,25 +107,101 @@ export function hypertrophyEffortLow(
   if (effort.sufficiency === 'insufficient') return null;
   if (goalWeight(stats, 'hypertrophy') < 25) return null;
 
-  const mark = TRAINING.hypertrophyProximityToFailure.value;
-  const { meanRpe, nearFailure, total } = effort.value;
+  const mark = RPE_LADDER.nearFailure;
+  const { meanRpe, nearFailure, total, unratedSessions } = effort.value;
+  // Half a point of slack: at 7.5 the athlete is already inside their own
+  // working band and the dial only moves in 0.5 steps.
   if (meanRpe >= mark - 0.5) return null;
+
+  const caveat =
+    unratedSessions > 0
+      ? ` ${unratedSessions} session${unratedSessions === 1 ? '' : 's'} were left out entirely because the RPE dial was never moved off its default there — that is missing data, not easy training.`
+      : '';
 
   return {
     ruleId: 'training.hypertrophy.effort-low',
     periodKey,
-    tldr: `Hypertrophy sets average RPE ${round(meanRpe, 1)}`,
-    action: `Take the last set of each movement to RPE ${mark} or beyond — one or two reps left, not three or four.`,
-    body: `Across ${total} sets in the ${TRAINING.hypertrophyReps.value[0]}–${TRAINING.hypertrophyReps.value[1]} rep range you logged an average RPE of ${round(meanRpe, 1)}, and ${nearFailure} of them reached RPE ${mark} or higher. The rep range on its own is not the prescription — Galpin's stated caveat is "${TRAINING.hypertrophyProximityToFailure.quote}". At RPE ${round(meanRpe, 1)} you are leaving roughly ${round(10 - meanRpe, 1)} reps in reserve, which is the one variable that would make correct-looking sets under-deliver. RPE ${mark} as the near-failure mark is this app's translation; he speaks in failure, not in RPE.`,
-    drift: round(Math.min(1, (mark - meanRpe) / 3), 2),
-    confidence: effort.sufficiency === 'ok' ? 0.7 : 0.45,
+    tldr: `Last movement per muscle averages RPE ${round(meanRpe, 1)}`,
+    action: `Take the final movement for each muscle group to RPE ${mark} — your last good rep.`,
+    body: `Looking only at the LAST movement to hit each muscle group in each session — the one with nothing after it to save energy for — the average was RPE ${round(meanRpe, 1)} across ${total} readings, and ${nearFailure} reached ${mark}. Earlier movements are deliberately excluded: stacking several movements on one region means the first ones have to be held back or the last ones become undoable, and judging those would penalise correct programming.${caveat} On your own scale ${mark} is the last good rep, so that is the bar here — not 9, which you avoid by design. Galpin's caveat on the ${TRAINING.hypertrophyReps.value[0]}–${TRAINING.hypertrophyReps.value[1]} rep range is "${TRAINING.hypertrophyProximityToFailure.quote}".`,
+    drift: round(Math.min(1, (mark - meanRpe) / 2), 2),
+    confidence: effort.sufficiency === 'ok' ? 0.6 : 0.4,
     sufficiency: effort.sufficiency,
     claims: [TRAINING.hypertrophyProximityToFailure, TRAINING.hypertrophyReps],
     observed: {
-      meanRpe: round(meanRpe, 1),
-      nearFailureSets: nearFailure,
-      hypertrophySets: total,
-      nearFailureMark: mark,
+      meanTerminalRpe: round(meanRpe, 1),
+      atOrAboveMark: nearFailure,
+      readings: total,
+      unratedSessionsExcluded: unratedSessions,
+      mark,
+    },
+  };
+}
+
+/**
+ * Is the RPE genuinely low, or is the dial not being moved?
+ *
+ * The athlete's own question, and answerable without guessing because soreness
+ * cannot be left at a default. If the sessions that never used the dial are
+ * followed by MORE soreness than the ones that did, the effort was there and the
+ * log missed it. This does not tell them to train harder — it tells them which
+ * of the two problems they have, which is the only honest thing to say when the
+ * effort column is 72% prefill.
+ */
+export function rpeCalibration(s: TrainingSignals, periodKey: string): Finding | null {
+  const c = s.rpeCalibration;
+  if (c.sufficiency === 'insufficient') return null;
+  const { defaultShare, ratedSessions, unratedSessions, sorenessAfterUnrated, sorenessAfterRated } =
+    c.value;
+  // Below half the sets sitting on the prefill there is no calibration problem
+  // worth raising, whatever the effort numbers say.
+  if (defaultShare < 0.5) return null;
+  if (unratedSessions === 0) return null;
+
+  const gap =
+    sorenessAfterUnrated != null && sorenessAfterRated != null
+      ? sorenessAfterUnrated - sorenessAfterRated
+      : null;
+  // Three outcomes, not two. The first version collapsed the last two and
+  // reported a 0.9-point difference as "about the same" — in the direction that
+  // is actually the GOOD news.
+  const verdict =
+    gap == null
+      ? 'There are not enough vibe checks after those sessions to tell which it is yet — a soreness rating on the session after a hard one would settle it.'
+      : gap > 0.5
+        ? `Soreness after the unrated sessions averages ${round(sorenessAfterUnrated as number, 1)} against ${round(sorenessAfterRated as number, 1)} after the ones you did rate — your body is reporting more work than the dial is. The reading to trust is the soreness.`
+        : gap < -0.5
+          ? `The dial is tracking honestly: sessions you rated are followed by MORE soreness (${round(sorenessAfterRated as number, 1)}) than the ones you left on the default (${round(sorenessAfterUnrated as number, 1)}). So a low RPE here is a real low RPE, not a missed entry — the effort column can be believed on the sessions where you use it.`
+          : `Soreness afterwards is about the same either way (${round(sorenessAfterUnrated as number, 1)} vs ${round(sorenessAfterRated as number, 1)}), so the effort probably is what the dial says.`;
+
+  return {
+    ruleId: 'training.effort.rpe-calibration',
+    periodKey,
+    tldr:
+      gap != null && gap < -0.5
+        ? `RPE is honest, but ${pct(defaultShare)} of sets sit on the default`
+        : `${pct(defaultShare)} of sets sit on the default RPE`,
+    action:
+      gap != null && gap > 0.5
+        ? 'Rate the last set of each movement honestly — the rest can stay on the default.'
+        : `Keep rating the sets that matter; ${unratedSessions} session${unratedSessions === 1 ? '' : 's'} carried no rating at all and are invisible to the coach.`,
+    body: `${pct(defaultShare)} of the sets carrying an RPE read exactly ${RPE.default}, which is the value the logger fills in for you — so a set at ${RPE.default} and a set nobody rated look identical. ${unratedSessions} session${unratedSessions === 1 ? '' : 's'} never moved the dial at all, against ${ratedSessions} that did. ${verdict} Either way this is not a "train harder" note — the unrated sessions are excluded from every effort judgement rather than counted as easy.`,
+    // When the dial checks out against soreness this is reassurance plus a
+    // nudge about coverage, not a defect — so the drift that ranks it drops.
+    drift:
+      gap != null && gap < -0.5
+        ? round(Math.min(1, unratedSessions / Math.max(1, ratedSessions + unratedSessions)), 2)
+        : round(Math.min(1, defaultShare), 2),
+    confidence: gap != null ? 0.6 : 0.4,
+    sufficiency: c.sufficiency,
+    claims: [],
+    observed: {
+      defaultShare: round(defaultShare, 2),
+      defaultRpe: RPE.default,
+      ratedSessions,
+      unratedSessions,
+      sorenessAfterUnrated: sorenessAfterUnrated != null ? round(sorenessAfterUnrated, 1) : null,
+      sorenessAfterRated: sorenessAfterRated != null ? round(sorenessAfterRated, 1) : null,
     },
   };
 }
