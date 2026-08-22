@@ -56,6 +56,37 @@ const logDoc = {
     {
       key: 'primary',
       groups: [
+        // A FINISHED superset, stamped `completedAt` so the Logger parks it and
+        // the "Done" pile actually renders. Without one the pile is absent and
+        // this audit measures a surface it never drew — the failure recorded in
+        // docs/LESSONS.md as "audit:mobile is green on a surface it never
+        // rendered". Long names, four sets and a notation on purpose: the done
+        // row is [✓][name + tags][set summary] on one line, and this is what
+        // squeezes it at 375px.
+        {
+          id: 'g0',
+          kind: 'superset',
+          completedAt: '2026-01-06T09:00:00Z',
+          items: [
+            {
+              id: 'i0a',
+              movement: 'single-arm half-kneeling landmine press',
+              primaryMetric: 'weight',
+              sets: [
+                { ...set('10', 32.5, 10, 7, true), notations: ['/side'] },
+                { ...set('10', 32.5, 10, 8, true), notations: ['/side'] },
+                { ...set('10', 32.5, 9, 8.5, true), notations: ['/side'] },
+                { ...set('10', 32.5, 8, 9, true), notations: ['/side'] },
+              ],
+            },
+            {
+              id: 'i0b',
+              movement: 'chest-supported row',
+              primaryMetric: 'weight',
+              sets: [set('12', 45, 12, 7, true), set('12', 45, 12, 8, true)],
+            },
+          ],
+        },
         {
           id: 'g1',
           kind: 'single',

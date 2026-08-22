@@ -250,6 +250,11 @@ expand on tap. The mockup's `sticky top-0` header was **not** taken — `App.ast
 already sticks a header that auto-hides, and the rest-timer bar already sticks
 beneath it, so a third sticky bar would need a hard offset that detaches. The
 sheet contract, autosave, rest timer and voice input are untouched.
+A follow-on pass compressed the **"Done" pile** to match: a parked group is now
+one 44px row per movement — `✓ name [notations] 60 × 8, 60 × 8` — inside a
+single bordered list, the shape `LogQuickView` and `SessionDetail` already used
+for a finished workout, with a superset's movements listed indented instead of
+hidden behind "2 movements". Any row expands back to the full editable card.
 
 **Plan is a week at a time.** A `role="tablist"` week rail with phase stripes
 and a `set`/`open` state selects the active week; days are collapsible cards
