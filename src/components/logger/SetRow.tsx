@@ -15,12 +15,15 @@ import { haptic } from '@/lib/haptics';
 export function SetRow({
   metric,
   set,
+  index,
   isPr = false,
   onOpen,
   onToggle,
 }: {
   metric: MetricKey;
   set: LogSet;
+  // 0-based position in the movement, rendered 1-based as the ordinal gutter.
+  index: number;
   isPr?: boolean;
   onOpen: () => void;
   onToggle: () => void;
@@ -68,11 +71,22 @@ export function SetRow({
   const main = value();
 
   return (
+    // The completed rule is `--color-teal`, the app's one signal colour and the
+    // same token the ring-pop above already fires in — so the resting state of a
+    // logged set matches the flash that confirmed it. It is theme-adaptive
+    // (burnt orange on paper, cyan on carbon), and it is never the only cue:
+    // the ✓ fill and the summary text both change with it.
     <div
       className={`flex items-center gap-2 border-l-2 pl-2 ${
-        a.completed ? 'border-accent' : 'border-border'
+        a.completed ? 'border-teal' : 'border-border'
       }`}
     >
+      {/* Ordinal gutter. Fixed width and tabular so the summaries below it line
+          up into a column rather than stepping right at set 10. */}
+      <span className="w-4 shrink-0 text-[0.6rem] leading-none tabular-nums text-faint">
+        {index + 1}
+      </span>
+
       {set.planned ? (
         <span className="flex w-9 shrink-0 items-center text-[0.6rem] uppercase leading-tight tracking-wider text-muted">
           {set.planned}

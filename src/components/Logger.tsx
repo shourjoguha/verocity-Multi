@@ -845,8 +845,10 @@ export default function Logger() {
     const item = group.items[ii];
     if (isSubroutine(item)) {
       return (
-        <div key={item.id} className={grouped ? 'border-t border-border pt-3 first:border-0 first:pt-0' : ''}>
-          <div className="flex items-start justify-between gap-2">
+        <div key={item.id} className={grouped ? 'border-t border-border first:border-0' : ''}>
+          {/* Carries its own px-4/py-3 now that the card container is unpadded
+              — same band treatment as a movement's identity row. */}
+          <div className="flex items-start justify-between gap-2 px-4 py-3">
             <div className="min-w-0">
               <span className="capitalize text-fg">{item.movement}</span>
               <SubroutineBody description={item.description} url={item.url} className="mt-1" />
@@ -870,12 +872,16 @@ export default function Logger() {
     const collapsible = !grouped;
     const isCollapsed = collapsible && collapsed.has(groupId);
     return (
-      <div key={item.id} className={grouped ? 'border-t border-border pt-3 first:border-0 first:pt-0' : ''}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          {/* A definite min-width is what makes the wrap actually happen: with
-              min-w-0 the name collapses to nothing so the controls always
-              "fit" on one line and cover it. */}
-          <div className="flex min-w-[8rem] flex-1 items-center gap-2">
+      <div key={item.id} className={grouped ? 'border-t border-border first:border-0' : ''}>
+        {/* BAND 1 — identity. The metric/voice/rest/options cluster used to
+            share this row and wrap onto a second line at 375px; the comment
+            that stood here described fighting that wrap with a min-width on
+            the name. The design bands the controls below a hairline instead,
+            so the name row is a single line at every width and the controls
+            get a full row of their own. `min-w-0` is now correct precisely
+            because nothing competes for the space any more. */}
+        <div className="flex items-center gap-2 px-4 py-1.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               type="button"
               onClick={() => {
@@ -929,31 +935,35 @@ export default function Logger() {
               {allDone ? ' · done' : ''}
             </span>
           ) : (
-          <>
-            {/* Per-movement done/total — the mockup's "2/4" between the name
-                and the chip row. Fragment, not a wrapping div, so this and
-                the chip row stay siblings of the name block above and the
-                whole header keeps wrapping as ONE flex-wrap row rather than
-                stacking into two. */}
+            /* Per-movement done/total, right-aligned in the identity band. */
             <span className="shrink-0 t-label text-faint tabular-nums">
               {doneCount}/{item.sets.length}
             </span>
-            <div className="flex items-center gap-2 t-control text-muted">
+          )}
+        </div>
+
+        {isCollapsed ? null : (
+          <>
+            {/* BAND 2 — controls. Borderless in a hairline-separated row
+                rather than four bordered chips floating in the header: the
+                band itself is the container now, so each control does not
+                need its own outline to read as a control. */}
+            <div className="flex items-center border-t border-border-soft px-2 t-control text-muted">
             <button
               onClick={() => {
                 activate(groupId);
                 const nextMetric = METRIC_CYCLE[(METRIC_CYCLE.indexOf(item.primaryMetric) + 1) % METRIC_CYCLE.length];
                 setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric));
               }}
-              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-2 hover:text-fg"
+              className="hill-btn flex min-h-11 items-center px-2 transition-colors hover:text-fg"
               aria-label="Change metric"
             >
               {item.primaryMetric}
             </button>
             {/* Voice stays visible at every width — the mockup hides it below
                 sm:, and hiding a control on the primary target platform is
-                removing a feature, not compacting a layout. The row wraps
-                instead (parent is flex-wrap). */}
+                removing a feature, not compacting a layout. It has a band of
+                its own now, so there is room for it without wrapping. */}
             {voice.supported && !editing ? (
               <button
                 onClick={() => {
@@ -961,8 +971,8 @@ export default function Logger() {
                   listen(item.id, si, gi, ii);
                 }}
                 aria-pressed={voiceTarget === item.id}
-                className={`hill-btn flex min-h-11 items-center border bg-surface px-2 hover:text-fg ${
-                  voiceTarget === item.id ? 'border-accent text-accent' : 'border-border'
+                className={`hill-btn flex min-h-11 items-center px-2 transition-colors ${
+                  voiceTarget === item.id ? 'text-teal' : 'hover:text-fg'
                 }`}
               >
                 {voiceTarget === item.id ? 'Listening…' : 'Voice'}
@@ -974,39 +984,43 @@ export default function Logger() {
                   const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
                   if (restSeconds > 0) rest.start(restSeconds);
                 }}
-                className="hill-btn flex min-h-11 items-center border border-border bg-surface px-2 hover:text-fg"
+                className="hill-btn flex min-h-11 items-center px-2 transition-colors hover:text-fg"
               >
                 Rest
               </button>
             ) : null}
+            {/* Options sits hard right, opposite the three act-on-this-set
+                controls — the design's split toolbar. */}
+            <span className="flex-1" />
             <button
               onClick={() => setOptionsFor({ si, gi, ii })}
-              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-2 hover:text-fg"
+              className="hill-btn flex min-h-11 items-center px-2 text-base transition-colors hover:text-fg"
               aria-label="Movement options"
             >
               ⋯
             </button>
             </div>
-          </>
-          )}
-        </div>
-        {isCollapsed ? null : (
-        <>
+
         {item.notes ? (
-          // Tap-to-expand, one-line clamp — `line-clamp-1` is a Tailwind v4
-          // core utility, not hand-rolled CSS (see docs/LESSONS.md § "Hand-
-          // written CSS loses its unprefixed property" for why a hand-rolled
-          // -webkit-line-clamp rule is the wrong call here). -my-2 pulls the
-          // min-h-11 tap target back so a one-line note doesn't push the set
-          // list down — same technique as the +Movement/+Subroutine row.
+          // BAND 3 — coach's note. Tap-to-expand, one-line clamp;
+          // `line-clamp-1` is a Tailwind v4 core utility, not hand-rolled CSS
+          // (see docs/LESSONS.md § "Hand-written CSS loses its unprefixed
+          // property" for why a hand-rolled -webkit-line-clamp rule is the
+          // wrong call here). The -my-2 that used to collapse this row's
+          // height is gone: the note is its own band now, so the 44px target
+          // is the band rather than something pulled back out of the flow.
           <button
             type="button"
             onClick={() => toggleNotesOpen(item.id)}
             aria-expanded={notesOpen.has(item.id)}
-            className="-my-2 flex min-h-11 w-full items-center border-l-2 border-border pl-2 text-left"
+            className="flex min-h-11 w-full items-center border-t border-border-soft px-4 py-2 text-left"
           >
+            {/* Sentence case, not `t-control`. A coach's note is prose — the
+                uppercase control tier was rendering "Belt on from set 2…" as
+                "BELT ON FROM SET 2…", which reads as a warning label rather
+                than an instruction and costs width on the clamp. */}
             <span
-              className={`whitespace-pre-wrap t-control text-muted ${
+              className={`whitespace-pre-wrap text-xs leading-snug text-muted ${
                 notesOpen.has(item.id) ? '' : 'line-clamp-1'
               }`}
             >
@@ -1014,7 +1028,9 @@ export default function Logger() {
             </span>
           </button>
         ) : null}
-        <div className="flex flex-col [&>*+*]:border-t [&>*+*]:border-border-soft">
+        {/* BAND 4 — the sets. Flush to the card edge with inner hairlines, so
+            the ordinal gutter and the ✓ column line up down the whole card. */}
+        <div className="flex flex-col border-t border-border-soft [&>*+*]:border-t [&>*+*]:border-border-soft">
           {item.sets.map((set, ki) => {
             const prev = ki > 0 ? item.sets[ki - 1] : null;
             const cliff =
@@ -1028,10 +1044,11 @@ export default function Logger() {
               set.actual.reps != null &&
               prev.actual.reps - set.actual.reps > 2;
             return (
-              <div key={ki} className="flex flex-col gap-2 py-2">
+              <div key={ki} className="flex flex-col gap-2 px-4 py-1.5">
                 <SetRow
                   metric={item.primaryMetric}
                   set={set}
+                  index={ki}
                   isPr={isPrSet(set.actual, bestByMovement.get(item.movement) ?? null)}
                   onOpen={() => {
                     activate(groupId);
@@ -1056,7 +1073,7 @@ export default function Logger() {
             activate(groupId);
             setDoc((d) => addSet(d, si, gi, ii));
           }}
-          className="mt-3 flex min-h-11 w-full items-center justify-center border border-dashed border-border t-control text-muted transition-colors hover:border-fg hover:text-fg"
+          className="flex min-h-11 w-full items-center justify-center gap-1 border-t border-border-soft t-control text-muted transition-colors hover:bg-elevated hover:text-fg"
         >
           + Add set
         </button>
@@ -1080,11 +1097,20 @@ export default function Logger() {
         // Left accent rule, not an all-round accent border — the mockup's
         // "superset with previous" cue on an otherwise ordinary bordered
         // card, matching the single-movement group's border-border below.
+        // Horizontal padding moved off the card and onto the bands inside it,
+        // so a superset's member movements band exactly like a standalone one
+        // instead of being inset a second time by this container.
         <div
           key={group.id}
-          className={`border border-border border-l-2 border-l-accent ${isCollapsed ? 'px-4 py-1' : 'p-4'}`}
+          className={`lift border border-border border-l-2 border-l-accent bg-surface ${
+            isCollapsed ? 'py-1' : ''
+          }`}
         >
-          <div className={`flex items-center justify-between gap-2 t-control ${isCollapsed ? '' : 'mb-3'}`}>
+          <div
+            className={`flex items-center justify-between gap-2 px-4 t-control ${
+              isCollapsed ? '' : 'border-b border-border-soft'
+            }`}
+          >
             <button
               type="button"
               onClick={() => {
@@ -1134,13 +1160,15 @@ export default function Logger() {
     }
     const singleCollapsed = collapsed.has(group.id);
     return (
+      // Flat card, hairline outline, surface fill — the bands inside supply
+      // their own padding so every row runs the full width of the card.
       <div
         key={group.id}
-        className={`border border-border ${singleCollapsed ? 'px-4 py-1' : 'p-4'}`}
+        className={`lift border border-border bg-surface ${singleCollapsed ? 'py-1' : ''}`}
       >
         {renderItem(si, gi, 0, false)}
         {singleCollapsed ? null : (
-        <div className="mt-3 flex justify-end gap-1 t-control">
+        <div className="flex justify-end gap-1 border-t border-border-soft px-2 t-control">
           {gi < groups.length - 1 ? (
             <button
               onClick={() => setDoc((d) => mergeWithNext(d, si, gi, 'superset'))}
@@ -1314,8 +1342,26 @@ export default function Logger() {
             <>
               <div>
                 <div className="font-display text-4xl tabular-nums text-fg">{clock(stopwatch.seconds)}</div>
-                <div className={`t-label ${unsaved ? 'text-accent' : 'text-muted'}`}>
-                  {status}
+                {/* Run-state dot + word, from the design. The dot is teal only
+                    while the clock is actually running, which is information
+                    (a paused session still autosaves and still reads
+                    `in_progress`, so the status string alone never showed it).
+                    Colour is never the only carrier — the word next to it says
+                    the same thing, per the monochrome-chrome rule. */}
+                <div className={`flex items-center gap-1.5 t-label ${unsaved ? 'text-accent' : 'text-muted'}`}>
+                  <span
+                    aria-hidden
+                    className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+                      stopwatch.running ? 'bg-teal' : 'bg-faint'
+                    }`}
+                  />
+                  {stopwatch.running ? 'In progress' : 'Paused'}
+                  {/* The dot reads the CLOCK; `status` is the persisted row
+                      state and the two are different axes. They agree on the
+                      common path, so printing both would just be noise — but a
+                      log resumed as `planned`, or one that has gone `done` or
+                      `cancelled` under us, still has to say so. */}
+                  {status !== 'in_progress' && status !== 'paused' ? ` · ${status}` : ''}
                   {saving ? ' · saving…' : ''}
                   {unsaved && !saving ? ' · not saved' : ''}
                 </div>
@@ -1369,8 +1415,12 @@ export default function Logger() {
             <span className="t-label text-faint tabular-nums">
               {sessionSets.done}/{sessionSets.total} sets
             </span>
+            {/* MM/DD, per the design. The full ISO date left this row touching
+                the hairline at 390px with nothing to spare, and the year is
+                the one part of today's date nobody is reading — the picker
+                under Session details still shows it in full. */}
             <span className="t-label text-muted tabular-nums">
-              {logDate}
+              {logDate.slice(5).replace('-', '/')}
               {tags.length ? ` · ${tags.length}` : ''}
             </span>
           </span>
@@ -1427,16 +1477,31 @@ export default function Logger() {
             animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
             exit={{ opacity: 0, height: 0, marginBottom: 0 }}
             transition={{ duration: 0.3, ease: EASE }}
-            className="sticky top-12 z-30 flex items-center justify-between gap-3 overflow-hidden border border-accent bg-bg px-4 pointer-fine:bg-bg/95 pointer-fine:backdrop-blur"
+            className="sticky top-12 z-30 overflow-hidden border border-teal bg-bg pointer-fine:bg-bg/95 pointer-fine:backdrop-blur"
           >
-            <span className="t-control text-accent">Rest</span>
-            <span className="font-display text-2xl tabular-nums text-fg">{clock(rest.secondsLeft)}</span>
-            <button
-              onClick={rest.stop}
-              className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
-            >
-              Skip
-            </button>
+            <div className="flex items-center justify-between gap-3 px-4">
+              <span className="t-control text-teal">Rest</span>
+              <span className="font-display text-2xl tabular-nums text-fg">{clock(rest.secondsLeft)}</span>
+              <button
+                onClick={rest.stop}
+                className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
+              >
+                Skip
+              </button>
+            </div>
+            {/* Remaining-fraction rule from the design — the countdown made
+                glanceable, which is the whole job of a bar you look at from
+                across a rack. Width only, so it composites without repainting
+                the sticky bar's blurred backdrop on every tick. `aria-hidden`:
+                the clock beside it already announces the real value. */}
+            <div aria-hidden className="h-0.5 w-full bg-border-soft">
+              <div
+                className="h-full bg-teal"
+                style={{
+                  width: `${Math.min(100, Math.max(0, (rest.secondsLeft / Math.max(1, rest.totalSeconds)) * 100))}%`,
+                }}
+              />
+            </div>
           </motion.div>
         ) : null}
       </AnimatePresence>
