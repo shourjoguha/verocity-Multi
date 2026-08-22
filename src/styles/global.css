@@ -45,6 +45,16 @@
   --color-up: hsl(147 46% 30%);
   --color-down: hsl(4 55% 42%);
 
+  /* DESTRUCTIVE actions — remove, delete, discard. Its own token rather than
+     borrowing --color-down: that one means "a negative delta" and is read by
+     Delta and the sparklines, so retuning it for chart legibility would drag
+     every delete button along with it. Same red family on purpose; the two are
+     allowed to drift.
+     This is the one colour that is legal on CHROME rather than data, because
+     severity is the information. It is never the only cue — the control also
+     says "remove" in its accessible name, and the flows it starts confirm. */
+  --color-danger: hsl(4 55% 42%);
+
   /* Meal-tag chroma — the saturation/lightness a meal tag's generated hue is
      painted at (see mealTagColor in lib/tags.ts). Only the hue varies per tag;
      these hold it readable on paper. DATA colour, not chrome: the macro chips
@@ -165,6 +175,10 @@ html[data-theme='dark'] {
      reference design's #3fa45b / #c4554d. */
   --color-up: hsl(137 44% 45%);
   --color-down: hsl(4 43% 54%);
+  /* Lightened to clear AA on carbon, same as --color-down above it. Defined in
+     BOTH theme blocks deliberately — a token that exists in only one is the
+     most expensive mistake available in this file. */
+  --color-danger: hsl(4 43% 54%);
   /* Brighter than the light block so a generated hue reads on carbon. */
   --meal-tag-sat: 70%;
   --meal-tag-light: 58%;

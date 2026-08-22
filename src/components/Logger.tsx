@@ -924,7 +924,7 @@ export default function Logger() {
             so the name row is a single line at every width and the controls
             get a full row of their own. `min-w-0` is now correct precisely
             because nothing competes for the space any more. */}
-        <div className="flex items-center gap-2 px-4 py-0.5">
+        <div className="flex items-center gap-2 px-4">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               type="button"
@@ -932,22 +932,24 @@ export default function Logger() {
                 activate(groupId);
                 toggleItemComplete(si, gi, ii);
               }}
-              // Same box as a set row's ✓, deliberately: they are the same
-              // control at two scopes, and at 20px this one read as a decorative
-              // tick beside three 44px checkboxes rather than the one that
-              // completes all of them. The old comment here defended the small
-              // glyph because "the pillow doesn't read at that scale" — that
-              // pillow was a drop shadow, and it was retired with the rest of
-              // the depth tokens, so the reason no longer holds.
-              className={`hill-btn -ml-2 flex h-11 w-11 shrink-0 items-center justify-center border text-lg transition-colors ${
-                allDone
-                  ? 'border-accent bg-accent text-accent-fg'
-                  : 'border-border bg-surface text-muted hover:text-fg'
-              }`}
+              // Same box as a set row's ✓ — they are the same control at two
+              // scopes and have to read as one. Text-height chrome inside a
+              // real 44px target; see the SetRow note for why the target
+              // cannot shrink with it.
+              className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center"
               aria-label="Complete movement"
               aria-pressed={allDone}
             >
-              ✓
+              <span
+                aria-hidden
+                className={`hill-btn flex h-6 w-6 items-center justify-center border text-xs transition-colors ${
+                  allDone
+                    ? 'border-accent bg-accent text-accent-fg'
+                    : 'border-border bg-surface text-muted'
+                }`}
+              >
+                ✓
+              </span>
             </button>
             {collapsible ? (
               <button
@@ -1103,7 +1105,7 @@ export default function Logger() {
             return (
               // No `px-*`: SetRow supplies its own, so its left rule can sit on
               // the card border. The cliff note below keeps a matching inset.
-              <div key={ki} className="flex flex-col gap-2 py-0.5">
+              <div key={ki} className="flex flex-col gap-2">
                 <SetRow
                   metric={item.primaryMetric}
                   set={set}
@@ -1751,18 +1753,37 @@ export default function Logger() {
                 <div className="min-h-0 flex-1 overflow-y-auto p-4">
                   <div className="mb-4 text-sm capitalize text-fg">{item.movement}</div>
                   <div className="flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handoff(() => {
-                          if (sub) setSubEditor({ mode: 'edit', si, gi, ii });
-                          else setPicker({ mode: 'swap', si, gi, ii });
-                        })
-                      }
-                      className={rowClass}
-                    >
-                      {sub ? 'Edit subroutine' : 'Swap movement'}
-                    </button>
+                    {/* Swap takes the width, remove is a square beside it —
+                        the Finish/Discard pairing from the bottom bar. Red is
+                        --color-danger, the one place colour is legal on chrome
+                        because severity is the information; the accessible
+                        name still says "remove", so it survives without hue. */}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handoff(() => {
+                            if (sub) setSubEditor({ mode: 'edit', si, gi, ii });
+                            else setPicker({ mode: 'swap', si, gi, ii });
+                          })
+                        }
+                        className={`flex-1 ${rowClass}`}
+                      >
+                        {sub ? 'Edit subroutine' : 'Swap movement'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDoc((d) => removeItem(d, si, gi, ii));
+                          close();
+                        }}
+                        className="hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-border bg-surface text-danger transition-colors hover:border-danger"
+                        aria-label={sub ? 'Remove subroutine' : 'Remove movement'}
+                        title={sub ? 'Remove subroutine' : 'Remove movement'}
+                      >
+                        <TrashGlyph className={GLYPH} />
+                      </button>
+                    </div>
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -1790,66 +1811,63 @@ export default function Logger() {
                         ↓ Down
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDoc((d) => removeItem(d, si, gi, ii));
-                        close();
-                      }}
-                      className={rowClass}
-                    >
-                      {sub ? 'Remove subroutine' : 'Remove movement'}
-                    </button>
                   </div>
 
-                  <div className="mt-5">
-                    <div className="mb-2 t-label text-muted">
-                      Move to section
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {SECTIONS.filter((k) => k !== currentKey).map((k) => (
-                        <button
-                          key={k}
-                          type="button"
-                          onClick={() => {
-                            setDoc((d) => moveGroupToSection(d, si, gi, k));
+                  {/* Two one-shot pickers. Native <select>: it costs no JS
+                      state, gets the OS wheel on a phone, and collapses two
+                      wrapping chip grids (five sections and up to N movements,
+                      ~180px of the sheet) into two 44px rows. Both are ACTIONS,
+                      not stored settings, so each stays on its placeholder and
+                      fires on change — hence `value=""` rather than a bound
+                      value. */}
+                  <div className="mt-4 flex flex-col gap-2">
+                    <label className="flex items-center gap-3">
+                      <span className="w-32 shrink-0 t-label text-muted">Move to section</span>
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const k = e.target.value as SectionKey;
+                          if (!k) return;
+                          setDoc((d) => moveGroupToSection(d, si, gi, k));
+                          close();
+                        }}
+                        className="hill-btn min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-sm text-fg transition-colors hover:border-fg"
+                      >
+                        <option value="">Choose…</option>
+                        {SECTIONS.filter((k) => k !== currentKey).map((k) => (
+                          <option key={k} value={k}>
+                            {sectionLabel(k)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    {!sub && supersetTargets.length > 0 ? (
+                      <label className="flex items-center gap-3">
+                        <span className="w-32 shrink-0 t-label text-muted">Superset with</span>
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const target = supersetTargets.find((t) => t.group.id === e.target.value);
+                            if (!target) return;
+                            setDoc((d) =>
+                              groupWithAcrossSections(d, si, gi, target.targetSi, target.targetGi, 'superset'),
+                            );
                             close();
                           }}
-                          className="hill-btn border border-border bg-surface px-2 py-1 text-xs text-fg transition-colors hover:border-fg"
+                          className="hill-btn min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-sm capitalize text-fg transition-colors hover:border-fg"
                         >
-                          {sectionLabel(k)}
-                        </button>
-                      ))}
-                    </div>
+                          <option value="">Choose…</option>
+                          {supersetTargets.map(({ group: g, sectionKey }) => (
+                            <option key={g.id} value={g.id}>
+                              {g.items.map((it) => it.movement).join(' + ')}
+                              {sectionKey !== currentKey ? ` · ${sectionLabel(sectionKey)}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
                   </div>
-
-                  {!sub && supersetTargets.length > 0 ? (
-                    <div className="mt-5">
-                      <div className="mb-2 t-label text-muted">
-                        Superset with
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {supersetTargets.map(({ group: g, targetSi, targetGi, sectionKey }) => (
-                          <button
-                            key={g.id}
-                            type="button"
-                            onClick={() => {
-                              setDoc((d) => groupWithAcrossSections(d, si, gi, targetSi, targetGi, 'superset'));
-                              close();
-                            }}
-                            className="hill-btn border border-border bg-surface px-2 py-1 text-xs capitalize text-fg transition-colors hover:border-fg"
-                          >
-                            {g.items.map((it) => it.movement).join(' + ')}
-                            {sectionKey !== currentKey ? (
-                              <span className="ml-1 uppercase tracking-wider text-muted">
-                                · {sectionLabel(sectionKey)}
-                              </span>
-                            ) : null}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
 
                   {!sub ? (
                   <>
