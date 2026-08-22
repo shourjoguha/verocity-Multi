@@ -68,6 +68,7 @@ const ALLOW = [
   { id: '/side', why: 'the per-side set notation, not a page' },
   // Not this repo's code.
   { id: 'three.js', why: 'library name, not a local module' },
+  { id: 'fullPage', why: 'a Playwright screenshot option, named in the Testing entry about why it captures one viewport under the app shell' },
   { id: 'ANTHROPIC_API_KEY', why: 'env var, set in the Supabase dashboard' },
   { id: 'SHOWCASE_PROFILE_ID', why: 'env var' },
 ];

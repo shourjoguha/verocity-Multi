@@ -32,6 +32,10 @@ export function useStopwatch(initialSeconds = 0, autostart = false) {
 // ends silently is a countdown you miss.
 export function useCountdown(onDone?: () => void) {
   const [secondsLeft, setSecondsLeft] = useState(0);
+  // What the countdown was started with, kept so the caller can draw a
+  // remaining-fraction bar. Never reset on stop: the bar unmounts with the
+  // timer, and zeroing it here would divide by zero on the last frame.
+  const [totalSeconds, setTotalSeconds] = useState(0);
   const [running, setRunning] = useState(false);
 
   useEffect(() => {
@@ -52,9 +56,11 @@ export function useCountdown(onDone?: () => void) {
 
   return {
     secondsLeft,
+    totalSeconds,
     running,
     start: (s: number) => {
       setSecondsLeft(s);
+      setTotalSeconds(s);
       setRunning(true);
     },
     stop: () => setRunning(false),

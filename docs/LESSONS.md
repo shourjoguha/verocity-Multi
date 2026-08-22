@@ -804,6 +804,21 @@ were meaningless before this was spotted. Restart it after every `npm run build`
 **For anything involving a rebuild, serve `dist` with a server that reads from
 disk per request**, and always assert the origin really changed.
 
+### A `fullPage` screenshot of `/app/*` shows exactly one viewport
+`[confirmed in the wild]`
+Playwright's `fullPage: true` grows the capture to the **document's** scroll
+height, and under `.app-shell` the document cannot scroll at all — `html`/`body`
+are `height: 100dvh; overflow: hidden` and the scrolling lives in
+`[data-scroll-root]` inside `App.astro`. So `fullPage` returns a plain viewport
+shot with no error and no clue, and a Logger screenshot taken to check the Done
+pile showed a surface that was simply below the fold. Same root cause as
+`audit:mobile` measuring the scroller rather than `documentElement.scrollWidth`.
+**To capture below the fold, scroll the scroller, not the window**:
+`page.evaluate(() => { const s = document.querySelector('[data-scroll-root]');
+s.scrollTop = s.scrollHeight; })`, then shoot the viewport. `window.scrollTo` and
+`page.mouse.wheel` on the document are equally inert here.
+→ `src/layouts/App.astro`, `scripts/mobile-audit.mjs`
+
 ### A guard that can pass while the thing it guards is broken
 `[confirmed in the wild]` — twice now.
 The first service-worker test asserted its token appeared *somewhere in the

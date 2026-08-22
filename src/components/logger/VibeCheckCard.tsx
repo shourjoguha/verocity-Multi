@@ -20,9 +20,15 @@ export function VibeCheckCard({
   const [vibe, setVibe] = useState<VibeCheck>({ sleep: 3, energy: 3, soreness: 3 });
 
   return (
-    <div className="mb-8 border border-border p-4">
-      <div className="mb-3 t-label text-muted">Vibe check</div>
-      <div className="flex flex-col gap-3">
+    // Banded like the movement cards: a surface-filled card whose heading sits
+    // in its own row above an inner hairline, rather than a label floating in
+    // shared padding. `mb-8` and the save/skip contract are unchanged.
+    <div className="lift mb-8 border border-border bg-surface">
+      <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border-soft px-4">
+        <span className="t-label text-fg">Readiness</span>
+        <span className="t-label text-faint">10 sec check-in</span>
+      </div>
+      <div className="flex flex-col gap-3 px-4 pt-4">
         {FIELDS.map(({ key, label }) => (
           <div
             key={key}
@@ -59,7 +65,7 @@ export function VibeCheckCard({
           </div>
         ))}
       </div>
-      <div className="mt-4 flex gap-3">
+      <div className="flex gap-3 p-4">
         <button
           type="button"
           onClick={() => onSave(vibe)}
