@@ -710,6 +710,23 @@ turned `/app` back to `small-targets=0`. **Never chase a slimmer control with a
 button height override; audit:mobile measures the button, not the thumb.**
 → `src/components/ui/SegmentedTabs.tsx`, `scripts/mobile-audit.mjs`
 
+### The slim-thumb trick does not transfer to a stacked list
+`[reasoned, not measured — the faked version was deliberately never built]`
+The `min-h-11` + negative-margin pattern above buys a real 44px target because
+`ui/SegmentedTabs` lays its buttons out **side by side**: the extra height grows
+into empty space above and below the row, and no sibling competes for it. Copy
+it into a vertical list — the Logger's Done pile, a settings list, any column of
+rows — and it buys nothing. Each row's 44px box then overlaps its neighbours',
+the shared band goes to whichever row paints last, and every row's *exclusive*
+tap band collapses back to its visible height. `audit:mobile` still reports 44
+and the control still taps like 28.
+**So compress a column by deleting chrome, not by faking the row.** The Done
+pile went from ~62px per finished movement (a bordered card, `px-4 py-1`, plus
+an 8px gap) to ~45px by dropping the per-card border, the padding and the gaps
+and keeping the row a genuine `min-h-11` — and it now shows the movement names
+inside a superset, which the taller version did not.
+→ `src/components/Logger.tsx`, `src/components/ui/SegmentedTabs.tsx`
+
 ### `audit:mobile` never visits `/app/plan/upload`
 `[measured in Chromium]`
 Its `ROUTES` list covers the nav destinations, so the entire plan/session
@@ -1009,6 +1026,15 @@ looks exactly like the bug you are trying to fix.
 the chart, its vertex markers and the toggles are never in the DOM. A green
 `/app/stats` run says nothing about any of them.
 
+**The Logger's "Done" pile was the same gap, found the same way:** the fixture's
+groups carried no `completedAt`, so nothing ever parked and the pile was absent
+from every run — a compressed-row rewrite of it could have shipped with
+`small-targets=0` twice over. The fixture now opens with a finished superset
+(`g0`, stamped `completedAt`, every set `completed: true`), deliberately holding
+a 40-character movement name, four sets and a `/side` notation, because the done
+row is name + tags + set summary on ONE line and that is what squeezes it at
+375px.
+
 A probe that does see them needs completed logs **and** `aspect_snapshots` rows,
 because the chart has four distinct renderings and the baseline depth is what
 picks between them: unscored (raw measurements, no polygon), thin (hollow
@@ -1267,7 +1293,15 @@ The fitness radar:
 - **Completed movements park into a foldable "Done" pile**, deferred until you
   touch a *different* movement so nothing jumps mid-set. Collapsed groups must
   stay genuinely compact — dropping only the set rows while keeping the control
-  cluster left them at ~166px and defeated the point.
+  cluster left them at ~166px and defeated the point. A parked group is now a
+  *summary*, not a shrunken logging card (`renderDoneGroup` in `Logger.tsx`):
+  one 44px row per movement reading `✓ name [tags] 60 × 8, 60 × 8`, the same
+  shape `LogQuickView` and `SessionDetail` use for a finished workout, inside
+  one bordered pile with `--color-border-soft` dividers instead of a stack of
+  bordered cards with an 8px gap. A superset lists its movements indented under
+  its kind rather than hiding them behind "2 movements". Tapping any row expands
+  the group back into the full editable card, which is the only reason the
+  controls can leave the summary at all.
 - **44px targets, `TOUCH.minTargetPx`.** The glyph may stay small; the *target*
   may not. Exceptions live in `scripts/mobile-audit.mjs`'s allowlist and each
   carries its reason.

@@ -47,6 +47,7 @@ import {
   ungroup,
 } from '@/lib/logEdits';
 import { isSubroutine } from '@/lib/subroutine';
+import { formatSetActual } from '@/lib/format';
 import { activeSessionOf } from '@/lib/activeSession';
 import { typeFromLabel } from '@/lib/timeline';
 import { SubroutineBody } from '@/components/SubroutineBody';
@@ -61,6 +62,7 @@ import { ACTIVITY_TAGS, NOTATIONS, SECTIONS, TIMERS, type MetricKey, type Sectio
 import type {
   GroupKind,
   LogDocument,
+  LogItem,
   LogStatus,
   Movement,
   MovementSub,
@@ -99,6 +101,18 @@ function clock(total: number): string {
 
 const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
 const today = () => new Date().toISOString().slice(0, 10);
+
+// What a finished movement reads as in the Done pile: the same comma-joined
+// actuals the completed-session surfaces use (LogQuickView, SessionDetail), so
+// a workout looks the same the moment it is done as it does when reopened.
+const doneSetSummary = (item: LogItem) =>
+  item.sets.map((s) => formatSetActual(s.actual)).join(', ');
+
+// Notations are stored per set but toggled per item (toggleItemNotation writes
+// every set), so the union IS the movement's tag set. Rendered as a subscript
+// after the name rather than a chip row — it is provenance, not a control.
+const doneNotations = (item: LogItem) =>
+  Array.from(new Set(item.sets.flatMap((s) => s.notations)));
 
 type Picker =
   | { mode: 'add'; sectionKey: SectionKey }
@@ -773,6 +787,14 @@ export default function Logger() {
     .flatMap((s, si) => s.groups.map((g, gi) => ({ si, gi, g })))
     .filter(({ g }) => parked.has(g.id))
     .sort((a, b) => (a.g.completedAt ?? '').localeCompare(b.g.completedAt ?? ''));
+  // The header says "movements", so count movements — a finished superset is
+  // one group and two of them. It used to count groups, which was invisible
+  // while the pile showed one card per group and reads as a plain miscount now
+  // that every movement has its own row.
+  const doneMovements = doneGroups.reduce(
+    (n, { g }) => n + g.items.filter((it) => !isSubroutine(it)).length,
+    0,
+  );
   // The set the entry sheet is bound to, resolved fresh each render so the sheet
   // always shows current values. Any index that no longer exists (set deleted,
   // movement removed) resolves to null and closes the sheet.
@@ -1139,6 +1161,96 @@ export default function Logger() {
     );
   }
 
+  // A parked group as it reads in the Done pile: one row per movement, name and
+  // logged sets on a single line, no card padding and no per-card border — the
+  // compressed shape of the completed-session views rather than a shrunken
+  // logging card. A superset keeps its accent rule and lists its movements
+  // indented underneath, which the old collapsed card hid behind "2 movements".
+  //
+  // Tapping any row expands the group back into renderGroup's full editable
+  // card, so nothing here is a removed feature — the ✓ toggle, metric, rest,
+  // options and set rows all live one tap away, which is where they belong for
+  // work that is already finished.
+  function renderDoneGroup(si: number, gi: number) {
+    const group = doc.sections[si].groups[gi];
+    if (!collapsed.has(group.id)) {
+      // Inset so the expanded card's own border does not sit flush against the
+      // pile's outer hairline and read as one 2px line.
+      return (
+        <div key={group.id} className="p-2">
+          {renderGroup(si, gi)}
+        </div>
+      );
+    }
+    const superset = group.items.length > 1;
+    return (
+      <div key={group.id} className={superset ? 'border-l-2 border-l-accent' : ''}>
+        {superset ? (
+          // 'single' is unreachable for a multi-item group, but printing it
+          // raw would read as a bug rather than a label if it ever arrived.
+          <div className="px-2 pt-1.5 t-label text-faint">
+            {group.kind === 'circuit' ? 'circuit' : 'superset'}
+          </div>
+        ) : null}
+        {group.items.map((item) => {
+          const sub = isSubroutine(item);
+          const tags = sub ? [] : doneNotations(item);
+          // min-h-11 is the real 44px target and stays: these are stacked
+          // rows, so a negative margin would only fake the number for
+          // audit:mobile — the exclusive tap band of a row in a column is its
+          // visible height. The compression comes from the padding, borders
+          // and gaps that are gone, not from the row height.
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                activate(group.id);
+                toggleCollapse(group.id);
+              }}
+              aria-label={`Expand ${item.movement}`}
+              aria-expanded={false}
+              className={`flex min-h-11 w-full items-center gap-2 px-2 text-left ${
+                superset ? 'pl-5' : ''
+              }`}
+            >
+              <span
+                aria-hidden
+                className={`flex h-4 w-4 shrink-0 items-center justify-center border text-[0.5rem] ${
+                  sub ? 'border-border text-transparent' : 'border-accent bg-accent text-accent-fg'
+                }`}
+              >
+                ✓
+              </span>
+              {/* The tags are a SIBLING of the name, not inside it: nested in
+                  the truncating span they were the first thing an over-long
+                  movement name cut off, which is exactly backwards — the name
+                  survives truncation, a two-character tag cannot. */}
+              <span className="flex min-w-0 flex-1 items-baseline gap-1">
+                <span className="min-w-0 truncate text-sm capitalize text-fg">
+                  {item.movement}
+                </span>
+                {tags.length > 0 ? (
+                  <span className="shrink-0 translate-y-[0.15em] text-[0.6rem] leading-none tracking-wide text-faint">
+                    {tags.join(' ')}
+                  </span>
+                ) : null}
+              </span>
+              {sub ? null : (
+                // Capped at 40% so the NAME wins the row: a truncated summary
+                // still shows the first (heaviest) set, a truncated name shows
+                // nothing you can identify the movement by.
+                <span className="max-w-[40%] shrink-0 truncate text-right text-xs tabular-nums text-muted">
+                  {doneSetSummary(item)}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   // Hand off from the options sheet to another sheet. Sheets now unmount the
   // moment they close, so closing this one and opening the next in the same
   // commit leaves no overlap — no two scrims stacked, and no delay to wait out.
@@ -1395,12 +1507,16 @@ export default function Logger() {
               </span>
             </span>
             <span className="t-control text-muted">
-              {doneGroups.length} {doneGroups.length === 1 ? 'movement' : 'movements'}
+              {doneMovements} {doneMovements === 1 ? 'movement' : 'movements'}
             </span>
           </button>
           {doneOpen ? (
-            <div className="mt-1 flex flex-col gap-2">
-              {doneGroups.map(({ si, gi }) => renderGroup(si, gi))}
+            // One bordered pile with inner hairlines between groups, instead of
+            // a stack of individually bordered cards separated by an 8px gap:
+            // the card chrome was costing more height per finished movement
+            // than the movement itself.
+            <div className="mt-1 flex flex-col border border-border [&>*+*]:border-t [&>*+*]:border-border-soft">
+              {doneGroups.map(({ si, gi }) => renderDoneGroup(si, gi))}
             </div>
           ) : null}
         </section>
