@@ -16,6 +16,7 @@ export function SetRow({
   metric,
   set,
   index,
+  showPlanned,
   isPr = false,
   onOpen,
   onToggle,
@@ -24,6 +25,12 @@ export function SetRow({
   set: LogSet;
   // 0-based position in the movement, rendered 1-based as the ordinal gutter.
   index: number;
+  // True when ANY set in this movement has a planned target. The column is then
+  // reserved on EVERY row, empty ones included, so the value below it starts at
+  // one x down the whole card instead of stepping left on the rows that happen
+  // to have no target. False for ad-hoc movements, where reserving it would
+  // just indent every row past 48px of nothing.
+  showPlanned: boolean;
   isPr?: boolean;
   onOpen: () => void;
   onToggle: () => void;
@@ -81,34 +88,50 @@ export function SetRow({
         a.completed ? 'border-teal' : 'border-border'
       }`}
     >
-      {/* Ordinal gutter. Fixed width and tabular so the summaries below it line
-          up into a column rather than stepping right at set 10. */}
-      <span className="w-4 shrink-0 text-[0.6rem] leading-none tabular-nums text-faint">
+      {/* Ordinal gutter. Fixed width and tabular so the summaries beside it
+          line up into a column rather than stepping right at set 10. */}
+      <span className="w-4 shrink-0 text-right text-[0.6rem] leading-none tabular-nums text-faint">
         {index + 1}
       </span>
 
-      {set.planned ? (
-        <span className="flex w-9 shrink-0 items-center text-[0.6rem] uppercase leading-tight tracking-wider text-muted">
+      {/* Planned target. Fixed width and single-line: it used to be `w-9` with
+          `leading-tight`, so "5 @70%" wrapped to two lines and pushed the row
+          taller than its neighbours. Truncated with the full value on `title`
+          — a target that spills is worse than one you hover to read. */}
+      {showPlanned ? (
+        <span
+          title={set.planned || undefined}
+          className="ml-1 w-12 shrink-0 truncate text-[0.6rem] uppercase leading-none tracking-wider text-muted"
+        >
           {set.planned}
         </span>
       ) : null}
 
+      {/* Two nested boxes on purpose. The BUTTON centres its content in the
+          44px row, so the value lines up with the ordinal and planned columns
+          beside it; the inner span keeps value and RPE on a shared BASELINE,
+          which is what "142.5kg × 5 @8" needs to read as one phrase. Doing
+          both on one element is what misaligned it: `items-baseline` on the
+          button pinned the value near the top of the row while its siblings
+          centred, so every row's numbers sat visibly high. */}
       <button
         type="button"
         onClick={onOpen}
         aria-label={main ? `Edit set — ${main}` : 'Log this set'}
-        className="flex min-h-11 min-w-0 flex-1 items-baseline gap-2 text-left"
+        className="flex min-h-11 min-w-0 flex-1 items-center text-left"
       >
-        {main ? (
-          <span className="truncate font-display text-xl leading-none tabular-nums text-fg">
-            {main}
-          </span>
-        ) : (
-          <span className="t-control text-muted">Tap to log</span>
-        )}
-        {a.rpe != null ? (
-          <span className="shrink-0 text-sm tabular-nums text-muted">@{a.rpe}</span>
-        ) : null}
+        <span className="flex min-w-0 items-baseline gap-2">
+          {main ? (
+            <span className="truncate font-display text-xl leading-none tabular-nums text-fg">
+              {main}
+            </span>
+          ) : (
+            <span className="t-control text-muted">Tap to log</span>
+          )}
+          {a.rpe != null ? (
+            <span className="shrink-0 text-sm tabular-nums text-muted">@{a.rpe}</span>
+          ) : null}
+        </span>
       </button>
 
       <span className="relative inline-flex shrink-0">
