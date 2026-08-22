@@ -23,7 +23,7 @@ export function VibeCheckCard({
     // Banded like the movement cards: a surface-filled card whose heading sits
     // in its own row above an inner hairline, rather than a label floating in
     // shared padding. `mb-8` and the save/skip contract are unchanged.
-    <div className="lift mb-8 border border-border bg-surface">
+    <div className="lift mb-4 border border-border bg-surface">
       <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border-soft px-4">
         <span className="t-label text-fg">Readiness</span>
         <span className="t-label text-faint">10 sec check-in</span>

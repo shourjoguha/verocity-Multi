@@ -924,7 +924,7 @@ export default function Logger() {
             so the name row is a single line at every width and the controls
             get a full row of their own. `min-w-0` is now correct precisely
             because nothing competes for the space any more. */}
-        <div className="flex items-center gap-2 px-4 py-1.5">
+        <div className="flex items-center gap-2 px-4 py-0.5">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               type="button"
@@ -1070,7 +1070,7 @@ export default function Logger() {
             type="button"
             onClick={() => toggleNotesOpen(item.id)}
             aria-expanded={notesOpen.has(item.id)}
-            className="flex min-h-11 w-full items-center border-t border-border-soft px-4 py-2 text-left"
+            className="flex min-h-11 w-full items-center border-t border-border-soft px-4 py-1 text-left"
           >
             {/* Sentence case, not `t-control`. A coach's note is prose — the
                 uppercase control tier was rendering "Belt on from set 2…" as
@@ -1103,7 +1103,7 @@ export default function Logger() {
             return (
               // No `px-*`: SetRow supplies its own, so its left rule can sit on
               // the card border. The cliff note below keeps a matching inset.
-              <div key={ki} className="flex flex-col gap-2 py-1.5">
+              <div key={ki} className="flex flex-col gap-2 py-0.5">
                 <SetRow
                   metric={item.primaryMetric}
                   set={set}
@@ -1387,7 +1387,7 @@ export default function Logger() {
           having to know the header's height. (`min-h-svh` did know it, and was
           wrong by exactly that much.) The reading column moved in here; the
           outer div is full-bleed so the bar can span the screen. */}
-      <div className="mx-auto w-full max-w-2xl flex-1 px-3 sm:px-4 pb-8 pt-4">
+      <div className="mx-auto w-full max-w-2xl flex-1 px-3 sm:px-4 pb-4 pt-2">
       {/* Recomposed header: row 1 is the clock/status + Home/Pause (or the
           "Editing" heading), row 2 is the Session details toggle plus the
           sets count and date — one <header>, replacing the previous two
@@ -1402,7 +1402,7 @@ export default function Logger() {
           app header retracts, or stacked stickies that must know each
           other's heights. The clock is not what you need mid-set; the rest
           timer is, and it is already sticky. */}
-      <header className="mb-6">
+      <header className="mb-3">
         {/* Wraps: at 375px a session past the hour mark ("1:05:23" at
             text-4xl) plus Home and Pause does not fit on one line. */}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1473,7 +1473,7 @@ export default function Logger() {
             audit:mobile stays green on it (docs/LESSONS.md § "A fix silently
             switched off an existing guard"). Caught by screenshot, not by a
             check. */}
-        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-y border-border">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-y border-border">
           <button
             type="button"
             onClick={() => setShowDetails((v) => !v)}
@@ -1504,7 +1504,7 @@ export default function Logger() {
         </div>
 
         {showDetails ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <input
               type="date"
               value={logDate}
@@ -1533,7 +1533,7 @@ export default function Logger() {
         ) : null}
 
         {showDetails && linkedSession?.source_text ? (
-          <details className="mt-3 border border-border">
+          <details className="mt-1.5 border border-border">
             <summary className="cursor-pointer px-3 py-2 t-control text-muted hover:text-fg">
               Source{linkedSession.source ? ` · ${linkedSession.source}` : ''}
             </summary>
@@ -1551,7 +1551,7 @@ export default function Logger() {
           <motion.div
             key="rest"
             initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-            animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+            animate={{ opacity: 1, height: 'auto', marginBottom: 12 }}
             exit={{ opacity: 0, height: 0, marginBottom: 0 }}
             transition={{ duration: 0.3, ease: EASE }}
             className="sticky top-12 z-30 overflow-hidden border border-teal bg-bg pointer-fine:bg-bg/95 pointer-fine:backdrop-blur"
@@ -1587,13 +1587,19 @@ export default function Logger() {
         const si = doc.sections.findIndex((s) => s.key === section.key);
         const groups = doc.sections[si].groups;
         return (
-          <section key={section.key} className="mb-6">
+          <section key={section.key} className="mb-3">
             {/* The two add-affordances go in SectionHeader's `action` slot
                 rather than a second flex row around it — SectionHeader is
                 itself a `flex justify-between` with its own mb-3, so wrapping
                 it stacked two of them and left the label sitting in a nested
                 row it did not own. */}
             <SectionHeader
+              // `mb-1.5!` — SectionHeader hardcodes `mb-3` and Tailwind does no
+              // class-merging here, so an unmarked override loses the cascade
+              // (same trap as Button's `px-3!` above). Overridden per-caller
+              // rather than changed in the primitive, which every other view
+              // shares.
+              className="mb-1.5!"
               action={
                 <div className="-my-2 flex shrink-0 gap-1">
                   <button
@@ -1614,7 +1620,7 @@ export default function Logger() {
               {sectionLabel(section.key)}{' '}
               <span className="text-faint tabular-nums">{groups.length}</span>
             </SectionHeader>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
               {groups.map((group, gi) => (parked.has(group.id) ? null : renderGroup(si, gi)))}
               {groups.length === 0 ? (
                 <p className="text-sm text-muted">No movements yet.</p>
@@ -1625,7 +1631,7 @@ export default function Logger() {
       })}
 
       {doneGroups.length > 0 ? (
-        <section className="mb-6 border-t border-border pt-4">
+        <section className="mb-3 border-t border-border pt-2">
           {/* The whole Done pile folds as one unit, so what's left to do can be
               the only thing on screen. Each group inside stays individually
               expandable and fully editable. */}

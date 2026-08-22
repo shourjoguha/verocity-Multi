@@ -107,7 +107,7 @@ export function SetRow({
       {showPlanned ? (
         <span
           title={set.planned || undefined}
-          className="ml-1 w-12 shrink-0 truncate text-[0.6rem] uppercase leading-none tracking-wider text-muted"
+          className="ml-1 w-12 shrink-0 truncate text-[0.6rem] uppercase leading-tight tracking-wider text-muted"
         >
           {set.planned}
         </span>
@@ -128,7 +128,13 @@ export function SetRow({
       >
         <span className="flex min-w-0 items-baseline gap-2">
           {main ? (
-            <span className="truncate font-display text-xl leading-none tabular-nums text-fg">
+            // `leading-tight`, NOT `leading-none`: `truncate` is
+            // `overflow: hidden`, and at line-height 1 Archivo Black's descender
+            // falls outside the line box — so the tail of the "g" in "kg" was
+            // sheared off. The line box has to contain the descender before the
+            // overflow rule can be safe. Anywhere `truncate` meets
+            // `leading-none` on a face with descenders has the same bug.
+            <span className="truncate font-display text-xl leading-tight tabular-nums text-fg">
               {main}
             </span>
           ) : (
