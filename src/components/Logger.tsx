@@ -932,22 +932,22 @@ export default function Logger() {
                 activate(groupId);
                 toggleItemComplete(si, gi, ii);
               }}
-              className="-ml-2 flex min-h-11 w-11 shrink-0 items-center justify-center"
+              // Same box as a set row's ✓, deliberately: they are the same
+              // control at two scopes, and at 20px this one read as a decorative
+              // tick beside three 44px checkboxes rather than the one that
+              // completes all of them. The old comment here defended the small
+              // glyph because "the pillow doesn't read at that scale" — that
+              // pillow was a drop shadow, and it was retired with the rest of
+              // the depth tokens, so the reason no longer holds.
+              className={`hill-btn -ml-2 flex h-11 w-11 shrink-0 items-center justify-center border text-lg transition-colors ${
+                allDone
+                  ? 'border-accent bg-accent text-accent-fg'
+                  : 'border-border bg-surface text-muted hover:text-fg'
+              }`}
               aria-label="Complete movement"
               aria-pressed={allDone}
             >
-              {/* The glyph stays 20px — the pillow doesn't read at that scale —
-                  but the tap target around it meets TOUCH.minTargetPx. */}
-              <span
-                aria-hidden
-                className={`flex h-5 w-5 items-center justify-center border text-[0.6rem] ${
-                  allDone
-                    ? 'border-accent bg-accent text-accent-fg'
-                    : 'border-border text-muted'
-                }`}
-              >
-                ✓
-              </span>
+              ✓
             </button>
             {collapsible ? (
               <button
@@ -1101,7 +1101,9 @@ export default function Logger() {
               set.actual.reps != null &&
               prev.actual.reps - set.actual.reps > 2;
             return (
-              <div key={ki} className="flex flex-col gap-2 px-4 py-1.5">
+              // No `px-*`: SetRow supplies its own, so its left rule can sit on
+              // the card border. The cliff note below keeps a matching inset.
+              <div key={ki} className="flex flex-col gap-2 py-1.5">
                 <SetRow
                   metric={item.primaryMetric}
                   set={set}
@@ -1118,7 +1120,7 @@ export default function Logger() {
                   }}
                 />
                 {cliff ? (
-                  <div className="pl-3 t-control text-accent">
+                  <div className="pl-3.5 pr-2 t-control text-accent">
                     Rep drop {prev!.actual.reps! - set.actual.reps!} — extend rest or stop
                   </div>
                 ) : null}

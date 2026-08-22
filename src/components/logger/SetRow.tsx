@@ -83,14 +83,20 @@ export function SetRow({
     // logged set matches the flash that confirmed it. It is theme-adaptive
     // (burnt orange on paper, cyan on carbon), and it is never the only cue:
     // the ✓ fill and the summary text both change with it.
+    // Owns its own horizontal padding rather than sitting inside a padded
+    // wrapper, so the 2px rule lands FLUSH on the card's left border the way
+    // the reference draws it. Inside a `px-4` band it floated 16px in and read
+    // as a stray tick beside the row instead of the row's own edge.
     <div
-      className={`flex items-center gap-2 border-l-2 pl-2 ${
+      className={`flex items-center gap-2 border-l-2 pl-3 pr-2 ${
         a.completed ? 'border-teal' : 'border-border'
       }`}
     >
       {/* Ordinal gutter. Fixed width and tabular so the summaries beside it
-          line up into a column rather than stepping right at set 10. */}
-      <span className="w-4 shrink-0 text-right text-[0.6rem] leading-none tabular-nums text-faint">
+          line up into a column rather than stepping right at set 10 — but
+          LEFT-aligned within it, which is where the reference puts the digit
+          and 12px closer to the rule than right-aligning it was. */}
+      <span className="w-4 shrink-0 text-[0.6rem] leading-none tabular-nums text-faint">
         {index + 1}
       </span>
 
