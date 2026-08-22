@@ -1950,17 +1950,22 @@ export default function Logger() {
           pins until the page ends — which is also why the column dropped its
           `pb-32` bar reserve. */}
       <div className="pb-safe sticky bottom-0 border-t border-border bg-bg px-3 pt-3 pointer-fine:bg-bg/95 pointer-fine:backdrop-blur sm:px-4">
-        <div className="mx-auto flex max-w-2xl flex-col items-center gap-1">
+        <div className="mx-auto flex max-w-2xl items-center gap-2">
           {editing ? (
             <Button onClick={finishEdit} className="w-full">
               Done
             </Button>
           ) : (
             <>
-              {/* Finish owns the full width; discarding is a deliberate,
-                  confirmed act rather than a button 12px from the one you
-                  reach for with a shaking hand after a set. */}
-              <Button onClick={() => finish()} className="w-full">
+              {/* Finish takes the width; discard is a 44px square beside it.
+                  The size difference IS the safeguard — the two are one gap
+                  apart, so what keeps a shaking hand off the wrong one is that
+                  Finish is ~6x the area and filled while discard is a hairline
+                  square. It also opens a confirm sheet rather than discarding,
+                  which the per-movement trash does not. Both are `min-h-11`
+                  with a border so their boxes align to the pixel (see the
+                  Button primitive's note on why primary carries a border). */}
+              <Button onClick={() => finish()} className="flex-1">
                 Finish
                 <span className="ml-2 text-bg/45 tabular-nums">
                   {sessionSets.done}/{sessionSets.total}
@@ -1969,9 +1974,11 @@ export default function Logger() {
               <button
                 type="button"
                 onClick={() => setConfirmDiscard(true)}
-                className="flex min-h-11 items-center px-3 t-control text-muted transition-colors hover:text-fg"
+                className="hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-border bg-surface text-muted transition-colors hover:text-fg"
+                aria-label="Discard session"
+                title="Discard session"
               >
-                Discard session
+                <TrashGlyph className={GLYPH} />
               </button>
             </>
           )}
