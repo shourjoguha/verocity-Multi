@@ -546,6 +546,26 @@ plan-side equivalents in `src/lib/sessionTemplate.ts` and
 with no active-plan gate.
 → `src/components/PlanUpload.tsx`, `src/lib/sessionTemplate.ts`
 
+### The tail of the "g" in "kg" is sheared off
+`[confirmed in the wild]` — reported by a user, on a surface four audits pass.
+`truncate` is `overflow: hidden` plus `text-overflow: ellipsis`, and it clips
+BOTH axes, not just the horizontal one people reach for it for. Pair it with
+`leading-none` and the line box is exactly 1em while the face needs ~1.15em for
+ascender plus descender, so every descender is trimmed by roughly a pixel and a
+half. Archivo Black makes it obvious because its descenders are deep and the set
+value is `text-xl`.
+**`truncate` and `leading-none` on the same element is a bug wherever the text
+can contain a descender.** Give the line box room (`leading-tight` was enough
+here) rather than reaching for `overflow-visible`, which defeats the truncation.
+Uppercase text is only accidentally safe — a `text-transform` does not stop a
+`Q` or a comma descending.
+No check here can see it: `audit:mobile` measures overflow and tap targets,
+`audit:flicker` exercises sheets, and a screenshot only catches it if you read
+the glyphs rather than the layout. Grep is the real guard —
+`grep -rn "truncate" src/ --include=*.tsx | grep "leading-none"` must come back
+empty.
+→ `src/components/logger/SetRow.tsx`
+
 ## Build & deploy
 
 ### A build step works locally and silently does nothing on Vercel
