@@ -169,21 +169,39 @@ export function SetRow({
             PR
           </motion.span>
         ) : null}
+        {/* The BOX is text-height; the BUTTON stays a real 44px target.
+            Shrinking the button instead would drop this under
+            TOUCH.minTargetPx, and the negative-margin trick that makes
+            SegmentedTabs slim does NOT apply here — these are stacked rows, so
+            a 44px box would overlap its neighbours and each row's exclusive
+            tap band would collapse to its visible height while audit:mobile
+            still reported 44 (docs/LESSONS.md § "The slim-thumb trick does not
+            transfer to a stacked list"). So the chrome shrinks and the target
+            does not.
+            `hill-btn` moved onto the span with it: on the button it also
+            matched `.hill-btn[aria-pressed='true']`, whose unlayered
+            `background-color` beat the `bg-accent` utility, so the completed
+            state was painting `--color-elevated` instead of the accent fill. */}
         <button
           type="button"
           onClick={() => {
             haptic();
             onToggle();
           }}
-          className={`hill-btn flex min-h-11 w-11 shrink-0 items-center justify-center border text-lg ${
-            a.completed
-              ? 'border-accent bg-accent text-accent-fg'
-              : 'border-border bg-surface text-muted hover:text-fg'
-          }`}
+          className="flex min-h-11 w-11 shrink-0 items-center justify-center"
           aria-label="Toggle completed"
           aria-pressed={a.completed}
         >
-          ✓
+          <span
+            aria-hidden
+            className={`hill-btn flex h-6 w-6 items-center justify-center border text-xs transition-colors ${
+              a.completed
+                ? 'border-accent bg-accent text-accent-fg'
+                : 'border-border bg-surface text-muted'
+            }`}
+          >
+            ✓
+          </span>
         </button>
       </span>
     </div>
