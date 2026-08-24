@@ -63,7 +63,10 @@ export const BODY_REGION_SHAPES: Record<BodyFace, Partial<Record<RegionKey, Regi
     shoulders: [DELT],
     back: [{ d: 'M34 38L50 38L50 95L34 91L31 72L32 55Z', mirrorX: true }],
     arms: [ARM],
-    posteriorChain: [{ d: 'M30 110L47 113L46 140L45 167L34 166L32 140Z', mirrorX: true }],
+    // The posterior chain, split into the upper (glute) and lower (hamstring)
+    // halves of the same silhouette, divided at y≈136.
+    glutes: [{ d: 'M30 110L47 113L46.2 136L31.8 136Z', mirrorX: true }],
+    hamstrings: [{ d: 'M31.8 136L46.2 136L45 167L34 166L32 140Z', mirrorX: true }],
     calves: [{ d: 'M35 171L45 171L44 190L43 205L36 204L34 188Z', mirrorX: true }],
   },
 };

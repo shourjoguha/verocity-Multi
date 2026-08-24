@@ -167,42 +167,53 @@ const VERTICAL_PULL: RegionWeights = { back: 0.7, arms: 0.3 };
 
 const RAW_EXACT: Record<string, MovementProfile> = {
   // --- lower, knee-dominant
-  // Bilateral squats are anterior-leg dominant. The front squat most of all:
-  // the upright torso shifts demand off the hips and onto the quads, and the
-  // rack position taxes the trunk more than a back squat does.
+  // Bilateral squats are anterior-leg dominant. A heel-elevated front or back
+  // squat most of all: the raised heels drive the knees forward and shift the
+  // hip-extension load off the posterior chain and onto the quads, so those two
+  // carry the flat 0.65 quad / 0.35 glute ratio with no hamstring share.
   'back squat': p(
-    { quads: 0.6, posteriorChain: 0.28, core: 0.12 },
+    { quads: 0.6, hamstrings: 0.098, glutes: 0.182, core: 0.12 },
     'resistance',
     'sagittal',
     { rom: ROM.squat },
   ),
   'front squat': p(
-    { quads: 0.7, posteriorChain: 0.1, core: 0.2 },
+    { quads: 0.65, glutes: 0.35 },
+    'resistance',
+    'sagittal',
+    { rom: ROM.squat },
+  ),
+  // The heel-elevated back squat the athlete performs most often — quad-dominant
+  // like the front squat. The `(v)` variant marker is a PER-SET notation the
+  // name-based classifier never sees, so this is reachable only by naming the
+  // variant explicitly; a marker-driven path would be a separate mechanism.
+  'heel elevated back squat': p(
+    { quads: 0.65, glutes: 0.35 },
     'resistance',
     'sagittal',
     { rom: ROM.squat },
   ),
   'leg extension': p({ quads: 1 }, 'resistance', 'sagittal', { rom: ROM.kneeIsolation }),
   'leg press': p(
-    { quads: 0.65, posteriorChain: 0.35 },
+    { quads: 0.65, hamstrings: 0.1225, glutes: 0.2275 },
     'resistance',
     'sagittal',
     { rom: ROM.squat },
   ),
   pistol: p(
-    { quads: 0.6, posteriorChain: 0.3, core: 0.1 },
+    { quads: 0.6, hamstrings: 0.105, glutes: 0.195, core: 0.1 },
     'resistance',
     'sagittal',
     { rom: ROM.squat },
   ),
   'reverse lunge': p(
-    { quads: 0.5, posteriorChain: 0.4, core: 0.1 },
+    { quads: 0.5, hamstrings: 0.16, glutes: 0.24, core: 0.1 },
     'resistance',
     'sagittal',
     { rom: ROM.lunge },
   ),
   'bulgarian split squat': p(
-    { quads: 0.45, posteriorChain: 0.45, core: 0.1 },
+    { quads: 0.45, hamstrings: 0.18, glutes: 0.27, core: 0.1 },
     'resistance',
     'sagittal',
     { rom: ROM.lunge },
@@ -211,52 +222,52 @@ const RAW_EXACT: Record<string, MovementProfile> = {
   // adductor — and adductors fold into `quads` at this granularity, so it is
   // strongly anterior despite the lateral shape.
   'cossack squat': p(
-    { quads: 0.75, posteriorChain: 0.15, core: 0.1 },
+    { quads: 0.75, hamstrings: 0.0525, glutes: 0.0975, core: 0.1 },
     'resistance',
     { frontal: 0.7, sagittal: 0.3 },
     { rom: ROM.squat },
   ),
 
   // --- lower, hip-dominant
-  'leg curl': p({ posteriorChain: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
-  'nordic leg curl': p({ posteriorChain: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
-  nordic: p({ posteriorChain: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+  'leg curl': p({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+  'nordic leg curl': p({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+  nordic: p({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
   // The everyday spelling. Without it "Nordic Curl" normalises to an atom that is
   // in neither EXACT key and falls to rule:hamstring-isolation -- which is there
   // for MACHINE leg curls (bwLoad 0) and would price a nordic at zero.
-  'nordic curl': p({ posteriorChain: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+  'nordic curl': p({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
   'hip thrust machine': p(
-    { posteriorChain: 1 },
+    { hamstrings: 0.2, glutes: 0.8 },
     'resistance',
     'sagittal',
     { rom: ROM.hipIsolation },
   ),
   'banded hip thrust': p(
-    { posteriorChain: 1 },
+    { hamstrings: 0.2, glutes: 0.8 },
     'resistance',
     'sagittal',
     { rom: ROM.hipIsolation },
   ),
   'split stance romanian deadlift': p(
-    { posteriorChain: 0.75, core: 0.15, quads: 0.1 },
+    { hamstrings: 0.45, glutes: 0.3, core: 0.15, quads: 0.1 },
     'resistance',
     'sagittal',
     { rom: ROM.hinge },
   ),
   'trap bar deadlift': p(
-    { posteriorChain: 0.5, quads: 0.35, back: 0.15 },
+    { hamstrings: 0.225, glutes: 0.275, quads: 0.35, back: 0.15 },
     'resistance',
     'sagittal',
     { rom: ROM.hinge },
   ),
   'kettlebell swing': p(
-    { posteriorChain: 0.7, core: 0.2, shoulders: 0.1 },
+    { hamstrings: 0.315, glutes: 0.385, core: 0.2, shoulders: 0.1 },
     'plyometric',
     'sagittal',
     { systemic: true, rom: ROM.hinge },
   ),
   'kettlebell snatch': p(
-    { posteriorChain: 0.4, shoulders: 0.3, core: 0.2, back: 0.1 },
+    { hamstrings: 0.18, glutes: 0.22, shoulders: 0.3, core: 0.2, back: 0.1 },
     'plyometric',
     'sagittal',
     { systemic: true, rom: ROM.jump },
@@ -342,26 +353,26 @@ const RAW_EXACT: Record<string, MovementProfile> = {
 
   // --- carries / sled
   'farmer carry': p(
-    { core: 0.35, arms: 0.25, shoulders: 0.2, posteriorChain: 0.2 },
+    { core: 0.35, arms: 0.25, shoulders: 0.2, hamstrings: 0.08, glutes: 0.12 },
     'endurance',
     'frontal',
     { systemic: true },
   ),
   'sled push': p(
-    { quads: 0.5, posteriorChain: 0.25, calves: 0.15, chest: 0.1 },
+    { quads: 0.5, hamstrings: 0.125, glutes: 0.125, calves: 0.15, chest: 0.1 },
     'resistance',
     'sagittal',
     { systemic: true },
   ),
   'sled drag': p(
-    { quads: 0.45, posteriorChain: 0.3, calves: 0.15, core: 0.1 },
+    { quads: 0.45, hamstrings: 0.15, glutes: 0.15, calves: 0.15, core: 0.1 },
     'resistance',
     'sagittal',
     { systemic: true },
   ),
 
   // --- plyometric
-  'box jump': p({ quads: 0.5, posteriorChain: 0.4, calves: 0.1 }, 'plyometric', 'sagittal', {
+  'box jump': p({ quads: 0.5, hamstrings: 0.2, glutes: 0.2, calves: 0.1 }, 'plyometric', 'sagittal', {
     systemic: true, rom: ROM.jump },
   ),
   'med ball throw': p(
@@ -376,50 +387,50 @@ const RAW_EXACT: Record<string, MovementProfile> = {
     systemic: true,
   }),
   'rower interval': p(
-    { back: 0.4, quads: 0.3, posteriorChain: 0.2, arms: 0.1 },
+    { back: 0.4, quads: 0.3, hamstrings: 0.09, glutes: 0.11, arms: 0.1 },
     'endurance',
     'sagittal',
     { systemic: true },
   ),
   'row erg interval': p(
-    { back: 0.4, quads: 0.3, posteriorChain: 0.2, arms: 0.1 },
+    { back: 0.4, quads: 0.3, hamstrings: 0.09, glutes: 0.11, arms: 0.1 },
     'endurance',
     'sagittal',
     { systemic: true },
   ),
   zone: p(
-    { quads: 0.35, posteriorChain: 0.35, calves: 0.15, back: 0.15 },
+    { quads: 0.35, hamstrings: 0.1575, glutes: 0.1925, calves: 0.15, back: 0.15 },
     'endurance',
     'sagittal',
     { systemic: true },
   ),
   run: p(
-    { posteriorChain: 0.35, quads: 0.3, calves: 0.25, core: 0.1 },
+    { hamstrings: 0.175, glutes: 0.175, quads: 0.3, calves: 0.25, core: 0.1 },
     'endurance',
     'sagittal',
     { systemic: true },
   ),
-  cycle: p({ quads: 0.5, posteriorChain: 0.3, calves: 0.2 }, 'endurance', 'sagittal', {
+  cycle: p({ quads: 0.5, hamstrings: 0.12, glutes: 0.18, calves: 0.2 }, 'endurance', 'sagittal', {
     systemic: true,
   }),
-  stairmaster: p({ quads: 0.4, posteriorChain: 0.35, calves: 0.25 }, 'endurance', 'sagittal', {
+  stairmaster: p({ quads: 0.4, hamstrings: 0.1225, glutes: 0.2275, calves: 0.25 }, 'endurance', 'sagittal', {
     systemic: true,
   }),
 
   // --- mobility / prep
   'hip mobility flow': p(
-    { quads: 0.4, posteriorChain: 0.4, core: 0.2 },
+    { quads: 0.4, hamstrings: 0.16, glutes: 0.24, core: 0.2 },
     'mobility',
     { sagittal: 0.4, frontal: 0.3, transverse: 0.3 },
   ),
   'hip flow': p(
-    { quads: 0.4, posteriorChain: 0.4, core: 0.2 },
+    { quads: 0.4, hamstrings: 0.16, glutes: 0.24, core: 0.2 },
     'mobility',
     { sagittal: 0.4, frontal: 0.3, transverse: 0.3 },
   ),
   'couch stretch': p({ quads: 1 }, 'mobility', 'sagittal'),
-  'hip stretch': p({ quads: 0.5, posteriorChain: 0.5 }, 'mobility', 'sagittal'),
-  pigeon: p({ posteriorChain: 0.6, quads: 0.4 }, 'mobility', { frontal: 0.5, transverse: 0.5 }),
+  'hip stretch': p({ quads: 0.5, hamstrings: 0.25, glutes: 0.25 }, 'mobility', 'sagittal'),
+  pigeon: p({ hamstrings: 0.18, glutes: 0.42, quads: 0.4 }, 'mobility', { frontal: 0.5, transverse: 0.5 }),
   'kettlebell halo': p({ shoulders: 0.6, core: 0.4 }, 'mobility', 'transverse'),
   halo: p({ shoulders: 0.6, core: 0.4 }, 'mobility', 'transverse'),
   'shoulder prep': p({ shoulders: 1 }, 'mobility', {
@@ -438,7 +449,7 @@ const RAW_EXACT: Record<string, MovementProfile> = {
   // Front squat into an overhead press: anterior legs and shoulders lead, with
   // the trunk bracing the rack-to-lockout path. Full-body, so systemic.
   thruster: p(
-    { quads: 0.35, shoulders: 0.35, posteriorChain: 0.15, core: 0.15 },
+    { quads: 0.35, shoulders: 0.35, hamstrings: 0.06, glutes: 0.09, core: 0.15 },
     'resistance',
     'sagittal',
     { systemic: true, rom: ROM.squat },
@@ -476,13 +487,13 @@ const RAW_EXACT: Record<string, MovementProfile> = {
   // Squat-thrust-jump-pushup: whole-body conditioning spanning legs, chest and
   // trunk. The dumbbell-facing variant loads the same pattern.
   burpee: p(
-    { quads: 0.3, chest: 0.2, posteriorChain: 0.2, shoulders: 0.15, core: 0.15 },
+    { quads: 0.3, chest: 0.2, hamstrings: 0.1, glutes: 0.1, shoulders: 0.15, core: 0.15 },
     'endurance',
     'sagittal',
     { systemic: true },
   ),
   'dumbbell facing burpee': p(
-    { quads: 0.3, chest: 0.2, posteriorChain: 0.2, shoulders: 0.15, core: 0.15 },
+    { quads: 0.3, chest: 0.2, hamstrings: 0.1, glutes: 0.1, shoulders: 0.15, core: 0.15 },
     'endurance',
     'sagittal',
     { systemic: true },
@@ -509,7 +520,7 @@ const RAW_RULES: MovementRule[] = [
   {
     id: 'erg-endurance',
     match: ['ski erg', 'row erg', 'rower', 'erg', 'treadmill', 'stairmaster', 'elliptical'],
-    profile: p({ back: 0.4, quads: 0.3, posteriorChain: 0.2, arms: 0.1 }, 'endurance', 'sagittal', {
+    profile: p({ back: 0.4, quads: 0.3, hamstrings: 0.09, glutes: 0.11, arms: 0.1 }, 'endurance', 'sagittal', {
       systemic: true,
     }),
   },
@@ -517,7 +528,7 @@ const RAW_RULES: MovementRule[] = [
     id: 'locomotion-endurance',
     match: ['jog', 'sprint', 'swim', 'bike', 'cycling', 'walk', 'hike', 'ruck'],
     profile: p(
-      { posteriorChain: 0.35, quads: 0.3, calves: 0.25, core: 0.1 },
+      { hamstrings: 0.175, glutes: 0.175, quads: 0.3, calves: 0.25, core: 0.1 },
       'endurance',
       'sagittal',
       { systemic: true },
@@ -526,7 +537,7 @@ const RAW_RULES: MovementRule[] = [
   {
     id: 'jump-plyo',
     match: ['jump', 'hop', 'bound', 'throw', 'slam', 'clean', 'snatch', 'jerk'],
-    profile: p({ quads: 0.4, posteriorChain: 0.35, core: 0.25 }, 'plyometric', 'sagittal', {
+    profile: p({ quads: 0.4, hamstrings: 0.175, glutes: 0.175, core: 0.25 }, 'plyometric', 'sagittal', {
       systemic: true, rom: ROM.jump },
   ),
   },
@@ -537,7 +548,7 @@ const RAW_RULES: MovementRule[] = [
     // longest-fragment-wins routes 'split squat' there without any ordering.
     match: ['squat', 'leg press'],
     profile: p(
-      { quads: 0.6, posteriorChain: 0.28, core: 0.12 },
+      { quads: 0.6, hamstrings: 0.098, glutes: 0.182, core: 0.12 },
       'resistance',
       'sagittal',
       { rom: ROM.squat },
@@ -547,7 +558,7 @@ const RAW_RULES: MovementRule[] = [
     id: 'lunge-pattern',
     match: ['lunge', 'split squat', 'step up'],
     profile: p(
-      { quads: 0.5, posteriorChain: 0.4, core: 0.1 },
+      { quads: 0.5, hamstrings: 0.16, glutes: 0.24, core: 0.1 },
       'resistance',
       'sagittal',
       { rom: ROM.lunge },
@@ -557,7 +568,7 @@ const RAW_RULES: MovementRule[] = [
     id: 'hinge-pattern',
     match: ['deadlift', 'romanian deadlift', 'good morning', 'hip thrust', 'glute bridge', 'swing'],
     profile: p(
-      { posteriorChain: 0.75, core: 0.15, back: 0.1 },
+      { hamstrings: 0.4125, glutes: 0.3375, core: 0.15, back: 0.1 },
       'resistance',
       'sagittal',
       { rom: ROM.hinge },
@@ -566,7 +577,7 @@ const RAW_RULES: MovementRule[] = [
   {
     id: 'hamstring-isolation',
     match: ['leg curl', 'nordic', 'ham curl'],
-    profile: p({ posteriorChain: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+    profile: p({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
   },
   {
     id: 'quad-isolation',
@@ -651,7 +662,7 @@ const RAW_RULES: MovementRule[] = [
     id: 'carry',
     match: ['carry', 'farmer', 'suitcase carry'],
     profile: p(
-      { core: 0.35, arms: 0.25, shoulders: 0.2, posteriorChain: 0.2 },
+      { core: 0.35, arms: 0.25, shoulders: 0.2, hamstrings: 0.08, glutes: 0.12 },
       'endurance',
       'frontal',
       { systemic: true },
@@ -661,7 +672,7 @@ const RAW_RULES: MovementRule[] = [
     id: 'sled',
     match: ['sled'],
     profile: p(
-      { quads: 0.5, posteriorChain: 0.25, calves: 0.15, core: 0.1 },
+      { quads: 0.5, hamstrings: 0.125, glutes: 0.125, calves: 0.15, core: 0.1 },
       'resistance',
       'sagittal',
       { systemic: true },
@@ -670,7 +681,7 @@ const RAW_RULES: MovementRule[] = [
   {
     id: 'mobility',
     match: ['stretch', 'mobility', 'flow', 'halo', 'prep', 'foam roll', 'pigeon', 'yoga'],
-    profile: p({ core: 0.34, quads: 0.33, posteriorChain: 0.33 }, 'mobility', {
+    profile: p({ core: 0.34, quads: 0.33, hamstrings: 0.1485, glutes: 0.1815 }, 'mobility', {
       sagittal: 0.4,
       frontal: 0.3,
       transverse: 0.3,

@@ -290,8 +290,8 @@ Classifies a logged movement for the body map at `/app/body`. **Additive** — i
 sits alongside `MOVEMENT_FAMILIES`/`familyOf`, which keep their existing (and
 in three cases wrong) answers so Stats output for existing logs is unchanged.
 
-- **Vocabulary** in `src/app.config.ts`: eight coarse `MUSCLE_REGIONS`
-  (chest, back, shoulders, arms, core, posteriorChain, quads, calves) with a
+- **Vocabulary** in `src/app.config.ts`: nine coarse `MUSCLE_REGIONS`
+  (chest, back, shoulders, arms, core, glutes, hamstrings, quads, calves) with a
   separate `systemic` flag; five `MOVEMENT_MODALITIES`; three
   `MOVEMENT_PLANES`; and `ROTARY_ROLES` (rotational / anti-rotational) modelled
   **orthogonally** to plane, since both are transverse-plane.

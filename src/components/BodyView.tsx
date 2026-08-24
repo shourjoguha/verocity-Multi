@@ -171,7 +171,8 @@ const CALLOUT_TOP: Record<RegionKey, string> = {
   back: '26%',
   arms: '38%',
   core: '40%',
-  posteriorChain: '56%',
+  glutes: '54%',
+  hamstrings: '62%',
   quads: '58%',
   calves: '78%',
 };
