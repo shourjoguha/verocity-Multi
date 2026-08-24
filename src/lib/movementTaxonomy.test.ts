@@ -20,6 +20,7 @@ const VOCABULARY = [
   'Hip Mobility Flow',
   'Pull-ups',
   'Back Squat',
+  'Heel Elevated Back Squat',
   'Dead bug',
   'Hip Thrust Machine',
   'Iso-lateral Row',
@@ -210,8 +211,10 @@ describe('the misfires this taxonomy exists to avoid', () => {
     const c = classifyMovement('Bulgarian Split Squat');
     expect(c.matchedIds[0]).toBe('exact:bulgarian split squat');
     // More posterior-chain bias than a bilateral back squat.
-    const bss = c.profile.regions.posteriorChain ?? 0;
-    const back = classifyMovement('Back Squat').profile.regions.posteriorChain ?? 0;
+    const posterior = (r: typeof c.profile.regions) =>
+      (r.hamstrings ?? 0) + (r.glutes ?? 0);
+    const bss = posterior(c.profile.regions);
+    const back = posterior(classifyMovement('Back Squat').profile.regions);
     expect(bss).toBeGreaterThan(back);
   });
 
@@ -293,8 +296,12 @@ describe('squat patterns are anterior-leg dominant', () => {
     '%s puts quads well ahead of the posterior chain',
     (name) => {
       const { regions } = classifyMovement(name).profile;
+      const posterior = (regions.hamstrings ?? 0) + (regions.glutes ?? 0);
       expect(regions.quads ?? 0).toBeGreaterThan(0.55);
-      expect(regions.quads ?? 0).toBeGreaterThan(2 * (regions.posteriorChain ?? 0));
+      // Quads strictly dominant over the combined hamstring + glute share. The
+      // heel-elevated front/back squat sits at 0.65/0.35, so the old "2×" pin no
+      // longer holds — "clearly ahead", not "evenly split", is the real invariant.
+      expect(regions.quads ?? 0).toBeGreaterThan(posterior);
     },
   );
 
@@ -303,8 +310,19 @@ describe('squat patterns are anterior-leg dominant', () => {
     expect(q('Front Squat')).toBeGreaterThan(q('Back Squat'));
   });
 
+  it('reads the heel-elevated back squat as quad-dominant like the front squat', () => {
+    const c = classifyMovement('Heel Elevated Back Squat');
+    expect(c.source).toBe('exact');
+    expect(c.profile.regions.quads).toBeCloseTo(0.65, 3);
+    expect(c.profile.regions.glutes).toBeCloseTo(0.35, 3);
+    expect(c.profile.regions.hamstrings ?? 0).toBe(0);
+  });
+
   it('keeps unilateral patterns more posterior than bilateral squats', () => {
-    const pc = (n: string) => classifyMovement(n).profile.regions.posteriorChain ?? 0;
+    const pc = (n: string) => {
+      const r = classifyMovement(n).profile.regions;
+      return (r.hamstrings ?? 0) + (r.glutes ?? 0);
+    };
     expect(pc('Bulgarian Split Squat')).toBeGreaterThan(pc('Back Squat'));
     expect(pc('Reverse Lunge')).toBeGreaterThan(pc('Back Squat'));
     // 'split squat' (11 chars) must beat 'squat' (5) on fragment length —
@@ -348,7 +366,7 @@ describe('compounds', () => {
   });
 
   it('collapses Nordic/Leg Curl onto one region', () => {
-    expect(classifyMovement('Nordic/Leg Curl').profile.regions.posteriorChain).toBeCloseTo(1, 3);
+    expect(classifyMovement('Nordic/Leg Curl').profile.regions.hamstrings).toBeCloseTo(1, 3);
   });
 
   it('reads Hip Flow + KB Halos as mobility', () => {

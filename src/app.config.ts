@@ -502,7 +502,8 @@ export const MUSCLE_REGIONS = {
   shoulders: { label: 'Shoulders', short: 'Delts' },
   arms: { label: 'Arms', short: 'Arms' },
   core: { label: 'Trunk', short: 'Core' },
-  posteriorChain: { label: 'Posterior chain', short: 'P-Chain' },
+  glutes: { label: 'Glutes', short: 'Glutes' },
+  hamstrings: { label: 'Hamstrings', short: 'Hams' },
   quads: { label: 'Quads', short: 'Quads' },
   calves: { label: 'Calves', short: 'Calves' },
 } as const;
@@ -926,7 +927,7 @@ export interface MovementProfile {
    */
   rom?: number;
   // Whole-organism demand. Additive to the region weights, never a substitute:
-  // Run is systemic AND posteriorChain/quads/calves.
+  // Run is systemic AND hamstrings/glutes/quads/calves.
   systemic: boolean;
   /**
    * Fraction of the athlete's own bodyweight this movement bears as load, per
