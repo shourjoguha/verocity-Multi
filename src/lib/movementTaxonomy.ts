@@ -784,7 +784,7 @@ const BW_LOAD: Record<string, number> = {
   'rule:vertical-push'                : 0.0,
   'shoulder raise'                    : 0.0,
   'ski erg interval'                  : 0.0,
-  'split stance romanian deadlift'    : 0.0,
+  'split stance romanian deadlift'    : 0.8,
   'standing barbell military press'   : 0.0,
 };
 

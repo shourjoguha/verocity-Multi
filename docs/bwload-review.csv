@@ -4,7 +4,7 @@
 "leg curl","leg curl","EXACT","resistance","posteriorChain 1","machine","0","high","Supported or seated; the plate/stack is the only load.",""
 "hip thrust machine","hip thrust machine","EXACT","resistance","posteriorChain 1","machine","0","high","Supported or seated; the plate/stack is the only load.",""
 "banded hip thrust","banded hip thrust","EXACT","resistance","posteriorChain 1","machine","0","high","Supported or seated; the plate/stack is the only load.",""
-"split stance romanian deadlift","split stance romanian deadlift","EXACT","resistance","posteriorChain 0.75; core 0.15; quads 0.1","hinge","0","med","Bar rises, body centre of mass barely does.",""
+"split stance romanian deadlift","split stance romanian deadlift","EXACT","resistance","posteriorChain 0.75; core 0.15; quads 0.1","hinge","0.8","med","Corrected on review — the hinge family bears bodyweight; matches trap bar deadlift and rule:hinge-pattern.",""
 "trap bar deadlift","trap bar deadlift","EXACT","resistance","posteriorChain 0.5; quads 0.35; back 0.15","hinge","0.8","med","Bar rises, body centre of mass barely does.",""
 "kettlebell swing","kettlebell swing","EXACT","plyometric","posteriorChain 0.7; core 0.2; shoulders 0.1","hinge","0.4","med","Bar rises, body centre of mass barely does.",""
 "kettlebell snatch","kettlebell snatch","EXACT","plyometric","posteriorChain 0.4; shoulders 0.3; core 0.2; back 0.1","implement","0.4","med","You move an external implement; your body is not lifted.",""
