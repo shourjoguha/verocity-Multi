@@ -122,7 +122,10 @@ function LogReadView({ log }: { log: WorkoutLog }) {
     <PageStagger>
       <Item>
         <header className="mb-2">
-          <p className="t-eyebrow text-muted">{formatDate(log.log_date)}</p>
+          <p className="t-eyebrow text-muted">
+            {formatDate(log.log_date)}
+            {log.day_key ? ` · Day ${log.day_key}` : ''}
+          </p>
           <EchoText text={log.activity_type ?? 'Session'} as="h1" className={`mt-2 ${echoTitle}`} />
           <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted">
             <span>{formatDuration(log.total_seconds)}</span>
