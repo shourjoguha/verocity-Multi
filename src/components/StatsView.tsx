@@ -8,10 +8,11 @@ import { useAspectProfile } from '@/lib/useAspectProfile';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
 import { flattenSets, familyOf, sessionVolume } from '@/lib/stats';
+import { summarizeBodyLoad } from '@/lib/bodyLoad';
 import { aspectWindows, logsInWindow } from '@/lib/aspects';
 import { formatDuration, formatRound } from '@/lib/format';
 import { sessionTagColors, stripeBackground } from '@/lib/tags';
-import { ASPECT_WINDOW_DAYS, FITNESS_ASPECTS } from '@/app.config';
+import { ASPECT_WINDOW_DAYS, BODY_LENSES, BODY_LENS_KEYS, FITNESS_ASPECTS } from '@/app.config';
 import {
   EmptyState,
   LoadingScreen,
@@ -112,6 +113,28 @@ function Sparkline({
 // Extracted from the render body and memoised by the caller. It used to run
 // inline on every render, so hovering a sparkline point re-derived every bucket,
 // map and series over 120 days of LogDocument JSONB just to move a tooltip.
+// How the window's MINUTES split across strength / cardio / mobility, for the
+// small proportion bar under the tiles. Reuses BODY_LENSES (the same split the
+// body map uses) so "kind of work" means one thing across the app, and reads
+// modalityMinutes off summarizeBodyLoad rather than re-deriving. Unmapped work
+// has no modality and is simply absent — this is a share of CLASSIFIED time, not
+// of the wall clock. Returns null when nothing classified, so the bar hides
+// rather than rendering an empty rail.
+function modalityMix(logs: WorkoutLog[]): { key: string; label: string; pct: number }[] | null {
+  const body = summarizeBodyLoad(logs);
+  const parts = BODY_LENS_KEYS.map((key) => ({
+    key,
+    label: BODY_LENSES[key].label,
+    minutes: BODY_LENSES[key].modalities.reduce(
+      (sum, m) => sum + (body.modalityMinutes[m as keyof typeof body.modalityMinutes] ?? 0),
+      0,
+    ),
+  }));
+  const total = parts.reduce((sum, p) => sum + p.minutes, 0);
+  if (total <= 0) return null;
+  return parts.map(({ key, label, minutes }) => ({ key, label, pct: (minutes / total) * 100 }));
+}
+
 function deriveStats(fetched: WorkoutLog[], today: Date, groupBy: 'movement' | 'family') {
   const eightWeeksAgo = new Date(
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (WEEKS * 7 - 1)),
@@ -300,6 +323,9 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const derived = useMemo(() => deriveStats(logs ?? [], today, groupBy), [logs, groupBy]);
 
+  // Kept before the loading guard: hooks must not sit behind an early return.
+  const mix = useMemo(() => modalityMix(derived.all), [derived]);
+
   // The biggest riser and the biggest faller between the current period and the
   // one before it, plus whichever axis is now lowest. Scores are on
   // ASPECT_SCALE (1..10), so a delta is already a plain integer and needs no
@@ -319,8 +345,10 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     const up = [...deltas].sort((a, b) => b.delta - a.delta)[0];
     const down = [...deltas].sort((a, b) => a.delta - b.delta)[0];
     const lowest = [...deltas].sort((a, b) => a.now - b.now)[0];
-    // Nothing actually moved — say nothing rather than reporting "up 0".
-    if (up.delta <= 0) return null;
+    // Nothing actually moved — say nothing rather than reporting "up 0". Scores
+    // are floats, so the threshold is the smallest value that survives rounding
+    // to one decimal; a +0.04 rise would otherwise render as "up 0".
+    if (up.delta < 0.05) return null;
     return {
       up,
       down: down.delta < 0 && down.label !== up.label ? down : null,
@@ -378,9 +406,11 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
           <Item>
             <section className="mb-6">
               <Takeaway
-                lead={`${movers.up.label} up ${movers.up.delta}.`}
+                lead={`${movers.up.label} up ${formatRound(movers.up.delta, 1)}.`}
                 trail={
-                  movers.down ? `${movers.down.label} down ${Math.abs(movers.down.delta)}.` : undefined
+                  movers.down
+                    ? `${movers.down.label} down ${formatRound(Math.abs(movers.down.delta), 1)}.`
+                    : undefined
                 }
                 detail={`Against the previous ${profile.windowDays} days.${
                   movers.lowest ? ` ${movers.lowest} is now your lowest axis.` : ''
@@ -407,6 +437,37 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                 },
               ]}
             />
+            {mix ? (
+              <div className="mt-2">
+                {/* Where the window's time actually went. Monochrome by design:
+                    three greys plus the labels carry it, and a hue set would
+                    have to be defended against every activity colour already on
+                    the page. Segments below 4% keep their sliver so the rail
+                    always sums to the whole. */}
+                <div className="flex h-1.5 overflow-hidden rounded-full bg-fg/10">
+                  {mix.map((m, i) => (
+                    <span
+                      key={m.key}
+                      className={i === 0 ? 'bg-fg/80' : i === 1 ? 'bg-fg/45' : 'bg-fg/25'}
+                      style={{ width: `${Math.max(m.pct, m.pct > 0 ? 1.5 : 0)}%` }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[0.65rem] text-muted">
+                  {mix.map((m, i) => (
+                    <span key={m.key} className="inline-flex items-center gap-1">
+                      <span
+                        aria-hidden
+                        className={`inline-block h-2 w-2 rounded-[1px] ${
+                          i === 0 ? 'bg-fg/80' : i === 1 ? 'bg-fg/45' : 'bg-fg/25'
+                        }`}
+                      />
+                      {m.label} {Math.round(m.pct)}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </section>
         </Item>
 
@@ -435,25 +496,44 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     // multi-activity branch passed no style at all, so those
                     // days lost their shading and read as maximum volume.
                     const stripes = stripeBackground(cell.colors);
+                    // Colour is IDENTITY, at full strength, so a strength day and
+                    // a mobility day never converge on the same washed-out grey.
+                    // The old `opacity: 0.3 + volume/dayMax * 0.7` folded amount
+                    // into the hue's lightness, which is exactly what made two
+                    // different activities hard to tell apart at low volume.
+                    // Volume moves to its own channel: a hairline meter along the
+                    // bottom edge, a monochrome LENGTH that cannot distort the
+                    // colour above it. (Border-glow was the other candidate, but
+                    // an inset box-shadow is a CLAUDE.md "never" in a component.)
+                    const volPct = Math.round((cell.volume / dayMax) * 100);
                     return (
                       <div
                         key={row}
-                        className="hill aspect-square cursor-pointer"
-                        style={{
-                          ...(stripes
+                        className="hill relative aspect-square cursor-pointer overflow-hidden"
+                        style={
+                          stripes
                             ? { backgroundImage: stripes }
-                            : { backgroundColor: cell.colors[0] }),
-                          opacity: 0.3 + (cell.volume / dayMax) * 0.7,
-                        }}
+                            : { backgroundColor: cell.colors[0] }
+                        }
                         onMouseMove={(e) => showTip(e, label)}
-                      />
+                      >
+                        <span
+                          aria-hidden
+                          className="absolute inset-x-0 bottom-0 h-[3px] bg-bg/40"
+                        >
+                          <span
+                            className="block h-full bg-fg/70"
+                            style={{ width: `${volPct}%` }}
+                          />
+                        </span>
+                      </div>
                     );
                   })}
                 </div>
               ))}
             </div>
             <p className="mt-2 text-[0.65rem] text-muted">
-              Colored by activity · intensity by volume · striped days had multiple activities.
+              Colored by activity · bottom bar is volume · striped days had multiple activities.
             </p>
           </section>
         </Item>
