@@ -1,3 +1,4 @@
+import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 // Pure, immutable edits on a ParsedPlan, used by the plan editor. dayKey stays
 // stable across label edits (workout_logs.day_key references it); weeklyTemplate
 // is kept in sync with day order.
@@ -54,7 +55,7 @@ export function addExercise(
   di: number,
   movement = '',
   section: SectionKey = 'accessory',
-  primaryMetric: MetricKey = 'weight',
+  primaryMetric: MetricKey = DEFAULT_PRIMARY_METRIC,
 ): ParsedPlan {
   const ex: PlanExercise = { movement, section, primaryMetric, plannedByWeek: {} };
   return mapDay(plan, di, (d) => ({ ...d, exercises: [...d.exercises, ex] }));

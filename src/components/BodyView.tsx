@@ -19,6 +19,7 @@ import {
   type MovementProfile,
   type RegionKey,
 } from '@/app.config';
+import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { TaxonomyEditor } from '@/components/TaxonomyEditor';
 import { formatRound } from '@/lib/format';
 import {
@@ -221,7 +222,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     const created = await createMovement({
       name,
       category: null,
-      primary_metric: 'weight',
+      primary_metric: DEFAULT_PRIMARY_METRIC,
       default_rest_seconds: 120,
       taxonomy,
     });

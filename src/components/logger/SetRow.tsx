@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { METRICS, type MetricKey } from '@/app.config';
+import { showsWeightField } from '@/lib/metrics';
 import type { LogSet } from '@/lib/types';
 import { EASE } from '@/components/anim';
 import { haptic } from '@/lib/haptics';
@@ -54,25 +55,35 @@ export function SetRow({
     wasComplete.current = a.completed;
   }, [a.completed, reduce, isPr]);
 
-  const value = () => {
+  // The primary field's own summary. Weight is prepended separately below,
+  // because it is now available on reps/time/distance rather than being the
+  // private second half of the old `weight` metric.
+  const primary = () => {
     switch (metric) {
-      case 'weight': {
-        const parts = [];
-        if (a.weight) parts.push(`${a.weight}${METRICS.weight.unit}`);
-        if (a.reps) parts.push(`× ${a.reps}`);
-        return parts.join(' ');
-      }
+      case 'weight':
       case 'reps':
-        return a.reps ? `${a.reps} reps` : '';
+        // "× 5" only reads as a multiplier when something precedes it. With no
+        // weight the set is bodyweight, so the reps stand on their own noun.
+        if (!a.reps) return '';
+        return showsWeightField(metric) && a.weight ? `× ${a.reps}` : `${a.reps} reps`;
       case 'time':
         return a.time ? `${a.time}${METRICS.time.unit}` : '';
       case 'distance':
         return a.distance ? `${a.distance}${METRICS.distance.unit}` : '';
       case 'cal':
         return a.calories ? `${a.calories} ${METRICS.cal.unit}` : '';
-      case 'rpe':
+      default:
         return '';
     }
+  };
+
+  // "47.5kg × 5", "47.5kg 50m", "50m" — one phrase, load first, so a loaded and
+  // an unloaded set of the same movement line up on the number that changed.
+  // A 0 or absent weight prints nothing: that set was bodyweight.
+  const value = () => {
+    const head = showsWeightField(metric) && a.weight ? `${a.weight}${METRICS.weight.unit}` : '';
+    const tail = primary();
+    return [head, tail].filter(Boolean).join(' ');
   };
 
   const main = value();

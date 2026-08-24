@@ -12,7 +12,8 @@ import { firstWeekWithContent, frameFromPlanDay } from '@/lib/logBuilder';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { clientFor, isReadOnly, type Surface } from '@/lib/surface';
 import type { Movement, Plan, PlanDay, Session, SessionExercise, SessionType } from '@/lib/types';
-import { ACTIVITY_TAGS, METRICS, SECTIONS, type ActivityTagKey, type MetricKey, type SectionKey } from '@/app.config';
+import { ACTIVITY_TAGS, METRICS, SECTIONS, type ActivityTagKey, type MetricKey, type SectionKey, PRIMARY_METRICS } from '@/app.config';
+import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { tagColor } from '@/lib/tags';
 import { distinctSessionMovements, formatSessionMeta, sessionMovementKeys, TYPE_SHORT } from '@/lib/sessionMeta';
 import { SessionSheet } from '@/components/SessionSheet';
@@ -24,7 +25,9 @@ import { MovementPicker } from '@/components/logger/MovementPicker';
 import { toast } from '@/lib/toast';
 
 const TAG_KEYS = Object.keys(ACTIVITY_TAGS) as ActivityTagKey[];
-const METRIC_KEYS = Object.keys(METRICS) as MetricKey[];
+// See LibraryView: offer only primary-eligible metrics; stored legacy values
+// still resolve through METRICS.
+const METRIC_KEYS = PRIMARY_METRICS as readonly MetricKey[];
 const SESSION_TYPES = Object.keys(TYPE_SHORT) as SessionType[];
 const inputClass =
   'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle';
@@ -234,7 +237,7 @@ function SessionForm({
     const name = picked.name;
     const known = movements.find((m) => m.name.toLowerCase() === name.toLowerCase());
     const primaryMetric: MetricKey =
-      'primary_metric' in picked ? picked.primary_metric : known?.primary_metric ?? 'weight';
+      'primary_metric' in picked ? picked.primary_metric : known?.primary_metric ?? DEFAULT_PRIMARY_METRIC;
     // First exercise lands in primary; later ones in accessory — a sane default
     // the user can change per row.
     const section: SectionKey = draft.exercises.length === 0 ? 'primary' : 'accessory';

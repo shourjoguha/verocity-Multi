@@ -52,6 +52,32 @@ export const METRICS = {
   rpe: { label: 'RPE', unit: '', step: 0.5 },
 } as const;
 
+// Which metrics may be a movement's PRIMARY metric.
+//
+// `weight` and `rpe` stay in METRICS -- they are still real per-set fields, and
+// every stored row that named one as its primary must keep resolving -- but
+// neither is offered as a choice any more:
+//
+//   `weight` was the only primary that carried a second field (weight AND reps),
+//   which made it the only way to record load. That is now backwards: weight is
+//   an always-on field on any of WEIGHTED_PRIMARIES, so a loaded carry is
+//   distance + weight and a loaded squat is reps + weight, rather than everything
+//   loaded being forced through `weight` and its reps box.
+//
+//   `rpe` was never coherent as a primary: SetEntrySheet has always rendered an
+//   RPE stepper for EVERY metric, and the `rpe` case rendered nothing else, so
+//   picking it gave a movement with no primary field at all. It is not persisted
+//   as a primaryMetric anywhere.
+//
+// A set logged with no weight, or with 0, is bodyweight -- see bwLoad in
+// MovementProfile for how that is priced.
+export const PRIMARY_METRICS = ['reps', 'time', 'distance', 'cal'] as const;
+
+// The primaries that show the always-on weight field. `cal` is excluded: an erg
+// scores calories against its own resistance, and there is no external load to
+// name.
+export const WEIGHTED_PRIMARIES = ['reps', 'time', 'distance'] as const;
+
 export const RPE = { min: 5, max: 10, step: 0.5, default: 7 } as const;
 
 /**
@@ -779,6 +805,7 @@ export const appConfig = {
 } as const;
 
 export type MetricKey = keyof typeof METRICS;
+export type PrimaryMetricKey = (typeof PRIMARY_METRICS)[number];
 export type SectionKey = (typeof SECTIONS)[number];
 export type BlockKey = keyof typeof BLOCKS;
 export type ActivityTagKey = keyof typeof ACTIVITY_TAGS;
