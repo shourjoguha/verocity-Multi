@@ -566,6 +566,34 @@ the glyphs rather than the layout. Grep is the real guard —
 empty.
 → `src/components/logger/SetRow.tsx`
 
+### Dark-theme cards dissolve into the page while the light theme looks fine
+`[confirmed in the wild]` — reported on the Logger, where movement cards stopped
+reading as objects sitting on the background.
+The two themes were authored to the same token ROLES and the same *lightness
+steps*, which is exactly the trap: **contrast is a ratio, not a difference in
+lightness, and the ratio collapses at the dark end.** Paper put 5 points of L
+between `--color-bg` (95%) and `--color-surface` (100%) and bought 1.117:1.
+Carbon put 3.5 points between #050505 and #0E0E0E and bought **1.055:1 — barely
+half the separation**, from numbers that look comparable in the file. The same
+halving hit `surface → elevated` (1.076:1 against paper's 1.225:1), so tracks,
+hover fills and pressed rows flattened too.
+**Derive a dark value from the light theme's RATIO, never from its step.**
+Matching paper took surface #141414 and elevated #242424 — both far lighter than
+the reference palette's hexes, which are correct as a starting point and wrong
+as a destination. There is a ceiling: `--color-border` at `0.14` white
+composites to ≈15.7% over the page, so an `elevated` above ~15% swallows the
+hairline on `.hill-btn[aria-pressed='true']`, which is filled *and* outlined.
+No check in this repo can see any of it — `audit:mobile` measures overflow and
+tap targets, `audit:flicker` exercises sheets, and neither reads a colour. The
+guard is to measure: render the real markup under `data-theme='dark'`, sample
+the painted `backgroundColor`s and compute the ratio against the light theme's.
+**Sample it after the transition has settled.** `.lift` carries
+`transition: background-color 0.18s`, so a computed colour read straight after
+flipping `data-theme` is a mid-fade value, not the token — it read #1F1F1F for a
+card whose token says #141414 and sent this investigation after a phantom
+override. Set the attribute before first paint, or wait past 180ms.
+→ `src/styles/global.css` (dark token block)
+
 ## Build & deploy
 
 ### A build step works locally and silently does nothing on Vercel
