@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   regionIntensities,
+  regionTotals,
   romFactor,
   bwLoadFactor,
   setMinutes,
@@ -9,7 +10,15 @@ import {
   summarizeTrainingVolume,
 } from '@/lib/bodyLoad';
 import { classifyMovement } from '@/lib/movementTaxonomy';
-import { LOAD, ROM, RPE, VOLUME, type SectionKey } from '@/app.config';
+import {
+  BODY_LENS_KEYS,
+  LOAD,
+  MUSCLE_REGION_KEYS,
+  ROM,
+  RPE,
+  VOLUME,
+  type SectionKey,
+} from '@/app.config';
 import type { LogItem, LogSet, WorkoutLog } from '@/lib/types';
 
 function set(actual: Partial<LogSet['actual']>): LogSet {
@@ -571,5 +580,76 @@ describe('romFactor', () => {
     // One unestimated half of a compound must not drag the other half down.
     const c = classifyMovement('Back Squat + Plank').profile;
     expect(c.rom).toBeCloseTo(classifyMovement('Back Squat').profile.rom!, 5);
+  });
+});
+
+describe('body lenses', () => {
+  // Minutes and scaled volume are meaningful within a lens and misleading across
+  // one: `setVolume` converts duration into rep-equivalents, so an hour of
+  // cycling outweighs an entire squat session in a currency that claims to
+  // measure load. These pin the split that makes the number mean one thing.
+  const squats = item('Back Squat', 'weight', [set({ weight: 100, reps: 5 })]);
+  const run = item('Run', 'time', [set({ time: 3600 })]);
+  const stretch = item('Couch Stretch', 'time', [set({ time: 120 })]);
+  const plank = item('Plank', 'time', [set({ time: 60 })]);
+  const mixed = log([
+    { key: 'primary', items: [squats] },
+    { key: 'conditioning', items: [run] },
+    { key: 'cooldown', items: [stretch] },
+    { key: 'accessory', items: [plank] },
+  ]);
+
+  it('keeps loaded work out of the cardio lens and cardio out of strength', () => {
+    const s = summarizeBodyLoad([mixed]);
+    // The squat loads quads; the run does not appear there under `strength`
+    // beyond the squat's own contribution, and vice versa for the cardio lens.
+    expect(s.byLens.strength.volume.quads).toBeGreaterThan(0);
+    expect(s.byLens.cardio.volume.quads).toBeGreaterThan(0);
+    const strengthOnly = summarizeBodyLoad([log([{ key: 'primary', items: [squats] }])]);
+    expect(s.byLens.strength.volume.quads).toBeCloseTo(strengthOnly.byLens.strength.volume.quads, 5);
+  });
+
+  it('files a plank as strength, not cardio — it is loaded core work', () => {
+    const s = summarizeBodyLoad([log([{ key: 'accessory', items: [plank] }])]);
+    expect(s.byLens.strength.minutes.core).toBeGreaterThan(0);
+    expect(s.byLens.cardio.minutes.core).toBe(0);
+  });
+
+  // Stretching keeps its own lens rather than vanishing: a collapsed default
+  // with no expansion is a removed feature.
+  it('keeps mobility visible in its own lens', () => {
+    const s = summarizeBodyLoad([log([{ key: 'cooldown', items: [stretch] }])]);
+    expect(s.byLens.mobility.minutes.quads).toBeGreaterThan(0);
+    expect(s.byLens.strength.minutes.quads).toBe(0);
+  });
+
+  it('adds up: every lens together is the all-modality total', () => {
+    const s = summarizeBodyLoad([mixed]);
+    for (const currency of ['minutes', 'volume'] as const) {
+      const all = regionTotals(s, currency);
+      for (const region of MUSCLE_REGION_KEYS) {
+        const summed = BODY_LENS_KEYS.reduce((a, k) => a + regionTotals(s, currency, k)[region], 0);
+        expect(summed).toBeCloseTo(all[region], 5);
+      }
+    }
+  });
+
+  // THE REGRESSION GUARD. `aspects.ts` and `coach/signals.ts` read this same
+  // summary. Lenses were ADDED rather than filtered in precisely so the radar
+  // and the coach could not move; if this drifts, they moved.
+  it('leaves the all-modality totals exactly as they were', () => {
+    const s = summarizeBodyLoad([mixed]);
+    const viaLens = regionTotals(s, 'volume');
+    expect(viaLens).toEqual(s.regionVolume);
+    expect(regionTotals(s, 'minutes')).toEqual(s.regionMinutes);
+    // and the fields the radar/coach actually read are untouched by lensing
+    expect(s.totalMinutes).toBeGreaterThan(0);
+    expect(s.modalityMinutes.endurance).toBeGreaterThan(0);
+  });
+
+  it('normalises the heat map within the chosen lens, not across all work', () => {
+    const s = summarizeBodyLoad([mixed]);
+    const strength = regionIntensities(s, 'volume', 'strength');
+    expect(Math.max(...Object.values(strength))).toBeCloseTo(1, 5);
   });
 });

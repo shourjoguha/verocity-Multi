@@ -465,6 +465,37 @@ export const MOVEMENT_FAMILIES = {
 // Eight coarse regions. Deliberately not muscle-level: much of the logged
 // vocabulary is whole-region or full-body work, and a finer grain would force
 // guesses (Gorilla Row vs Face Pull vs Band pull-apart all land in `back`).
+// How the body map is SLICED. Minutes and scaled volume are meaningful within a
+// lens and misleading across one, so the map shows a lens at a time.
+//
+// This exists because "volume" had quietly become a second, worse spelling of
+// "minutes". `setVolume` converts duration into rep-equivalents through
+// LOAD.repSeconds, which is right for a 30-second plank and wrong by orders of
+// magnitude for a 105-minute run: one minute of jogging priced at roughly nine
+// tenths of a working back-squat set. On real data that put endurance and
+// mobility at 80% of total scaled volume, left 22 sets of back squat at 2.6%,
+// and — because running, cycling and hip flows are all leg-weighted — showed
+// quads ahead of the posterior chain when the athlete's own loaded work runs
+// 1.5:1 the other way.
+//
+// Splitting by modality is the fix: within `strength` the number means load
+// moved, within `cardio` it means duration. Comparing a squat to a bike ride was
+// never a question the currency could answer.
+//
+// `isometric` sits with strength because a plank is loaded core work, not
+// conditioning. `mobility` keeps its own lens rather than being dropped: a
+// collapsed default with no expansion is a removed feature (CLAUDE.md).
+export const BODY_LENSES = {
+  strength: { label: 'Strength', modalities: ['resistance', 'plyometric', 'isometric'] },
+  cardio: { label: 'Cardio', modalities: ['endurance'] },
+  mobility: { label: 'Mobility', modalities: ['mobility'] },
+} as const;
+
+export const BODY_LENS_KEYS = Object.keys(BODY_LENSES) as (keyof typeof BODY_LENSES)[];
+
+// What the map opens on: the lens where "volume" means what it claims to.
+export const DEFAULT_BODY_LENS = 'strength';
+
 export const MUSCLE_REGIONS = {
   chest: { label: 'Chest', short: 'Chest' },
   back: { label: 'Back', short: 'Back' },
@@ -809,6 +840,7 @@ export const appConfig = {
 } as const;
 
 export type MetricKey = keyof typeof METRICS;
+export type BodyLensKey = keyof typeof BODY_LENSES;
 export type PrimaryMetricKey = (typeof PRIMARY_METRICS)[number];
 export type SectionKey = (typeof SECTIONS)[number];
 export type BlockKey = keyof typeof BLOCKS;
