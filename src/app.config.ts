@@ -52,6 +52,32 @@ export const METRICS = {
   rpe: { label: 'RPE', unit: '', step: 0.5 },
 } as const;
 
+// Which metrics may be a movement's PRIMARY metric.
+//
+// `weight` and `rpe` stay in METRICS -- they are still real per-set fields, and
+// every stored row that named one as its primary must keep resolving -- but
+// neither is offered as a choice any more:
+//
+//   `weight` was the only primary that carried a second field (weight AND reps),
+//   which made it the only way to record load. That is now backwards: weight is
+//   an always-on field on any of WEIGHTED_PRIMARIES, so a loaded carry is
+//   distance + weight and a loaded squat is reps + weight, rather than everything
+//   loaded being forced through `weight` and its reps box.
+//
+//   `rpe` was never coherent as a primary: SetEntrySheet has always rendered an
+//   RPE stepper for EVERY metric, and the `rpe` case rendered nothing else, so
+//   picking it gave a movement with no primary field at all. It is not persisted
+//   as a primaryMetric anywhere.
+//
+// A set logged with no weight, or with 0, is bodyweight -- see bwLoad in
+// MovementProfile for how that is priced.
+export const PRIMARY_METRICS = ['reps', 'time', 'distance', 'cal'] as const;
+
+// The primaries that show the always-on weight field. `cal` is excluded: an erg
+// scores calories against its own resistance, and there is no external load to
+// name.
+export const WEIGHTED_PRIMARIES = ['reps', 'time', 'distance'] as const;
+
 export const RPE = { min: 5, max: 10, step: 0.5, default: 7 } as const;
 
 /**
@@ -717,9 +743,13 @@ export const ASPECT_OVERRIDE_DAYS = 21;
 //   3 — unweighted work priced against the owner's bodyweight; HR ceiling from age
 //   4 — volume scaled by each movement's range of motion (ROM)
 //   5 — HR spread scaled by a session's ENDURANCE minutes rather than its whole
+//   6 — load is ADDITIVE: a movement's own bodyweight share (MovementProfile
+//       .bwLoad) plus the external weight, so a loaded set can never price below
+//       the same movement unloaded. Also treats a 0 weight as bodyweight rather
+//       than as zero work.
 //       wall clock, ending the channel by which resistance training scored as
 //       endurance
-export const ASPECT_METRICS_VERSION = 5;
+export const ASPECT_METRICS_VERSION = 6;
 
 // Softness of the logistic that maps a robust z-score onto ASPECT_SCALE: ±1.5
 // lands roughly ±2.2 points. The logistic is asymptotic, so scores approach 1
@@ -779,6 +809,7 @@ export const appConfig = {
 } as const;
 
 export type MetricKey = keyof typeof METRICS;
+export type PrimaryMetricKey = (typeof PRIMARY_METRICS)[number];
 export type SectionKey = (typeof SECTIONS)[number];
 export type BlockKey = keyof typeof BLOCKS;
 export type ActivityTagKey = keyof typeof ACTIVITY_TAGS;

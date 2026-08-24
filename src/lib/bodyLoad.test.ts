@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   regionIntensities,
   romFactor,
+  bwLoadFactor,
   setMinutes,
   setVolume,
   summarizeBodyLoad,
@@ -69,32 +70,37 @@ describe('setVolume', () => {
     notations,
   });
   const plain = set({ weight: 100, reps: 5 });
+  // Load is ADDITIVE now (bodyweight share + external weight), so a bare
+  // setVolume call also prices the athlete. These tests are about the notation
+  // and RPE MULTIPLIERS, so they pin bwLoad at 0 to isolate the external half.
+  // The additive behaviour itself is covered in its own block below.
+  const ext = (st: LogSet) => setVolume(st, VOLUME.unweightedRepKg, 1, 0);
 
   it('is load × reps for a plain weighted set', () => {
-    expect(setVolume(plain)).toBeCloseTo(500, 5);
+    expect(ext(plain)).toBeCloseTo(500, 5);
   });
 
   // The scalar that recovers work the app was silently discarding: reps are
   // logged PER SIDE and nothing else in the codebase doubles them.
   it('doubles a /side set', () => {
-    expect(setVolume(notated({ weight: 100, reps: 5 }, ['/side']))).toBeCloseTo(1000, 5);
+    expect(ext(notated({ weight: 100, reps: 5 }, ['/side']))).toBeCloseTo(1000, 5);
   });
 
   it('raises a paused set', () => {
-    const paused = setVolume(notated({ weight: 100, reps: 5 }, ['(p)']));
-    expect(paused).toBeGreaterThan(setVolume(plain));
+    const paused = ext(notated({ weight: 100, reps: 5 }, ['(p)']));
+    expect(paused).toBeGreaterThan(ext(plain));
     expect(paused).toBeCloseTo(500 * VOLUME.pauseFactor, 5);
   });
 
   it('stacks /side and (p)', () => {
-    expect(setVolume(notated({ weight: 100, reps: 5 }, ['/side', '(p)']))).toBeCloseTo(
+    expect(ext(notated({ weight: 100, reps: 5 }, ['/side', '(p)']))).toBeCloseTo(
       500 * 2 * VOLUME.pauseFactor,
       5,
     );
   });
 
   it('ignores notations it does not price', () => {
-    expect(setVolume(notated({ weight: 100, reps: 5 }, ['(t)', '→']))).toBeCloseTo(500, 5);
+    expect(ext(notated({ weight: 100, reps: 5 }, ['(t)', '→']))).toBeCloseTo(500, 5);
   });
 
   it('scales with RPE either side of the default', () => {
@@ -366,9 +372,39 @@ describe('regionIntensities', () => {
 });
 
 describe('bodyweight pricing', () => {
-  it('leaves weighted work untouched — only unloaded reps are repriced', () => {
+  // v6: load ADDS instead of replacing, so a heavier athlete does more work on
+  // the same bar — but only on a movement that actually carries them. A bench
+  // (bwLoad 0) is still immune; a squat is not, and should not be.
+  it('leaves loaded work alone only when the movement bears none of the athlete', () => {
     const loaded = set({ weight: 100, reps: 5 });
-    expect(setVolume(loaded, 80)).toBe(setVolume(loaded));
+    expect(setVolume(loaded, 80, 1, 0)).toBe(setVolume(loaded, VOLUME.unweightedRepKg, 1, 0));
+    expect(setVolume(loaded, 80, 1, 0.8)).toBeGreaterThan(setVolume(loaded, 40, 1, 0.8));
+  });
+
+  // The bug v6 exists to fix: under the old `weight ?? unweightedKg` an 86kg
+  // lifter's bodyweight squat priced at 55.9 and the same squat with 20kg on the
+  // bar priced at 20, so adding weight made the set score LESS.
+  it('never prices a loaded set below the same movement unloaded', () => {
+    const bw = set({ reps: 5 });
+    const light = set({ weight: 20, reps: 5 });
+    const heavy = set({ weight: 100, reps: 5 });
+    const price = (st: LogSet) => setVolume(st, 55.9, 1, 0.8);
+    expect(price(light)).toBeGreaterThan(price(bw));
+    expect(price(heavy)).toBeGreaterThan(price(light));
+  });
+
+  // voice.ts writes weight 0 for "bodyweight"; `?? ` treated that as zero work.
+  it('treats a weight of 0 as bodyweight, not as no work', () => {
+    expect(setVolume(set({ weight: 0, reps: 5 }), 55.9, 1, 0.8)).toBeCloseTo(
+      setVolume(set({ reps: 5 }), 55.9, 1, 0.8),
+      5,
+    );
+  });
+
+  // A movement with no estimate must land exactly where it did before v6, or the
+  // change silently reprices every unmapped movement in the vocabulary.
+  it('prices an unestimated movement exactly as it did before', () => {
+    expect(setVolume(set({ reps: 10 }), 52)).toBeCloseTo(520, 5);
   });
 
   it('prices unloaded reps at whatever the caller passes', () => {
@@ -422,10 +458,16 @@ describe('regionVolume', () => {
     const s = summarizeBodyLoad([mixed]);
     const squat = classifyMovement('Back Squat').profile;
     const wQuads = squat.regions.quads ?? 0;
-    // One set of 100kg × 5 with no notations and no RPE is 500, scaled by the
-    // squat's ROM factor. Read both off the taxonomy rather than restating
-    // them: this test is about the distribution mechanics, not the estimates.
-    expect(s.regionVolume.quads).toBeCloseTo(500 * romFactor(squat) * wQuads, 3);
+    // Read ROM *and* bwLoad off the taxonomy rather than restating them: this
+    // test is about the distribution mechanics, not the estimates. Since v6 the
+    // base is no longer a bare 100 x 5 = 500 — a squat carries the athlete too.
+    const base = setVolume(
+      set({ weight: 100, reps: 5 }),
+      VOLUME.unweightedRepKg,
+      1,
+      bwLoadFactor(squat),
+    );
+    expect(s.regionVolume.quads).toBeCloseTo(base * romFactor(squat) * wQuads, 3);
   });
 
   it('is non-zero for the erg work that reads as zero tonnage', () => {
@@ -444,7 +486,10 @@ describe('regionVolume', () => {
     // LOAD.repSeconds priced through the unweighted constant — the erg carries
     // no ROM estimate, so it scores the neutral 1.0. The unmapped 10×8 lands
     // nowhere.
-    const squat = 500 * romFactor(classifyMovement('Back Squat').profile);
+    const squatProfile = classifyMovement('Back Squat').profile;
+    const squat =
+      setVolume(set({ weight: 100, reps: 5 }), VOLUME.unweightedRepKg, 1, bwLoadFactor(squatProfile)) *
+      romFactor(squatProfile);
     const skiErg = (300 / LOAD.repSeconds) * VOLUME.unweightedRepKg;
     expect(romFactor(classifyMovement('Ski-Erg Intervals').profile)).toBe(1);
     const total = Object.values(s.regionVolume).reduce((a, b) => a + b, 0);

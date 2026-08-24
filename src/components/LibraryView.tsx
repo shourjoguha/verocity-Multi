@@ -10,7 +10,8 @@ import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { track } from '@/lib/analytics';
 import { supabasePublic } from '@/lib/supabase';
 import type { Movement } from '@/lib/types';
-import { METRICS, type MetricKey } from '@/app.config';
+import { METRICS, type MetricKey, PRIMARY_METRICS } from '@/app.config';
+import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { isSubroutine } from '@/lib/subroutine';
 import { Button, EmptyState, LoadingScreen } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
@@ -21,14 +22,16 @@ import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { TaxonomyEditor } from '@/components/TaxonomyEditor';
 import type { MovementProfile } from '@/app.config';
 
-const METRIC_KEYS = Object.keys(METRICS) as MetricKey[];
+// Only primary-eligible metrics are offered. A movement already stored as
+// weight/rpe-primary still renders (METRICS keeps both), it just cannot be chosen.
+const METRIC_KEYS = PRIMARY_METRICS as readonly MetricKey[];
 const inputClass =
   'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle';
 
 type Draft = MovementInput;
 
 function emptyDraft(): Draft {
-  return { name: '', category: '', primary_metric: 'weight', default_rest_seconds: 120 };
+  return { name: '', category: '', primary_metric: DEFAULT_PRIMARY_METRIC, default_rest_seconds: 120 };
 }
 
 function MovementForm({

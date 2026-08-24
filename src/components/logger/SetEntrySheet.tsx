@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { METRICS, RPE, type MetricKey } from '@/app.config';
+import { showsWeightField } from '@/lib/metrics';
 import type { LogSet, SetActual } from '@/lib/types';
 import { StepperField } from '@/components/logger/StepperField';
 import { haptic } from '@/lib/haptics';
@@ -129,29 +130,9 @@ export function SetEntrySheet({
   const fields = () => {
     if (!a) return null;
     switch (metric) {
+      // Legacy `weight`-primary rows render as reps; the weight field they were
+      // logged with is the always-on one below, so nothing is lost.
       case 'weight':
-        return (
-          <>
-            <StepperField
-              inline
-              value={a.weight ?? 0}
-              onChange={(v) => onPatch({ weight: v })}
-              step={METRICS.weight.step}
-              clamp={snap(METRICS.weight.step)}
-              label={METRICS.weight.unit}
-              ariaLabel="weight"
-            />
-            <StepperField
-              inline
-              value={a.reps ?? 0}
-              onChange={(v) => onPatch({ reps: v })}
-              step={METRICS.reps.step}
-              clamp={whole}
-              label="reps"
-              ariaLabel="reps"
-            />
-          </>
-        );
       case 'reps':
         return (
           <StepperField
@@ -200,7 +181,9 @@ export function SetEntrySheet({
             ariaLabel="calories"
           />
         );
-      case 'rpe':
+      // No `rpe` case: it is not a primary any more, and the RPE stepper below
+      // renders for every metric regardless.
+      default:
         return null;
     }
   };
@@ -230,6 +213,22 @@ export function SetEntrySheet({
               </div>
 
               <div className="flex flex-col gap-2 p-4">
+                {/* Weight is ALWAYS available on reps/time/distance, the same way
+                    RPE always is below — a squat, a loaded carry and a weighted
+                    plank all take load. Leaving it at 0 means bodyweight, which
+                    is priced through the movement's bwLoad rather than as zero
+                    work. Excluded on `cal`, where there is no external load. */}
+                {showsWeightField(metric) ? (
+                  <StepperField
+                    inline
+                    value={a.weight ?? 0}
+                    onChange={(v) => onPatch({ weight: v })}
+                    step={METRICS.weight.step}
+                    clamp={snap(METRICS.weight.step)}
+                    label={METRICS.weight.unit}
+                    ariaLabel="weight"
+                  />
+                ) : null}
                 {fields()}
                 <StepperField
                   inline

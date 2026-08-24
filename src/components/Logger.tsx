@@ -58,7 +58,16 @@ import { useCountdown, useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
 import { weekFromDate } from '@/lib/week';
 import { nextWeekForDay, planWeekCount } from '@/lib/progression';
-import { ACTIVITY_TAGS, NOTATIONS, SECTIONS, TIMERS, type MetricKey, type SectionKey } from '@/app.config';
+import {
+  ACTIVITY_TAGS,
+  NOTATIONS,
+  PRIMARY_METRICS,
+  SECTIONS,
+  TIMERS,
+  type MetricKey,
+  type SectionKey,
+} from '@/app.config';
+import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import type {
   GroupKind,
   LogDocument,
@@ -97,7 +106,11 @@ import {
 } from '@/components/ui/icons';
 import { toast } from '@/lib/toast';
 
-const METRIC_CYCLE: MetricKey[] = ['weight', 'reps', 'time', 'distance', 'cal', 'rpe'];
+// Only the primary-eligible metrics cycle. `weight` and `rpe` are still real
+// per-set fields and still resolve on stored rows, but neither is a primary any
+// more: weight is an always-on field on reps/time/distance, and rpe was never a
+// primary that rendered anything. See PRIMARY_METRICS in app.config.ts.
+const METRIC_CYCLE: MetricKey[] = [...PRIMARY_METRICS];
 
 // One glyph per MetricKey. Exhaustive by construction — a new metric in
 // app.config.ts fails the build here rather than rendering a blank button.
@@ -607,7 +620,7 @@ export default function Logger() {
     const name = 'name' in picked ? picked.name : (picked as Movement).name;
     const known = movements.find((m) => m.name.toLowerCase() === name.toLowerCase());
     const metric: MetricKey =
-      'primary_metric' in picked ? (picked as Movement).primary_metric : known?.primary_metric ?? 'weight';
+      'primary_metric' in picked ? (picked as Movement).primary_metric : known?.primary_metric ?? DEFAULT_PRIMARY_METRIC;
 
     if (picker?.mode === 'add') {
       if ('kind' in picked && isSubroutine(picked)) {
@@ -620,7 +633,7 @@ export default function Logger() {
       const { si, gi, ii } = picker;
       const original = doc.sections[si]?.groups[gi]?.items[ii]?.movement ?? '';
       const swapMetric = 'primary_metric' in picked ? (picked as Movement).primary_metric : known?.primary_metric;
-      const current = doc.sections[si]?.groups[gi]?.items[ii]?.primaryMetric ?? 'weight';
+      const current = doc.sections[si]?.groups[gi]?.items[ii]?.primaryMetric ?? DEFAULT_PRIMARY_METRIC;
       setDoc((d) => swapItemMovement(d, si, gi, ii, name, swapMetric ?? current));
       if (planId && original && original.toLowerCase() !== name.toLowerCase()) {
         bumpMovementSub(planId, dayKey, original, name).then(() =>
@@ -1003,7 +1016,11 @@ export default function Logger() {
                 <button
                   onClick={() => {
                     activate(groupId);
-                    const nextMetric = METRIC_CYCLE[(METRIC_CYCLE.indexOf(item.primaryMetric) + 1) % METRIC_CYCLE.length];
+                    // indexOf is -1 for a legacy `weight`/`rpe` row, which would otherwise
+                    // jump to index 1 and skip the first option. Treat "not in the
+                    // cycle" as "before the start" so the first tap lands on reps.
+                    const at = METRIC_CYCLE.indexOf(item.primaryMetric);
+                    const nextMetric = METRIC_CYCLE[at < 0 ? 0 : (at + 1) % METRIC_CYCLE.length];
                     setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric));
                   }}
                   className={`${ICON_BTN} hover:text-fg`}
@@ -1693,7 +1710,7 @@ export default function Logger() {
 
       <SetEntrySheet
         open={entrySet !== null}
-        metric={entryItem?.primaryMetric ?? 'weight'}
+        metric={entryItem?.primaryMetric ?? DEFAULT_PRIMARY_METRIC}
         movement={entryItem?.movement ?? ''}
         setIndex={entryFor?.ki ?? 0}
         setCount={entryItem?.sets.length ?? 0}

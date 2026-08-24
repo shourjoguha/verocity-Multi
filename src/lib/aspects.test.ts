@@ -750,11 +750,23 @@ describe('owner stats feed the metrics', () => {
     expect(heavy.strength!).toBeCloseTo(light.strength! * 2, 5);
   });
 
-  it('leaves loaded work alone whatever the owner weighs', () => {
-    const squats = [log('2026-07-20', [{ movement: 'Back Squat', sets: squatSets(5) }])];
-    expect(computeAspectMetrics(squats, { end: END, unweightedKg: 80 }).strength).toBeCloseTo(
-      computeAspectMetrics(squats, { end: END }).strength!,
+  // Before v6 this asserted that ANY loaded work was immune to bodyweight,
+  // because weight simply replaced the bodyweight estimate. Load is additive
+  // now, so immunity is a property of the MOVEMENT: a bench press bears none of
+  // the athlete and is unmoved, while a squat carries them up and down with the
+  // bar and genuinely is heavier work for a heavier lifter.
+  it('leaves loaded work alone only where the movement bears none of the athlete', () => {
+    const benches = [log('2026-07-20', [{ movement: 'Bench Press', sets: squatSets(5) }])];
+    expect(computeAspectMetrics(benches, { end: END, unweightedKg: 80 }).strength).toBeCloseTo(
+      computeAspectMetrics(benches, { end: END }).strength!,
       5,
+    );
+  });
+
+  it('prices a loaded squat higher for a heavier athlete', () => {
+    const squats = [log('2026-07-20', [{ movement: 'Back Squat', sets: squatSets(5) }])];
+    expect(computeAspectMetrics(squats, { end: END, unweightedKg: 80 }).strength!).toBeGreaterThan(
+      computeAspectMetrics(squats, { end: END, unweightedKg: 40 }).strength!,
     );
   });
 });

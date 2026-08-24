@@ -165,7 +165,7 @@ const DIP: RegionWeights = { chest: 0.45, arms: 0.35, shoulders: 0.2 };
 const ROW: RegionWeights = { back: 0.7, arms: 0.3 };
 const VERTICAL_PULL: RegionWeights = { back: 0.7, arms: 0.3 };
 
-export const EXACT: Record<string, MovementProfile> = {
+const RAW_EXACT: Record<string, MovementProfile> = {
   // --- lower, knee-dominant
   // Bilateral squats are anterior-leg dominant. The front squat most of all:
   // the upright torso shifts demand off the hips and onto the quads, and the
@@ -221,6 +221,10 @@ export const EXACT: Record<string, MovementProfile> = {
   'leg curl': p({ posteriorChain: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
   'nordic leg curl': p({ posteriorChain: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
   nordic: p({ posteriorChain: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+  // The everyday spelling. Without it "Nordic Curl" normalises to an atom that is
+  // in neither EXACT key and falls to rule:hamstring-isolation -- which is there
+  // for MACHINE leg curls (bwLoad 0) and would price a nordic at zero.
+  'nordic curl': p({ posteriorChain: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
   'hip thrust machine': p(
     { posteriorChain: 1 },
     'resistance',
@@ -277,6 +281,10 @@ export const EXACT: Record<string, MovementProfile> = {
     { rom: ROM.pushHorizontal },
   ),
   'bench press': p(PUSH_HORIZONTAL, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
+  // Its own entry, not left to the horizontal-push RULE: that rule exists for
+  // bench/machine/fly, which bear none of the athlete, while a push-up carries
+  // ~65% of them. Same anatomy, opposite bwLoad -- so the rule cannot serve both.
+  'push up': p(PUSH_HORIZONTAL, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
   dip: p(DIP, 'resistance', 'sagittal', { rom: ROM.dip }),
   'weighted dip': p(DIP, 'resistance', 'sagittal', { rom: ROM.dip }),
   'landmine press': p(
@@ -307,6 +315,9 @@ export const EXACT: Record<string, MovementProfile> = {
   'dumbbell row': p(ROW, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
   'iso lateral row': p(ROW, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
   'gorilla row': p(ROW, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
+  // As with 'push up': the horizontal-pull RULE covers bent and machine rows,
+  // which bear none of the athlete; an inverted row hangs off their own mass.
+  'inverted row': p(ROW, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
   'face pull': p({ back: 0.6, shoulders: 0.4 }, 'resistance', 'transverse', { rom: ROM.prehab }),
   'band pull apart': p(
     { back: 0.6, shoulders: 0.4 },
@@ -332,7 +343,7 @@ export const EXACT: Record<string, MovementProfile> = {
   // --- carries / sled
   'farmer carry': p(
     { core: 0.35, arms: 0.25, shoulders: 0.2, posteriorChain: 0.2 },
-    'isometric',
+    'endurance',
     'frontal',
     { systemic: true },
   ),
@@ -494,7 +505,7 @@ export const EXACT: Record<string, MovementProfile> = {
 // Fallbacks for names not in EXACT (i.e. anything logged after this shipped).
 // LONGEST MATCHED FRAGMENT WINS, so ordering here is NOT load-bearing.
 
-export const RULES: MovementRule[] = [
+const RAW_RULES: MovementRule[] = [
   {
     id: 'erg-endurance',
     match: ['ski erg', 'row erg', 'rower', 'erg', 'treadmill', 'stairmaster', 'elliptical'],
@@ -641,7 +652,7 @@ export const RULES: MovementRule[] = [
     match: ['carry', 'farmer', 'suitcase carry'],
     profile: p(
       { core: 0.35, arms: 0.25, shoulders: 0.2, posteriorChain: 0.2 },
-      'isometric',
+      'endurance',
       'frontal',
       { systemic: true },
     ),
@@ -666,6 +677,128 @@ export const RULES: MovementRule[] = [
     }),
   },
 ];
+
+// ---- reviewed bodyweight load ------------------------------------------------
+//
+// `bwLoad` is the fraction of the athlete's own bodyweight a movement makes them
+// lift, which `setVolume` ADDS to any external weight so that weighted is always
+// >= bodyweight for the same movement. Kept as ONE table rather than an argument
+// on 100+ `p()` calls because these are ESTIMATES that were reviewed as a set:
+// docs/bwload-review.csv is the round-tripped record, and this block is meant to
+// be diffed against it. Keys are the normalised EXACT name, or `rule:<id>`.
+//
+// An absent key means "not estimated" and falls back to VOLUME.bodyweightFraction
+// in setVolume -- never to zero. 0 is a CLAIM (a bench bears none of you); blank
+// is the absence of one. Do not collapse the two.
+const BW_LOAD: Record<string, number> = {
+  'chin up'                           : 1.0,
+  'muscle up'                         : 1.0,
+  'pull up'                           : 1.0,
+  'rope climb'                        : 1.0,
+  'weighted pull up'                  : 1.0,
+  'dip'                               : 0.9,
+  'handstand push up'                 : 0.9,
+  'rule:dip'                          : 0.9,
+  'weighted dip'                      : 0.9,
+  'box jump'                          : 0.85,
+  'pistol'                            : 0.85,
+  'standing calf raise'               : 0.85,
+  'back squat'                        : 0.8,
+  'farmer carry'                      : 0.8,
+  'front squat'                       : 0.8,
+  'rule:carry'                        : 0.8,
+  'rule:hinge-pattern'                : 0.8,
+  'rule:sled'                         : 0.8,
+  'rule:squat-pattern'                : 0.8,
+  'sled drag'                         : 0.8,
+  'sled push'                         : 0.8,
+  'stairmaster'                       : 0.8,
+  'thruster'                          : 0.8,
+  'trap bar deadlift'                 : 0.8,
+  'bulgarian split squat'             : 0.75,
+  'cossack squat'                     : 0.75,
+  'reverse lunge'                     : 0.75,
+  'rule:lunge-pattern'                : 0.75,
+  'burpee'                            : 0.65,
+  'double under'                      : 0.65,
+  'dumbbell facing burpee'            : 0.65,
+  'nordic'                            : 0.65,
+  'nordic leg curl'                   : 0.65,
+  'nordic curl'                       : 0.65,
+  'push up'                           : 0.65,
+  'run'                               : 0.65,
+  'single under'                      : 0.65,
+  'zone'                              : 0.65,
+  'inverted row'                      : 0.6,
+  'ab wheel roller'                   : 0.5,
+  'ab wheel rollout'                  : 0.5,
+  'calf raise'                        : 0.5,
+  'rule:calf'                         : 0.5,
+  'rule:locomotion-endurance'         : 0.5,
+  'side plank'                        : 0.45,
+  'kettlebell snatch'                 : 0.4,
+  'kettlebell swing'                  : 0.4,
+  'plank'                             : 0.4,
+  'rule:core-isometric'               : 0.4,
+  'ab routine'                        : 0.3,
+  'dead bug'                          : 0.3,
+  'hanging knee raise'                : 0.3,
+  'rule:core-dynamic'                 : 0.3,
+  'rule:jump-plyo'                    : 0.3,
+  'v up'                              : 0.3,
+  'pallof press'                      : 0.2,
+  'rule:anti-rotation'                : 0.2,
+  'rule:rotation'                     : 0.2,
+  'band pull apart'                   : 0.0,
+  'banded hip thrust'                 : 0.0,
+  'bench press'                       : 0.0,
+  'cable fly'                         : 0.0,
+  'cycle'                             : 0.0,
+  'dumbbell row'                      : 0.0,
+  'face pull'                         : 0.0,
+  'gorilla row'                       : 0.0,
+  'hip thrust machine'                : 0.0,
+  'incline dumbbell bench'            : 0.0,
+  'iso lateral row'                   : 0.0,
+  'landmine press'                    : 0.0,
+  'landmine twist'                    : 0.0,
+  'leg curl'                          : 0.0,
+  'leg extension'                     : 0.0,
+  'leg press'                         : 0.0,
+  'machine crunch'                    : 0.0,
+  'machine press'                     : 0.0,
+  'med ball throw'                    : 0.0,
+  'overhead press'                    : 0.0,
+  'overhead tricep'                   : 0.0,
+  'row erg interval'                  : 0.0,
+  'rower interval'                    : 0.0,
+  'rule:arm-isolation'                : 0.0,
+  'rule:delt-isolation'               : 0.0,
+  'rule:erg-endurance'                : 0.0,
+  'rule:hamstring-isolation'          : 0.0,
+  'rule:horizontal-pull'              : 0.0,
+  'rule:horizontal-push'              : 0.0,
+  'rule:quad-isolation'               : 0.0,
+  'rule:upper-back-prehab'            : 0.0,
+  'rule:vertical-pull'                : 0.0,
+  'rule:vertical-push'                : 0.0,
+  'shoulder raise'                    : 0.0,
+  'ski erg interval'                  : 0.0,
+  'split stance romanian deadlift'    : 0.8,
+  'standing barbell military press'   : 0.0,
+};
+
+const withBw = (key: string, profile: MovementProfile): MovementProfile =>
+  BW_LOAD[key] != null ? { ...profile, bwLoad: BW_LOAD[key] } : profile;
+
+export const EXACT: Record<string, MovementProfile> = Object.fromEntries(
+  Object.entries(RAW_EXACT).map(([name, profile]) => [name, withBw(name, profile)]),
+);
+
+export const RULES: MovementRule[] = RAW_RULES.map((rule) => ({
+  ...rule,
+  profile: withBw('rule:' + rule.id, rule.profile),
+}));
 
 // ---- matching -------------------------------------------------------------
 
@@ -765,6 +898,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
   let systemic = false;
   let rotary: RotaryRole | null = null;
   const romParts: number[] = [];
+  const bwParts: number[] = [];
 
   for (const m of matched) {
     for (const [k, v] of Object.entries(m.profile.regions)) {
@@ -779,6 +913,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
     systemic = systemic || m.profile.systemic;
     if (!rotary && m.profile.rotary) rotary = m.profile.rotary;
     if (m.profile.rom != null) romParts.push(m.profile.rom);
+    if (m.profile.bwLoad != null) bwParts.push(m.profile.bwLoad);
   }
 
   const firstModality = matched.find((m) => m.profile.modality)?.profile.modality ?? null;
@@ -797,6 +932,14 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
   // zero — one unestimated half of a compound must not halve the other.
   const rom = romParts.length > 0 ? romParts.reduce((a, b) => a + b, 0) / romParts.length : null;
 
+  // Compound bwLoad is the MEAN of the atoms that carry one, for the same reason
+  // ROM is: an atom with no estimate is skipped, never counted as zero, or one
+  // unestimated half of "Pull-up + Dip" would halve the other. Carrying it here
+  // at all is the point -- this merge rebuilds the profile field by field, so a
+  // property that is not named here is silently dropped no matter what the EXACT
+  // table says (docs/LESSONS.md: "the logger records more than the metrics read").
+  const bwLoad = bwParts.length > 0 ? bwParts.reduce((a, b) => a + b, 0) / bwParts.length : null;
+
   let profile: MovementProfile = {
     regions: normalizeWeights(regionAcc),
     modality,
@@ -804,6 +947,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
     rotary,
     systemic,
     ...(rom != null ? { rom } : {}),
+    ...(bwLoad != null ? { bwLoad } : {}),
   };
 
   let source: ClassificationSource;

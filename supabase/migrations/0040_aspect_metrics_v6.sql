@@ -1,0 +1,27 @@
+-- ASPECT_METRICS_VERSION 5 -> 6: load became ADDITIVE.
+--
+-- `setVolume` used to price a set at `a.weight ?? unweightedKg` — external weight
+-- REPLACING the bodyweight estimate. That is wrong whenever the same movement is
+-- sometimes loaded and sometimes not: for an 86kg lifter it put a bodyweight
+-- squat at 55.9 and a squat with 20kg on the bar at 20, so adding weight made the
+-- set score LESS. It also priced a set stored with weight 0 — which is what
+-- voice.ts writes for "bodyweight" — at zero work.
+--
+-- v6 adds instead of replacing: the athlete's own share (MovementProfile.bwLoad,
+-- reviewed per movement in docs/bwload-review.csv) plus whatever is on the bar.
+-- A pull-up costs exactly bodyweight, a bench costs only the plate, and a
+-- movement with no estimate lands on the old unweightedKg unchanged.
+--
+-- That redefines `strength` and `power`, which are scaled resistance and
+-- plyometric volume. The radar scores each axis against the MEDIAN of the
+-- owner's own past metrics, so a baseline holding both definitions describes
+-- neither — and does so invisibly, since nothing about the reading looks wrong.
+-- Same reasoning as 0019/0022/0037; the read path in queries.ts already filters
+-- on metrics_version, so this delete is what stops v5 rows lingering as dead
+-- weight rather than what enforces correctness.
+--
+-- Snapshots rebuild themselves: useAspectProfile backfills ASPECT_BACKFILL_WEEKS
+-- in one pass, which clears ASPECT_MIN_BASELINE immediately, and the span
+-- thickens a week at a time from there.
+
+delete from public.aspect_snapshots where metrics_version < 6;
