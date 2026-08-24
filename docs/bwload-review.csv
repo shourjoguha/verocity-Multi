@@ -1,0 +1,108 @@
+movement,source,modality,proposed_bwLoad,confidence,rationale
+# bwLoad = fraction of the athlete's bodyweight this movement bears per rep. setVolume ADDS it to external weight.
+# 0 = external plate is the only load (bench/machine/isolation). ~1.0 = whole bodyweight moved (pull-up).
+# Absent/blank in code = falls back to VOLUME.bodyweightFraction (0.65). Edit proposed_bwLoad and hand back.
+# POLICY QUESTION (affects every MED squat/lunge row): does a loaded barbell squat count bodyweight (~0.8) PLUS the bar,
+#   or only the bar (0)? Rows below assume bodyweight IS counted, per "weighted should always be higher since it includes bodyweight".
+back squat,EXACT,resistance,0.80,med,"Air squat bears ~85% BW (mass above knee); bar adds on top. Policy: BW counted."
+front squat,EXACT,resistance,0.80,med,"Same as back squat; upright torso, still bears BW."
+leg extension,EXACT,resistance,0.00,high,Seated machine; bodyweight not moved.
+leg press,EXACT,resistance,0.00,high,Seated; you press the sled, body is supported.
+pistol,EXACT,resistance,0.85,med,Single-leg squat of full bodyweight.
+reverse lunge,EXACT,resistance,0.75,med,Bears bodyweight through the working leg.
+bulgarian split squat,EXACT,resistance,0.75,med,Bodyweight on the front leg + optional load.
+cossack squat,EXACT,resistance,0.75,med,Deep unilateral squat, bears bodyweight.
+leg curl,EXACT,resistance,0.00,high,Machine hamstring isolation; no bodyweight.
+nordic leg curl,EXACT,resistance,0.50,low,"Bodyweight hamstring lower — bears upper-body mass; hard to price."
+nordic,EXACT,resistance,0.50,low,Same as nordic leg curl.
+hip thrust machine,EXACT,resistance,0.00,high,Machine; external load only.
+banded hip thrust,EXACT,resistance,0.00,high,Band is the external load.
+split stance romanian deadlift,EXACT,resistance,0.00,med,Hinge — bar rises, body COM barely does.
+trap bar deadlift,EXACT,resistance,0.00,high,Bar is the load; bodyweight not lifted.
+kettlebell swing,EXACT,plyometric,0.00,low,"Ballistic hinge; KB is the load, BW doesn't rise much. Unsure."
+kettlebell snatch,EXACT,plyometric,0.00,low,KB external; BW contribution unclear.
+calf raise,EXACT,resistance,0.50,low,"Standing bears ~0.85 BW; seated/machine bears 0. Name is ambiguous."
+standing calf raise,EXACT,resistance,0.85,med,Standing raises whole bodyweight onto the toes.
+incline dumbbell bench,EXACT,resistance,0.00,high,Supported on a bench; plate only.
+machine press,EXACT,resistance,0.00,high,Machine; external load only.
+cable fly,EXACT,resistance,0.00,high,Cable stack; no bodyweight.
+bench press,EXACT,resistance,0.00,high,Lying; bodyweight supported by bench.
+dip,EXACT,resistance,0.90,med,Press ~90% of bodyweight up on the arms.
+weighted dip,EXACT,resistance,0.90,med,Same as dip plus the belt plate.
+landmine press,EXACT,resistance,0.00,high,Standing press of an external bar; body doesn't rise.
+standing barbell military press,EXACT,resistance,0.00,high,Bar is the load; body doesn't rise.
+overhead press,EXACT,resistance,0.00,high,Bar is the load; body doesn't rise.
+shoulder raise,EXACT,resistance,0.00,high,Delt isolation; external only.
+overhead tricep,EXACT,resistance,0.00,high,Arm isolation; external only.
+pull up,EXACT,resistance,1.00,high,Lifts entire bodyweight.
+weighted pull up,EXACT,resistance,1.00,high,Bodyweight + belt plate.
+chin up,EXACT,resistance,1.00,high,Lifts entire bodyweight.
+dumbbell row,EXACT,resistance,0.00,high,Bent/supported row; bodyweight not lifted.
+iso lateral row,EXACT,resistance,0.00,high,Machine row; external only.
+gorilla row,EXACT,resistance,0.00,high,Bent row; external only.
+face pull,EXACT,resistance,0.00,high,Cable prehab; external only.
+band pull apart,EXACT,resistance,0.00,high,Band is the load.
+dead bug,EXACT,isometric,0.30,low,Anti-extension core; supports limb/torso mass. Unsure.
+side plank,EXACT,isometric,0.45,low,Supports lateral bodyweight; isometric pricing is fuzzy.
+plank,EXACT,isometric,0.40,low,Supports bodyweight in a line; hard to price.
+pallof press,EXACT,isometric,0.20,low,Anti-rotation vs a cable; mostly external.
+landmine twist,EXACT,resistance,0.00,med,External bar, rotational.
+hanging knee raise,EXACT,resistance,0.30,low,Raises the legs (~⅓ BW), not the whole body.
+ab wheel roller,EXACT,resistance,0.50,low,Bodyweight anti-extension; fraction unclear.
+ab wheel rollout,EXACT,resistance,0.50,low,Same as ab wheel roller.
+machine crunch,EXACT,resistance,0.00,med,Machine; external load only.
+ab routine,EXACT,resistance,0.30,low,Generic bodyweight core; fraction unclear.
+farmer carry,EXACT,isometric,0.00,med,You carry external weight; bodyweight isn't the load.
+sled push,EXACT,resistance,0.00,med,Push external sled; body horizontal, not lifted.
+sled drag,EXACT,resistance,0.00,med,Drag external sled.
+box jump,EXACT,plyometric,0.85,med,Jumps whole bodyweight onto the box.
+med ball throw,EXACT,plyometric,0.00,med,External ball is the load.
+ski erg interval,EXACT,endurance,0.00,med,Standing/seated erg; pulls a handle, body not lifted.
+rower interval,EXACT,endurance,0.00,med,Seated erg; bodyweight supported.
+row erg interval,EXACT,endurance,0.00,med,Seated erg; bodyweight supported.
+zone,EXACT,endurance,0.65,low,"Generic zone-2 (mixed modes); default. Low stakes (endurance axis is minutes-based)."
+run,EXACT,endurance,0.65,low,Bears bodyweight; low stakes for the radar.
+cycle,EXACT,endurance,0.00,low,Seated; low stakes.
+stairmaster,EXACT,endurance,0.65,low,Climbs bodyweight; low stakes.
+hip mobility flow,EXACT,mobility,,low,Leave default; mobility barely feeds volume.
+hip flow,EXACT,mobility,,low,Leave default.
+couch stretch,EXACT,mobility,,low,Leave default.
+hip stretch,EXACT,mobility,,low,Leave default.
+pigeon,EXACT,mobility,,low,Leave default.
+kettlebell halo,EXACT,mobility,,low,Leave default.
+halo,EXACT,mobility,,low,Leave default.
+shoulder prep,EXACT,mobility,,low,Leave default.
+adductor work,EXACT,mobility,,low,Leave default.
+thruster,EXACT,resistance,0.50,low,"Squat (bears BW) into a press (doesn't). Blended; unsure."
+muscle up,EXACT,resistance,1.00,med,Pull + dip of full bodyweight.
+rope climb,EXACT,resistance,1.00,med,Hauls bodyweight up the rope.
+v up,EXACT,resistance,0.30,low,Dynamic trunk flexion; raises legs+torso partly.
+double under,EXACT,endurance,0.65,low,Jump-rope; bears bodyweight, low stakes.
+single under,EXACT,endurance,0.65,low,Same as double under.
+burpee,EXACT,endurance,0.65,low,Bodyweight squat-thrust-jump; systemic.
+dumbbell facing burpee,EXACT,endurance,0.65,low,Same pattern, dumbbell-facing.
+handstand push up,EXACT,resistance,0.90,med,Presses ~90% bodyweight overhead.
+erg-endurance,RULE (ski erg/rower/erg/treadmill/stairmaster/elliptical),endurance,0.00,low,"Seated ergs dominate this bucket; treadmill/stair bear BW. Mixed."
+locomotion-endurance,RULE (jog/sprint/swim/bike/walk/hike/ruck),endurance,0.50,low,"Run/walk/ruck bear BW; bike/swim don't. Mixed bucket."
+jump-plyo,RULE (jump/hop/bound/throw/slam/clean/snatch/jerk),plyometric,0.30,low,"Box jump bears BW; clean/snatch/throw are external. Mixed — consider splitting."
+squat-pattern,RULE (squat/leg press),resistance,0.80,med,"Bodyweight squats; but 'leg press' in bucket bears 0. Consider splitting leg press."
+lunge-pattern,RULE (lunge/split squat/step up),resistance,0.75,med,Unilateral leg patterns bear bodyweight.
+hinge-pattern,RULE (deadlift/rdl/good morning/hip thrust/glute bridge/swing),resistance,0.00,med,Bar/hip-load; bodyweight COM barely rises.
+hamstring-isolation,RULE (leg curl/nordic/ham curl),resistance,0.00,low,"leg curl = 0 but nordic bears BW. Nordic is EXACT (0.5); rule stays 0."
+quad-isolation,RULE (leg extension/knee extension),resistance,0.00,high,Machine isolation.
+calf,RULE (calf raise/calf),resistance,0.50,low,"Standing bears ~0.85; seated/machine = 0. Ambiguous bucket."
+horizontal-push,RULE (bench/chest press/push up/machine press/fly),resistance,0.00,low,"Bench/machine/fly = 0 but 'push up' bears ~0.65. RECOMMEND adding 'push up' EXACT at 0.65; rule stays 0."
+dip,RULE (dip),resistance,0.90,med,Bodyweight dip.
+vertical-push,RULE (overhead/military/shoulder/push press/landmine),resistance,0.00,high,Bar is the load; body doesn't rise.
+delt-isolation,RULE (lateral/shoulder/front raise/rear delt),resistance,0.00,high,Delt isolation; external only.
+vertical-pull,RULE (pull up/chin up/lat pulldown/pulldown),resistance,0.00,low,"pull up/chin up are EXACT (1.0). This rule mainly catches lat pulldown (machine = 0). Rule stays 0."
+horizontal-pull,RULE (row/seal row/inverted row),resistance,0.00,med,"Bent/machine rows = 0. Inverted row bears BW — minor; keep 0 or split."
+upper-back-prehab,RULE (face pull/pull apart/reverse fly),resistance,0.00,high,Cable/band prehab; external only.
+arm-isolation,RULE (curl/tricep/bicep/pushdown/skullcrusher),resistance,0.00,high,Arm isolation; external only.
+anti-rotation,RULE (pallof/anti rotation),isometric,0.20,low,Mostly external cable resistance.
+rotation,RULE (twist/russian twist/wood chop/chop/rotation),resistance,0.20,low,Usually external ball/cable; some bodyweight.
+core-isometric,RULE (plank/hollow hold/dead bug/bird dog),isometric,0.40,low,Supports bodyweight; isometric pricing fuzzy.
+core-dynamic,RULE (crunch/sit up/knee raise/leg raise/ab wheel/rollout),resistance,0.30,low,Bodyweight core; raises part of the body.
+carry,RULE (carry/farmer/suitcase carry),isometric,0.00,med,Carries external weight; bodyweight isn't the load.
+sled,RULE (sled),resistance,0.00,med,Push/drag external sled.
+mobility,RULE (stretch/mobility/flow/halo/prep/foam roll/pigeon/yoga),mobility,,low,Leave default; negligible volume contribution.

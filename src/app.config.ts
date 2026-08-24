@@ -865,4 +865,17 @@ export interface MovementProfile {
   // Whole-organism demand. Additive to the region weights, never a substitute:
   // Run is systemic AND posteriorChain/quads/calves.
   systemic: boolean;
+  /**
+   * Fraction of the athlete's own bodyweight this movement bears as load, per
+   * rep — the bodyweight-borne component that `setVolume` ADDS to any external
+   * weight (weighted ≥ bodyweight for the same movement, by construction).
+   *
+   * A pull-up moves ~all of bodyweight (≈1.0); a push-up ~0.65; a bench press
+   * or a machine curl bears none (0), so only the external plate counts. Like
+   * `rom?`, it is an ESTIMATE reviewable as an estimate. Absent means "not
+   * estimated", which falls back to the global `VOLUME.bodyweightFraction` —
+   * never treat absence as zero, or an unmapped bodyweight movement would price
+   * at nothing. Reviewed values live in docs/bwload-review.csv.
+   */
+  bwLoad?: number;
 }

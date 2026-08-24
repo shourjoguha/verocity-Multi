@@ -131,7 +131,7 @@ function p(
   regions: RegionWeights,
   modality: ModalityKey,
   plane: PlaneKey | PlaneWeights,
-  opts: { rotary?: RotaryRole; systemic?: boolean; rom?: number } = {},
+  opts: { rotary?: RotaryRole; systemic?: boolean; rom?: number; bwLoad?: number } = {},
 ): MovementProfile {
   return {
     regions,
@@ -142,6 +142,9 @@ function p(
     // Omitted rather than defaulted, so "not estimated" stays distinguishable
     // from "estimated at the reference length" in a stored override.
     ...(opts.rom != null ? { rom: opts.rom } : {}),
+    // Bodyweight-borne fraction (see MovementProfile.bwLoad). Omitted → falls
+    // back to VOLUME.bodyweightFraction in setVolume, never to zero.
+    ...(opts.bwLoad != null ? { bwLoad: opts.bwLoad } : {}),
   };
 }
 
