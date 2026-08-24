@@ -577,3 +577,27 @@ describe('cold start', () => {
     expect(ids).not.toContain('training.hypertrophy.region-volume-short');
   });
 });
+
+describe('timezone determinism', () => {
+  // This suite reads a LOCAL clock hour off `started_at` and compares it to meal
+  // times stored as bare wall-clock strings. That pairing is correct in a
+  // browser — both are the athlete's own zone — but it means these fixtures only
+  // mean one thing if the runner's zone is pinned. It was not: the fuel-timing
+  // assertions passed in Europe/London and Asia/Kolkata and failed in UTC,
+  // America/New_York and Australia/Sydney, so the suite was red in CI and green
+  // for whoever wrote it, for months.
+  //
+  // vitest.config.ts pins TZ=UTC. If that pin is ever removed this fails first
+  // and names the reason, instead of one fuel-timing assertion failing somewhere
+  // far away and looking like a coaching-logic bug.
+  it('runs in the pinned timezone', () => {
+    expect(new Date().getTimezoneOffset()).toBe(0);
+  });
+
+  // The specific trap: a session that starts within an hour of the day's first
+  // meal flips from "fed" to "unfed" on a one-hour offset change.
+  it('keeps the fed-before-training fixture unambiguous in the pinned zone', () => {
+    const fuel = measureFuelTiming(LOGS, MEALS, 60, TODAY);
+    expect(fuel.unfedLongSessions).toBe(0);
+  });
+});
