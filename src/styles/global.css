@@ -153,16 +153,33 @@
    Applied via the pre-paint script in Base.astro (System / Light / Dark, see
    lib/theme.ts).
 
-   Values track the reference palette: bg #050505, surface #0E0E0E, elevated
-   #171717, line #262626, lineSoft #1C1C1C, dim #8C8C8C, faint #5A5A5A, and
-   pure-white ink. The hairlines are white alphas rather than flat greys so they
-   stay correct over the six backdrop presets, which paint behind the surfaces.
+   Values track the reference palette: bg #050505, line #262626, lineSoft
+   #1C1C1C, dim #8C8C8C, faint #5A5A5A, and pure-white ink. The hairlines are
+   white alphas rather than flat greys so they stay correct over the six
+   backdrop presets, which paint behind the surfaces.
+
+   SURFACE AND ELEVATED ARE DELIBERATELY LIGHTER THAN THE REFERENCE'S #0E0E0E /
+   #171717, because the reference's own numbers do not survive the transfer to
+   the dark end of the scale. Contrast is a RATIO, not a difference in
+   lightness: paper puts 5 points of L between bg and a card and buys 1.117:1,
+   while carbon put 3.5 points between #050505 and #0E0E0E and bought only
+   1.055:1 — barely half the separation, on the same token roles that
+   CLAUDE.md says are authored as EQUALS. Cards stopped reading as objects
+   sitting on the page and the Logger's movement cards dissolved into the
+   backdrop. Matching paper's ratio takes surface #141414 (1.110:1) and, so
+   `elevated` keeps its own step above the card it fills, #242424 (1.178:1 over
+   surface, against paper's 1.225:1).
+
+   Do not "restore" these to the reference hexes without re-deriving the ratio —
+   and do not push `elevated` past ~15%: `--color-border` at 0.14 white
+   composites to ≈15.7% over the page, so an elevated fill up there swallows the
+   hairline on `.hill-btn[aria-pressed='true']`, which is filled AND outlined.
 
    IF YOU ADD A TOKEN ABOVE, ADD IT HERE. ---- */
 html[data-theme='dark'] {
   --color-bg: hsl(0 0% 2%); /* #050505 */
-  --color-surface: hsl(0 0% 5.5%); /* #0e0e0e — cards */
-  --color-elevated: hsl(0 0% 9%); /* #171717 — tracks / hover fills */
+  --color-surface: hsl(0 0% 8%); /* #141414 — cards. 1.110:1 on bg, ≈ paper's 1.117:1 */
+  --color-elevated: hsl(0 0% 14%); /* #242424 — tracks / hover fills. 1.178:1 on surface */
   --color-border: hsl(0 0% 100% / 0.14); /* ≈ #262626 over the page — OUTER hairline */
   --color-border-soft: hsl(0 0% 100% / 0.07); /* ≈ #1c1c1c — INNER row divider */
   --color-muted: hsl(0 0% 55%); /* #8c8c8c — AA secondary on carbon */
