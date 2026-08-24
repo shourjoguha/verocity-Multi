@@ -90,6 +90,9 @@ const VOCABULARY = [
   'Burpee',
   'Dumbbell-Facing Burpee',
   'Handstand Push-up',
+  'Push-up',
+  'Inverted Row',
+  'Nordic Curl',
 ];
 
 // Truncated at import — almost certainly "Weighted Pull-up" and "Deficit
@@ -416,5 +419,65 @@ describe('familyOf is unchanged by the taxonomy work', () => {
     expect(familyOf('Zone 2 (row/bike/walk)')).toBe('pull');
     expect(familyOf('Back Squat')).toBe('squat');
     expect(familyOf('Bulgarian Split Squat')).toBe('lunge');
+  });
+});
+
+describe('bodyweight load (bwLoad)', () => {
+  // These numbers are ESTIMATES reviewed as a set (docs/bwload-review.csv) and
+  // no check can tell whether one is anatomically right — this block only pins
+  // what was agreed, so a later edit has to be deliberate. `setVolume` ADDS
+  // bwLoad x bodyweight to the external weight, so these decide how a bodyweight
+  // set is priced against a loaded one.
+  const bw = (name: string) => classifyMovement(name).profile.bwLoad;
+
+  it('lifts the whole athlete on a strict vertical pull', () => {
+    expect(bw('Pull-ups')).toBe(1);
+    expect(bw('Chin-up')).toBe(1);
+    expect(bw('Muscle-up')).toBe(1);
+  });
+
+  it('bears none of the athlete when they are supported by a bench or machine', () => {
+    expect(bw('Bench Press')).toBe(0);
+    expect(bw('Leg Press')).toBe(0);
+    expect(bw('Dumbbell Row')).toBe(0);
+    expect(bw('Bicep Curl')).toBe(0);
+  });
+
+  // The specific name and the generic RULE that covers its family must agree, or
+  // the value turns on how the user happened to type it. These four pairs were
+  // each a real split before review.
+  it('agrees between an exact name and the rule that catches its variants', () => {
+    expect(bw('Trap Bar Deadlift')).toBe(bw('Deadlift'));
+    expect(bw('Farmer Carry')).toBe(bw('Suitcase Carry'));
+    expect(bw('Sled Push')).toBe(bw('Sled Drag'));
+    expect(bw('Nordic Curl')).toBe(bw('Nordic Leg Curl'));
+  });
+
+  // Three names that a RULE would price at the wrong end of the scale, because
+  // the rule exists for the supported version of the same anatomy.
+  it('separates the bodyweight variant from its machine namesake', () => {
+    expect(bw('Push-up')).toBe(0.65);
+    expect(bw('Bench Press')).toBe(0);
+    expect(bw('Inverted Row')).toBe(0.6);
+    expect(bw('Nordic Curl')).toBe(0.65);
+    expect(bw('Leg Curl')).toBe(0);
+  });
+
+  it('does not let the push-up entry swallow the handstand push-up', () => {
+    expect(bw('Handstand Push-up')).toBe(0.9);
+  });
+
+  // Absence is NOT zero: an unestimated movement falls back to the global
+  // bodyweightFraction in setVolume, so mobility must stay undefined rather than
+  // being priced at nothing.
+  it('leaves an unestimated movement undefined rather than zero', () => {
+    expect(bw('Couch Stretch')).toBeUndefined();
+    expect(bw('Wtd')).toBeUndefined();
+  });
+
+  // Mirrors the ROM rule: an atom with no estimate is skipped, never counted as
+  // zero, or one unestimated half of a compound would halve the other.
+  it('averages a compound over the atoms that carry an estimate', () => {
+    expect(bw('Pull-up + Dip')).toBeCloseTo(0.95, 5);
   });
 });
