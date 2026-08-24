@@ -37,7 +37,7 @@ export default function ShareManager({ embedded = false }: { embedded?: boolean 
   const [scope, setScope] = useState<ShareScope>('profile');
   const [resourceId, setResourceId] = useState('');
   const [label, setLabel] = useState('');
-  const [expiryDays, setExpiryDays] = useState(0);
+  const [expiryDays, setExpiryDays] = useState(7);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -181,7 +181,8 @@ export default function ShareManager({ embedded = false }: { embedded?: boolean 
             <option value="">Select a workout…</option>
             {logs.map((l) => (
               <option key={l.id} value={l.id}>
-                {formatDate(l.log_date)} ·{' '}
+                {formatDate(l.log_date)}
+                {l.day_key ? ` · Day ${l.day_key}` : ''} ·{' '}
                 {l.activity_type ?? (l.tags.length ? l.tags.join(', ') : 'Session')}
               </option>
             ))}

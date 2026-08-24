@@ -11,8 +11,16 @@ import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { Modal } from '@/components/ui/Modal';
 import { hrefFor } from '@/lib/surface';
+import { LogShareControl } from '@/components/LogShareControl';
 
 const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
+
+// A human label for a shared workout: "Day A · 24 Aug 2026", falling back to the
+// activity, then bare date. Prefills the inline share control.
+const shareLabel = (log: WorkoutLog) =>
+  [log.day_key ? `Day ${log.day_key}` : log.activity_type, formatDate(log.log_date)]
+    .filter(Boolean)
+    .join(' · ');
 
 // Tap-a-log quick popup: a session at a glance with Open / Resume actions,
 // plus inline total-time editing and delete, instead of jumping straight to
@@ -51,12 +59,13 @@ export function LogQuickView({
       {log ? (
         <>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            <div className="mb-3 flex flex-wrap items-center gap-1">
-              {log.tags.length > 0 ? (
-                log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)
-              ) : (
-                <span className="text-sm text-fg">{log.day_key ?? log.activity_type ?? 'Session'}</span>
-              )}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {log.day_key ? <span className="text-sm text-fg">Day {log.day_key}</span> : null}
+              {log.activity_type ? <span className="text-sm text-muted">{log.activity_type}</span> : null}
+              {log.tags.map((t) => <Tag key={t} label={t} color={tagColor(t)} />)}
+              {!log.day_key && !log.activity_type && log.tags.length === 0 ? (
+                <span className="text-sm text-fg">Session</span>
+              ) : null}
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="uppercase tracking-wider text-muted">{log.status}</span>
@@ -112,6 +121,12 @@ export function LogQuickView({
               >
                 + Add another session
               </button>
+            ) : null}
+
+            {!readOnly ? (
+              <div className="mt-6 border-t border-border pt-4">
+                <LogShareControl logId={log.id} defaultLabel={shareLabel(log)} />
+              </div>
             ) : null}
           </div>
           <div className="flex items-center gap-2 border-t border-border p-4">
