@@ -130,11 +130,36 @@ export function setVolume(
   set: LogSet,
   unweightedKg: number = VOLUME.unweightedRepKg,
   rom: number = 1,
+  bwLoad: number = VOLUME.bodyweightFraction,
 ): number {
   const a = set.actual;
   if (!a.completed) return 0;
 
-  const load = a.weight ?? unweightedKg;
+  // ADDITIVE, not a replacement. External weight sits ON TOP of the part of the
+  // athlete the movement makes them carry, so a loaded set can never price below
+  // the same movement unloaded — which the old `a.weight ?? unweightedKg` did,
+  // routinely: at 86kg it put a bodyweight squat at 55.9 and a squat with 20kg
+  // on the bar at 20.
+  //
+  // `unweightedKg` already carries VOLUME.bodyweightFraction baked in, so
+  // dividing it back out recovers the athlete's mass (or the flat fallback when
+  // no bodyweight is on file) before applying THIS movement's share. A pull-up
+  // (bwLoad 1) therefore costs exactly bodyweight, a bench (bwLoad 0) costs only
+  // the plate, and a movement with no estimate lands on unweightedKg — precisely
+  // its old value, so unmapped work is unchanged.
+  //
+  // `|| 0` and not `?? 0`: a set logged with 0 is bodyweight, the same as one
+  // logged with no weight at all. voice.ts has always written 0 for "bodyweight",
+  // and under the old `??` that priced the set at zero work.
+  const borne = unweightedKg * (bwLoad / VOLUME.bodyweightFraction);
+  const external = a.weight || 0;
+  // A completed set is never zero work. `borne` is 0 for a movement that carries
+  // none of the athlete — a seated erg, a machine — and if nothing external was
+  // logged either, the additive sum is 0 and the set would vanish. An erg
+  // interval is real work performed against resistance the logger never records
+  // as weight, so fall back to the generic unloaded-rep price, exactly as an
+  // unestimated movement does. Absence is never a penalty (docs/LESSONS.md).
+  const load = borne + external > 0 ? borne + external : unweightedKg;
   const reps = repEquivalents(a);
   const side = set.notations.includes('/side') ? 2 : 1;
   const pause = set.notations.includes('(p)') ? VOLUME.pauseFactor : 1;
@@ -155,6 +180,21 @@ export function setVolume(
  * with no estimate scores 1.0: absence is neutral, never a penalty, so an
  * isometric is not priced at zero work for displacing nothing.
  */
+/**
+ * What fraction of the athlete this movement makes them lift, for `setVolume`.
+ *
+ * Absent means "not estimated" and falls back to the global
+ * `VOLUME.bodyweightFraction`, never to zero — the same rule `rom` follows, and
+ * for the same reason: absence must not be a penalty, or every unmapped
+ * bodyweight movement would price at nothing. A 0 in the table is a positive
+ * claim (a bench bears none of you) and is honoured.
+ */
+export function bwLoadFactor(profile: { bwLoad?: number } | null | undefined): number {
+  const v = profile?.bwLoad;
+  if (v == null || !Number.isFinite(v) || v < 0) return VOLUME.bodyweightFraction;
+  return v;
+}
+
 export function romFactor(profile: { rom?: number } | null | undefined): number {
   const m = profile?.rom;
   if (m == null || !Number.isFinite(m) || m <= 0) return 1;
@@ -163,7 +203,9 @@ export function romFactor(profile: { rom?: number } | null | undefined): number 
 
 /** How heavy a set was relative to that movement's own best, as a multiplier. */
 function intensityFactor(a: LogSet['actual'], best: number | undefined): number {
-  if (a.weight == null || best == null || best <= 0) return 1;
+  // `!a.weight` rather than a null check: a bodyweight set has no external
+  // intensity to compare against a best e1RM, whether it stored 0 or nothing.
+  if (!a.weight || best == null || best <= 0) return 1;
   return clamp(a.weight / best / VOLUME.refIntensity, VOLUME.intensityFactorRange);
 }
 
@@ -234,8 +276,9 @@ export function summarizeTrainingVolume(
 
           const best = bests.get(item.movement);
           const rom = romFactor(c.profile);
+          const bw = bwLoadFactor(c.profile);
           for (const s of item.sets) {
-            const base = setVolume(s, unweightedKg, rom);
+            const base = setVolume(s, unweightedKg, rom, bw);
             if (base <= 0) continue;
             const weighted =
               modality === 'resistance'
@@ -290,7 +333,7 @@ function inferModality(
 ): ModalityKey | null {
   const done = sets.filter((s) => s.actual.completed);
   const looksEndurance = done.some(
-    (s) => (s.actual.time != null || s.actual.distance != null) && s.actual.weight == null,
+    (s) => (s.actual.time != null || s.actual.distance != null) && !s.actual.weight,
   );
   if (looksEndurance) return 'endurance';
   if (primaryMetric === 'time' || primaryMetric === 'distance') {
@@ -357,8 +400,9 @@ export function summarizeBodyLoad(
           // and the body map must not inherit them. This is raw scaled volume,
           // ROM-adjusted so a calf raise stops matching a squat at equal tonnage.
           const rom = romFactor(profile);
+          const bw = bwLoadFactor(profile);
           const itemVolume = item.sets.reduce(
-            (acc, s) => acc + setVolume(s, unweightedKg, rom),
+            (acc, s) => acc + setVolume(s, unweightedKg, rom, bw),
             0,
           );
 

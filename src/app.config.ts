@@ -743,9 +743,13 @@ export const ASPECT_OVERRIDE_DAYS = 21;
 //   3 — unweighted work priced against the owner's bodyweight; HR ceiling from age
 //   4 — volume scaled by each movement's range of motion (ROM)
 //   5 — HR spread scaled by a session's ENDURANCE minutes rather than its whole
+//   6 — load is ADDITIVE: a movement's own bodyweight share (MovementProfile
+//       .bwLoad) plus the external weight, so a loaded set can never price below
+//       the same movement unloaded. Also treats a 0 weight as bodyweight rather
+//       than as zero work.
 //       wall clock, ending the channel by which resistance training scored as
 //       endurance
-export const ASPECT_METRICS_VERSION = 5;
+export const ASPECT_METRICS_VERSION = 6;
 
 // Softness of the logistic that maps a robust z-score onto ASPECT_SCALE: ±1.5
 // lands roughly ±2.2 points. The logistic is asymptotic, so scores approach 1
