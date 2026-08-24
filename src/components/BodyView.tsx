@@ -9,6 +9,9 @@ import { unweightedRepKg } from '@/lib/userStats';
 import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
 import type { BodyFace } from '@/lib/bodyRegions';
 import {
+  BODY_LENSES,
+  BODY_LENS_KEYS,
+  DEFAULT_BODY_LENS,
   MODALITY_KEYS,
   MOVEMENT_MODALITIES,
   MOVEMENT_PLANES,
@@ -18,6 +21,7 @@ import {
   ROTARY_ROLES,
   type MovementProfile,
   type RegionKey,
+  type BodyLensKey,
 } from '@/app.config';
 import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { TaxonomyEditor } from '@/components/TaxonomyEditor';
@@ -44,11 +48,17 @@ const WINDOWS = [
 
 type WindowKey = (typeof WINDOWS)[number]['key'];
 
-// The two readings of the same window. Minutes answers "how long did I work
-// this region", volume answers "how much work landed there" — a 45-minute
-// mobility flow and a 45-minute squat session are the same on the first and
-// nothing alike on the second. Minutes stays the default because it is the only
-// currency that survives for unloaded work.
+// The two readings of the same window. Minutes answers "how long did I work this
+// region", volume answers "how much work landed there" — a 45-minute mobility
+// flow and a 45-minute squat session are the same on the first and nothing alike
+// on the second.
+//
+// They are NOT two spellings of one number and must never be read against each
+// other: minutes are wall clock, volume is load x rep-equivalents. Volume used to
+// collapse onto minutes anyway, because duration converts into rep-equivalents —
+// which is exactly what BODY_LENSES now prevents by keeping the comparison inside
+// one kind of work. Minutes stays the default because it is the currency that
+// survives for every lens.
 const CURRENCIES = [
   { key: 'minutes', label: 'Minutes' },
   { key: 'volume', label: 'Volume' },
@@ -171,6 +181,9 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const client = showcase ? supabasePublic : undefined;
   const [windowKey, setWindowKey] = useState<WindowKey>('8w');
   const [currency, setCurrency] = useState<BodyCurrency>('minutes');
+  // Defaults to strength, the lens where "volume" means load moved rather than
+  // duration re-spelled. See BODY_LENSES in app.config.ts.
+  const [lens, setLens] = useState<BodyLensKey>(DEFAULT_BODY_LENS);
   const [face, setFace] = useState<BodyFace>('front');
   const [selected, setSelected] = useState<RegionKey | null>(null);
   const [mapping, setMapping] = useState<string | null>(null);
@@ -240,13 +253,19 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     [all, overrides, unweightedKg],
   );
   // Normalised per currency, so the heat map cannot contradict the list beside it.
-  const intensity = useMemo(() => regionIntensities(summary, currency), [summary, currency]);
+  const intensity = useMemo(
+    () => regionIntensities(summary, currency, lens),
+    [summary, currency, lens],
+  );
 
   // Wait on stats too, or Volume would paint at the flat constant and then jump
   // once bodyweight lands.
   if (loading || statsLoading) return <LoadingScreen />;
 
-  const totals = regionTotals(summary, currency);
+  const totals = regionTotals(summary, currency, lens);
+  // Emptiness is a property of the LENS, not the window — measured on minutes so
+  // the answer does not change when the currency toggle does.
+  const lensTotal = Object.values(regionTotals(summary, 'minutes', lens)).reduce((a, b) => a + b, 0);
   const regionRows = MUSCLE_REGION_KEYS.map((k) => ({
     key: k,
     label: MUSCLE_REGIONS[k].label,
@@ -312,12 +331,32 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
             onChange={(k) => setWindowKey(k as WindowKey)}
             ariaLabel="Time window"
           />
+          {/* Second control, not a merged one: the window asks "when" and the
+              lens asks "which kind of work". Both are single-select, so both are
+              SegmentedTabs rather than a sixth hand-rolled variant. */}
+          <div className="mt-2">
+            <SegmentedTabs
+              tabs={BODY_LENS_KEYS.map((k) => ({ key: k, label: BODY_LENSES[k].label }))}
+              active={lens}
+              onChange={(k) => setLens(k as BodyLensKey)}
+              ariaLabel="Kind of work"
+              size="sm"
+            />
+          </div>
         </div>
       </Item>
 
       {summary.totalMinutes === 0 ? (
         <Item>
           <EmptyState>No completed sessions in this window.</EmptyState>
+        </Item>
+      ) : lensTotal === 0 ? (
+        /* The window HAS work, this lens does not. Without its own message the
+           silhouette just renders cold and reads as broken rather than empty. */
+        <Item>
+          <EmptyState>
+            No {BODY_LENSES[lens].label.toLowerCase()} work logged in this window.
+          </EmptyState>
         </Item>
       ) : (
         <>

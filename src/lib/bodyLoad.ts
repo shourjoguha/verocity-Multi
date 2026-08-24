@@ -15,6 +15,8 @@
 // `FlatSet` would touch a type stats.test.ts asserts on.
 
 import {
+  BODY_LENSES,
+  BODY_LENS_KEYS,
   ENDURANCE,
   LOAD,
   MODALITY_KEYS,
@@ -23,6 +25,7 @@ import {
   ROM,
   RPE,
   VOLUME,
+  type BodyLensKey,
   type ModalityKey,
   type MovementProfile,
   type PlaneKey,
@@ -61,6 +64,21 @@ export interface BodyLoadSummary {
    * not kilograms: render it without a unit.
    */
   regionVolume: Record<RegionKey, number>;
+  /**
+   * The same two currencies, split by BODY_LENSES.
+   *
+   * ADDITIVE on purpose. `regionMinutes` and `regionVolume` above keep their
+   * all-modality meaning, because they are read by nothing outside the body map
+   * and changing them in place would have been indistinguishable, at the call
+   * site, from changing what the radar and the coach see — those read
+   * `totalMinutes`, `modalityMinutes`, `resistanceSets` and `coverage` off this
+   * same summary. Adding a field cannot move them; filtering an existing one
+   * could have.
+   *
+   * Every lens's minutes sum to `regionMinutes`, and its volume to
+   * `regionVolume`, except for work whose modality could not be inferred at all.
+   */
+  byLens: Record<BodyLensKey, { minutes: Record<RegionKey, number>; volume: Record<RegionKey, number> }>;
   modalityMinutes: Record<ModalityKey, number>;
   planeMinutes: Record<PlaneKey, number>;
   rotaryMinutes: Record<RotaryRole, number>;
@@ -345,6 +363,16 @@ function inferModality(
   return null;
 }
 
+// Which lens a modality belongs to. Null for an un-inferrable modality, which
+// is deliberate — see the note at the accumulation site.
+function lensFor(modality: ModalityKey | null): BodyLensKey | null {
+  if (!modality) return null;
+  for (const key of BODY_LENS_KEYS) {
+    if ((BODY_LENSES[key].modalities as readonly string[]).includes(modality)) return key;
+  }
+  return null;
+}
+
 export function summarizeBodyLoad(
   logs: WorkoutLog[],
   overrides: OverrideMap = {},
@@ -358,6 +386,9 @@ export function summarizeBodyLoad(
   const rotaryMinutes = zeroed(['rotational', 'antiRotational'] as const);
   const resistanceSets = zeroed(MUSCLE_REGION_KEYS);
   const resistanceTonnage = zeroed(MUSCLE_REGION_KEYS);
+  const byLens = Object.fromEntries(
+    BODY_LENS_KEYS.map((k) => [k, { minutes: zeroed(MUSCLE_REGION_KEYS), volume: zeroed(MUSCLE_REGION_KEYS) }]),
+  ) as BodyLoadSummary['byLens'];
 
   let systemicMinutes = 0;
   let classifiedMinutes = 0;
@@ -406,9 +437,20 @@ export function summarizeBodyLoad(
             0,
           );
 
+          // Which lens this item's work belongs to. An item whose modality could
+          // not be inferred still counts in the all-modality totals but lands in
+          // no lens — it has no defensible one, and inventing a bucket would put
+          // unclassifiable work behind a label that claims to know better.
+          const lens = lensFor(modality);
+
           for (const [region, weight] of Object.entries(profile.regions) as [RegionKey, number][]) {
             regionMinutes[region] += minutes * weight;
             regionVolume[region] += itemVolume * weight;
+
+            if (lens) {
+              byLens[lens].minutes[region] += minutes * weight;
+              byLens[lens].volume[region] += itemVolume * weight;
+            }
 
             if (modality === 'resistance') {
               for (const s of item.sets) {
@@ -436,6 +478,7 @@ export function summarizeBodyLoad(
   return {
     regionMinutes,
     regionVolume,
+    byLens,
     modalityMinutes,
     planeMinutes,
     rotaryMinutes,
@@ -454,11 +497,17 @@ export function summarizeBodyLoad(
 /** The two currencies the body map can be read in. */
 export type BodyCurrency = 'minutes' | 'volume';
 
+// The single funnel every body-map surface reads — the silhouette heat, the
+// region list and the callouts all come through here, so the lens only has to be
+// threaded once. Omitting it keeps the old all-modality behaviour, which is what
+// the tests that predate lenses assert.
 export function regionTotals(
   summary: BodyLoadSummary,
   currency: BodyCurrency,
+  lens?: BodyLensKey,
 ): Record<RegionKey, number> {
-  return currency === 'volume' ? summary.regionVolume : summary.regionMinutes;
+  const scope = lens ? summary.byLens[lens] : { minutes: summary.regionMinutes, volume: summary.regionVolume };
+  return currency === 'volume' ? scope.volume : scope.minutes;
 }
 
 // Region intensities normalised 0..1 against the busiest region, for the map.
@@ -467,8 +516,9 @@ export function regionTotals(
 export function regionIntensities(
   summary: BodyLoadSummary,
   currency: BodyCurrency = 'minutes',
+  lens?: BodyLensKey,
 ): Record<RegionKey, number> {
-  const totals = regionTotals(summary, currency);
+  const totals = regionTotals(summary, currency, lens);
   const max = Math.max(...Object.values(totals));
   const out = zeroed(MUSCLE_REGION_KEYS);
   if (max <= 0) return out;
