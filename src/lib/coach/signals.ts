@@ -41,11 +41,6 @@ import type { Measured, Sufficiency } from '@/lib/coach/types';
  *  change of habit shows up while the athlete still remembers making it. */
 export const COACH_WINDOW_DAYS = 28;
 
-/** Below this, a session's `total_seconds` is treated as absent rather than as
- *  a short session. Real logs carry 0 and 203 from sessions that were started
- *  and abandoned; neither is five minutes of training. */
-export const MIN_PLAUSIBLE_SESSION_MINUTES = 5;
-
 /** Longest timed conditioning set still read as an interval bout rather than a
  *  steady-state block. Five minutes covers everything from a 20-second sprint to
  *  a San-Millán four-by-four and excludes a 45-minute ride logged as one set. */
@@ -146,7 +141,6 @@ export interface TrainingSignals {
   sessionsPerWeek: Measured<number>;
   /** Working minutes per week, by modality — the body-map currency. Excludes
    *  rest, so it is a measure of work done, NOT of time spent. */
-  modalityMinutesPerWeek: Measured<Record<ModalityKey, number>>;
   /**
    * ELAPSED session minutes per week, by modality. The goal-alignment
    * denominator, and deliberately a different number from the line above.
@@ -160,7 +154,8 @@ export interface TrainingSignals {
    * resource a goal weight is really allocating: his time.
    *
    * So each session's own `total_seconds` is split across the modalities it
-   * contained, in proportion to the working minutes inside it. An hour of
+   * contained (in `summarizeBodyLoad`, which is where the split now lives — the
+   * body map reads the same numbers). An hour of
    * lifting is an hour of resistance; an hour of cycling is an hour of
    * endurance; a session that was half each splits half and half. Sessions with
    * no plausible elapsed time fall back to their working minutes rather than
@@ -344,38 +339,19 @@ export function measureTraining(
 
   const body = summarizeBodyLoad(logs, overrides, { unweightedKg: opts.unweightedKg });
 
-  const modalityPerWeek = Object.fromEntries(
-    MODALITY_KEYS.map((k) => [k, body.modalityMinutes[k] / weeks]),
-  ) as Record<ModalityKey, number>;
   const regionPerWeek = Object.fromEntries(
     MUSCLE_REGION_KEYS.map((k) => [k, body.resistanceSets[k] / weeks]),
   ) as Record<RegionKey, number>;
 
   // Rep bands and primary intensity need the raw sets, and need to know which
   // section a set came from — flattenSets drops `section`, so walk it here.
-  // Elapsed-time attribution, per session. Uses summarizeBodyLoad on a
-  // single-log array so the modality split is the SAME classification the body
-  // map uses — no second, divergent classifier.
-  const sessionMinutes = Object.fromEntries(MODALITY_KEYS.map((k) => [k, 0])) as Record<
-    ModalityKey,
-    number
-  >;
-  for (const log of logs) {
-    const one = summarizeBodyLoad([log], overrides, { unweightedKg: opts.unweightedKg });
-    const worked = MODALITY_KEYS.reduce((sum, k) => sum + one.modalityMinutes[k], 0);
-    if (worked <= 0) continue;
-    // Implausible elapsed times are ignored, not clamped: 0 and 203s both appear
-    // in real data from abandoned sessions, and migration 0015 already caps the
-    // top end at 7200. Below the floor the session's own working minutes are the
-    // better estimate of how long it took.
-    const elapsed = (log.total_seconds ?? 0) / 60;
-    const total = elapsed >= MIN_PLAUSIBLE_SESSION_MINUTES ? elapsed : worked;
-    for (const k of MODALITY_KEYS) {
-      sessionMinutes[k] += (one.modalityMinutes[k] / worked) * total;
-    }
-  }
+  // Elapsed-time attribution now happens ONCE, inside summarizeBodyLoad: every
+  // session spends its own `total_seconds` across the modalities it contains,
+  // so `modalityMinutes` is already elapsed time rather than working time. This
+  // used to re-derive the same split here from working minutes; doing both now
+  // would allocate the clock twice.
   const sessionPerWeek = Object.fromEntries(
-    MODALITY_KEYS.map((k) => [k, sessionMinutes[k] / weeks]),
+    MODALITY_KEYS.map((k) => [k, body.modalityMinutes[k] / weeks]),
   ) as Record<ModalityKey, number>;
 
   const bests = bestE1rmByMovement(logs);
@@ -613,12 +589,6 @@ export function measureTraining(
       logs.length,
       4,
       `only ${logs.length} sessions in the last ${windowDays} days`,
-    ),
-    modalityMinutesPerWeek: measured(
-      modalityPerWeek,
-      logs.length,
-      6,
-      'a modality split needs more sessions to be stable',
     ),
     sessionMinutesPerWeek: measured(
       sessionPerWeek,

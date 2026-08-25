@@ -17,6 +17,7 @@
 import {
   BODY_LENSES,
   BODY_LENS_KEYS,
+  COMPOUND,
   ENDURANCE,
   LOAD,
   MODALITY_KEYS,
@@ -24,6 +25,7 @@ import {
   PLANE_KEYS,
   ROM,
   RPE,
+  SESSION_CLOCK,
   VOLUME,
   type BodyLensKey,
   type ModalityKey,
@@ -35,7 +37,7 @@ import {
 } from '@/app.config';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import { isSubroutine } from '@/lib/subroutine';
-import type { LogSet, WorkoutLog } from '@/lib/types';
+import type { LogItem, LogSet, WorkoutLog } from '@/lib/types';
 
 export interface UnmappedMovement {
   name: string;
@@ -373,6 +375,199 @@ function lensFor(modality: ModalityKey | null): BodyLensKey | null {
   return null;
 }
 
+// ---- session-clock allocation ---------------------------------------------
+//
+// See SESSION_CLOCK in app.config.ts for why minutes are allocated from the
+// session's own wall clock rather than summed from `setMinutes`.
+
+/**
+ * How much more of a session one set of this movement is worth than one set of
+ * an isolation movement. Read off what the taxonomy already knows — region
+ * spread and `systemic` — so there is no new hand-maintained column, and
+ * clamped to COMPOUND.range so it can only nudge the split.
+ */
+function compoundFactor(profile: MovementProfile): number {
+  const regions = Object.keys(profile.regions).length;
+  if (regions === 0) return 1;
+  return clamp(
+    1 + (regions - 1) * COMPOUND.perExtraRegion + (profile.systemic ? COMPOUND.systemicBonus : 0),
+    COMPOUND.range,
+  );
+}
+
+/**
+ * The key the remainder is spread by: what this item plausibly COST the clock.
+ *
+ * Rest is in it deliberately. A set of squats and a set of curls do not occupy
+ * the session equally, and `setMinutes` — time under tension only — says they
+ * nearly do. `restSeconds` is real logged intent on most items and is the one
+ * recorded number that captures the difference; the compound factor covers the
+ * rest of it. Only a distribution key, never a total: it decides how the
+ * remainder splits, never how big the remainder is.
+ */
+function itemShareWeight(item: LogItem, profile: MovementProfile): number {
+  const rest = item.restSeconds ?? SESSION_CLOCK.restFallbackSeconds;
+  let seconds = 0;
+  for (const s of item.sets) {
+    if (!s.actual.completed) continue;
+    seconds += setMinutes(s) * 60 + rest;
+  }
+  return (seconds / 60) * compoundFactor(profile);
+}
+
+/**
+ * Minutes a non-remainder block claims off the clock before the split.
+ * A set that logged real time always beats the stand-in — a 5-minute rower
+ * interval in a conditioning block is 5 minutes, not the 1-minute default.
+ */
+function claimMinutes(item: LogItem, modality: ModalityKey | null): number {
+  let logged = 0;
+  let done = 0;
+  for (const s of item.sets) {
+    if (!s.actual.completed) continue;
+    done += 1;
+    if (s.actual.time != null) logged += s.actual.time / 60;
+  }
+  if (logged > 0) return logged;
+  return (
+    done *
+    (modality === 'mobility' ? SESSION_CLOCK.mobilitySetMinutes : SESSION_CLOCK.enduranceSetMinutes)
+  );
+}
+
+function tagModality(tags: string[] | null | undefined): ModalityKey | null {
+  const table = SESSION_CLOCK.tagModality as Record<string, ModalityKey | undefined>;
+  for (const t of tags ?? []) {
+    const m = table[t];
+    if (m) return m;
+  }
+  return null;
+}
+
+function remainderFloor(tags: string[] | null | undefined): number {
+  const t = tags ?? [];
+  return (SESSION_CLOCK.mixedTags as readonly string[]).some((k) => t.includes(k))
+    ? SESSION_CLOCK.mixedFloor
+    : SESSION_CLOCK.resistanceFloor;
+}
+
+/** One item of a session, after classification and before allocation. */
+interface WalkItem {
+  item: LogItem;
+  section: SectionKey;
+  profile: MovementProfile;
+  hasRegions: boolean;
+  modality: ModalityKey | null;
+  /** Raw `setMinutes` — the OLD currency, kept only to rank modalities. */
+  raw: number;
+  /** Allocated share of the session clock. The currency everything else reads. */
+  minutes: number;
+}
+
+/**
+ * Spend one session's wall clock across its items, in place.
+ *
+ * Warmup, cooldown and conditioning claim an explicit share first; whatever is
+ * left goes to what the session mostly WAS, spread across its items by
+ * `itemShareWeight`. The owner is chosen by the classifier — a tag only breaks
+ * a tie or fills a silence — because a tag is what a session was called and the
+ * taxonomy is what was performed, and real logs disagree often enough to matter.
+ */
+function allocateSession(log: WorkoutLog, walk: WalkItem[]): void {
+  const rawTotal = walk.reduce((a, w) => a + w.raw, 0);
+  if (rawTotal <= 0) return;
+
+  // A clock below the floor is not a measurement — real data holds sessions at
+  // 0s and 203s carrying 13-20 completed sets. Fall back to working minutes
+  // rather than dropping the session: the timer was not running, the work was.
+  //
+  // Nothing is reallocated in that case. There is no session time to spend, so
+  // every item keeps exactly what `setMinutes` gave it and the session behaves
+  // as it did before this existed. Claiming and the floor both need a real
+  // clock to mean anything: applied to a total that IS the sum of the parts,
+  // the floor would reshape data that was never mismeasured.
+  const elapsed = (log.total_seconds ?? 0) / 60;
+  if (elapsed < SESSION_CLOCK.minPlausibleMinutes) {
+    for (const w of walk) w.minutes = w.raw;
+    return;
+  }
+  const sessionMinutes = elapsed;
+
+  // Who owns the remainder. Ranked over the session's MAIN WORK — the items
+  // outside warmup, cooldown and conditioning — because those three sections
+  // are by definition not what the session was, and a session that has no main
+  // work at all (a run logged as one conditioning block, a yoga class logged as
+  // one cooldown block) falls back to ranking everything.
+  //
+  // Ranked by `itemShareWeight`, NOT by raw setMinutes. Ranking by raw minutes
+  // reproduces the exact bias being fixed: two sets of stretching out-score a
+  // set of squats on time under tension, so a lift with a cooldown would elect
+  // mobility as its own main work.
+  const main = walk.filter(
+    (w) => !(SESSION_CLOCK.claimSections as readonly string[]).includes(w.section),
+  );
+  const candidates = main.length > 0 ? main : walk;
+
+  const byModality = new Map<ModalityKey, number>();
+  for (const w of candidates) {
+    if (w.modality) {
+      byModality.set(w.modality, (byModality.get(w.modality) ?? 0) + itemShareWeight(w.item, w.profile));
+    }
+  }
+  const ranked = [...byModality.entries()].sort((a, b) => b[1] - a[1]);
+  const tagged = tagModality(log.tags);
+  const top = ranked[0];
+  const tiedAtTop = top != null && ranked.filter(([, v]) => v === top[1]).length > 1;
+  const owner: ModalityKey | null =
+    top == null
+      ? tagged
+      : tiedAtTop && tagged != null && byModality.get(tagged) === top[1]
+        ? tagged
+        : top[0];
+
+  const isClaim = walk.map((w) => w.modality != null && w.modality !== owner);
+  const claims = walk.map((w, i) => (isClaim[i] ? claimMinutes(w.item, w.modality) : 0));
+  let claimed = claims.reduce((a, b) => a + b, 0);
+
+  // The guard: the session's main work can never be claimed below its floor.
+  // Measured over 48 real sessions this never fires (lowest strength remainder
+  // 76%, lowest hyrox 79%) — it is here so a conditioning-heavy log cannot
+  // claim away the lifting it was mostly made of.
+  const floor = owner === 'resistance' ? remainderFloor(log.tags) : 0;
+  const maxClaim = sessionMinutes * (1 - floor);
+  if (claimed > maxClaim) {
+    const k = claimed > 0 ? maxClaim / claimed : 0;
+    for (let i = 0; i < claims.length; i += 1) claims[i] *= k;
+    claimed = maxClaim;
+  }
+  const remainder = Math.max(0, sessionMinutes - claimed);
+
+  const weights = walk.map((w, i) => (isClaim[i] ? 0 : itemShareWeight(w.item, w.profile)));
+  const weightTotal = weights.reduce((a, b) => a + b, 0);
+  const rawRemainder = walk.reduce((a, w, i) => a + (isClaim[i] ? 0 : w.raw), 0);
+  const remainderCount = isClaim.filter((x) => !x).length;
+
+  for (let i = 0; i < walk.length; i += 1) {
+    const w = walk[i];
+    if (isClaim[i]) {
+      w.minutes = claims[i];
+      continue;
+    }
+    w.minutes =
+      weightTotal > 0
+        ? remainder * (weights[i] / weightTotal)
+        : rawRemainder > 0
+          ? remainder * (w.raw / rawRemainder)
+          : remainderCount > 0
+            ? remainder / remainderCount
+            : 0;
+    // Work the taxonomy could not place still consumed this session, and the
+    // session's character is known. Unknown work in a lifting session is
+    // lifting time. This does NOT touch `coverage`, which is about regions.
+    if (w.modality == null) w.modality = owner;
+  }
+}
+
 export function summarizeBodyLoad(
   logs: WorkoutLog[],
   overrides: OverrideMap = {},
@@ -400,76 +595,83 @@ export function summarizeBodyLoad(
     if (log.status !== 'done') continue;
     countedLogs.add(log.id);
 
+    // PASS 1 — classify. Minutes cannot be attributed yet: the split depends on
+    // the whole session, not on any one item.
+    const walk: WalkItem[] = [];
     for (const section of log.data?.sections ?? []) {
       for (const group of section.groups ?? []) {
         for (const item of group.items ?? []) {
           if (isSubroutine(item)) continue;
 
-          const minutes = item.sets.reduce((acc, s) => acc + setMinutes(s), 0);
-          if (minutes <= 0) continue;
+          const raw = item.sets.reduce((acc, s) => acc + setMinutes(s), 0);
+          if (raw <= 0) continue;
 
           const c = classifyMovement(item.movement, { overrides });
-          const hasRegions = Object.keys(c.profile.regions).length > 0;
-
-          if (!hasRegions) {
-            unmappedMinutes += minutes;
-            const entry = unmapped.get(item.movement) ?? { minutes: 0, sessions: new Set<string>() };
-            entry.minutes += minutes;
-            entry.sessions.add(log.id);
-            unmapped.set(item.movement, entry);
-            continue;
-          }
-
-          classifiedMinutes += minutes;
-
-          const profile: MovementProfile = c.profile;
-          const modality =
-            profile.modality ?? inferModality(item.sets, item.primaryMetric, section.key);
-
-          // Unweighted by intensity/explosiveness on purpose: those are
-          // axis-specific weightings the radar applies in summarizeTrainingVolume,
-          // and the body map must not inherit them. This is raw scaled volume,
-          // ROM-adjusted so a calf raise stops matching a squat at equal tonnage.
-          const rom = romFactor(profile);
-          const bw = bwLoadFactor(profile);
-          const itemVolume = item.sets.reduce(
-            (acc, s) => acc + setVolume(s, unweightedKg, rom, bw),
-            0,
-          );
-
-          // Which lens this item's work belongs to. An item whose modality could
-          // not be inferred still counts in the all-modality totals but lands in
-          // no lens — it has no defensible one, and inventing a bucket would put
-          // unclassifiable work behind a label that claims to know better.
-          const lens = lensFor(modality);
-
-          for (const [region, weight] of Object.entries(profile.regions) as [RegionKey, number][]) {
-            regionMinutes[region] += minutes * weight;
-            regionVolume[region] += itemVolume * weight;
-
-            if (lens) {
-              byLens[lens].minutes[region] += minutes * weight;
-              byLens[lens].volume[region] += itemVolume * weight;
-            }
-
-            if (modality === 'resistance') {
-              for (const s of item.sets) {
-                if (!s.actual.completed) continue;
-                resistanceSets[region] += weight;
-                resistanceTonnage[region] += (s.actual.weight ?? 0) * (s.actual.reps ?? 0) * weight;
-              }
-            }
-          }
-
-          for (const [plane, weight] of Object.entries(profile.planes) as [PlaneKey, number][]) {
-            planeMinutes[plane] += minutes * weight;
-          }
-
-          if (modality) modalityMinutes[modality] += minutes;
-          if (profile.rotary) rotaryMinutes[profile.rotary] += minutes;
-          if (profile.systemic) systemicMinutes += minutes;
+          walk.push({
+            item,
+            section: section.key,
+            profile: c.profile,
+            hasRegions: Object.keys(c.profile.regions).length > 0,
+            modality: c.profile.modality ?? inferModality(item.sets, item.primaryMetric, section.key),
+            raw,
+            minutes: 0,
+          });
         }
       }
+    }
+    if (walk.length === 0) continue;
+
+    // PASS 2 — spend the session clock across them.
+    allocateSession(log, walk);
+
+    // PASS 3 — attribute the allocated minutes.
+    for (const { item, profile, hasRegions, modality, minutes } of walk) {
+      if (minutes <= 0) continue;
+
+      if (!hasRegions) {
+        unmappedMinutes += minutes;
+        const entry = unmapped.get(item.movement) ?? { minutes: 0, sessions: new Set<string>() };
+        entry.minutes += minutes;
+        entry.sessions.add(log.id);
+        unmapped.set(item.movement, entry);
+        continue;
+      }
+
+      classifiedMinutes += minutes;
+
+      // Volume is a DIFFERENT currency — scaled load, not time — and is not
+      // reallocated. Only minutes were ever in the wrong unit.
+      const rom = romFactor(profile);
+      const bw = bwLoadFactor(profile);
+      const itemVolume = item.sets.reduce((acc, s) => acc + setVolume(s, unweightedKg, rom, bw), 0);
+
+      const lens = lensFor(modality);
+
+      for (const [region, weight] of Object.entries(profile.regions) as [RegionKey, number][]) {
+        regionMinutes[region] += minutes * weight;
+        regionVolume[region] += itemVolume * weight;
+
+        if (lens) {
+          byLens[lens].minutes[region] += minutes * weight;
+          byLens[lens].volume[region] += itemVolume * weight;
+        }
+
+        if (modality === 'resistance') {
+          for (const s of item.sets) {
+            if (!s.actual.completed) continue;
+            resistanceSets[region] += weight;
+            resistanceTonnage[region] += (s.actual.weight ?? 0) * (s.actual.reps ?? 0) * weight;
+          }
+        }
+      }
+
+      for (const [plane, weight] of Object.entries(profile.planes) as [PlaneKey, number][]) {
+        planeMinutes[plane] += minutes * weight;
+      }
+
+      if (modality) modalityMinutes[modality] += minutes;
+      if (profile.rotary) rotaryMinutes[profile.rotary] += minutes;
+      if (profile.systemic) systemicMinutes += minutes;
     }
   }
 

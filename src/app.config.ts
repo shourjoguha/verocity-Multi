@@ -579,6 +579,83 @@ export const ROM = {
 
 // Working-minutes model (lib/bodyLoad.ts). Tonnage is deliberately not the
 // primary currency: weight × reps is zero for Ski-Erg, Box Jump and Side Plank.
+// Session-clock allocation (`summarizeBodyLoad` in lib/bodyLoad.ts).
+//
+// THE UNIT PROBLEM THIS SOLVES. `setMinutes` prices a resistance set at its
+// time under tension — reps x LOAD.repSeconds — while an endurance block is
+// logged as its real duration. A 5x5 back squat therefore scored 1.25 minutes
+// against a 90-minute run's 90, and the modality mix read 51% endurance for an
+// athlete whose training is mostly resistance. The two numbers were never in
+// the same unit.
+//
+// THE FIX IS NOT A PER-MODALITY MULTIPLIER — that is the coefficient nobody can
+// defend when the chart looks wrong, and the taxonomy skill forbids it. It is
+// to spend a quantity that was already measured: the session's own wall clock.
+// Every session distributes `total_seconds` across the modalities it contains,
+// so a 60-minute lift contributes 60 minutes and a 60-minute ride contributes
+// 60, whatever the logger recorded inside them.
+//
+// Blocks that are NOT the session's main work claim an explicit share first,
+// and the remainder goes to whatever the session mostly was:
+//
+//   mobilitySetMinutes    a warmup/cooldown set with no logged duration. 30s.
+//   enduranceSetMinutes   a conditioning set with no logged duration. 1 min —
+//                         which also covers circuits, because each movement in
+//                         a circuit is its own LogItem with its own sets.
+//
+// A set that logged real time always overrules the stand-in.
+//
+// FLOORS are a guard, not a tuning knob. Measured over 48 real sessions the
+// lowest remainder on a strength-tagged session was 76% and the lowest on a
+// hyrox one 79%, so neither floor fired. They exist so a session stuffed with
+// conditioning cannot claim away the lifting it was mostly made of.
+export const SESSION_CLOCK = {
+  // Below this the clock is not a measurement. Real data holds sessions at 0s
+  // and 203s carrying 13-20 completed sets: the timer was not running, the work
+  // was. Those fall back to working minutes rather than being discarded —
+  // discarding them would delete real training to fix a clock problem.
+  minPlausibleMinutes: 5,
+  // Sections that are, by definition, not the session's main work. They claim
+  // their share off the clock; the remainder belongs to whatever is left.
+  claimSections: ['warmup', 'cooldown', 'conditioning'],
+  mobilitySetMinutes: 0.5,
+  enduranceSetMinutes: 1,
+  // Rest is part of what a set costs the session clock, and is the better key
+  // for spreading the remainder across items. Absent on ~44% of logged items,
+  // so it needs the same default the logger writes.
+  restFallbackSeconds: TIMERS.defaultRestSeconds,
+  resistanceFloor: 0.5,
+  // Hyrox and CrossFit are genuinely half conditioning, so their resistance
+  // work is allowed to claim less of the session before the guard trips.
+  mixedFloor: 0.25,
+  mixedTags: ['hyrox', 'crossfit'],
+  // Which modality owns the remainder when the movements themselves cannot say.
+  // A TIEBREAK ONLY: the classifier wins wherever it has an answer, because a
+  // tag is what the session was called and the taxonomy is what was performed.
+  // Two of five mobility-tagged sessions in real data are mostly dips, carries
+  // and band work — a tag-first rule would file all of it under mobility.
+  tagModality: {
+    strength: 'resistance',
+    endurance: 'endurance',
+    sport: 'endurance',
+    mobility: 'mobility',
+    recovery: 'mobility',
+  },
+} as const;
+
+// How much more of a session a compound movement is worth than an isolation one
+// when the remainder is spread across items. A set of back squats and a set of
+// curls do not cost the same clock, and rest alone does not capture it.
+//
+// Derived from what the taxonomy already knows — how many regions the movement
+// spans, and whether it is `systemic` — rather than a new hand-maintained
+// column. Clamped, so this can only ever nudge the split.
+export const COMPOUND = {
+  perExtraRegion: 0.08,
+  systemicBonus: 0.15,
+  range: [0.8, 1.4] as [number, number],
+} as const;
+
 export const LOAD = {
   repSeconds: 3,
   metersPerMinute: 150,
