@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { addSetWork, sessionWork, workBodyWeight, type WorkTotals } from '@/lib/work';
+import {
+  addSetWork,
+  sessionWork,
+  workBodyWeight,
+  workIntensity,
+  workMaxima,
+  type WorkTotals,
+} from '@/lib/work';
 import { classifyMovement } from '@/lib/movementTaxonomy';
 import { VOLUME, WORK, type SectionKey } from '@/app.config';
 import type { LogItem, LogSet, UserStats, WorkoutLog } from '@/lib/types';
@@ -230,5 +237,41 @@ describe('sessionWork', () => {
     );
     expect(w.resistance).toBeGreaterThan(2000);
     expect(w.cardio).toBeGreaterThan(20000);
+  });
+});
+
+describe('workIntensity', () => {
+  const w = (resistance: number, cardio: number): WorkTotals => ({ resistance, cardio });
+
+  it('normalises each lane against its own maximum', () => {
+    // The defect this replaces: on a shared rail with the lanes SUMMED, a hard
+    // full lifting session (~8,600) sat at a sixth of a 30km ride (~51,600), so
+    // every lifting day read as empty however the constants were tuned.
+    const days = [w(8_600, 0), w(0, 51_600), w(4_300, 0)];
+    const max = workMaxima(days);
+    expect(max).toEqual({ resistance: 8_600, cardio: 51_600 });
+    expect(workIntensity(days[0], max)).toBe(1);
+    expect(workIntensity(days[1], max)).toBe(1);
+    expect(workIntensity(days[2], max)).toBeCloseTo(0.5, 6);
+  });
+
+  it('takes the higher ratio on a day that mixed lanes', () => {
+    // Big at either thing is a big day. Averaging would let an easy run dilute
+    // a hard lift.
+    const max = w(10_000, 50_000);
+    expect(workIntensity(w(9_000, 5_000), max)).toBeCloseTo(0.9, 6);
+    expect(workIntensity(w(1_000, 40_000), max)).toBeCloseTo(0.8, 6);
+  });
+
+  it('gives a lifting-only athlete a full rail', () => {
+    // A lane with no maximum contributes nothing rather than dividing by zero.
+    const max = workMaxima([w(5_000, 0), w(2_500, 0)]);
+    expect(workIntensity(w(5_000, 0), max)).toBe(1);
+    expect(workIntensity(w(2_500, 0), max)).toBeCloseTo(0.5, 6);
+  });
+
+  it('is zero when nothing was logged', () => {
+    expect(workIntensity(w(0, 0), workMaxima([]))).toBe(0);
+    expect(workIntensity(w(0, 0), w(10, 10))).toBe(0);
   });
 });

@@ -140,6 +140,45 @@ export function sessionWork(
   return totals;
 }
 
+/** The largest work seen in each lane across a window. */
+export type WorkMaxima = WorkTotals;
+
+export function workMaxima(days: Iterable<WorkTotals>): WorkMaxima {
+  const max: WorkMaxima = { resistance: 0, cardio: 0 };
+  for (const d of days) {
+    if (d.resistance > max.resistance) max.resistance = d.resistance;
+    if (d.cardio > max.cardio) max.cardio = d.cardio;
+  }
+  return max;
+}
+
+/**
+ * How big a day was FOR ITS KIND, as 0..1 — the max of each lane's ratio to
+ * that lane's own maximum.
+ *
+ * NEVER sum the lanes for this. Both are kg.m, so `resistance + cardio` is
+ * dimensionally legal and was shipped on that reasoning; it is still wrong,
+ * because the lanes have never been calibrated against each other and cannot
+ * be. The counts differ by three orders of magnitude — tens of reps against
+ * tens of thousands of metres — while the per-unit prices differ by one, so a
+ * hard full lifting session (~8,600) lands at a sixth of a 30km ride (~51,600).
+ * On a shared rail every lifting day reads as empty, and no constant fixes
+ * that: cycling would have to be distorted to a twentieth of its real cost to
+ * make the two look alike. The lanes were split precisely so this comparison
+ * would never have to be made.
+ *
+ * A day that mixes lanes takes the HIGHER ratio: it was a big day if it was big
+ * at either thing. Averaging would let an easy run dilute a hard lift.
+ *
+ * A lane whose maximum is zero contributes nothing rather than dividing by it —
+ * an athlete who only lifts still gets a full rail from the lifting lane.
+ */
+export function workIntensity(work: WorkTotals, max: WorkMaxima): number {
+  const res = max.resistance > 0 ? work.resistance / max.resistance : 0;
+  const cardio = max.cardio > 0 ? work.cardio / max.cardio : 0;
+  return Math.min(1, Math.max(res, cardio));
+}
+
 export const addWork = (a: WorkTotals, b: WorkTotals): WorkTotals => ({
   resistance: a.resistance + b.resistance,
   cardio: a.cardio + b.cardio,
