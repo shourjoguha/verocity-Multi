@@ -1184,6 +1184,54 @@ assertion that passes by finding nothing is not an assertion.
 
 ## Data & privacy
 
+### One modality reads 51% of training and the chart is obviously wrong
+`[measured — 48 real sessions, before and after]`
+`setMinutes` priced a resistance set at its **time under tension** — reps ×
+`LOAD.repSeconds` — while an endurance block was priced at the duration it
+logged. A 5×5 back squat scored 1.25 minutes against a 90-minute run's 90, so
+the modality mix read **56% endurance / 23% resistance** for an athlete who
+mostly lifts. Rest was never counted at all; the two numbers were never in the
+same unit.
+The fix is NOT a per-modality multiplier — that is the coefficient nobody can
+defend when the chart looks wrong, and the taxonomy skill forbids it. It is to
+spend a quantity that was already measured: each session's own `total_seconds`,
+allocated across the modalities it contains (`SESSION_CLOCK`, `allocateSession`
+in `lib/bodyLoad.ts`). Same 48 sessions after: **67% resistance / 22%
+endurance**.
+**Three things cost the most time, and none of them was the arithmetic.**
+
+1. **Ranking the remainder's owner by raw `setMinutes` reproduces the exact bias
+   being fixed.** Two sets of hamstring stretch out-score one set of squats on
+   time under tension, so a lift with a cooldown elected *mobility* as its own
+   main work. Rank by `itemShareWeight` — work plus prescribed rest — and only
+   over items **outside** warmup/cooldown/conditioning, because those sections
+   are by definition not what the session was. A session with no main work at
+   all (a run logged as one conditioning block, a yoga class as one cooldown
+   block) falls back to ranking everything.
+2. **The session tag is a tiebreak, never an override.** Two of five
+   `mobility`-tagged sessions in real data are mostly dips, carries and band
+   work. A tag is what a session was *called*; the taxonomy is what was
+   *performed*. Same rule `inferModality` already followed.
+3. **A clock below the plausibility floor is not an abandoned session.** Real
+   logs held 0s and 203s carrying 13–20 completed sets — the timer was off, the
+   work was not. Deleting them would have destroyed real training to fix a clock
+   problem. They fall back to raw working minutes, and **nothing is reallocated**
+   in that case: claiming and the floor both need a real clock, and applied to a
+   total that *is* the sum of its parts the floor reshapes data that was never
+   mismeasured. That last one only surfaced as a failing test.
+
+The floors (`resistanceFloor`, `mixedFloor`) never fire on real data — lowest
+strength remainder 76%, lowest hyrox 79%. They are a guard, not a tuning knob;
+do not tune them without measuring first.
+Minutes are now allocated once, in `summarizeBodyLoad`. `coach/signals.ts` used
+to re-derive the same split from working minutes; doing both allocates the clock
+twice, so the duplicate working-minutes field there was removed and
+`sessionMinutesPerWeek` now reads `modalityMinutes` directly.
+**`npm test` cannot see any of this being right** — it sees the rules firing in
+the intended order. The 56%→22% swing was measured against the live database,
+which is the only thing that observed the symptom stop.
+
+
 ### A new column on `profiles` is published to anonymous visitors immediately
 `[argued — read off the policy and the query]`
 `profiles_select_showcase` is `for select to anon using (is_showcase)` — a

@@ -13,6 +13,7 @@ import { classifyMovement } from '@/lib/movementTaxonomy';
 import {
   BODY_LENS_KEYS,
   LOAD,
+  MODALITY_KEYS,
   MUSCLE_REGION_KEYS,
   ROM,
   RPE,
@@ -228,6 +229,19 @@ describe('summarizeTrainingVolume', () => {
   });
 });
 
+// Recovers how many minutes one movement was allocated, by dividing a region
+// total back through that movement's taxonomy weight. Valid only where the
+// fixture gives the region a single contributor — which is why each caller
+// names the region rather than letting this pick one.
+function minutesVia(
+  s: ReturnType<typeof summarizeBodyLoad>,
+  movement: string,
+  region: keyof ReturnType<typeof summarizeBodyLoad>['regionMinutes'],
+): number {
+  const w = (classifyMovement(movement).profile.regions as Record<string, number>)[region];
+  return s.regionMinutes[region] / w;
+}
+
 describe('summarizeBodyLoad', () => {
   const mixed = log([
     {
@@ -244,25 +258,29 @@ describe('summarizeBodyLoad', () => {
 
   it('gives endurance work real load despite zero tonnage', () => {
     const s = summarizeBodyLoad([mixed]);
-    // Ski-Erg is back .5 / arms .3 / core .2 over 10 minutes.
-    expect(s.regionMinutes.back).toBeCloseTo(10 * 0.5, 3);
+    // Ski-Erg logged real time, so its conditioning block claims exactly that:
+    // 10 minutes, split back .5 / arms .3 / core .2.
     expect(s.modalityMinutes.endurance).toBeCloseTo(10, 3);
+    expect(s.regionMinutes.back).toBeCloseTo(10 * 0.5, 3);
     // ...and contributes nothing to the resistance-only tonnage readout.
     expect(s.resistanceTonnage.back).toBe(0);
   });
 
   it('distributes a movement across its regions by weight', () => {
-    const s = summarizeBodyLoad([mixed]);
-    const squatMinutes = (10 * LOAD.repSeconds) / 60; // 2 sets × 5 reps
-    const jumpMinutes = (5 * LOAD.repSeconds) / 60;
-    // Read the weights from the taxonomy rather than restating them: this test
-    // is about the distribution mechanics, not about what a squat works, and
-    // hardcoding the split makes every weight tune look like a broken test.
-    const wQuads = (n: string) => classifyMovement(n).profile.regions.quads ?? 0;
-    expect(s.regionMinutes.quads).toBeCloseTo(
-      squatMinutes * wQuads('Back Squat') + jumpMinutes * wQuads('Box Jump'),
-      3,
-    );
+    // One movement, one hour: the whole clock is the squat's, so each region
+    // gets exactly its taxonomy share of 60 minutes. Read the weights from the
+    // taxonomy rather than restating them — this test is about the distribution
+    // mechanics, not about what a squat works, and hardcoding the split makes
+    // every weight tune look like a broken test.
+    const s = summarizeBodyLoad([
+      log([{ key: 'primary', items: [item('Back Squat', 'weight', [set({ weight: 100, reps: 5 })])] }], {
+        total_seconds: 3600,
+      }),
+    ]);
+    const regions = classifyMovement('Back Squat').profile.regions as Record<string, number>;
+    for (const [region, weight] of Object.entries(regions)) {
+      expect(s.regionMinutes[region as keyof typeof s.regionMinutes]).toBeCloseTo(60 * weight, 3);
+    }
   });
 
   it('routes an unclassifiable movement to unmapped and to no region', () => {
@@ -270,21 +288,109 @@ describe('summarizeBodyLoad', () => {
     expect(s.unmapped.map((u) => u.name)).toEqual(['Wtd']);
     expect(s.unmapped[0].sessions).toBe(1);
     const regionTotal = Object.values(s.regionMinutes).reduce((a, b) => a + b, 0);
-    const wtdMinutes = (8 * LOAD.repSeconds) / 60;
-    expect(regionTotal).toBeCloseTo(s.totalMinutes - wtdMinutes, 3);
+    expect(regionTotal).toBeCloseTo(s.totalMinutes - s.unmapped[0].minutes, 3);
   });
 
   it('reports coverage as the classified share of minutes', () => {
     const s = summarizeBodyLoad([mixed]);
-    const wtdMinutes = (8 * LOAD.repSeconds) / 60;
-    expect(s.coverage).toBeCloseTo((s.totalMinutes - wtdMinutes) / s.totalMinutes, 5);
+    const wtd = s.unmapped[0].minutes;
+    expect(s.coverage).toBeCloseTo((s.totalMinutes - wtd) / s.totalMinutes, 5);
     expect(s.coverage).toBeLessThan(1);
   });
 
   it('tracks systemic minutes separately from regions', () => {
-    const s = summarizeBodyLoad([mixed]);
-    const jumpMinutes = (5 * LOAD.repSeconds) / 60;
-    expect(s.systemicMinutes).toBeCloseTo(10 + jumpMinutes, 3);
+    // Ski-Erg is systemic and logged 10 real minutes; the curl is neither, and
+    // takes the other 50. Systemic minutes therefore read exactly the erg.
+    const s = summarizeBodyLoad([
+      log(
+        [
+          { key: 'conditioning', items: [item('Ski-Erg Intervals', 'time', [set({ time: 600 })])] },
+          { key: 'accessory', items: [item('Bicep Curl', 'weight', [set({ weight: 20, reps: 10 })])] },
+        ],
+        { total_seconds: 3600 },
+      ),
+    ]);
+    expect(s.systemicMinutes).toBeCloseTo(10, 3);
+  });
+
+  // ---- session-clock allocation -------------------------------------------
+
+  it('spends the whole session clock, not the time under tension', () => {
+    const s = summarizeBodyLoad([{ ...mixed, total_seconds: 3600 } as WorkoutLog]);
+    expect(s.totalMinutes).toBeCloseTo(60, 3);
+    // Modality totals are a share of CLASSIFIED time, as they always were —
+    // 'Wtd' has no regions and so no modality — but nothing else leaks: the
+    // classified and unmapped halves account for the whole clock.
+    const byModality = MODALITY_KEYS.reduce((a, k) => a + s.modalityMinutes[k], 0);
+    const unmappedTotal = s.unmapped.reduce((a, u) => a + u.minutes, 0);
+    expect(byModality + unmappedTotal).toBeCloseTo(60, 3);
+  });
+
+  it('leaves the remainder with resistance rather than endurance', () => {
+    const s = summarizeBodyLoad([{ ...mixed, total_seconds: 3600, tags: ['strength'] } as WorkoutLog]);
+    // The conditioning block logged 10 real minutes and claims exactly those.
+    expect(s.modalityMinutes.endurance).toBeCloseTo(10, 3);
+    // Everything else is the lift. Under the old currency this session read as
+    // 71% endurance off 10 minutes of skiing against 4 minutes of squats.
+    expect(s.modalityMinutes.resistance).toBeGreaterThan(s.modalityMinutes.endurance * 3);
+  });
+
+  it('gives a compound movement more of the remainder than an isolation one', () => {
+    const s = summarizeBodyLoad([
+      log(
+        [
+          {
+            key: 'primary',
+            items: [
+              item('Back Squat', 'weight', [set({ weight: 100, reps: 5 })]),
+              item('Bicep Curl', 'weight', [set({ weight: 20, reps: 5 })]),
+            ],
+          },
+        ],
+        { total_seconds: 3600 },
+      ),
+    ]);
+    // quads come only from the squat, arms only from the curl.
+    expect(minutesVia(s, 'Back Squat', 'quads')).toBeGreaterThan(
+      minutesVia(s, 'Bicep Curl', 'arms'),
+    );
+  });
+
+  it('sends a cooldown to mobility at 30s a set when it logged no time', () => {
+    const s = summarizeBodyLoad([
+      log(
+        [
+          { key: 'primary', items: [item('Back Squat', 'weight', [set({ weight: 100, reps: 5 })])] },
+          {
+            key: 'cooldown',
+            items: [item('Hamstring Stretch', 'reps', [set({ reps: 10 }), set({ reps: 10 })])],
+          },
+        ],
+        { total_seconds: 3600 },
+      ),
+    ]);
+    expect(s.modalityMinutes.mobility).toBeCloseTo(1, 3);
+    expect(s.modalityMinutes.resistance).toBeCloseTo(59, 3);
+  });
+
+  it('lets the classifier outrank the session tag', () => {
+    // Tagged mobility, but every movement is resistance work. The tag is a
+    // tiebreak, never an override — real logs carry exactly this mismatch.
+    const s = summarizeBodyLoad([
+      log(
+        [{ key: 'accessory', items: [item('Dips', 'reps', [set({ reps: 10 })])] }],
+        { total_seconds: 1800, tags: ['mobility'] },
+      ),
+    ]);
+    expect(s.modalityMinutes.resistance).toBeCloseTo(30, 3);
+    expect(s.modalityMinutes.mobility).toBe(0);
+  });
+
+  it('falls back to working minutes when the clock is not a measurement', () => {
+    // 13 completed sets against a 0-second timer is a real session with the
+    // timer off, not an abandoned one. It must not vanish.
+    const s = summarizeBodyLoad([{ ...mixed, total_seconds: 0 } as WorkoutLog]);
+    expect(s.totalMinutes).toBeGreaterThan(0);
   });
 
   it('splits the rotary axis', () => {

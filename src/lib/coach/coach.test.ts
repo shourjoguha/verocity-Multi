@@ -10,6 +10,7 @@ import {
   runCoach,
 } from '@/lib/coach/evaluate';
 import {
+  COACH_WINDOW_DAYS,
   measureFuelTiming,
   measureGoals,
   rpeWasRated,
@@ -17,7 +18,7 @@ import {
   measureTraining,
 } from '@/lib/coach/signals';
 import { CLAIMS, KNOWLEDGE_PACK_VERSION, NUTRITION, SOURCES, TRAINING } from '@/lib/coach/knowledge';
-import { RPE, RPE_LADDER } from '@/app.config';
+import { MODALITY_KEYS, RPE, RPE_LADDER } from '@/app.config';
 import {
   carbSourceConcentration,
   carbTimingWindow,
@@ -94,13 +95,20 @@ describe('knowledge pack', () => {
 describe('signals', () => {
   const training = measureTraining(LOGS, trainingOpts, TODAY);
 
-  it('measures elapsed and working minutes as DIFFERENT numbers', () => {
-    // The bug this engine shipped with once: an hour of lifting is ~20 working
-    // minutes and ~60 elapsed. If these ever converge, the attribution in
-    // sessionMinutesPerWeek has silently stopped doing anything.
-    const working = training.modalityMinutesPerWeek.value.resistance;
-    const elapsed = training.sessionMinutesPerWeek.value.resistance;
-    expect(elapsed).toBeGreaterThan(working * 1.5);
+  it('measures training time as elapsed minutes, not time under tension', () => {
+    // The bug this engine shipped with once: an hour of lifting scored ~20
+    // minutes because resistance was priced at reps x LOAD.repSeconds while
+    // endurance was priced at its real duration, and the modality mix read 51%
+    // endurance for an athlete who mostly lifts. Elapsed allocation now happens
+    // inside summarizeBodyLoad, so this asserts the fixture's resistance time
+    // is in the same unit as its wall clock rather than a fraction of it.
+    const minutes = training.sessionMinutesPerWeek.value;
+    const done = LOGS.filter((l) => l.status === 'done');
+    const clockPerWeek =
+      done.reduce((a, l) => a + (l.total_seconds ?? 0) / 60, 0) / (COACH_WINDOW_DAYS / 7);
+    const total = MODALITY_KEYS.reduce((a, k) => a + minutes[k], 0);
+    expect(total).toBeGreaterThan(clockPerWeek * 0.5);
+    expect(minutes.resistance).toBeGreaterThan(minutes.endurance);
   });
 
   it('reads loaded work from every resistance section, not just `primary`', () => {
