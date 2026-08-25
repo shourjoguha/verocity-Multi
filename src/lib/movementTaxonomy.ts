@@ -535,9 +535,35 @@ const RAW_RULES: MovementRule[] = [
   },
   {
     id: 'locomotion-endurance',
-    match: ['jog', 'sprint', 'swim', 'bike', 'cycling', 'walk', 'hike', 'ruck'],
+    // `bike` and `cycling` USED to live here, which made every ride resolve to
+    // the running profile — the same bwLoad and the same cost per metre, over
+    // distances four to six times longer. They have their own rules below.
+    match: ['jog', 'sprint', 'swim', 'walk', 'hike', 'ruck'],
     profile: p(
       { hamstrings: 0.175, glutes: 0.175, quads: 0.3, calves: 0.25, core: 0.1 },
+      'endurance',
+      'sagittal',
+      { systemic: true },
+    ),
+  },
+  {
+    // Road and stationary cycling. The `cycle` EXACT entry has always carried
+    // the right estimates and was unreachable: nobody logs the word "Cycle".
+    id: 'cycling',
+    match: ['bike', 'cycling'],
+    not: ['assault', 'air bike', 'echo', 'fan bike'],
+    profile: p({ quads: 0.5, hamstrings: 0.12, glutes: 0.18, calves: 0.2 }, 'endurance', 'sagittal', {
+      systemic: true,
+    }),
+  },
+  {
+    // An air bike is not a bicycle. It drives arms and legs against a fan, it is
+    // scored in calories rather than distance, and its work per calorie sits
+    // just above a rower's — where a road bike's sits far below.
+    id: 'air-bike',
+    match: ['assault bike', 'air bike', 'echo bike', 'fan bike'],
+    profile: p(
+      { quads: 0.3, back: 0.2, arms: 0.2, hamstrings: 0.1, glutes: 0.1, core: 0.1 },
       'endurance',
       'sagittal',
       { systemic: true },
@@ -825,6 +851,10 @@ const FORCE_FACTOR: Record<string, number> = {
   'rower interval'                    : 0.45,
   'ski erg interval'                  : 0.3,
   'cycle'                             : 0.4,
+  'rule:cycling'                      : 0.4,
+  // Arms and legs against a fan, so more of the athlete is driving than on a
+  // bicycle. Set just above the rower's 0.45, per the same reading.
+  'rule:air-bike'                     : 0.5,
   'rule:erg-endurance'                : 0.4,
 };
 
@@ -850,8 +880,16 @@ const HORIZ_FACTOR: Record<string, number> = {
   'rower interval'                    : 0.1,
   'ski erg interval'                  : 0.1,
   'rule:erg-endurance'                : 0.1,
-  // A bike converts effort to distance far more efficiently than legs do.
-  'cycle'                             : 0.04,
+  // An air bike is priced as a rower, not as a bicycle — see rule:air-bike.
+  'rule:air-bike'                     : 0.1,
+  // A bike converts effort into distance far more efficiently than legs do:
+  // running 12km/h costs ~0.083 kcal/m, cycling 30km/h ~0.027, so a cycled
+  // metre is worth about a third of a run metre. Anchored on metabolic cost
+  // per metre rather than mechanical work, which would say a tenth — the
+  // metabolic reading is the one under which a session's DURATION means
+  // something, and it independently leaves the ergs where they already are.
+  'cycle'                             : 0.05,
+  'rule:cycling'                      : 0.05,
 };
 
 // Equivalent metres per calorie, for erg work prescribed in calories
@@ -862,8 +900,15 @@ const CAL_METRES: Record<string, number> = {
   'rower interval'                    : 15,
   // Smaller working muscle mass per stroke, so a calorie buys less distance.
   'ski erg interval'                  : 12,
-  // A fan converts cheaply, so a calorie buys more.
-  'cycle'                             : 20,
+  // A calorie is a calorie: this is set so a cycled calorie prices near a rowed
+  // one, which the lower horizFactor would otherwise undercut. A bike simply
+  // covers more ground per calorie.
+  'cycle'                             : 35,
+  'rule:cycling'                      : 35,
+  // The unit air bikes are actually scored in, and the reason this movement is
+  // split out at all. 43kg x 15m x 0.1 = 64.5 kg.m per calorie, against the
+  // rower's 58.1 — "equal to a rower or slightly higher".
+  'rule:air-bike'                     : 15,
   'stairmaster'                       : 10,
   'rule:erg-endurance'                : 15,
 };

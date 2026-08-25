@@ -13,6 +13,8 @@ import { MUSCLE_REGION_KEYS, PLANE_KEYS } from '@/app.config';
 // is the ratchet: every name here must classify, or the suite fails.
 const VOCABULARY = [
   'Wall Balls',
+  'Assault Bike',
+  'Bike Ride',
   'Leg Curl',
   'Incline DB Bench',
   'Leg Extension',
@@ -484,6 +486,27 @@ describe('bodyweight load (bwLoad)', () => {
 
   it('does not let the push-up entry swallow the handstand push-up', () => {
     expect(bw('Handstand Push-up')).toBe(0.9);
+  });
+
+  // The `cycling` rule must not swallow the air bikes, which are a different
+  // machine priced against a rower rather than a bicycle. Longest matched
+  // fragment does the work — 'assault bike' beats 'bike' — so this holds
+  // whatever order the rules sit in.
+  it('does not let the cycling rule swallow the air bikes', () => {
+    for (const name of ['Assault Bike', 'Echo Bike', 'Air Bike', 'Fan Bike']) {
+      expect(classifyMovement(name).matchedIds).toEqual(['air-bike']);
+    }
+    for (const name of ['Bike', 'Cycling', 'Bike Ride', 'Road Cycling']) {
+      expect(classifyMovement(name).matchedIds).toEqual(['cycling']);
+    }
+  });
+
+  // A ride used to resolve to the RUNNING profile, because `bike` and `cycling`
+  // sat in rule:locomotion-endurance. That rule keeps the names that really are
+  // locomotion on your own legs.
+  it('keeps cycling out of the locomotion rule', () => {
+    expect(classifyMovement('Jog').matchedIds).toEqual(['locomotion-endurance']);
+    expect(classifyMovement('Ruck').matchedIds).toEqual(['locomotion-endurance']);
   });
 
   // Absence is NOT zero: an unestimated movement falls back to the global

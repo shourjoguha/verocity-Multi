@@ -154,6 +154,35 @@ describe('the cardio lane', () => {
     );
   });
 
+  it('routes every bike name to cycling, not to the running profile', () => {
+    // The regression: `bike` and `cycling` sat in rule:locomotion-endurance,
+    // which IS the running profile, so a ride was priced per metre almost like
+    // a run over distances four to six times longer. A 40km ride read 172,000
+    // kg·m against a 10km run's 55,900.
+    for (const name of ['Bike', 'Cycling', 'Bike Ride', 'Road Cycling']) {
+      expect(work(name, set({ distance: 1000 })).cardio).toBeCloseTo(86 * 0.4 * 1000 * 0.05, 4);
+    }
+  });
+
+  it('prices a cycled metre at about a third of a run metre', () => {
+    const ratio =
+      work('Bike', set({ distance: 1000 })).cardio / work('Run', set({ distance: 1000 })).cardio;
+    expect(ratio).toBeGreaterThan(0.25);
+    expect(ratio).toBeLessThan(0.4);
+  });
+
+  it('treats an air bike as a rower, not as a bicycle', () => {
+    // Arms and legs against a fan, scored in calories. Its work per calorie
+    // must land just above the rower's, where a road bike's per METRE lands far
+    // below. The longer name fragment is what beats the `bike` rule.
+    const perCal = (m: string) => work(m, set({ calories: 1 })).cardio;
+    for (const name of ['Assault Bike', 'Echo Bike', 'Air Bike', 'Fan Bike']) {
+      expect(perCal(name)).toBeGreaterThan(perCal('Row Erg Intervals'));
+      expect(perCal(name)).toBeLessThan(perCal('Row Erg Intervals') * 1.25);
+    }
+    expect(perCal('Assault Bike')).toBeGreaterThan(perCal('Bike') * 0.9);
+  });
+
   it('prefers a measured distance over a converted calorie count', () => {
     const both = work('Row Erg Intervals', set({ distance: 500, calories: 99 })).cardio;
     expect(both).toBeCloseTo(work('Row Erg Intervals', set({ distance: 500 })).cardio, 4);

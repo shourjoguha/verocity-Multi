@@ -1213,6 +1213,15 @@ Three things that fell out and are worth keeping:
   maximal 2km row at literally nothing. Hence `forceFactor`, which exists only
   for the machines where "fraction of you that you lift" and "force you
   generate" come apart.
+- **A per-movement estimate is worthless if no real name reaches it.** The
+  `cycle` entry carried tuned numbers that nothing hit: every name a person
+  actually logs — Bike, Cycling, Bike Ride, Assault Bike — matched
+  `rule:locomotion-endurance` on the bare `bike` fragment, which IS the running
+  profile. Rides were priced per metre like runs, over distances four to six
+  times longer, so a 40km ride read 172,000 kg·m against a 10km run's 55,900 and
+  bike days topped every chart. **Check what the classifier returns for the
+  names in the logs, not what the table says.** A tuned constant behind an
+  unreachable key is dead config that reads as live.
 - **An absent estimate is louder than a wrong one.** `rom` was absent on double
   unders, so they inherited the 0.45m reference bar path and 100 skips priced as
   100 near-squats. The neutral default is only neutral where the movement is
