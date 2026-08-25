@@ -25,11 +25,6 @@ export function flattenSets(log: WorkoutLog): FlatSet[] {
   );
 }
 
-// Total tonnage (sum of weight × reps) for a session.
-export function sessionVolume(log: WorkoutLog): number {
-  return flattenSets(log).reduce((acc, s) => acc + (s.weight ?? 0) * (s.reps ?? 0), 0);
-}
-
 // Home's headline tiles count finished sessions only, over the whole history.
 // Two reasons this is its own helper rather than an inline filter: landing on
 // /app/log calls createLog({ status: 'in_progress' }) immediately, so anything

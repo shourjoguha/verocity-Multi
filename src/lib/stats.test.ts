@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completedLogs, familyOf, flattenSets, sessionVolume } from '@/lib/stats';
+import { completedLogs, familyOf, flattenSets } from '@/lib/stats';
 import type { WorkoutLog } from '@/lib/types';
 
 function log(sets: { weight?: number; reps?: number; rpe?: number; completed?: boolean }[]): WorkoutLog {
@@ -47,16 +47,6 @@ describe('flattenSets', () => {
 
   it('returns an empty array when there is no log data', () => {
     expect(flattenSets({} as WorkoutLog)).toEqual([]);
-  });
-});
-
-describe('sessionVolume', () => {
-  it('sums weight × reps across sets', () => {
-    expect(sessionVolume(log([{ weight: 100, reps: 5 }, { weight: 100, reps: 5 }]))).toBe(1000);
-  });
-
-  it('treats missing weight or reps as zero contribution', () => {
-    expect(sessionVolume(log([{ reps: 5 }, { weight: 100, reps: 3 }]))).toBe(300);
   });
 });
 

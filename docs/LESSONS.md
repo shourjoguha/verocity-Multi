@@ -1184,6 +1184,40 @@ assertion that passes by finding nothing is not an assertion.
 
 ## Data & privacy
 
+### A hard session reads 460kg of volume and the number is obviously wrong
+`[measured — one Hyrox session, before and after]`
+The Stats screen's Volume column was `sessionVolume` in `lib/stats.ts`: raw
+`weight × reps`, and nothing else. A session of pull-ups, dips, wall balls, sled
+and runs scored **460kg** — one weighted movement — because a bodyweight rep
+prices at `0 × reps` and `distance`, `time` and `calories` are fields it never
+reads. The suspicion was that normalisation was broken. It was not: the
+normalised model (`setVolume`, bodyweight-priced, ROM-scaled) already existed
+and fed the radar and the body map. **Stats simply bypassed it.** Two live
+implementations of one concept, sharing no code.
+
+The replacement is `lib/work.ts`, and the model is one line: **work = force ×
+displacement**, output in kg·m. `bwLoad`/`forceFactor` is the force term, `rom`
+is the displacement term — they are the two halves of one product, not two
+competing corrections, which is the question to answer before adding either.
+
+Three things that fell out and are worth keeping:
+- **Time is not a work unit.** The first instinct is to normalise reps and
+  distance *through* time, since every movement has a duration. It is exactly
+  backwards: a minute says nothing about how much was moved, where a rep and a
+  metre both say it directly. Converting through time is what made the same 50m
+  sled push score **4.5× differently** depending on whether the logger filled
+  the distance box or the time box — the metric moved when logging habits moved.
+  Isometrics score zero work and keep their minutes on the body map.
+- **`bwLoad: 0` is a correct claim that breaks a force term.** A row erg bears
+  none of you, so 0 is right — and a work model reading it as force prices a
+  maximal 2km row at literally nothing. Hence `forceFactor`, which exists only
+  for the machines where "fraction of you that you lift" and "force you
+  generate" come apart.
+- **An absent estimate is louder than a wrong one.** `rom` was absent on double
+  unders, so they inherited the 0.45m reference bar path and 100 skips priced as
+  100 near-squats. The neutral default is only neutral where the movement is
+  ordinary.
+
 ### One modality reads 51% of training and the chart is obviously wrong
 `[measured — 48 real sessions, before and after]`
 `setMinutes` priced a resistance set at its **time under tension** — reps ×
