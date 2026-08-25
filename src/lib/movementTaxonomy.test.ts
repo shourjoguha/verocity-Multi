@@ -12,6 +12,7 @@ import { MUSCLE_REGION_KEYS, PLANE_KEYS } from '@/app.config';
 // The real production vocabulary, verbatim from the user's 46 logs. This list
 // is the ratchet: every name here must classify, or the suite fails.
 const VOCABULARY = [
+  'Wall Balls',
   'Leg Curl',
   'Incline DB Bench',
   'Leg Extension',

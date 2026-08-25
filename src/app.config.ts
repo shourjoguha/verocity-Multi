@@ -575,6 +575,15 @@ export const ROM = {
   prehab: 0.3,
   coreDynamic: 0.3,
   jump: 0.55,
+  // A rope skip clears the floor by a few centimetres. Without an estimate it
+  // inherited the reference bar path and priced 100 double-unders as 100 near-
+  // squats, which is the exact failure `rom` exists to prevent.
+  skip: 0.05,
+  // Chest to the floor, stand, jump: a long path, and the reason a burpee is
+  // not a push-up.
+  burpee: 0.7,
+  // Squat depth, then the ball travels on up to the target.
+  wallBall: 0.9,
 } as const;
 
 // Working-minutes model (lib/bodyLoad.ts). Tonnage is deliberately not the
@@ -702,6 +711,50 @@ export const VOLUME = {
   // volume would let 20 sloppy box jumps outrank 6 sharp ones.
   explosiveRefReps: 5,
   explosiveFactorRange: [0.4, 1.5] as [number, number],
+} as const;
+
+// Work done (lib/work.ts), the currency of the Stats screen.
+//
+// WORK = FORCE x DISPLACEMENT. That is the whole model, and the two factors are
+// already in the taxonomy: `forceFactor`/`bwLoad` is the force term, `rom` is
+// the displacement term. They are not double counting -- they are the two
+// halves of one product, and the output is kg.m ("this much weight, this far").
+//
+// DELIBERATELY NOT `setVolume`. That function prices STIMULUS: it multiplies in
+// RPE and load-relative-to-e1RM, neither of which is work performed, and it
+// converts time and distance into rep-equivalents through one global pace. The
+// pace constant is what made the same sled push score 4.5x differently
+// depending on whether the logger filled the distance box or the time box.
+//
+// TIME IS NOT A WORK UNIT and is excluded from both lanes. A minute says
+// nothing about how much was moved; reps and distance say it directly. An
+// isometric therefore scores zero work here and keeps its minutes on the body
+// map, which is the honest split rather than an invented displacement.
+//
+// TWO LANES, never summed for display:
+//   resistance  reps  -> force x romMetres x reps x side x tempo
+//   cardio      distance or calories -> force x metres x horizFactor
+// A run and a bench press are both kg.m, but an 8km run would swamp a strength
+// week in a single total, so Stats reports them side by side.
+export const WORK = {
+  // Load travel per rep when a movement carries no `rom` estimate. The
+  // reference compound bar path, so an unestimated movement is priced as a
+  // typical one -- absence is never a penalty (the rule `bwLoad` follows).
+  defaultRomM: ROM.referenceM,
+  // How many vertical metres one HORIZONTAL metre costs. Lifting 1kg through
+  // 1m is ~9.8 J; carrying 1kg through 1m of level locomotion is ~1 J, so a
+  // running metre is worth about a tenth of a lifting metre. Per-movement
+  // overrides live in HORIZ_FACTOR (lib/movementTaxonomy.ts): a sled metre is
+  // worth ~5 running metres because friction eats a large share of the load.
+  defaultHorizFactor: 0.1,
+  // Equivalent metres per calorie, for erg work scored in calories. Rowing is
+  // the ballpark the others are calibrated against; per-machine overrides live
+  // in CAL_METRES.
+  defaultCalMetres: 15,
+  // Bodyweight to assume when `user_stats` has none. Derived from the same two
+  // constants `unweightedRepKg` falls back through, so the two models disagree
+  // about nothing when the row is missing.
+  fallbackBodyWeightKg: VOLUME.unweightedRepKg / VOLUME.bodyweightFraction,
 } as const;
 
 // Endurance blends aerobic work, dense strength work and heart-rate spread
@@ -858,7 +911,11 @@ export const ASPECT_OVERRIDE_DAYS = 21;
 //       than as zero work.
 //       wall clock, ending the channel by which resistance training scored as
 //       endurance
-export const ASPECT_METRICS_VERSION = 6;
+//   7 — range-of-motion estimates added for the rope skips, burpees and wall
+//       balls that had none, which moves `romFactor` off its neutral 1.0 for
+//       them and so moves the strength and power axes. The skips are the big
+//       mover: unestimated, 100 double-unders priced as 100 near-squats.
+export const ASPECT_METRICS_VERSION = 7;
 
 // Softness of the logistic that maps a robust z-score onto ASPECT_SCALE: ±1.5
 // lands roughly ±2.2 points. The logistic is asymptotic, so scores approach 1
@@ -1019,4 +1076,24 @@ export interface MovementProfile {
    * at nothing. Reviewed values live in docs/bwload-review.csv.
    */
   bwLoad?: number;
+  /**
+   * Force generated as a fraction of the athlete's own bodyweight, for the
+   * work model in lib/work.ts. Absent falls back to `bwLoad`, which is the
+   * right answer for every movement where the force you generate IS the part
+   * of you that you lift.
+   *
+   * It exists only for the machines where those two claims come apart. A row
+   * erg has `bwLoad: 0` — correct, you lift none of yourself — but you are
+   * still pulling hard against the flywheel, and a zero force term would price
+   * a 2km erg at literally no work. Rowing 0.45, ski 0.3, bike 0.4.
+   */
+  forceFactor?: number;
+  /**
+   * How many vertical metres one metre of this movement costs (see
+   * `WORK.defaultHorizFactor`). Only meaningful on a movement logged by
+   * distance. Absent → the global default.
+   */
+  horizFactor?: number;
+  /** Equivalent metres per calorie, for erg work scored in calories. */
+  calMetres?: number;
 }

@@ -351,6 +351,15 @@ const RAW_EXACT: Record<string, MovementProfile> = {
   'machine crunch': p({ core: 1 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
   'ab routine': p({ core: 1 }, 'resistance', 'sagittal'),
 
+  // A front squat into an overhead throw. Logged in reps, so the work model
+  // reads its `rom` as the ball's whole path, not the squat alone.
+  'wall ball': p(
+    { quads: 0.4, glutes: 0.15, shoulders: 0.25, core: 0.1, arms: 0.1 },
+    'resistance',
+    'sagittal',
+    { systemic: true, rom: ROM.wallBall },
+  ),
+
   // --- carries / sled
   'farmer carry': p(
     { core: 0.35, arms: 0.25, shoulders: 0.2, hamstrings: 0.08, glutes: 0.12 },
@@ -476,13 +485,13 @@ const RAW_EXACT: Record<string, MovementProfile> = {
     { calves: 0.55, quads: 0.25, core: 0.2 },
     'endurance',
     'sagittal',
-    { systemic: true },
+    { systemic: true, rom: ROM.skip },
   ),
   'single under': p(
     { calves: 0.55, quads: 0.25, core: 0.2 },
     'endurance',
     'sagittal',
-    { systemic: true },
+    { systemic: true, rom: ROM.skip },
   ),
   // Squat-thrust-jump-pushup: whole-body conditioning spanning legs, chest and
   // trunk. The dumbbell-facing variant loads the same pattern.
@@ -490,13 +499,13 @@ const RAW_EXACT: Record<string, MovementProfile> = {
     { quads: 0.3, chest: 0.2, hamstrings: 0.1, glutes: 0.1, shoulders: 0.15, core: 0.15 },
     'endurance',
     'sagittal',
-    { systemic: true },
+    { systemic: true, rom: ROM.burpee },
   ),
   'dumbbell facing burpee': p(
     { quads: 0.3, chest: 0.2, hamstrings: 0.1, glutes: 0.1, shoulders: 0.15, core: 0.15 },
     'endurance',
     'sagittal',
-    { systemic: true },
+    { systemic: true, rom: ROM.burpee },
   ),
 
   // Correction: a handstand push-up is a VERTICAL press (shoulders + triceps),
@@ -731,6 +740,7 @@ const BW_LOAD: Record<string, number> = {
   'reverse lunge'                     : 0.75,
   'rule:lunge-pattern'                : 0.75,
   'burpee'                            : 0.65,
+  'wall ball'                         : 0.8,
   'double under'                      : 0.65,
   'dumbbell facing burpee'            : 0.65,
   'nordic'                            : 0.65,
@@ -799,16 +809,80 @@ const BW_LOAD: Record<string, number> = {
   'standing barbell military press'   : 0.0,
 };
 
-const withBw = (key: string, profile: MovementProfile): MovementProfile =>
-  BW_LOAD[key] != null ? { ...profile, bwLoad: BW_LOAD[key] } : profile;
+// ---- work-model estimates ----------------------------------------------------
+//
+// The three tables below serve lib/work.ts, which prices WORK as force x
+// displacement. Kept beside BW_LOAD and in the same shape -- one flat table of
+// reviewed estimates keyed by normalised EXACT name or `rule:<id>` -- because
+// they are the same kind of claim and are meant to be diffed as a set.
+
+// Force generated as a fraction of bodyweight, where that differs from the
+// fraction LIFTED (see MovementProfile.forceFactor). ONLY the machines: an erg
+// bears none of you, so its bwLoad is a correct 0, and a work model reading
+// that as the force term would price a maximal 2km row at nothing.
+const FORCE_FACTOR: Record<string, number> = {
+  'row erg interval'                  : 0.45,
+  'rower interval'                    : 0.45,
+  'ski erg interval'                  : 0.3,
+  'cycle'                             : 0.4,
+  'rule:erg-endurance'                : 0.4,
+};
+
+// How many vertical metres one horizontal metre of this movement costs
+// (MovementProfile.horizFactor). Absent -> WORK.defaultHorizFactor (0.1).
+//
+// The sled entries are the reason this is per-movement rather than global:
+// friction eats a large share of the load, so 50m of sled push is real work
+// against ~half its weight, where 50m of running is not.
+const HORIZ_FACTOR: Record<string, number> = {
+  'sled push'                         : 0.5,
+  'sled drag'                         : 0.5,
+  'rule:sled'                         : 0.5,
+  // Stairs climb rather than travel -- the displacement really is mostly
+  // vertical, so a stairmaster metre costs far more than a running one.
+  'stairmaster'                       : 0.5,
+  'run'                               : 0.1,
+  'zone'                              : 0.1,
+  'farmer carry'                      : 0.1,
+  'rule:carry'                        : 0.1,
+  'rule:locomotion-endurance'         : 0.1,
+  'row erg interval'                  : 0.1,
+  'rower interval'                    : 0.1,
+  'ski erg interval'                  : 0.1,
+  'rule:erg-endurance'                : 0.1,
+  // A bike converts effort to distance far more efficiently than legs do.
+  'cycle'                             : 0.04,
+};
+
+// Equivalent metres per calorie, for erg work prescribed in calories
+// (MovementProfile.calMetres). Absent -> WORK.defaultCalMetres (15), the
+// rowing ballpark the others are calibrated against.
+const CAL_METRES: Record<string, number> = {
+  'row erg interval'                  : 15,
+  'rower interval'                    : 15,
+  // Smaller working muscle mass per stroke, so a calorie buys less distance.
+  'ski erg interval'                  : 12,
+  // A fan converts cheaply, so a calorie buys more.
+  'cycle'                             : 20,
+  'stairmaster'                       : 10,
+  'rule:erg-endurance'                : 15,
+};
+
+const withEstimates = (key: string, profile: MovementProfile): MovementProfile => ({
+  ...profile,
+  ...(BW_LOAD[key] != null ? { bwLoad: BW_LOAD[key] } : {}),
+  ...(FORCE_FACTOR[key] != null ? { forceFactor: FORCE_FACTOR[key] } : {}),
+  ...(HORIZ_FACTOR[key] != null ? { horizFactor: HORIZ_FACTOR[key] } : {}),
+  ...(CAL_METRES[key] != null ? { calMetres: CAL_METRES[key] } : {}),
+});
 
 export const EXACT: Record<string, MovementProfile> = Object.fromEntries(
-  Object.entries(RAW_EXACT).map(([name, profile]) => [name, withBw(name, profile)]),
+  Object.entries(RAW_EXACT).map(([name, profile]) => [name, withEstimates(name, profile)]),
 );
 
 export const RULES: MovementRule[] = RAW_RULES.map((rule) => ({
   ...rule,
-  profile: withBw('rule:' + rule.id, rule.profile),
+  profile: withEstimates('rule:' + rule.id, rule.profile),
 }));
 
 // ---- matching -------------------------------------------------------------
@@ -910,6 +984,9 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
   let rotary: RotaryRole | null = null;
   const romParts: number[] = [];
   const bwParts: number[] = [];
+  const forceParts: number[] = [];
+  const horizParts: number[] = [];
+  const calParts: number[] = [];
 
   for (const m of matched) {
     for (const [k, v] of Object.entries(m.profile.regions)) {
@@ -925,6 +1002,9 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
     if (!rotary && m.profile.rotary) rotary = m.profile.rotary;
     if (m.profile.rom != null) romParts.push(m.profile.rom);
     if (m.profile.bwLoad != null) bwParts.push(m.profile.bwLoad);
+    if (m.profile.forceFactor != null) forceParts.push(m.profile.forceFactor);
+    if (m.profile.horizFactor != null) horizParts.push(m.profile.horizFactor);
+    if (m.profile.calMetres != null) calParts.push(m.profile.calMetres);
   }
 
   const firstModality = matched.find((m) => m.profile.modality)?.profile.modality ?? null;
@@ -951,6 +1031,15 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
   // table says (docs/LESSONS.md: "the logger records more than the metrics read").
   const bwLoad = bwParts.length > 0 ? bwParts.reduce((a, b) => a + b, 0) / bwParts.length : null;
 
+  // The work-model estimates merge on the same rule, and for the same reason
+  // the comment above gives: a property this merge does not name is silently
+  // dropped no matter what EXACT says.
+  const meanOrNull = (xs: number[]) =>
+    xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+  const forceFactor = meanOrNull(forceParts);
+  const horizFactor = meanOrNull(horizParts);
+  const calMetres = meanOrNull(calParts);
+
   let profile: MovementProfile = {
     regions: normalizeWeights(regionAcc),
     modality,
@@ -959,6 +1048,9 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
     systemic,
     ...(rom != null ? { rom } : {}),
     ...(bwLoad != null ? { bwLoad } : {}),
+    ...(forceFactor != null ? { forceFactor } : {}),
+    ...(horizFactor != null ? { horizFactor } : {}),
+    ...(calMetres != null ? { calMetres } : {}),
   };
 
   let source: ClassificationSource;

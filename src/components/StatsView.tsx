@@ -7,7 +7,16 @@ import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { useAspectProfile } from '@/lib/useAspectProfile';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
-import { flattenSets, familyOf, sessionVolume } from '@/lib/stats';
+import { flattenSets, familyOf } from '@/lib/stats';
+import {
+  addWork,
+  formatWork,
+  sessionWork,
+  workBodyWeight,
+  WORK_UNIT,
+  ZERO_WORK,
+  type WorkTotals,
+} from '@/lib/work';
 import { summarizeBodyLoad } from '@/lib/bodyLoad';
 import { aspectWindows, logsInWindow } from '@/lib/aspects';
 import { formatDuration, formatRound } from '@/lib/format';
@@ -28,6 +37,11 @@ import { GarminHealthSection } from '@/components/GarminHealthSection';
 import { EASE, Item, PageStagger } from '@/components/anim';
 
 const WEEKS = 8;
+
+// The heatmap's intensity bar is ONE rail, so it reads the two lanes summed.
+// Legal arithmetic — both are kg.m — and deliberately unlike the DISPLAYED
+// figures, which stay split because a long run would swamp a lifting week.
+const dayTotal = (d: { work: WorkTotals }) => d.work.resistance + d.work.cardio;
 const RPE_BUCKETS = [6, 7, 8, 9, 10];
 
 function ymd(d: Date): string {
@@ -135,7 +149,12 @@ function modalityMix(logs: WorkoutLog[]): { key: string; label: string; pct: num
   return parts.map(({ key, label, minutes }) => ({ key, label, pct: (minutes / total) * 100 }));
 }
 
-function deriveStats(fetched: WorkoutLog[], today: Date, groupBy: 'movement' | 'family') {
+function deriveStats(
+  fetched: WorkoutLog[],
+  today: Date,
+  groupBy: 'movement' | 'family',
+  bodyWeightKg: number,
+) {
   const eightWeeksAgo = new Date(
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (WEEKS * 7 - 1)),
   );
@@ -163,7 +182,7 @@ function deriveStats(fetched: WorkoutLog[], today: Date, groupBy: 'movement' | '
       label: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
       count: inWeek.length,
       seconds: inWeek.reduce((a, l) => a + (l.total_seconds ?? 0), 0),
-      volume: inWeek.reduce((a, l) => a + sessionVolume(l), 0),
+      work: inWeek.reduce((a, l) => addWork(a, sessionWork(l, bodyWeightKg)), ZERO_WORK),
     };
   });
 
@@ -172,19 +191,19 @@ function deriveStats(fetched: WorkoutLog[], today: Date, groupBy: 'movement' | '
   // activities, so two strength sessions read as one solid strength cell while a
   // single session tagged strength + mobility reads as two stripes. Using
   // sessionTagColors (not tags[0]) is what makes the second case work.
-  type DayCell = { volume: number; labels: string[]; colors: string[] };
+  type DayCell = { work: WorkTotals; labels: string[]; colors: string[] };
   const dayMap = new Map<string, DayCell>();
   for (const log of all) {
     const key = log.log_date.slice(0, 10);
-    const cur = dayMap.get(key) ?? { volume: 0, labels: [], colors: [] };
-    cur.volume += sessionVolume(log);
+    const cur = dayMap.get(key) ?? { work: ZERO_WORK, labels: [], colors: [] };
+    cur.work = addWork(cur.work, sessionWork(log, bodyWeightKg));
     cur.labels.push(log.tags[0] ?? log.activity_type ?? 'Session');
     for (const c of sessionTagColors(log.tags, log.activity_type)) {
       if (!cur.colors.includes(c)) cur.colors.push(c);
     }
     dayMap.set(key, cur);
   }
-  const dayMax = Math.max(1, ...[...dayMap.values()].map((d) => d.volume));
+  const dayMax = Math.max(1, ...[...dayMap.values()].map(dayTotal));
 
   // RPE fingerprint: distribution across RPE buckets, per movement family.
   const fam = new Map<string, { dist: number[]; sum: number; n: number }>();
@@ -302,7 +321,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // Bodyweight, for the ×BW multiples on the e1RM cards. Null in showcase mode
   // (no anon policy on user_stats) and null for anyone who has not filled it in,
   // in which case the multiple simply is not rendered.
-  const { data: stats } = useAuthedQuery(
+  const { data: stats, loading: statsLoading } = useAuthedQuery(
     () => (mode === 'app' ? getUserStats() : Promise.resolve(null)),
     { auth: mode === 'app', key: mode === 'app' ? 'userStats' : undefined },
   );
@@ -321,7 +340,11 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // on every render, and re-deriving 8 weeks of buckets because the clock moved a
   // millisecond is the cost this memo exists to avoid.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const derived = useMemo(() => deriveStats(logs ?? [], today, groupBy), [logs, groupBy]);
+  const bodyWeightKg = workBodyWeight(stats ?? null);
+  const derived = useMemo(
+    () => deriveStats(logs ?? [], today, groupBy, bodyWeightKg),
+    [logs, groupBy, bodyWeightKg],
+  );
 
   // Kept before the loading guard: hooks must not sit behind an early return.
   const mix = useMemo(() => modalityMix(derived.all), [derived]);
@@ -356,7 +379,10 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     };
   }, [profile.current, profile.prior]);
 
-  if (loading) return <LoadingScreen />;
+  // Wait on stats too, or every work figure paints at the fallback bodyweight
+  // and then jumps once the real one lands (docs/LESSONS.md, and the same trap
+  // BodyView's Volume currency hit).
+  if (loading || statsLoading) return <LoadingScreen />;
 
   const {
     all,
@@ -490,7 +516,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     if (!cell) {
                       return <div key={row} className="hill aspect-square bg-fg/[0.05]" />;
                     }
-                    const label = `${dateLabel} · ${cell.labels.join(', ')} · ${formatRound(cell.volume)} kg`;
+                    const label = `${dateLabel} · ${cell.labels.join(', ')} · ${formatWork(dayTotal(cell))} ${WORK_UNIT}`;
                     // Stripes for a mixed day, a solid fill for one activity —
                     // and the volume intensity applies either way. The old
                     // multi-activity branch passed no style at all, so those
@@ -505,7 +531,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     // bottom edge, a monochrome LENGTH that cannot distort the
                     // colour above it. (Border-glow was the other candidate, but
                     // an inset box-shadow is a CLAUDE.md "never" in a component.)
-                    const volPct = Math.round((cell.volume / dayMax) * 100);
+                    const volPct = Math.round((dayTotal(cell) / dayMax) * 100);
                     return (
                       <div
                         key={row}
@@ -533,7 +559,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               ))}
             </div>
             <p className="mt-2 text-[0.65rem] text-muted">
-              Colored by activity · bottom bar is volume · striped days had multiple activities.
+              Colored by activity · bottom bar is work done · striped days had multiple activities.
             </p>
           </section>
         </Item>
@@ -554,7 +580,8 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                   <th className="border-b border-border px-3 py-2 text-left font-medium">Week</th>
                   <th className="border-b border-border px-3 py-2 text-right font-medium">Sessions</th>
                   <th className="border-b border-border px-3 py-2 text-right font-medium">Time</th>
-                  <th className="border-b border-border px-3 py-2 text-right font-medium">Volume</th>
+                  <th className="border-b border-border px-3 py-2 text-right font-medium">Lifting</th>
+                  <th className="border-b border-border px-3 py-2 text-right font-medium">Cardio</th>
                 </tr>
               </thead>
               <tbody className="tabular-nums">
@@ -563,11 +590,16 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     <td className="px-3 py-2 text-subtle">{w.label}</td>
                     <td className="px-3 py-2 text-right text-fg">{w.count}</td>
                     <td className="px-3 py-2 text-right text-fg">{formatDuration(w.seconds)}</td>
-                    <td className="px-3 py-2 text-right text-fg">{formatRound(w.volume)}</td>
+                    <td className="px-3 py-2 text-right text-fg">{formatWork(w.work.resistance)}</td>
+                    <td className="px-3 py-2 text-right text-fg">{formatWork(w.work.cardio)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <p className="mt-2 text-[0.65rem] text-muted">
+              Work in {WORK_UNIT} — weight moved × how far. Lifting and cardio are not summed:
+              they are the same unit, but a long run would swamp a lifting week.
+            </p>
           </section>
 
         {rpeRows.length > 0 ? (
