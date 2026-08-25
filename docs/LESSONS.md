@@ -1213,6 +1213,19 @@ Three things that fell out and are worth keeping:
   maximal 2km row at literally nothing. Hence `forceFactor`, which exists only
   for the machines where "fraction of you that you lift" and "force you
   generate" come apart.
+- **Two units being the same does not make them comparable.** The consistency
+  grid's intensity bar summed the lanes — `resistance + cardio` — on the
+  reasoning that both are kg·m, so the arithmetic is legal. It is legal and it
+  is meaningless: the lanes were split precisely BECAUSE they were never
+  calibrated against each other. The counts differ by three orders of magnitude
+  (tens of reps against tens of thousands of metres) while the per-unit prices
+  differ by one, so a hard full lifting session (~8,600) lands at a sixth of a
+  30km ride (~51,600) and every lifting day reads as empty. No constant fixes
+  it — cycling would have to be distorted to a twentieth of its real cost. The
+  fix is to normalise **each lane against its own maximum** and take the higher
+  ratio, so the rail answers "how big was this day for its kind"
+  (`workIntensity` in `lib/work.ts`). **When a chart looks wrong, check whether
+  it is asking the metric a question the metric was built to refuse.**
 - **A per-movement estimate is worthless if no real name reaches it.** The
   `cycle` entry carried tuned numbers that nothing hit: every name a person
   actually logs — Bike, Cycling, Bike Ride, Assault Bike — matched

@@ -13,6 +13,8 @@ import {
   formatWork,
   sessionWork,
   workBodyWeight,
+  workIntensity,
+  workMaxima,
   WORK_UNIT,
   ZERO_WORK,
   type WorkTotals,
@@ -38,10 +40,15 @@ import { EASE, Item, PageStagger } from '@/components/anim';
 
 const WEEKS = 8;
 
-// The heatmap's intensity bar is ONE rail, so it reads the two lanes summed.
-// Legal arithmetic — both are kg.m — and deliberately unlike the DISPLAYED
-// figures, which stay split because a long run would swamp a lifting week.
-const dayTotal = (d: { work: WorkTotals }) => d.work.resistance + d.work.cardio;
+// Both lanes, named. The old label printed one summed figure, which is the
+// number `workIntensity` exists to stop anyone reading as meaningful.
+function workLabel(work: WorkTotals): string {
+  const parts: string[] = [];
+  if (work.resistance > 0) parts.push(`${formatWork(work.resistance)} lifting`);
+  if (work.cardio > 0) parts.push(`${formatWork(work.cardio)} cardio`);
+  return parts.length > 0 ? `${parts.join(' · ')} ${WORK_UNIT}` : 'no work logged';
+}
+
 const RPE_BUCKETS = [6, 7, 8, 9, 10];
 
 function ymd(d: Date): string {
@@ -203,7 +210,10 @@ function deriveStats(
     }
     dayMap.set(key, cur);
   }
-  const dayMax = Math.max(1, ...[...dayMap.values()].map(dayTotal));
+  // Each lane is normalised against ITS OWN maximum, so the rail answers "how
+  // big was this day for its kind" rather than "how big against a bike ride".
+  // See `workIntensity` for why summing the two was wrong.
+  const dayMax = workMaxima([...dayMap.values()].map((d) => d.work));
 
   // RPE fingerprint: distribution across RPE buckets, per movement family.
   const fam = new Map<string, { dist: number[]; sum: number; n: number }>();
@@ -516,7 +526,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     if (!cell) {
                       return <div key={row} className="hill aspect-square bg-fg/[0.05]" />;
                     }
-                    const label = `${dateLabel} · ${cell.labels.join(', ')} · ${formatWork(dayTotal(cell))} ${WORK_UNIT}`;
+                    const label = `${dateLabel} · ${cell.labels.join(', ')} · ${workLabel(cell.work)}`;
                     // Stripes for a mixed day, a solid fill for one activity —
                     // and the volume intensity applies either way. The old
                     // multi-activity branch passed no style at all, so those
@@ -531,7 +541,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     // bottom edge, a monochrome LENGTH that cannot distort the
                     // colour above it. (Border-glow was the other candidate, but
                     // an inset box-shadow is a CLAUDE.md "never" in a component.)
-                    const volPct = Math.round((dayTotal(cell) / dayMax) * 100);
+                    const volPct = Math.round(workIntensity(cell.work, dayMax) * 100);
                     return (
                       <div
                         key={row}
@@ -559,7 +569,8 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               ))}
             </div>
             <p className="mt-2 text-[0.65rem] text-muted">
-              Colored by activity · bottom bar is work done · striped days had multiple activities.
+              Colored by activity · bottom bar is work done, against your biggest day of that
+              kind · striped days had multiple activities.
             </p>
           </section>
         </Item>
