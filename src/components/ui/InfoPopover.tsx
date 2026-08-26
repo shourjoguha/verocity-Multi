@@ -1,9 +1,14 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 // Small "!" affordance that reveals a caption bubble. Toggled from the button;
 // dismissed on outside click or Escape. Anchored inline next to a label rather
 // than portalled — its content is short and the parent never scrolls a section
 // out from under it while it is open.
+//
+// The bubble is centred on the trigger, which puts half of it off-screen when
+// the trigger sits near an edge — a movement name at the left edge of a card at
+// 375px is exactly that case. So after it opens we measure it and shift it back
+// inside the viewport, keeping the trigger's own position untouched.
 export function InfoPopover({
   label = 'More info',
   children,
@@ -12,8 +17,27 @@ export function InfoPopover({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [shift, setShift] = useState(0);
   const rootRef = useRef<HTMLSpanElement | null>(null);
+  const bubbleRef = useRef<HTMLSpanElement | null>(null);
   const bubbleId = useId();
+
+  // Measured once per open, before paint, so the bubble never appears clipped
+  // and then jumps. `shift` resets to 0 on close, so the measurement always
+  // starts from the centred position.
+  useLayoutEffect(() => {
+    if (!open) {
+      setShift(0);
+      return;
+    }
+    const el = bubbleRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const margin = 8;
+    if (rect.left < margin) setShift(margin - rect.left);
+    else if (rect.right > window.innerWidth - margin)
+      setShift(window.innerWidth - margin - rect.right);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -60,9 +84,11 @@ export function InfoPopover({
       </button>
       {open ? (
         <span
+          ref={bubbleRef}
           id={bubbleId}
           role="tooltip"
-          className="lift-fixed absolute left-1/2 top-full z-40 mt-1 w-max max-w-[16rem] -translate-x-1/2 border border-border bg-surface px-3 py-2 text-[0.7rem] leading-snug text-muted"
+          className="lift-fixed absolute left-1/2 top-full z-40 mt-1 w-max max-w-[min(16rem,calc(100vw-2rem))] border border-border bg-surface px-3 py-2 text-[0.7rem] leading-snug text-muted"
+          style={{ transform: `translateX(calc(-50% + ${shift}px))` }}
         >
           {children}
         </span>

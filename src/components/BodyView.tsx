@@ -32,7 +32,6 @@ import {
   LoadingScreen,
   SectionHeader,
   StackedBar,
-  StatStrip,
 } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Disclosure } from '@/components/ui/Disclosure';
@@ -335,6 +334,17 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           {/* Second control, not a merged one: the window asks "when" and the
               lens asks "which kind of work". Both are single-select, so both are
               SegmentedTabs rather than a sixth hand-rolled variant. */}
+          {/* The window/lens totals sit BETWEEN the two controls, because that
+              is what they belong to: the "when" above and the "which kind of
+              work" below both change this number. It used to be repeated in a
+              StatStrip below the figure, which said nothing the header did not. */}
+          {summary.totalMinutes > 0 ? (
+            <p className="t-label mt-2 text-muted">
+              {Math.round(summary.totalMinutes)} min · {summary.sessions}{' '}
+              {summary.sessions === 1 ? 'session' : 'sessions'} ·{' '}
+              {Math.round(summary.coverage * 100)}% mapped
+            </p>
+          ) : null}
           <div className="mt-2">
             <SegmentedTabs
               tabs={BODY_LENS_KEYS.map((k) => ({ key: k, label: BODY_LENSES[k].label }))}
@@ -374,15 +384,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               not move these inside, and do not add overflow-hidden here. */}
           <Item>
             <section className="mb-6">
-              <SectionHeader
-                action={
-                  <span className="t-label text-muted">
-                    {Math.round(summary.totalMinutes)} min · {summary.sessions} sessions
-                  </span>
-                }
-              >
-                Where the work went
-              </SectionHeader>
+              <SectionHeader>Where the work went</SectionHeader>
               <div className="lift border border-border bg-surface p-4">
                 <div className="relative">
                   <BodyMap
@@ -415,18 +417,6 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                 </p>
               </div>
             </section>
-          </Item>
-
-          <Item>
-            <div className="mb-6">
-              <StatStrip
-                stats={[
-                  { label: 'Working min', value: Math.round(summary.totalMinutes) },
-                  { label: 'Sessions', value: summary.sessions },
-                  { label: 'Mapped', value: `${Math.round(summary.coverage * 100)}%` },
-                ]}
-              />
-            </div>
           </Item>
 
           {/* Top three, then the rest on request. Region selection lives on
