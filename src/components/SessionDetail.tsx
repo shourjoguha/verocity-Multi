@@ -13,6 +13,7 @@ import { SessionTime } from '@/components/SessionTime';
 import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { LogShareControl } from '@/components/LogShareControl';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Item, PageStagger } from '@/components/anim';
 import { clientFor, isReadOnly, type Surface } from '@/lib/surface';
 
@@ -166,20 +167,29 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
               <SectionHeader>{sectionLabel(section.key)}</SectionHeader>
               <div className="flex flex-col gap-3">
                 {section.groups.map((group) => (
-                  <div key={group.id} className="border border-border">
+                  <div key={group.id} className="lift border border-border bg-surface">
                     {group.kind !== 'single' ? (
-                      <div className="border-b border-border px-3 py-1 t-control text-muted">
+                      <div className="border-b border-border-soft px-3 py-1 t-control text-muted">
                         {group.kind}
                       </div>
                     ) : null}
-                    {group.items.map((item) => (
-                      <div key={item.id} className="px-3 py-2">
-                        <div className="mb-1 capitalize text-fg">{item.movement}</div>
-                        {item.notes ? (
-                          <p className="mb-1 whitespace-pre-wrap text-[0.7rem] text-muted">
-                            {item.notes}
-                          </p>
-                        ) : null}
+                    {group.items.map((item, itemIndex) => (
+                      <div
+                        key={item.id}
+                        className={`px-3 py-2 ${itemIndex === 0 ? '' : 'border-t border-border-soft'}`}
+                      >
+                        {/* Notes are a paragraph of prescription per movement, and
+                            printing them all made the session unreadable — the sets,
+                            which are what you came for, sat below a wall of text. They
+                            move behind the "!" and are one tap away. */}
+                        <div className="mb-1 flex items-center gap-2">
+                          <span className="min-w-0 flex-1 capitalize text-fg">{item.movement}</span>
+                          {item.notes ? (
+                            <InfoPopover label={`Notes for ${item.movement}`}>
+                              <span className="whitespace-pre-wrap">{item.notes}</span>
+                            </InfoPopover>
+                          ) : null}
+                        </div>
                         <ul className="flex flex-col gap-1">
                           {item.sets.map((set, i) => (
                             <li
