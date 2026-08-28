@@ -22,3 +22,7 @@ supabase/.temp/
 *.log
 npm-debug.log*
 .DS_Store
+
+# local health-data exports — never commit (this repo is public)
+docs/imports/garmin/
+*garmin-export*/
