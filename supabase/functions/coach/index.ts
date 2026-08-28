@@ -23,7 +23,8 @@ const MODEL = 'claude-haiku-4-5-20251001';
 const SYSTEM_PROMPT = `You are a strength & conditioning coach reviewing an athlete's recent training signals (provided as JSON).
 Return ONLY a JSON array (no prose, no markdown fences) of 1-4 objects, each exactly:
 {"tldr": "<=60-char headline", "action": "one concrete next step", "body_md": "2-3 sentences of reasoning grounded in the numbers", "drift_score": 0.0-1.0, "confidence": 0.0-1.0}
-Fitness only — never nutrition or medical advice. Be specific to the numbers. If everything looks healthy, return a single encouraging item with a low drift_score.`;
+Fitness only — never nutrition or medical advice. Be specific to the numbers. If everything looks healthy, return a single encouraging item with a low drift_score.
+A "recovery" key may be present, summarising wearable data (sleep, HRV, resting heart rate, body battery) as a recent window against a prior one. When it is absent, say nothing about recovery or sleep — do not infer them from training load. When it is present, treat it as context for training advice only: never diagnose, never suggest a medical cause, and never treat a single night as a trend. nights/days counts tell you how much data each average rests on — say so when it is thin.`;
 
 function e1rm(weight: number, reps: number): number | null {
   if (reps <= 0) return null;
@@ -82,6 +83,17 @@ Deno.serve(async (req) => {
   const logs = (logsData ?? []) as AnyLog[];
   if (logs.length === 0) return json({ ok: false, error: 'no_data' }, 200);
 
+  // Recovery context from the wearable, when the user has imported any. Same
+  // RLS-scoped client, so this reads only their own rows (garmin_health_daily
+  // is authenticated-select-own, service-role-write). Absent for users with no
+  // Garmin data, and the prompt is explicit that absent means silent.
+  const { data: healthData } = await db
+    .from('garmin_health_daily')
+    .select('calendar_date, sleep_seconds, sleep_score, hrv_ms, resting_hr, body_battery_high')
+    .order('calendar_date', { ascending: false })
+    .limit(28);
+  const health = (healthData ?? []) as AnyLog[];
+
   // ---- drift signals ----
   let totalSets = 0;
   let doneSets = 0;
@@ -118,6 +130,31 @@ Deno.serve(async (req) => {
       e1rmLast: Math.round(series[series.length - 1]),
     }));
 
+  // Recent 7 days against the 21 before them — enough to separate a bad week
+  // from a bad night without pretending a month is a baseline.
+  const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+  const col = (rows: AnyLog[], key: string) =>
+    rows.map((r) => r[key]).filter((v): v is number => typeof v === 'number');
+  const round1 = (v: number | null) => (v === null ? null : Math.round(v * 10) / 10);
+
+  function recoveryWindow(rows: AnyLog[]) {
+    const sleep = col(rows, 'sleep_seconds');
+    return {
+      nights: sleep.length,
+      days: rows.length,
+      avgSleepHours: round1(mean(sleep.map((s) => s / 3600))),
+      avgSleepScore: round1(mean(col(rows, 'sleep_score'))),
+      avgHrvMs: round1(mean(col(rows, 'hrv_ms'))),
+      avgRestingHr: round1(mean(col(rows, 'resting_hr'))),
+      avgBodyBatteryHigh: round1(mean(col(rows, 'body_battery_high'))),
+    };
+  }
+
+  const recovery =
+    health.length > 0
+      ? { recent: recoveryWindow(health.slice(0, 7)), prior: recoveryWindow(health.slice(7)) }
+      : null;
+
   const signals = {
     sessionsAnalyzed: logs.length,
     adherencePct: totalSets ? Math.round((doneSets / totalSets) * 100) : null,
@@ -125,6 +162,9 @@ Deno.serve(async (req) => {
     avgRpePrior: avg(rpePrior),
     topMovements,
     currentWeek: logs[0]?.week_number ?? null,
+    // Omitted entirely when the user has no wearable data — an explicit null
+    // would invite the model to comment on its absence.
+    ...(recovery ? { recovery } : {}),
   };
 
   // ---- ask Claude (prompt-cached system) ----

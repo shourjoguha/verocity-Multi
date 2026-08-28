@@ -146,10 +146,93 @@ async function writeActivities(
   return byProvider;
 }
 
-// Project each activity into a workout_logs row keyed by garmin_activity_id (one
-// log per activity). The unique index on garmin_activity_id is PARTIAL (WHERE
-// NOT NULL), which supabase-js upsert can't target, so split insert/update by
-// hand against the ids we already hold.
+// ---- Garmin → app-session matching -----------------------------------------
+// Mirrors src/lib/garmin/matchLogs.ts, which is the SPEC and carries the tests
+// (the `@/` alias cannot cross the Node→Deno boundary, same as the request types
+// above). Keep the two in step: the rule is "attach to the session the user
+// already logged, otherwise make a row", biased so an ambiguous match inserts
+// rather than silently rewriting the wrong session.
+interface CandidateLog {
+  id: string;
+  log_date: string;
+  started_at: string | null;
+  ended_at: string | null;
+  source: string;
+  garmin_activity_id: string | null;
+  total_seconds: number | null;
+  hr_avg: number | null;
+  hr_max: number | null;
+}
+type MatchDecision =
+  | { kind: 'attach'; logId: string; patch: Record<string, number> }
+  | { kind: 'insert' };
+
+function msOf(iso: string | null): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+function patchFor(activity: NormalizedActivity, log: CandidateLog): Record<string, number> {
+  const patch: Record<string, number> = {};
+  if (log.total_seconds === null && activity.duration_seconds !== null) {
+    patch.total_seconds = activity.duration_seconds;
+  }
+  if (log.hr_avg === null && activity.avg_hr !== null) patch.hr_avg = activity.avg_hr;
+  if (log.hr_max === null && activity.max_hr !== null) patch.hr_max = activity.max_hr;
+  return patch;
+}
+
+function matchActivityToLog(
+  activity: NormalizedActivity,
+  candidates: CandidateLog[],
+  claimed: Set<string>,
+): MatchDecision {
+  const start = msOf(activity.start_time);
+  if (start === null) return { kind: 'insert' };
+  const end = start + (activity.duration_seconds ?? 0) * 1000;
+  const open = candidates.filter(
+    (c) => c.source === 'manual' && c.garmin_activity_id === null && !claimed.has(c.id),
+  );
+
+  let best: { log: CandidateLog; seconds: number } | null = null;
+  for (const log of open) {
+    const logStart = msOf(log.started_at);
+    if (logStart === null) continue;
+    const logEnd = msOf(log.ended_at) ?? logStart + (log.total_seconds ?? 0) * 1000;
+    const seconds = Math.max(0, Math.min(end, logEnd) - Math.max(start, logStart)) / 1000;
+    if (seconds > 0 && (!best || seconds > best.seconds)) best = { log, seconds };
+  }
+  if (best) return { kind: 'attach', logId: best.log.id, patch: patchFor(activity, best.log) };
+
+  const date = activity.start_time!.slice(0, 10);
+  const undated = open.filter((c) => c.log_date === date && msOf(c.started_at) === null);
+  if (undated.length === 1) {
+    return { kind: 'attach', logId: undated[0].id, patch: patchFor(activity, undated[0]) };
+  }
+  return { kind: 'insert' };
+}
+
+// Shift an ISO date by whole days — the candidate window is widened by one day
+// either side because a late-evening activity and its log can land on different
+// calendar dates once local time is involved.
+function shiftDate(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Write the workout_logs side of an ingest.
+//
+// A Garmin activity ENRICHES the session the user already logged when one
+// matches — the app is the source of truth for what the session was, Garmin for
+// what the body did during it — and only projects its own row when nothing
+// matches (a run that was never logged in the app). Without this, every logged
+// session that Garmin also recorded was counted twice by Calendar, Stats and
+// every aspect metric summing over workout_logs.
+//
+// The unique index on garmin_activity_id is PARTIAL (WHERE NOT NULL), which
+// supabase-js upsert can't target, so insert/update are split by hand.
 async function writeProjectedLogs(
   admin: SupabaseClient,
   ownerId: string,
@@ -159,32 +242,73 @@ async function writeProjectedLogs(
   const pending = items
     .map(({ activity, log }) => {
       const activityId = activityIdByProvider.get(activity.provider_activity_id);
-      return log && activityId ? { activityId, log } : null;
+      return log && activityId ? { activityId, log, activity } : null;
     })
-    .filter((x): x is { activityId: string; log: ProjectedLog } => x !== null);
+    .filter((x): x is { activityId: string; log: ProjectedLog; activity: NormalizedActivity } =>
+      x !== null,
+    );
   if (pending.length === 0) return;
 
+  // Re-imports: rows this activity already owns. `source` decides how — a
+  // 'garmin' row is our own projection and is refreshed wholesale, while a
+  // 'manual' row is a session the user logged that a previous run ENRICHED, so
+  // only the backfill columns may move. Overwriting it with the projection
+  // would destroy their status, tags and LogDocument on every re-import.
   const { data: existing, error: selErr } = await admin
     .from('workout_logs')
-    .select('id, garmin_activity_id')
+    .select('id, log_date, started_at, ended_at, source, garmin_activity_id, total_seconds, hr_avg, hr_max')
     .eq('owner_user_id', ownerId)
     .in('garmin_activity_id', pending.map((p) => p.activityId));
   if (selErr) throw new Error(`logs lookup: ${selErr.message}`);
-  const logIdByActivity = new Map<string, string>(
-    (existing ?? []).map((r) => [r.garmin_activity_id as string, r.id as string]),
+  const linkedByActivity = new Map<string, CandidateLog>(
+    ((existing ?? []) as CandidateLog[]).map((r) => [r.garmin_activity_id as string, r]),
   );
 
+  // Candidate app-logged sessions across the batch's date span (± a day).
+  const dates = pending.map((p) => p.log.log_date).sort();
+  const { data: candidateRows, error: candErr } = await admin
+    .from('workout_logs')
+    .select('id, log_date, started_at, ended_at, source, garmin_activity_id, total_seconds, hr_avg, hr_max')
+    .eq('owner_user_id', ownerId)
+    .gte('log_date', shiftDate(dates[0], -1))
+    .lte('log_date', shiftDate(dates[dates.length - 1], 1));
+  if (candErr) throw new Error(`candidate lookup: ${candErr.message}`);
+  const candidates = (candidateRows ?? []) as CandidateLog[];
+
+  const claimed = new Set<string>();
   const inserts: Record<string, unknown>[] = [];
-  for (const { activityId, log } of pending) {
-    const row = { owner_user_id: ownerId, garmin_activity_id: activityId, ...log };
-    const existingId = logIdByActivity.get(activityId);
-    if (existingId) {
-      const { error } = await admin.from('workout_logs').update(row).eq('id', existingId);
-      if (error) throw new Error(`log update: ${error.message}`);
-    } else {
-      inserts.push(row);
+
+  for (const { activityId, log, activity } of pending) {
+    const linked = linkedByActivity.get(activityId);
+    if (linked) {
+      const row =
+        linked.source === 'manual'
+          ? patchFor(activity, linked)
+          : { owner_user_id: ownerId, garmin_activity_id: activityId, ...log };
+      if (Object.keys(row).length > 0) {
+        const { error } = await admin.from('workout_logs').update(row).eq('id', linked.id);
+        if (error) throw new Error(`log update: ${error.message}`);
+      }
+      claimed.add(linked.id);
+      continue;
     }
+
+    const decision = matchActivityToLog(activity, candidates, claimed);
+    if (decision.kind === 'attach') {
+      // Enrich only: link the activity and fill columns the user left empty.
+      // Never touch status, activity_type, tags or data — those are the app's.
+      const { error } = await admin
+        .from('workout_logs')
+        .update({ garmin_activity_id: activityId, ...decision.patch })
+        .eq('id', decision.logId);
+      if (error) throw new Error(`log enrich: ${error.message}`);
+      claimed.add(decision.logId);
+      continue;
+    }
+
+    inserts.push({ owner_user_id: ownerId, garmin_activity_id: activityId, ...log });
   }
+
   if (inserts.length > 0) {
     const { error } = await admin.from('workout_logs').insert(inserts);
     if (error) throw new Error(`log insert: ${error.message}`);
