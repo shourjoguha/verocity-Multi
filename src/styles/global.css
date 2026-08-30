@@ -1111,18 +1111,21 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   }
 }
 
-/* A multi-session day: a thick greyscale hairline wrapping the day's adjacent
-   session bars so the widened cluster reads as one day. Height is JS-set (it
-   cannot use the `.strip-bar` transform without the stroke scaling with it), so
-   the re-normalise tween is on `height` here rather than `transform`. Monochrome
-   chrome — the colour lives only on the tag bars inside. */
-.strip-group {
+/* A multi-session day: a thick greyscale hairline FRAME wrapping the day's
+   adjacent session bars so the cluster reads as one day. It is an overlay
+   (absolute inset-0 of the wrap) rather than a box the bars sit inside, so it
+   never compresses the bars — each keeps the height it would have as a
+   standalone column. Monochrome chrome — colour lives only on the tag bars. */
+.strip-group-frame {
   border-style: solid;
   border-color: var(--color-muted);
   box-sizing: border-box;
 }
+/* Each constituent bar's height is JS-set (it cannot use the `.strip-bar`
+   transform without the frame stroke scaling with it), so the re-normalise
+   tween is on `height` here rather than `transform`. */
 @media (prefers-reduced-motion: no-preference) {
-  .strip-group {
+  .strip-subbar {
     transition: height 0.35s var(--ease-editorial);
   }
 }
