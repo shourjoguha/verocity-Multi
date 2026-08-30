@@ -891,7 +891,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
             ) : (
               <>
                 <LogList
-                  logs={thisMonthLogs.slice(0, showAllMonth ? 12 : 5)}
+                  logs={showAllMonth ? thisMonthLogs : thisMonthLogs.slice(0, 5)}
                   onSelect={setQuickLog}
                 />
                 {thisMonthLogs.length > 5 ? (
@@ -901,7 +901,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                     aria-expanded={showAllMonth}
                     className="t-control flex min-h-11 w-full items-center justify-center text-muted transition-colors hover:text-fg"
                   >
-                    {showAllMonth ? 'Show less' : `Show more (${Math.min(thisMonthLogs.length, 12) - 5})`}
+                    {showAllMonth ? 'Show less' : `Show more (${thisMonthLogs.length - 5})`}
                   </button>
                 ) : null}
               </>
