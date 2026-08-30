@@ -198,16 +198,24 @@ function deriveStats(
   // activities, so two strength sessions read as one solid strength cell while a
   // single session tagged strength + mobility reads as two stripes. Using
   // sessionTagColors (not tags[0]) is what makes the second case work.
-  type DayCell = { work: WorkTotals; labels: string[]; colors: string[] };
+  // `sessions` keeps each log separate — its own tag colours and its own
+  // duration — so a day with more than one log splits into time-proportional
+  // horizontal bands rather than merging every tag into one striped square
+  // (which read as a single mixed session). A single-tag session is a solid
+  // band; a session tagged with several activities is still striped within its
+  // own band.
+  type DaySession = { colors: string[]; seconds: number };
+  type DayCell = { work: WorkTotals; labels: string[]; sessions: DaySession[] };
   const dayMap = new Map<string, DayCell>();
   for (const log of all) {
     const key = log.log_date.slice(0, 10);
-    const cur = dayMap.get(key) ?? { work: ZERO_WORK, labels: [], colors: [] };
+    const cur = dayMap.get(key) ?? { work: ZERO_WORK, labels: [], sessions: [] };
     cur.work = addWork(cur.work, sessionWork(log, bodyWeightKg));
     cur.labels.push(log.tags[0] ?? log.activity_type ?? 'Session');
-    for (const c of sessionTagColors(log.tags, log.activity_type)) {
-      if (!cur.colors.includes(c)) cur.colors.push(c);
-    }
+    cur.sessions.push({
+      colors: sessionTagColors(log.tags, log.activity_type),
+      seconds: log.total_seconds ?? 0,
+    });
     dayMap.set(key, cur);
   }
   // Each lane is normalised against ITS OWN maximum, so the rail answers "how
@@ -527,11 +535,15 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                       return <div key={row} className="hill aspect-square bg-fg/[0.05]" />;
                     }
                     const label = `${dateLabel} · ${cell.labels.join(', ')} · ${workLabel(cell.work)}`;
-                    // Stripes for a mixed day, a solid fill for one activity —
-                    // and the volume intensity applies either way. The old
-                    // multi-activity branch passed no style at all, so those
-                    // days lost their shading and read as maximum volume.
-                    const stripes = stripeBackground(cell.colors);
+                    // One horizontal band PER LOG, stacked and split by a hairline
+                    // (the container bg shows through a 1px gap), each band's share
+                    // proportional to that log's duration. A single-log day is one
+                    // full-box band — unchanged from the old solid/striped square.
+                    // Within a band: stripes for a mixed-tag session, a solid fill
+                    // for one tag. The old code merged every tag of the day into
+                    // one striped square, so two separate logs read as a single
+                    // mixed session.
+                    const totalSecs = cell.sessions.reduce((a, s) => a + s.seconds, 0);
                     // Colour is IDENTITY, at full strength, so a strength day and
                     // a mobility day never converge on the same washed-out grey.
                     // The old `opacity: 0.3 + volume/dayMax * 0.7` folded amount
@@ -546,13 +558,27 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                       <div
                         key={row}
                         className="hill relative aspect-square cursor-pointer overflow-hidden"
-                        style={
-                          stripes
-                            ? { backgroundImage: stripes }
-                            : { backgroundColor: cell.colors[0] }
-                        }
                         onMouseMove={(e) => showTip(e, label)}
                       >
+                        <span aria-hidden className="absolute inset-0 flex flex-col gap-px bg-bg/60">
+                          {cell.sessions.map((s, si) => {
+                            const stripes = stripeBackground(s.colors);
+                            return (
+                              <span
+                                key={si}
+                                className="block w-full"
+                                style={{
+                                  // Time share drives the band height; equal split
+                                  // when a day carries no durations at all.
+                                  flex: `${totalSecs > 0 ? s.seconds || 0.0001 : 1} 1 0`,
+                                  ...(stripes
+                                    ? { backgroundImage: stripes }
+                                    : { backgroundColor: s.colors[0] }),
+                                }}
+                              />
+                            );
+                          })}
+                        </span>
                         <span
                           aria-hidden
                           className="absolute inset-x-0 bottom-0 h-[3px] bg-bg/40"

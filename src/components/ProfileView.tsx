@@ -74,11 +74,12 @@ const edgeFade: CSSProperties = {
 //
 // Rest is a hairline baseline and a trained day's height is its duration. A day
 // with one session is a single column; a day with MORE than one is a widened
-// cluster of adjacent 75%-width bars, one per session, wrapped in a thick
-// hairline (stacking them in one column read as a single multi-tag session).
-// The cluster is the only thing that changes the strip's pitch, so the scroll
-// math reads a precomputed offset table rather than a uniform pitch — see
-// `layout` below.
+// cluster of adjacent 75%-width bars — one per session, EACH at its own
+// duration-height (so the cluster is as tall as its longest session and a
+// shorter one sits low with space above it), wrapped in a thick hairline frame
+// (stacking them in one column read as a single multi-tag session). The cluster
+// is the only thing that changes the strip's pitch, so the scroll math reads a
+// precomputed offset table rather than a uniform pitch — see `layout` below.
 //
 // Heights are relative to WHAT IS IN VIEW, not to an absolute ceiling. Against a
 // fixed 2h maximum a stretch of 40-minute sessions renders as a row of identical
@@ -103,11 +104,6 @@ const SUB_GAP = 1;
 const GROUP_BORDER = 1.5;
 const GROUP_PAD = 1;
 const GROUP_CHROME = 2 * (GROUP_BORDER + GROUP_PAD);
-// A grouped day's height never overflows the strip (no transform to correct an
-// oversized layout box, unlike the single-bar path), so it is clamped into
-// [GROUP_MIN, STRIP_HEIGHT]. GROUP_MIN keeps the smallest trained day's bars
-// visible inside the wrapper chrome.
-const GROUP_MIN = BAR_MIN + GROUP_CHROME;
 // Quiet time before the strip re-normalises. Nothing runs during the gesture.
 const SETTLE_MS = 120;
 // Growth cap, so a screenful of 5-minute sessions doesn't read as a set of PRs.
@@ -115,14 +111,23 @@ const SETTLE_MS = 120;
 // everything shrinks to fit, which is the honest reading.
 const MAX_SCALE = 4;
 
-function barHeight(p: TimelinePoint): number {
-  if (p.state !== 'done') return 2;
-  // Undated logs (total_seconds null) still deserve a mark, so a done day with
-  // no duration falls back to the minimum bar.
+// A single session's bar height from its own duration. Undated logs
+// (total_seconds null → 0) still deserve a mark, so they fall back to BAR_MIN.
+function barHeightFromSeconds(seconds: number): number {
   return Math.max(
     BAR_MIN,
-    Math.round(BAR_MIN + (p.seconds / BAR_NOMINAL_SECONDS) * (STRIP_HEIGHT - BAR_MIN)),
+    Math.round(BAR_MIN + (seconds / BAR_NOMINAL_SECONDS) * (STRIP_HEIGHT - BAR_MIN)),
   );
+}
+
+// A day's height for scaling. A multi-session cluster is as tall as its TALLEST
+// constituent session (each bar keeps its own height, so a 90-min sport day and
+// a 60-min mobility day sit at their own heights with empty space above the
+// shorter one) — NOT the sum, which read as one long session. A single-session
+// day is just that session's height.
+function barHeight(p: TimelinePoint): number {
+  if (p.state !== 'done') return 2;
+  return Math.max(...p.sessionSeconds.map(barHeightFromSeconds), BAR_MIN);
 }
 
 // A day is a multi-session cluster only above one session; below that the
@@ -295,36 +300,38 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
                   // outside the scaled element so they never grow into blocks.
                   <span className="h-0.5 w-full bg-border" aria-hidden />
                 ) : multi ? (
-                  // More than one session: adjacent 75%-width bars, each showing
-                  // its own tags, wrapped in a thick hairline so the widened
-                  // cluster still reads as a single day. Height is set directly
-                  // (not via the `.strip-bar` transform) so the wrapper stroke
-                  // stays crisp and the layout box never overflows the strip —
-                  // hence the [GROUP_MIN, STRIP_HEIGHT] clamp.
+                  // More than one session: adjacent 75%-width bars, EACH AT ITS
+                  // OWN height (so a 90-min and a 60-min day sit at their real
+                  // heights, the shorter one with empty space above it — the
+                  // cluster just looks like two ordinary logs). A thick hairline
+                  // frame wraps them to say "same day". The frame is an overlay,
+                  // not a box the bars live inside, so it never steals height
+                  // from the bars — the bars keep the exact heights they'd have
+                  // as standalone columns. Heights are JS-set rather than via the
+                  // `.strip-bar` transform so the frame stroke stays crisp.
                   <span
-                    className="strip-group flex items-end justify-center"
-                    style={{
-                      height: Math.min(
-                        STRIP_HEIGHT,
-                        Math.max(GROUP_MIN, Math.round(barHeight(p) * scale)),
-                      ),
-                      gap: SUB_GAP,
-                      padding: GROUP_PAD,
-                      borderWidth: GROUP_BORDER,
-                    }}
+                    className="relative flex items-end"
+                    style={{ gap: SUB_GAP, padding: GROUP_PAD }}
                     aria-hidden
                   >
                     {p.sessions.map((colors, si) => (
                       <span
                         key={si}
-                        className="flex h-full flex-col"
-                        style={{ width: SUB_W }}
+                        className="strip-subbar flex flex-col"
+                        style={{
+                          width: SUB_W,
+                          height: Math.round(barHeightFromSeconds(p.sessionSeconds[si]) * scale),
+                        }}
                       >
                         {colors.map((c, ci) => (
                           <span key={ci} style={{ flex: 1, backgroundColor: c }} />
                         ))}
                       </span>
                     ))}
+                    <span
+                      className="strip-group-frame pointer-events-none absolute inset-0"
+                      style={{ borderWidth: GROUP_BORDER }}
+                    />
                   </span>
                 ) : (
                   // One session: the original single column, tags stacked.
