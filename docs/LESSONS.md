@@ -187,11 +187,14 @@ Measure it: `MutationObserver` on the element, count flips per gesture.
 The home activity strip is the pattern to copy when a scroll must drive a visual
 change: the listener is `{ passive: true }` and does **one** thing — reset a
 120ms timer. All the work happens after the gesture, the visible range is
-arithmetic off `scrollLeft` (uniform pitch, so no `IntersectionObserver`), and
-the result lands as a single inherited custom property on the row rather than a
-write per bar. A 3% gate stops a one-bar nudge re-rendering. Measured at **0
-style writes mid-gesture and 1 for the whole gesture**, with the
-`MutationObserver` count above as the assertion.
+arithmetic off `scrollLeft` against a precomputed offset table (days are no
+longer a uniform pitch — a multi-session day is a widened cluster — so a bounded
+scan of that in-memory table replaced the `scrollLeft / pitch` division; still
+no `IntersectionObserver` and no DOM reads mid-gesture), and the result lands as
+a single inherited custom property on the row rather than a write per bar. A 3%
+gate stops a one-bar nudge re-rendering. Measured at **0 style writes
+mid-gesture and 1 for the whole gesture**, with the `MutationObserver` count
+above as the assertion.
 → `ActivityStrip` in `src/components/ProfileView.tsx`
 
 ### A modal's effect re-runs on every parent render

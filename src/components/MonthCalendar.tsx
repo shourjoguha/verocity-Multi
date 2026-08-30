@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { WorkoutLog } from '@/lib/types';
-import { sessionTagColors } from '@/lib/tags';
+import { sessionTagColors, stripeBackground } from '@/lib/tags';
 import { formatDuration } from '@/lib/format';
 import { SectionHeader } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
@@ -207,20 +207,42 @@ export function MonthCalendar({
                 {day}
               </div>
               {sessions.length > 0 ? (
-                <div className="flex items-center gap-[2px]" style={{ height: 4 }}>
+                // The cell can't grow (it would break the grid), so multiple
+                // logs split it into side-by-side sections instead of collapsing
+                // to one dot. Each section is its own bar: height carries that
+                // session's volume/intensity, and its fill is 45° stripes of the
+                // session's tag colours (a solid where there's only one tag). Cap
+                // at three sections; a "+N" notes any beyond.
+                <div
+                  className="flex items-end justify-center gap-px"
+                  style={{ height: 12, width: '82%' }}
+                  aria-hidden
+                >
                   {sessions.slice(0, 3).map((s) => {
                     const colors = sessionTagColors(s.tags, s.activity_type);
+                    const stripe = stripeBackground(colors, 3);
+                    // Volume as a fraction of a 2h reference, floored so a short
+                    // or undated session still shows a mark.
+                    const frac = Math.max(0.2, Math.min(1, (s.total_seconds ?? 0) / 7200));
                     return (
                       <span
                         key={s.id}
                         title={formatDuration(s.total_seconds)}
-                        className="inline-block h-1 w-1 rounded-full"
-                        style={{ backgroundColor: colors[0] ?? 'var(--color-fg)' }}
-                      />
+                        className="relative h-full flex-1 overflow-hidden"
+                        style={{ maxWidth: 8 }}
+                      >
+                        <span
+                          className="absolute inset-x-0 bottom-0"
+                          style={{
+                            height: `${Math.round(frac * 100)}%`,
+                            background: stripe ?? colors[0] ?? 'var(--color-fg)',
+                          }}
+                        />
+                      </span>
                     );
                   })}
                   {sessions.length > 3 ? (
-                    <span className="text-[0.4rem] leading-none text-muted">
+                    <span className="self-center text-[0.4rem] leading-none text-muted">
                       +{sessions.length - 3}
                     </span>
                   ) : null}

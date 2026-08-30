@@ -72,9 +72,13 @@ const edgeFade: CSSProperties = {
 
 // Activity strip: the whole logged history, scrollable, opening on today.
 //
-// Rest is a hairline baseline, a trained day's height is its duration, and
-// multiple sessions stack within the day's single column so a day never changes
-// the strip's pitch.
+// Rest is a hairline baseline and a trained day's height is its duration. A day
+// with one session is a single column; a day with MORE than one is a widened
+// cluster of adjacent 75%-width bars, one per session, wrapped in a thick
+// hairline (stacking them in one column read as a single multi-tag session).
+// The cluster is the only thing that changes the strip's pitch, so the scroll
+// math reads a precomputed offset table rather than a uniform pitch — see
+// `layout` below.
 //
 // Heights are relative to WHAT IS IN VIEW, not to an absolute ceiling. Against a
 // fixed 2h maximum a stretch of 40-minute sessions renders as a row of identical
@@ -89,6 +93,21 @@ const BAR_MIN = 8;
 const BAR_NOMINAL_SECONDS = 7200;
 const BAR_W = 12;
 const BAR_GAP = 1;
+// A day with more than one logged session is NOT stacked into the single column
+// any longer — that read as one session with many tags. Instead each session
+// gets its own bar at 75% of the normal width, the bars sit adjacent, and a
+// thick wrapper hairline groups them so the widened cluster still reads as one
+// day. SUB_W is 75% of BAR_W; the wrapper adds border + padding on each side.
+const SUB_W = Math.round(BAR_W * 0.75);
+const SUB_GAP = 1;
+const GROUP_BORDER = 1.5;
+const GROUP_PAD = 1;
+const GROUP_CHROME = 2 * (GROUP_BORDER + GROUP_PAD);
+// A grouped day's height never overflows the strip (no transform to correct an
+// oversized layout box, unlike the single-bar path), so it is clamped into
+// [GROUP_MIN, STRIP_HEIGHT]. GROUP_MIN keeps the smallest trained day's bars
+// visible inside the wrapper chrome.
+const GROUP_MIN = BAR_MIN + GROUP_CHROME;
 // Quiet time before the strip re-normalises. Nothing runs during the gesture.
 const SETTLE_MS = 120;
 // Growth cap, so a screenful of 5-minute sessions doesn't read as a set of PRs.
@@ -106,6 +125,20 @@ function barHeight(p: TimelinePoint): number {
   );
 }
 
+// A day is a multi-session cluster only above one session; below that the
+// original single-column path (one bar, tags stacked) is unchanged.
+function isMultiSession(p: TimelinePoint): boolean {
+  return p.state === 'done' && p.sessions.length > 1;
+}
+
+// Layout width of a day's column. A cluster is n adjacent 75%-bars plus the
+// wrapper chrome; everything else keeps the single-bar pitch.
+function pointWidth(p: TimelinePoint): number {
+  if (!isMultiSession(p)) return BAR_W;
+  const n = p.sessions.length;
+  return n * SUB_W + (n - 1) * SUB_GAP + GROUP_CHROME;
+}
+
 function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -121,6 +154,22 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
     return todayIndex >= 0 ? all.slice(0, todayIndex + 4) : all;
   }, [plan, logs]);
 
+  // Days are no longer a uniform pitch — a multi-session cluster is wider — so
+  // the scroll math reads from a precomputed offset table instead of `i * pitch`.
+  // This is still pure arithmetic off an in-memory array (no IntersectionObserver,
+  // no DOM reads mid-gesture), so the "one style write per gesture" invariant in
+  // docs/LESSONS.md § "Something repaints constantly while scrolling" holds.
+  const layout = useMemo(() => {
+    let x = 0;
+    const items = points.map((p) => {
+      const width = pointWidth(p);
+      const offset = x;
+      x += width + BAR_GAP;
+      return { width, offset };
+    });
+    return items;
+  }, [points]);
+
   // Open pinned to today. Layout effect so it is never painted at the left edge
   // — a visible jump from the oldest day to the newest on every mount.
   useLayoutEffect(() => {
@@ -131,9 +180,9 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
       el.scrollLeft = el.scrollWidth;
       return;
     }
-    const pitch = BAR_W + BAR_GAP;
-    el.scrollLeft = (todayIdx + 1) * pitch - el.clientWidth;
-  }, [points.length]);
+    const it = layout[todayIdx];
+    el.scrollLeft = it.offset + it.width - el.clientWidth;
+  }, [layout]);
 
   // Re-normalise AFTER the scroll settles, never during it.
   //
@@ -149,11 +198,15 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
     let timer: number | undefined;
 
     const settle = () => {
-      const pitch = BAR_W + BAR_GAP;
-      const first = Math.max(0, Math.floor(el.scrollLeft / pitch));
-      const last = Math.min(points.length - 1, Math.ceil((el.scrollLeft + el.clientWidth) / pitch));
+      const viewL = el.scrollLeft;
+      const viewR = viewL + el.clientWidth;
       let tallest = 0;
-      for (let i = first; i <= last; i++) {
+      for (let i = 0; i < points.length; i++) {
+        const it = layout[i];
+        // Off screen either side — skip. The table is short (a rolling window),
+        // so this bounded scan is the variable-pitch equivalent of the old
+        // `scrollLeft / pitch` division, with no per-bar DOM work.
+        if (it.offset + it.width <= viewL || it.offset >= viewR) continue;
         const p = points[i];
         if (p?.state === 'done') tallest = Math.max(tallest, barHeight(p));
       }
@@ -172,7 +225,7 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
       window.clearTimeout(timer);
       el.removeEventListener('scroll', onScroll);
     };
-  }, [points]);
+  }, [points, layout]);
 
   // Outside-tap dismiss for the peeked day.
   useEffect(() => {
@@ -216,7 +269,7 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
           }
         >
           {points.map((p, i) => {
-            const totalSeconds = p.sessionSeconds.reduce((a, b) => a + b, 0);
+            const multi = isMultiSession(p);
             return (
               <button
                 key={p.date}
@@ -231,23 +284,41 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
                 // The outline lives on the COLUMN, not the bar, so scaling the
                 // bar never thickens the stroke.
                 className={`relative flex h-full shrink-0 cursor-pointer flex-col justify-end ${
-                  p.isToday ? 'shadow-[inset_0_0_0_1.5px_var(--color-fg)]' : ''
-                }`}
-                style={{ width: BAR_W }}
+                  multi ? 'items-center' : ''
+                } ${p.isToday ? 'shadow-[inset_0_0_0_1.5px_var(--color-fg)]' : ''}`}
+                style={{ width: layout[i].width }}
                 aria-label={`${p.date} ${p.fullLabel}`}
                 title={`${p.fullLabel} · ${p.date}`}
               >
-                {p.state === 'done' ? (
-                  <span className="strip-bar flex w-full flex-col" style={{ height: barHeight(p) }} aria-hidden>
-                    {/* Sessions stack inside the ONE column, split by their share
-                        of the day's minutes. */}
+                {p.state !== 'done' ? (
+                  // Rest days are a hairline rule, NOT a bar — deliberately
+                  // outside the scaled element so they never grow into blocks.
+                  <span className="h-0.5 w-full bg-border" aria-hidden />
+                ) : multi ? (
+                  // More than one session: adjacent 75%-width bars, each showing
+                  // its own tags, wrapped in a thick hairline so the widened
+                  // cluster still reads as a single day. Height is set directly
+                  // (not via the `.strip-bar` transform) so the wrapper stroke
+                  // stays crisp and the layout box never overflows the strip —
+                  // hence the [GROUP_MIN, STRIP_HEIGHT] clamp.
+                  <span
+                    className="strip-group flex items-end justify-center"
+                    style={{
+                      height: Math.min(
+                        STRIP_HEIGHT,
+                        Math.max(GROUP_MIN, Math.round(barHeight(p) * scale)),
+                      ),
+                      gap: SUB_GAP,
+                      padding: GROUP_PAD,
+                      borderWidth: GROUP_BORDER,
+                    }}
+                    aria-hidden
+                  >
                     {p.sessions.map((colors, si) => (
                       <span
                         key={si}
-                        className="flex w-full flex-col"
-                        style={{
-                          flex: totalSeconds > 0 ? `${p.sessionSeconds[si] || 0.0001} 1 0` : '1 1 0',
-                        }}
+                        className="flex h-full flex-col"
+                        style={{ width: SUB_W }}
                       >
                         {colors.map((c, ci) => (
                           <span key={ci} style={{ flex: 1, backgroundColor: c }} />
@@ -256,9 +327,12 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
                     ))}
                   </span>
                 ) : (
-                  // Rest days are a hairline rule, NOT a bar — deliberately
-                  // outside the scaled element so they never grow into blocks.
-                  <span className="h-0.5 w-full bg-border" aria-hidden />
+                  // One session: the original single column, tags stacked.
+                  <span className="strip-bar flex w-full flex-col" style={{ height: barHeight(p) }} aria-hidden>
+                    {p.sessions[0].map((c, ci) => (
+                      <span key={ci} style={{ flex: 1, backgroundColor: c }} />
+                    ))}
+                  </span>
                 )}
               </button>
             );
