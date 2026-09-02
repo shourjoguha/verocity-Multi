@@ -798,6 +798,15 @@ export const NOTATIONS = {
 // e1RM estimate uses Brzycki (see src/lib/e1rm.ts).
 export const E1RM = { formula: 'brzycki' } as const;
 
+// Set prefill. The Logger seeds a movement's sets from the last time it was
+// performed; these bound how that reference is chosen and re-priced.
+//   `roundKg`     — prefilled loads round DOWN to this increment (plates).
+//   `maxRefReps`  — above this, Brzycki is too unreliable to re-price a load,
+//                   so the reference weight is copied across unchanged.
+// Deload weeks are excluded from the reference outright (see lastPerformance):
+// a deload's reduced load is not the base the next hard week builds on.
+export const PREFILL = { roundKg: 2.5, maxRefReps: 12 } as const;
+
 // Fitness-profile radar axes (Stats spider chart). All six derive from logged
 // data (lib/aspects.ts); a recent check-in overrides any of them. There is no
 // `auto` flag any more — power and mobility used to carry `auto: false` and so
@@ -964,6 +973,7 @@ export const appConfig = {
   touch: TOUCH,
   notations: NOTATIONS,
   e1rm: E1RM,
+  prefill: PREFILL,
   mealSizes: MEAL_SIZES,
   mealKinds: MEAL_KINDS,
   mealSources: MEAL_SOURCES,

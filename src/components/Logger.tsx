@@ -10,7 +10,9 @@ import {
   getAllLogs,
   getLogById,
   getMovementSubs,
+  createMovement,
   getMovements,
+  resolveMovement,
   getPlanById,
   getRecentLogs,
   getSessionById,
@@ -52,12 +54,12 @@ import { activeSessionOf } from '@/lib/activeSession';
 import { typeFromLabel } from '@/lib/timeline';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { DemoIconButton, MovementDemoSheet } from '@/components/MovementDemo';
-import { lastPerformance, plannedReps } from '@/lib/lastPerformance';
+import { lastPerformance, plannedReps, repAdjustedWeight } from '@/lib/lastPerformance';
 import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
 import { weekFromDate } from '@/lib/week';
-import { nextWeekForDay, planWeekCount } from '@/lib/progression';
+import { blockForWeek, nextWeekForDay, planWeekByLog, planWeekCount } from '@/lib/progression';
 import {
   ACTIVITY_TAGS,
   NOTATIONS,
@@ -415,21 +417,46 @@ export default function Logger() {
         }
       }
 
+      // Which prior logs must not seed a prefill. A deload's reduced load is
+      // not the base the next hard week builds on — without this, week 6 of an
+      // intensification block inherited week 5's deload weights rather than
+      // stepping up from week 4. A deload week itself still reads the last week
+      // that was pushed, which is what the reduced prescription is relative to.
+      const skipLogIds = new Set<string>();
+      const planSource = sessionParam ? null : (source as Plan | null);
+      if (planSource && weekNumber != null) {
+        const blocks = planSource.parsed.blocks;
+        if (blockForWeek(blocks, weekNumber) !== 'deload') {
+          const weekByLog = planWeekByLog(planSource.id, allLogs, planWeekCount(planSource.parsed));
+          for (const [logId, w] of weekByLog) {
+            if (blockForWeek(blocks, w) === 'deload') skipLogIds.add(logId);
+          }
+        }
+      }
+
       for (const section of built.sections) {
         for (const group of section.groups) {
           for (const item of group.items) {
-            const last = lastPerformance(recent, item.movement);
+            const last = lastPerformance(recent, item.movement, skipLogIds);
             if (!last) continue;
             item.sets = item.sets.map((set) => {
               // Weight prefills from last session; reps come from the target
               // when the prescription states one, so a programmed rep increase
               // is not overwritten by what was lifted last time.
               const target = plannedReps(set.planned, item.primaryMetric);
+              // And when the target moved, the LOAD has to move with it: the
+              // reference weight is re-priced to hold the same estimated 1RM,
+              // so a block that cuts reps prescribes more weight instead of
+              // repeating last block's.
+              const weight =
+                item.primaryMetric === 'weight'
+                  ? (repAdjustedWeight(last.weight, last.reps, target) ?? last.weight)
+                  : last.weight;
               return {
                 ...set,
                 actual: {
                   ...set.actual,
-                  weight: last.weight,
+                  weight,
                   reps: target ?? last.reps,
                   prefilled: true,
                 },
@@ -616,11 +643,33 @@ export default function Logger() {
     });
   }
 
+  // A movement typed into the picker's "Add …" row exists only inside this
+  // workout unless it is written to the library — which is why a custom swap
+  // could not be searched for in the next session. Fire-and-forget: the pick
+  // has already been applied to the document, so a failed insert costs the
+  // library entry, not the set.
+  function persistCustomMovement(name: string, metric: MetricKey) {
+    if (resolveMovement(name, movements)) return;
+    createMovement({
+      name,
+      category: null,
+      primary_metric: metric,
+      default_rest_seconds: TIMERS.defaultRestSeconds,
+    }).then((created) => {
+      if (!created) return;
+      setMovements((prev) =>
+        [...prev, created].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      track('movement_created', { category: null, primary_metric: metric, source: 'logger' });
+    });
+  }
+
   function handlePick(picked: Movement | { name: string }) {
     const name = 'name' in picked ? picked.name : (picked as Movement).name;
     const known = movements.find((m) => m.name.toLowerCase() === name.toLowerCase());
     const metric: MetricKey =
       'primary_metric' in picked ? (picked as Movement).primary_metric : known?.primary_metric ?? DEFAULT_PRIMARY_METRIC;
+    if (!('id' in picked)) persistCustomMovement(name, metric);
 
     if (picker?.mode === 'add') {
       if ('kind' in picked && isSubroutine(picked)) {
