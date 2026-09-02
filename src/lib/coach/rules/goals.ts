@@ -22,6 +22,7 @@
 // arithmetic fact about the athlete's own two inputs and leaves the judgement
 // to them, which is why its body never says a split is wrong.
 
+import { share as shareOf } from '@/lib/coach/impact';
 import type { Finding } from '@/lib/coach/types';
 import type { GoalShare } from '@/lib/coach/signals';
 import type { Measured } from '@/lib/coach/types';
@@ -67,7 +68,7 @@ export function goalDrift(
     tldr: `${under.label} is ${pct(Math.abs(under.gap))} under its rank`,
     action: `Convert one ${over.label.toLowerCase()} session a week into ${under.label.toLowerCase()} work.`,
     body: `You rank ${under.label} at ${pct(under.intent)} of your stated goals but it took ${pct(under.actual)} of your training minutes over the last ${training.windowDays} days. ${over.label} runs the other way — ${pct(over.intent)} of intent, ${pct(over.actual)} of minutes. That is ${Math.round(totalMinutes)} minutes of training time a week being split differently from how you ranked it. This counts elapsed session time, not sets and not working minutes: a logged run carries one set and a full hour, and an hour of lifting is mostly rest — either of those units would answer a different question than the one your goal ranking asks.`,
-    drift: Number(Math.min(1, Math.abs(under.gap) / 0.5).toFixed(2)),
+    drift: shareOf(Math.abs(under.gap), 0.5),
     confidence: goals.sufficiency === 'ok' ? 0.7 : 0.45,
     sufficiency: goals.sufficiency,
     claims: [],

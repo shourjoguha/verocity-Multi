@@ -3,12 +3,14 @@ import logsFixture from './__fixtures__/logs.json';
 import mealsFixture from './__fixtures__/meals.json';
 import statsFixture from './__fixtures__/userStats.json';
 import {
-  COOLDOWN_DAYS,
-  MAX_FINDINGS,
-  MAX_PER_FAMILY,
+  DECISION_EXPIRY_DAYS,
+  MATERIAL_DRIFT_DELTA,
+  MIN_SILENCE_DAYS,
+  SESSIONS_TO_RESPEAK,
   isSuppressed,
   runCoach,
 } from '@/lib/coach/evaluate';
+import { byImpact, impactScore, impactWeight } from '@/lib/coach/impact';
 import {
   COACH_WINDOW_DAYS,
   measureFuelTiming,
@@ -336,10 +338,39 @@ describe('runCoach', () => {
     expect(JSON.stringify(a.write)).toBe(JSON.stringify(b.write));
   });
 
-  it('caps how much it says at once', () => {
+  it('writes every true finding rather than destroying the ones past a cap', () => {
+    // The old cap of four was applied at the write, so a fifth true finding got
+    // no row, no history and no way to be seen. Volume control moved to the
+    // page (SURFACED_LIMIT in CoachView); the engine now persists all of them.
     const out = runCoach(base);
-    expect(out.write.length).toBeLessThanOrEqual(MAX_FINDINGS);
-    expect(out.findings.length).toBeGreaterThanOrEqual(out.write.length);
+    expect(out.write.length).toBe(out.findings.length - out.suppressed.length);
+    expect(out.write.length).toBeGreaterThan(4);
+  });
+
+  it('orders the write set by impact, not by whichever drift normalised larger', () => {
+    const write = runCoach(base).write;
+    const scores = write.map((r) =>
+      impactScore({ ruleId: r.rule_id, drift: r.drift_score, confidence: r.confidence }),
+    );
+    expect(scores).toEqual([...scores].sort((a, b) => b - a));
+  });
+
+  it('puts a structural finding above a cosmetic one at equal drift and confidence', () => {
+    const structural = { ruleId: 'training.frequency.below-target', drift: 0.3, confidence: 0.6 };
+    const cosmetic = { ruleId: 'training.endurance.interval-ordering', drift: 0.3, confidence: 0.6 };
+    expect(impactScore(structural)).toBeGreaterThan(impactScore(cosmetic));
+  });
+
+  it('does not let a large miss on a trivial rule outrank a small one on a serious rule', () => {
+    // The inversion the drift floor exists to prevent.
+    const serious = { ruleId: 'training.hypertrophy.total-volume-short', drift: 0.05, confidence: 0.6 };
+    const trivial = { ruleId: 'nutrition.timing.arriving-hungry', drift: 1, confidence: 0.5 };
+    expect(byImpact(serious, trivial)).toBeLessThan(0);
+  });
+
+  it('weights a per-goal rule without needing a table row per goal', () => {
+    expect(impactWeight('goal.underserved.endurance')).toBe(impactWeight('goal.underserved.mobility'));
+    expect(impactWeight('goal.underserved.endurance')).toBeGreaterThan(0.5);
   });
 
   it('stamps every row with a rule id, a period and the pack version', () => {
@@ -398,26 +429,26 @@ describe('runCoach', () => {
     expect(bodies).not.toMatch(/your (heaviest|main) lift/i);
   });
 
-  it('ranks by how far off it is, not by how sure it is', () => {
+  it('ranks by consequence and distance, not by how sure it is', () => {
     // The standing protein target is the most certain thing the coach knows and
     // also drift 0. It must never head the page ahead of a measured problem.
     const write = runCoach(base).write;
     expect(write[0].drift_score).toBeGreaterThan(0);
     expect(write[0].rule_id).not.toBe('nutrition.dose.protein-target');
+    expect(write[write.length - 1].rule_id).toBe('nutrition.dose.protein-target');
   });
 
-  it('stops one family taking the whole page', () => {
-    const out = runCoach(base);
-    // Training rules are the most numerous and best measured; uncapped they
-    // filled every slot and nutrition never appeared.
-    const trainingFindings = out.findings.filter((f) => f.ruleId.startsWith('training.'));
-    expect(trainingFindings.length).toBeGreaterThan(MAX_PER_FAMILY);
+  it('covers every family it claims to look at', () => {
+    // The family cap that used to live here was compensating for the write cap:
+    // training rules are the most numerous and best measured, so uncapped they
+    // filled all four slots and nutrition never appeared. With nothing dropped
+    // at the write, coverage is a property of the output rather than a quota,
+    // and the cap survives only on the surfaced rows (CoachView).
     const counts = new Map<string, number>();
-    for (const r of out.write) {
+    for (const r of runCoach(base).write) {
       const fam = r.rule_id.split('.')[0];
       counts.set(fam, (counts.get(fam) ?? 0) + 1);
     }
-    expect(Math.max(...counts.values())).toBeLessThanOrEqual(MAX_PER_FAMILY);
     expect(counts.size).toBeGreaterThanOrEqual(3);
   });
 
@@ -477,48 +508,103 @@ describe('caveat gates', () => {
 
 describe('suppression', () => {
   const ruleId = 'training.endurance.zone2-short';
+  const ago = (d: number) => new Date(TODAY.getTime() - d * 86_400_000).toISOString();
+  /** Enough new training and enough movement to clear both halves of the gate. */
+  const moved = { newSessions: 99, drift: 1 };
 
   it('lets a rule update its own open row inside the same period', () => {
     const existing = [rec({ rule_id: ruleId, period_key: '2026-W34', status: 'open' })];
-    expect(isSuppressed(ruleId, '2026-W34', existing, TODAY)).toBe(false);
+    expect(isSuppressed(ruleId, '2026-W34', existing, TODAY)).toBeNull();
   });
 
-  it('does not mint a second row while an older one is still open', () => {
+  it('refreshes an open row from an earlier period instead of muting the rule', () => {
+    // THE BUG. An open row from last week used to suppress its own rule
+    // outright, so an unaddressed finding froze at the numbers it first fired
+    // on and silenced itself thereafter. Enough of those and every check-in
+    // reported "nothing new" to an athlete who had trained all week.
     const existing = [rec({ rule_id: ruleId, period_key: '2026-W33', status: 'open' })];
-    expect(isSuppressed(ruleId, '2026-W34', existing, TODAY)).toBe(true);
+    expect(isSuppressed(ruleId, '2026-W34', existing, TODAY)).toBeNull();
   });
 
-  it('honours a dismissal for weeks, even though the data has not changed', () => {
-    // The failure this exists to prevent: a finding the athlete rejected
-    // reappearing on the next check-in because the underlying measurement
-    // cannot move for another fortnight.
-    const justNow = rec({
-      rule_id: ruleId,
-      period_key: '2026-W33',
-      status: 'dismissed',
-      created_at: new Date(TODAY.getTime() - 7 * 86_400_000).toISOString(),
+  it('writes the refreshed numbers onto the open row rather than minting a second', () => {
+    const first = runCoach(base);
+    const target = first.write[0];
+    const openRow = rec({
+      rule_id: target.rule_id,
+      period_key: '2026-W01',
+      status: 'open',
+      created_at: ago(30),
+      drift_score: target.drift_score,
     });
-    expect(isSuppressed(ruleId, '2026-W34', [justNow], TODAY)).toBe(true);
-
-    const longAgo = rec({
-      rule_id: ruleId,
-      period_key: '2026-W20',
-      status: 'dismissed',
-      created_at: new Date(
-        TODAY.getTime() - (COOLDOWN_DAYS.dismissed + 1) * 86_400_000,
-      ).toISOString(),
-    });
-    expect(isSuppressed(ruleId, '2026-W34', [longAgo], TODAY)).toBe(false);
+    const out = runCoach({ ...base, existing: [openRow] });
+    const again = out.write.filter((r) => r.rule_id === target.rule_id);
+    expect(again).toHaveLength(1);
+    // Same row, by conflict target — not a new weekly one alongside it.
+    expect(again[0].period_key).toBe('2026-W01');
+    expect(out.refreshed).toContain(target.rule_id);
   });
 
-  it('gives acted-on advice time to land before grading it', () => {
+  it('honours a decision for a short floor no matter what lands', () => {
+    const justNow = rec({ rule_id: ruleId, status: 'dismissed', created_at: ago(1) });
+    expect(isSuppressed(ruleId, '2026-W34', [justNow], TODAY, moved)).toBe('too-soon');
+  });
+
+  it('re-speaks once new training has landed AND the number has moved', () => {
+    const dismissed = rec({
+      rule_id: ruleId,
+      status: 'dismissed',
+      created_at: ago(MIN_SILENCE_DAYS.dismissed + 1),
+      drift_score: 0.2,
+    });
+    const enough = SESSIONS_TO_RESPEAK.dismissed;
+    const worse = 0.2 + MATERIAL_DRIFT_DELTA;
+
+    // Both halves required.
+    expect(
+      isSuppressed(ruleId, '2026-W34', [dismissed], TODAY, { newSessions: enough - 1, drift: worse }),
+    ).toBe('no-new-training');
+    expect(
+      isSuppressed(ruleId, '2026-W34', [dismissed], TODAY, { newSessions: enough, drift: 0.25 }),
+    ).toBe('unchanged');
+    expect(
+      isSuppressed(ruleId, '2026-W34', [dismissed], TODAY, { newSessions: enough, drift: worse }),
+    ).toBeNull();
+  });
+
+  it('does not re-raise a finding that improved but is still technically true', () => {
+    const dismissed = rec({
+      rule_id: ruleId,
+      status: 'dismissed',
+      created_at: ago(30),
+      drift_score: 0.8,
+    });
+    expect(
+      isSuppressed(ruleId, '2026-W34', [dismissed], TODAY, { newSessions: 40, drift: 0.4 }),
+    ).toBe('unchanged');
+  });
+
+  it('gives acted-on advice fewer sessions to land than a rejection buys', () => {
+    expect(SESSIONS_TO_RESPEAK.acted).toBeLessThan(SESSIONS_TO_RESPEAK.dismissed);
     const acted = rec({
       rule_id: ruleId,
       status: 'acted',
       disposition: 'acted_as_prescribed',
-      created_at: new Date(TODAY.getTime() - 3 * 86_400_000).toISOString(),
+      created_at: ago(1),
     });
-    expect(isSuppressed(ruleId, '2026-W34', [acted], TODAY)).toBe(true);
+    expect(isSuppressed(ruleId, '2026-W34', [acted], TODAY, moved)).toBe('too-soon');
+  });
+
+  it('expires a decision that would otherwise buy silence forever', () => {
+    // The mirror of the bug it replaced: a rule decided once, on a measurement
+    // that is stable by nature, must not be gagged permanently by an evidence
+    // gate it can never satisfy.
+    const ancient = rec({
+      rule_id: ruleId,
+      status: 'dismissed',
+      created_at: ago(DECISION_EXPIRY_DAYS + 1),
+      drift_score: 0.9,
+    });
+    expect(isSuppressed(ruleId, '2026-W34', [ancient], TODAY, { newSessions: 0, drift: 0.9 })).toBeNull();
   });
 
   it('respects an unexpired snooze and releases an expired one', () => {
@@ -527,40 +613,61 @@ describe('suppression', () => {
       status: 'snoozed',
       snooze_until: new Date(TODAY.getTime() + 2 * 86_400_000).toISOString(),
     });
-    expect(isSuppressed(ruleId, '2026-W34', [future], TODAY)).toBe(true);
+    expect(isSuppressed(ruleId, '2026-W34', [future], TODAY, moved)).toBe('snoozed');
 
     const past = rec({
       rule_id: ruleId,
       status: 'snoozed',
-      snooze_until: new Date(TODAY.getTime() - 86_400_000).toISOString(),
+      snooze_until: ago(1),
     });
-    expect(isSuppressed(ruleId, '2026-W34', [past], TODAY)).toBe(false);
+    expect(isSuppressed(ruleId, '2026-W34', [past], TODAY, moved)).toBeNull();
   });
 
   it('reads only the newest decision for a rule', () => {
     const existing = [
-      rec({
-        rule_id: ruleId,
-        status: 'dismissed',
-        created_at: new Date(TODAY.getTime() - 90 * 86_400_000).toISOString(),
-      }),
-      rec({
-        rule_id: ruleId,
-        status: 'acted',
-        created_at: new Date(TODAY.getTime() - 2 * 86_400_000).toISOString(),
-      }),
+      rec({ rule_id: ruleId, status: 'dismissed', created_at: ago(90) }),
+      rec({ rule_id: ruleId, status: 'acted', created_at: ago(2) }),
     ];
-    // The dismissal has long expired; the recent action still buys silence.
-    expect(isSuppressed(ruleId, '2026-W34', existing, TODAY)).toBe(true);
+    // The dismissal has long expired; the recent action is still inside its floor.
+    expect(isSuppressed(ruleId, '2026-W34', existing, TODAY, moved)).toBe('too-soon');
+  });
+
+  it('runs both halves of the gate over real logs, not just in isolation', () => {
+    // The fixture carries 7 completed sessions in the 11 days before TODAY, so
+    // a decision dated 11 days back clears the session half outright. What
+    // decides the outcome is then the number itself — which is the behaviour
+    // the calendar cooldowns never had.
+    const decided = (driftAtDecision: (d: number) => number) =>
+      runCoach(base).findings.map((f) =>
+        rec({
+          rule_id: f.ruleId,
+          status: 'dismissed',
+          created_at: ago(MIN_SILENCE_DAYS.dismissed + 1),
+          drift_score: driftAtDecision(f.drift),
+        }),
+      );
+
+    // Every rule was decided on a WORSE number than it reads today: nothing has
+    // deteriorated, so nothing speaks.
+    const quiet = runCoach({ ...base, existing: decided((d) => d + 1) });
+    expect(quiet.write).toHaveLength(0);
+    expect(quiet.suppressed.every((s) => s.reason === 'unchanged')).toBe(true);
+
+    // Same decisions, same dates, but each was made on a clean number and the
+    // measurement has since drifted out. The training that landed in between is
+    // what buys the right to speak.
+    const spoke = runCoach({ ...base, existing: decided(() => 0) });
+    expect(spoke.write.length).toBeGreaterThan(0);
   });
 
   it('drops suppressed findings from the write set and reports why', () => {
     const dismissAll = runCoach(base).findings.map((f) =>
-      rec({ rule_id: f.ruleId, period_key: '2026-W33', status: 'dismissed' }),
+      rec({ rule_id: f.ruleId, period_key: '2026-W33', status: 'dismissed', created_at: ago(1) }),
     );
     const out = runCoach({ ...base, existing: dismissAll });
     expect(out.write).toHaveLength(0);
     expect(out.suppressed.length).toBe(out.findings.length);
+    expect(out.suppressed.every((s) => s.reason === 'too-soon')).toBe(true);
   });
 });
 

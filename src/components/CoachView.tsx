@@ -10,7 +10,8 @@ import {
   updateRecommendation,
   upsertCoachFindings,
 } from '@/lib/queries';
-import { runCoach } from '@/lib/coach/evaluate';
+import { family, runCoach } from '@/lib/coach/evaluate';
+import { impactScore } from '@/lib/coach/impact';
 import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
 import type { Recommendation, RecDisposition } from '@/lib/types';
 import { formatDate } from '@/lib/format';
@@ -19,7 +20,56 @@ import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primit
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { Modal } from '@/components/ui/Modal';
+import { Disclosure } from '@/components/ui/Disclosure';
 import DeepEnrichment from '@/components/DeepEnrichment';
+
+/**
+ * How many open findings lead the page. The rest are one tap away rather than
+ * gone: the cap used to be applied inside the engine, which did not defer a
+ * fifth true finding so much as destroy it — no row, no history, nothing for
+ * the athlete to expand. CLAUDE.md's rule is "default to 3-4 things, collapse
+ * the rest", and a collapsed default with no expansion is a removed feature.
+ */
+const SURFACED_LIMIT = 3;
+
+/** And at most this many of the leading rows from one family, so the loudest
+ *  family (training — most numerous, best measured) cannot take the whole
+ *  headline and leave nutrition and goals unseen below the fold. */
+const MAX_SURFACED_PER_FAMILY = 2;
+
+/**
+ * Rank an existing row the same way the engine ranked the finding that wrote
+ * it. Recomputed from `rule_id`, `drift_score` and `confidence` rather than
+ * stored, so re-weighting a rule reorders rows already on the page.
+ */
+function rank(r: Recommendation): number {
+  if (!r.rule_id) return 0; // Pre-0036 and AI-written rows have no rule identity.
+  return impactScore({
+    ruleId: r.rule_id,
+    drift: r.drift_score ?? 0,
+    confidence: r.confidence ?? 0.5,
+  });
+}
+
+/** Split the open list into what leads and what folds away. */
+function partitionOpen(open: Recommendation[]): { lead: Recommendation[]; rest: Recommendation[] } {
+  const ranked = [...open].sort((a, b) => rank(b) - rank(a));
+  const perFamily = new Map<string, number>();
+  const lead: Recommendation[] = [];
+  const rest: Recommendation[] = [];
+  for (const r of ranked) {
+    const fam = r.rule_id ? family(r.rule_id) : '';
+    if (lead.length < SURFACED_LIMIT && (perFamily.get(fam) ?? 0) < MAX_SURFACED_PER_FAMILY) {
+      perFamily.set(fam, (perFamily.get(fam) ?? 0) + 1);
+      lead.push(r);
+    } else {
+      rest.push(r);
+    }
+  }
+  // The family cap must never leave the headline short while rows wait below.
+  while (lead.length < SURFACED_LIMIT && rest.length > 0) lead.push(rest.shift()!);
+  return { lead, rest };
+}
 
 const inkBtn =
   'hill-btn inline-flex min-h-11 items-center justify-center bg-fg px-3 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85 disabled:opacity-40';
@@ -118,7 +168,7 @@ export default function CoachView() {
       for (const m of movements) {
         if (m.taxonomy) overrides[normalizeMovementName(m.name)] = m.taxonomy;
       }
-      const { write, findings, suppressed } = runCoach({
+      const { write, refreshed, findings, suppressed } = runCoach({
         logs,
         meals,
         stats,
@@ -131,11 +181,25 @@ export default function CoachView() {
         return;
       }
       setRecs(await getRecommendations());
-      // Distinguish "nothing to say" from "said it recently and you told me to
-      // stop", so a quiet coach never reads as a broken one.
-      if (write.length > 0) toast(`${write.length} new`, 'success');
-      else if (suppressed.length > 0) toast('Nothing new since last check-in', 'success');
-      else if (findings.length === 0) toast('Nothing to flag — keep logging', 'success');
+      // Say what actually happened. "Nothing new since last check-in" used to
+      // cover four different situations, one of which was the engine being
+      // gagged by its own cooldowns while the athlete kept training — so the
+      // one message an athlete saw most was the one that told them least.
+      const fresh = write.length - refreshed.length;
+      if (fresh > 0) {
+        toast(
+          refreshed.length > 0 ? `${fresh} new · ${refreshed.length} updated` : `${fresh} new`,
+          'success',
+        );
+      } else if (refreshed.length > 0) {
+        toast(`${refreshed.length} updated with this week's numbers`, 'success');
+      } else if (suppressed.some((s) => s.reason === 'no-new-training')) {
+        toast('Log a few more sessions and I can re-check', 'success');
+      } else if (suppressed.length > 0) {
+        toast('Same picture as last time — nothing has moved', 'success');
+      } else if (findings.length === 0) {
+        toast('Nothing to flag — keep logging', 'success');
+      }
     } finally {
       setAnalyzing(false);
     }
@@ -181,6 +245,7 @@ export default function CoachView() {
   const isLive = (r: Recommendation) =>
     r.status === 'open' || (r.status === 'snoozed' && r.snooze_until != null && Date.parse(r.snooze_until) <= now);
   const open = recs.filter(isLive);
+  const { lead, rest } = partitionOpen(open);
   const snoozed = recs.filter(
     (r) => r.status === 'snoozed' && r.snooze_until != null && Date.parse(r.snooze_until) > now,
   );
@@ -211,11 +276,24 @@ export default function CoachView() {
             {open.length === 0 ? (
               <EmptyState>Nothing open. Tap “Check-in” to scan recent sessions.</EmptyState>
             ) : (
-              <ul className="flex flex-col gap-2">
-                {open.map((r) => (
-                  <RecRow key={r.id} rec={r} onClick={() => setActive(r)} />
-                ))}
-              </ul>
+              <>
+                <ul className="flex flex-col gap-2">
+                  {lead.map((r) => (
+                    <RecRow key={r.id} rec={r} onClick={() => setActive(r)} />
+                  ))}
+                </ul>
+                {rest.length > 0 ? (
+                  <div className="mt-2">
+                    <Disclosure title={`${rest.length} more`}>
+                      <ul className="flex flex-col gap-2 p-4 pt-0">
+                        {rest.map((r) => (
+                          <RecRow key={r.id} rec={r} onClick={() => setActive(r)} />
+                        ))}
+                      </ul>
+                    </Disclosure>
+                  </div>
+                ) : null}
+              </>
             )}
           </section>
         </Item>
