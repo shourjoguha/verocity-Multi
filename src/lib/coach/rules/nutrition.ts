@@ -25,6 +25,7 @@
 // likely to be quietly dropped in a later edit.
 
 import { NUTRITION } from '@/lib/coach/knowledge';
+import { excess, share as shareOf } from '@/lib/coach/impact';
 import type { Finding } from '@/lib/coach/types';
 import type { FuelTimingSignals, NutritionSignals, TrainingSignals } from '@/lib/coach/signals';
 import type { MealLog, UserStats } from '@/lib/types';
@@ -106,7 +107,7 @@ export function proteinGapDays(
     tldr: `${gapDays} logged days with no protein tagged`,
     action: 'Anchor each day with one protein-tagged intake before anything else gets logged.',
     body: `Of the ${byDay.size} days you logged meals, ${gapDays} carried no protein-tagged intake at all. The cited floor is a daily one — "${NUTRITION.proteinFloor.quote}" — so a day with none logged sits under it regardless of portion size. Galpin's framing makes the daily total the thing that matters more than its timing: "${NUTRITION.proteinTotalOverTiming.quote}". If those days did contain protein and simply went untagged, the fix is the tag, not the meal.`,
-    drift: round(Math.min(1, gapDays / Math.max(1, byDay.size)), 2),
+    drift: shareOf(gapDays, byDay.size),
     confidence: n.proteinFeedsPerDay.sufficiency === 'ok' ? 0.55 : 0.35,
     sufficiency: n.proteinFeedsPerDay.sufficiency,
     claims: [NUTRITION.proteinFloor, NUTRITION.proteinTotalOverTiming],
@@ -139,7 +140,7 @@ export function arrivingHungry(n: NutritionSignals, periodKey: string): Finding 
     tldr: `You arrive at meals at ${round(hunger, 1)}/5 hunger`,
     action: `Move one intake into the ${round(gap, 1)}-hour gap, or make the meal before it larger.`,
     body: `Across ${n.daysLogged} logged days your own hunger-before rating averages ${round(hunger, 1)} out of 5, and your longest gap between intakes averages ${round(gap, 1)} hours. Your eating window runs ${clock(n.firstMealHour.value)} to ${clock(n.lastMealHour.value)}. That is your own rating against your own scale, not a target from anywhere — the corpus says nothing about meal spacing. Worth noticing only if arriving that hungry is changing what you then eat.`,
-    drift: round(Math.min(1, (hunger - 4) / 1), 2),
+    drift: excess(hunger, 4, 1),
     confidence: n.meanHungerBefore.sufficiency === 'ok' ? 0.5 : 0.3,
     sufficiency: n.meanHungerBefore.sufficiency,
     claims: [],
@@ -189,7 +190,7 @@ export function carbTimingWindow(
         ? `Get roughly ${carbs} g carbohydrate and ${protein} g protein in around each hard session.`
         : 'Get carbohydrate in around each hard session, pre, during or post.',
     body: `At ${round(perWeek.value, 1)} sessions a week you are past the point Galpin puts the precondition: "${NUTRITION.carbTimingPrecondition.quote}". Below daily training he says the opposite — glycogen restores on its own and timing can be ignored, which is why this has stayed quiet until now. ${unfuelled} of your ${n.trainingDays} logged training days recorded nothing after midday. His starting figure is "${NUTRITION.hardSessionFuel.quote}", which he calls a very rough number to scale with expenditure.`,
-    drift: round(Math.min(1, unfuelled / Math.max(1, n.trainingDays)), 2),
+    drift: shareOf(unfuelled, n.trainingDays),
     confidence: 0.5,
     sufficiency: perWeek.sufficiency,
     claims: [NUTRITION.carbTimingPrecondition, NUTRITION.hardSessionFuel],
@@ -234,7 +235,7 @@ export function longSessionUnfed(
     tldr: `${fuel.unfedLongSessions} long sessions started unfed`,
     action: `Put something in ${mins < 90 ? 'an hour' : 'ninety minutes'} before the sessions that run past ${mins} minutes.`,
     body: `On ${fuel.unfedLongSessions} of the ${fuel.pairedDays} training days where you logged both a start time and meals, nothing was eaten before a session that ran past ${mins} minutes${fuel.meanStartHour != null ? `; your sessions start around ${clock(fuel.meanStartHour)} on average` : ''}. Galpin's line is duration-dependent — "${NUTRITION.fastedDuration.quote}" — and past that it gets harder. His caveat matters here: it also depends on the day before, since topped-off glycogen buys you a fighting chance. He separates can from should, seeing no scenario where training fasted improves performance${kg ? `, and around a hard session his starting figure is ${Math.round(kg * 2.20462 * NUTRITION.hardSessionFuel.value.carbPerLb)} g of carbohydrate` : ''}.`,
-    drift: round(Math.min(1, fuel.unfedLongSessions / Math.max(1, fuel.pairedDays)), 2),
+    drift: shareOf(fuel.unfedLongSessions, fuel.pairedDays),
     confidence: fuel.pairedDays >= 6 ? 0.55 : 0.35,
     sufficiency: fuel.pairedDays >= 6 ? 'ok' : 'partial',
     claims: [NUTRITION.fastedDuration, NUTRITION.hardSessionFuel],
@@ -289,7 +290,7 @@ export function carbSourceConcentration(
     tldr: `${pct(share)} of your carbs are ${top.label}`,
     action: `Rotate one ${top.label} meal a week to a different source — variety costs nothing here.`,
     body: `Across the ${t.described} meals you described in words, ${t.withCarbSource} named a carbohydrate and ${top.count} of those were ${top.label}: ${named}. A vegetable was tagged or named in ${t.vegMeals} of ${t.total} intakes (${pct(vegShare)})${t.friedMeals > 0 ? `, and ${t.friedMeals} meal${t.friedMeals === 1 ? ' was' : 's were'} described as fried` : ''}. This is a mirror, not a verdict — nothing in the coach's evidence base ranks one carbohydrate source above another, so there is no target here to miss. Notes are optional, so treat this as a read of what you wrote down.`,
-    drift: round(Math.min(1, (share - 0.5) / 0.5), 2),
+    drift: excess(share, 0.5, 0.5),
     confidence: 0.4,
     sufficiency: t.described >= 20 ? 'ok' : 'partial',
     claims: [],
