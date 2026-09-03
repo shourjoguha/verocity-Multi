@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  blockForWeek,
   currentProgramWeek,
   nextWeekForDay,
   planWeekByLog,
@@ -114,5 +115,24 @@ describe('currentProgramWeek', () => {
       log('upper', '2026-05-02'),
     ];
     expect(currentProgramWeek(PLAN_ID, logs, 4)).toBe(2);
+  });
+});
+
+describe('blockForWeek', () => {
+  const blocks = [
+    { type: 'accumulation' as const, startWeek: 1, endWeek: 4 },
+    { type: 'deload' as const, startWeek: 5, endWeek: 5 },
+    { type: 'intensification' as const, startWeek: 6, endWeek: 8 },
+  ];
+
+  it('reads the block spanning a week', () => {
+    expect(blockForWeek(blocks, 4)).toBe('accumulation');
+    expect(blockForWeek(blocks, 5)).toBe('deload');
+    expect(blockForWeek(blocks, 6)).toBe('intensification');
+  });
+
+  it('is null outside every block', () => {
+    expect(blockForWeek(blocks, 9)).toBeNull();
+    expect(blockForWeek([], 1)).toBeNull();
   });
 });

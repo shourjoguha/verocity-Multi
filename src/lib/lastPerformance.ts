@@ -1,13 +1,26 @@
-import type { MetricKey } from '@/app.config';
+import { PREFILL, type MetricKey } from '@/app.config';
 import type { SetActual, WorkoutLog } from '@/lib/types';
 import { parsePlanned } from '@/lib/logBuilder';
 import { flattenSets } from '@/lib/stats';
+import { e1rm } from '@/lib/e1rm';
 
 // Most recent completed performance for a movement across prior logs, used to
 // prefill sets. Logs should be passed newest-first.
-export function lastPerformance(logs: WorkoutLog[], movement: string): SetActual | null {
+//
+// `skipLogIds` drops logs that must not be the reference — in practice the
+// deload weeks of the active plan. Without it the most recent log wins
+// unconditionally, so the week after a deload prefilled the deload's reduced
+// load and the programmed step up never happened: week 6 (intensification)
+// built on week 5 (deload) instead of on week 4. Skipping deloads makes the
+// reference the last week that was actually pushed.
+export function lastPerformance(
+  logs: WorkoutLog[],
+  movement: string,
+  skipLogIds?: ReadonlySet<string>,
+): SetActual | null {
   const target = movement.toLowerCase();
   for (const log of logs) {
+    if (skipLogIds?.has(log.id)) continue;
     const match = flattenSets(log).find(
       (s) => s.movement.toLowerCase() === target && s.completed && s.weight != null,
     );
@@ -43,4 +56,32 @@ export function plannedReps(label: string | null, metric: MetricKey): number | n
   if (!m) return null;
   const n = parseInt(m[1], 10);
   return n > 0 ? n : null;
+}
+
+// Re-price a reference load for a different rep target, holding the estimated
+// 1RM constant (Brzycki, inverted). This is what turns "the same weight as last
+// time" into the week's actual prescription: an intensification week that cuts
+// 12s to 5s asks for more load at the same strength, and copying last block's
+// weight across silently under-prescribes it.
+//
+// Deliberately NOT a percentage bump per week — the plan carries no %1RM, so
+// any fixed step would be invented. The rep target is real data, and the
+// athlete's own last set supplies the strength estimate.
+//
+// Rounds DOWN to a plate increment, and declines outside PREFILL.maxRefReps
+// where the formula stops being trustworthy. Returns null when there is nothing
+// defensible to say, in which case the caller keeps the reference weight.
+export function repAdjustedWeight(
+  weight: number | undefined,
+  refReps: number | undefined,
+  targetReps: number | null,
+): number | null {
+  if (!weight || weight <= 0 || !refReps || !targetReps) return null;
+  if (refReps === targetReps) return null;
+  if (refReps > PREFILL.maxRefReps || targetReps > PREFILL.maxRefReps) return null;
+  const est = e1rm(weight, refReps);
+  if (est == null) return null;
+  const raw = est * (1.0278 - 0.0278 * targetReps);
+  const rounded = Math.floor(raw / PREFILL.roundKg) * PREFILL.roundKg;
+  return rounded > 0 ? rounded : null;
 }

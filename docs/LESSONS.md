@@ -1361,6 +1361,35 @@ for.** If the answer is a kind of training the user actually does, keep the inde
 → `src/app.config.ts` (`ROM`), `src/lib/bodyLoad.ts` (`romFactor`),
 `src/lib/movementTaxonomy.ts`, `supabase/migrations/0022_aspect_metrics_v4.sql`
 
+### Prefilled weights come back light after a deload, and a custom movement vanishes next session
+`[verified by unit test — src/lib/lastPerformance.test.ts; not observed against live data]`
+Two independent faults on the same screen, both from taking "most recent" as if it
+meant "most relevant".
+**The prefill read the newest log, full stop.** `lastPerformance` walks logs
+newest-first and returns the first completed set for the movement, so the first
+session after a deload week inherited the deload's reduced load: week 6 of an
+intensification block built on week 5's back-off instead of on week 4. The plan
+already knew better — `parsed.blocks` maps week ranges to block types — the prefill
+just never asked. It does now: the Logger computes each prior log's program week
+(`planWeekByLog`) and skips the deload ones unless the week being started is itself
+a deload.
+**Skipping the deload only restores the old weight; it does not prescribe the new
+one.** The other half is the rep target: a block that cuts 12s to 5s asks for more
+load at the same strength, and copying the reference weight across under-prescribes
+it every time. `repAdjustedWeight` re-prices the reference to hold the same Brzycki
+e1RM, rounds DOWN to a plate increment, and declines above `PREFILL.maxRefReps`
+where the formula stops being trustworthy. **No per-week percentage bump exists,
+deliberately** — `ParsedPlan` carries no %1RM, so any fixed step would be a number
+this codebase invented and then presented as programming.
+**And the picker's "Add …" row wrote nothing to the database.** `handlePick` applied
+the typed name to the LogDocument and stopped, so a custom swap lived inside that
+one workout's JSONB and could not be searched for the next time. The fix is one
+`createMovement` on the pick — guarded by `resolveMovement` because the custom
+half of `movements` has no unique index, so a near-duplicate name is a real
+outcome, not a hypothetical.
+→ `src/lib/lastPerformance.ts`, `src/lib/progression.ts` (`blockForWeek`),
+`src/components/Logger.tsx`, `src/app.config.ts` (`PREFILL`)
+
 ## Superseded
 
 Kept so the search path survives, **demoted so it stops reading as advice.**

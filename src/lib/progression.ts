@@ -1,4 +1,5 @@
-import type { ParsedPlan, WorkoutLog } from '@/lib/types';
+import type { BlockKey } from '@/app.config';
+import type { ParsedPlan, PlanBlock, WorkoutLog } from '@/lib/types';
 
 // Program weeks are driven by logging progress, not the calendar: the Nth logged
 // session of a given plan day is program week N. Everything here derives from a
@@ -79,4 +80,9 @@ export function currentProgramWeek(planId: string, logs: WorkoutLog[], maxWeek: 
     );
   }
   return Math.min(Math.max(1, furthest), maxWeek);
+}
+
+// The block covering a program week, or null when no block spans it.
+export function blockForWeek(blocks: PlanBlock[], week: number): BlockKey | null {
+  return blocks.find((b) => week >= b.startWeek && week <= b.endWeek)?.type ?? null;
 }
