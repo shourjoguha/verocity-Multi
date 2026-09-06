@@ -76,10 +76,26 @@ const edgeFade: CSSProperties = {
 // with one session is a single column; a day with MORE than one is a widened
 // cluster of adjacent 75%-width bars — one per session, EACH at its own
 // duration-height (so the cluster is as tall as its longest session and a
-// shorter one sits low with space above it), wrapped in a thick hairline frame
-// (stacking them in one column read as a single multi-tag session). The cluster
-// is the only thing that changes the strip's pitch, so the scroll math reads a
-// precomputed offset table rather than a uniform pitch — see `layout` below.
+// shorter one sits low with space above it), marked as one day by a PEDESTAL:
+// a solid `--color-fg` foot in a reserved lane below the baseline, spanning the
+// cluster. The cluster is the only thing that changes the strip's pitch, so the
+// scroll math reads a precomputed offset table rather than a uniform pitch —
+// see `layout` below.
+//
+// Grouping is carried by TWO cues, and it needs both. A thick hairline FRAME
+// around the cluster was tried first and did not read: the "today" column is
+// already an inset 1.5px box, so a group was a second box distinguished only by
+// tone, and — being sized to the tallest constituent bar — no two groups shared
+// a shape for the eye to learn. What replaced it:
+//   1. PROXIMITY. `BAR_GAP` (between days) is 3× `SUB_GAP` (inside a cluster).
+//      The old 1px:1px made two unrelated days look exactly as grouped as two
+//      sessions of one day, which is the actual reason the frame had to work so
+//      hard. Fix the spacing and most of the ambiguity goes without any ink.
+//   2. The PEDESTAL. Constant height and constant position, unlike the frame,
+//      so it is one repeated token rather than a per-instance outline. It lives
+//      in its own lane so it never steals height from the bars, and it is
+//      heavier and darker than the rest-day hairline it sits under so the two
+//      never trade places.
 //
 // Heights are relative to WHAT IS IN VIEW, not to an absolute ceiling. Against a
 // fixed 2h maximum a stretch of 40-minute sessions renders as a row of identical
@@ -93,17 +109,23 @@ const BAR_MIN = 8;
 // an identical bar and hide exactly the differences this strip exists to show.
 const BAR_NOMINAL_SECONDS = 7200;
 const BAR_W = 12;
-const BAR_GAP = 1;
+// Between DAYS. Three times SUB_GAP, which is the whole of cue 1 above: at 1px
+// each, an unrelated neighbour and a same-day session were the same distance
+// apart. Kept at 3 rather than 4+ because every extra pixel is a day off the
+// screen, and 3:1 is already past the ratio proximity needs.
+const BAR_GAP = 3;
 // A day with more than one logged session is NOT stacked into the single column
-// any longer — that read as one session with many tags. Instead each session
-// gets its own bar at 75% of the normal width, the bars sit adjacent, and a
-// thick wrapper hairline groups them so the widened cluster still reads as one
-// day. SUB_W is 75% of BAR_W; the wrapper adds border + padding on each side.
+// — that read as one session with many tags. Each session gets its own bar at
+// 75% of the normal width and the bars sit adjacent, separated only by a 1px
+// seam of the card behind them.
 const SUB_W = Math.round(BAR_W * 0.75);
+// Inside a cluster. This is the seam, not a gap: it exists to keep two bars of
+// the same tone from merging into one block, and must stay well under BAR_GAP.
 const SUB_GAP = 1;
-const GROUP_BORDER = 1.5;
-const GROUP_PAD = 1;
-const GROUP_CHROME = 2 * (GROUP_BORDER + GROUP_PAD);
+// The pedestal lane, reserved below the baseline on EVERY column so a group
+// never shifts its neighbours' bars. Only multi-session days paint into it.
+const FOOT_H = 2.5;
+const FOOT_LANE = 4;
 // Quiet time before the strip re-normalises. Nothing runs during the gesture.
 const SETTLE_MS = 120;
 // Growth cap, so a screenful of 5-minute sessions doesn't read as a set of PRs.
@@ -136,12 +158,14 @@ function isMultiSession(p: TimelinePoint): boolean {
   return p.state === 'done' && p.sessions.length > 1;
 }
 
-// Layout width of a day's column. A cluster is n adjacent 75%-bars plus the
-// wrapper chrome; everything else keeps the single-bar pitch.
+// Layout width of a day's column. A cluster is n adjacent 75%-bars and their
+// seams — no wrapper chrome, since the pedestal is an overlay in the reserved
+// lane rather than a box the bars sit inside. Everything else keeps the
+// single-bar pitch.
 function pointWidth(p: TimelinePoint): number {
   if (!isMultiSession(p)) return BAR_W;
   const n = p.sessions.length;
-  return n * SUB_W + (n - 1) * SUB_GAP + GROUP_CHROME;
+  return n * SUB_W + (n - 1) * SUB_GAP;
 }
 
 function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }) {
@@ -267,7 +291,9 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
           className="strip-row flex items-end"
           style={
             {
-              height: STRIP_HEIGHT,
+              // The bar area is STRIP_HEIGHT; the lane is extra, so reserving it
+              // never costs a bar any height and `scale` keeps its meaning.
+              height: STRIP_HEIGHT + FOOT_LANE,
               gap: BAR_GAP,
               '--strip-scale': scale,
             } as CSSProperties
@@ -285,13 +311,12 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
                 }}
                 onMouseEnter={() => setPeekIndex(i)}
                 onMouseLeave={() => setPeekIndex((cur) => (cur === i ? null : cur))}
-                // Today reads as a framed column whether or not it was trained.
-                // The outline lives on the COLUMN, not the bar, so scaling the
-                // bar never thickens the stroke.
                 className={`relative flex h-full shrink-0 cursor-pointer flex-col justify-end ${
                   multi ? 'items-center' : ''
-                } ${p.isToday ? 'shadow-[inset_0_0_0_1.5px_var(--color-fg)]' : ''}`}
-                style={{ width: layout[i].width }}
+                }`}
+                // paddingBottom is the pedestal lane. Every column reserves it,
+                // trained or not, so the baseline stays one straight line.
+                style={{ width: layout[i].width, paddingBottom: FOOT_LANE }}
                 aria-label={`${p.date} ${p.fullLabel}`}
                 title={`${p.fullLabel} · ${p.date}`}
               >
@@ -303,24 +328,18 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
                   // More than one session: adjacent 75%-width bars, EACH AT ITS
                   // OWN height (so a 90-min and a 60-min day sit at their real
                   // heights, the shorter one with empty space above it — the
-                  // cluster just looks like two ordinary logs). A thick hairline
-                  // frame wraps them to say "same day". The frame is an overlay,
-                  // not a box the bars live inside, so it never steals height
-                  // from the bars — the bars keep the exact heights they'd have
-                  // as standalone columns. Heights are JS-set rather than via the
-                  // `.strip-bar` transform so the frame stroke stays crisp.
-                  <span
-                    className="relative flex items-end"
-                    style={{ gap: SUB_GAP, padding: GROUP_PAD }}
-                    aria-hidden
-                  >
+                  // cluster just looks like two ordinary logs). Each bar is an
+                  // ordinary `.strip-bar`, so a constituent session scales and
+                  // tweens exactly as it would standing alone — there is no
+                  // longer a frame stroke that would scale with it.
+                  <span className="flex items-end" style={{ gap: SUB_GAP }} aria-hidden>
                     {p.sessions.map((colors, si) => (
                       <span
                         key={si}
-                        className="strip-subbar flex flex-col"
+                        className="strip-bar flex flex-col"
                         style={{
                           width: SUB_W,
-                          height: Math.round(barHeightFromSeconds(p.sessionSeconds[si]) * scale),
+                          height: barHeightFromSeconds(p.sessionSeconds[si]),
                         }}
                       >
                         {colors.map((c, ci) => (
@@ -328,10 +347,6 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
                         ))}
                       </span>
                     ))}
-                    <span
-                      className="strip-group-frame pointer-events-none absolute inset-0"
-                      style={{ borderWidth: GROUP_BORDER }}
-                    />
                   </span>
                 ) : (
                   // One session: the original single column, tags stacked.
@@ -341,6 +356,34 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
                     ))}
                   </span>
                 )}
+                {p.isToday ? (
+                  // Today reads as a framed column whether or not it was
+                  // trained. The outline lives on the COLUMN, not the bar, so
+                  // scaling the bar never thickens the stroke — and it stops at
+                  // the baseline rather than wrapping the pedestal lane. As an
+                  // inset shadow on the button it enclosed the lane, and on a
+                  // day that is BOTH today and multi-session its bottom stroke
+                  // and the pedestal merged into one thick line: the grouping
+                  // cue vanished on the one column the user looks at first.
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 top-0 shadow-[inset_0_0_0_1.5px_var(--color-fg)]"
+                    style={{ bottom: FOOT_LANE }}
+                  />
+                ) : null}
+                {multi ? (
+                  // The pedestal. Absolutely positioned in the reserved lane, so
+                  // it takes no height from the bars and cannot move a
+                  // neighbouring column. `--color-fg` and 2.5px against the
+                  // rest-day rule's `--color-border` and 2px: the two share a
+                  // band and are told apart by weight and tone, so keep the
+                  // contrast if either ever changes.
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 bottom-0 bg-fg"
+                    style={{ height: FOOT_H }}
+                  />
+                ) : null}
               </button>
             );
           })}

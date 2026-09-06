@@ -1111,24 +1111,11 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   }
 }
 
-/* A multi-session day: a thick greyscale hairline FRAME wrapping the day's
-   adjacent session bars so the cluster reads as one day. It is an overlay
-   (absolute inset-0 of the wrap) rather than a box the bars sit inside, so it
-   never compresses the bars — each keeps the height it would have as a
-   standalone column. Monochrome chrome — colour lives only on the tag bars. */
-.strip-group-frame {
-  border-style: solid;
-  border-color: var(--color-muted);
-  box-sizing: border-box;
-}
-/* Each constituent bar's height is JS-set (it cannot use the `.strip-bar`
-   transform without the frame stroke scaling with it), so the re-normalise
-   tween is on `height` here rather than `transform`. */
-@media (prefers-reduced-motion: no-preference) {
-  .strip-subbar {
-    transition: height 0.35s var(--ease-editorial);
-  }
-}
+/* A multi-session day is marked by a PEDESTAL in the reserved lane below the
+   baseline, not by a frame around the cluster — see the comment on
+   `ActivityStrip` for why the frame did not read. It needs no rule of its own:
+   the bars inside a cluster are ordinary `.strip-bar`s and the foot is a plain
+   `bg-fg` box, so there is no stroke left to keep out of the scale transform. */
 
 /* Hide the platform disclosure triangle so <Disclosure> can paint its own
    chevron. `list-none` on <summary> is enough in modern Firefox/Chrome, but
