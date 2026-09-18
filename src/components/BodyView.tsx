@@ -7,6 +7,7 @@ import type { Movement, WorkoutLog } from '@/lib/types';
 import { regionIntensities, regionTotals, summarizeBodyLoad, type BodyCurrency } from '@/lib/bodyLoad';
 import { unweightedRepKg } from '@/lib/userStats';
 import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
+import { layoutCallouts } from '@/lib/bodyCallouts';
 import type { BodyFace } from '@/lib/bodyRegions';
 import {
   BODY_LENSES,
@@ -164,16 +165,16 @@ function RegionRow({
 // Roughly where each region sits down the figure, so a callout points at the
 // part it names instead of floating at an arbitrary height. Percentages of the
 // stage's height, tuned against the silhouette in BodyMap.
-const CALLOUT_TOP: Record<RegionKey, string> = {
-  shoulders: '18%',
-  chest: '26%',
-  back: '26%',
-  arms: '38%',
-  core: '40%',
-  glutes: '54%',
-  hamstrings: '62%',
-  quads: '58%',
-  calves: '78%',
+const CALLOUT_TOP: Record<RegionKey, number> = {
+  shoulders: 18,
+  chest: 26,
+  back: 26,
+  arms: 38,
+  core: 40,
+  glutes: 54,
+  hamstrings: 62,
+  quads: 58,
+  calves: 78,
 };
 
 export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
@@ -287,15 +288,19 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   // MINUTES regardless of the currency toggle: the callouts sit beside a
   // silhouette shaded by `intensity`, and a percentage that changed meaning
   // when a toggle further down the page flipped would be quietly wrong.
-  // Alternating sides keeps two adjacent regions from stacking on one edge.
+  // Side and final height come from layoutCallouts, which alternates edges
+  // going DOWN the figure and then slots each edge apart. Ranking by list
+  // position put chest and back — both at 26% — on the same edge at the same
+  // height, and nothing enforced a gap between them.
   const totalWorked = worked.reduce((a, r) => a + r.minutes, 0);
-  const callouts = worked.slice(0, 4).map((r, i) => ({
-    key: r.key,
-    label: MUSCLE_REGIONS[r.key].short,
-    pct: totalWorked > 0 ? Math.round((r.minutes / totalWorked) * 100) : 0,
-    top: CALLOUT_TOP[r.key],
-    side: (i % 2 === 0 ? 'left' : 'right') as 'left' | 'right',
-  }));
+  const callouts = layoutCallouts(
+    worked.slice(0, 4).map((r) => ({
+      key: r.key,
+      label: MUSCLE_REGIONS[r.key].short,
+      pct: totalWorked > 0 ? Math.round((r.minutes / totalWorked) * 100) : 0,
+      top: CALLOUT_TOP[r.key],
+    })),
+  );
 
   // Modality as one stacked bar. Zero-minute modalities are dropped rather than
   // rendered as slivers, and the opacity ramp is what distinguishes them —
@@ -400,7 +405,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                       className={`pointer-events-none absolute max-w-[5.5rem] ${
                         c.side === 'left' ? 'left-0 text-right' : 'right-0 text-left'
                       }`}
-                      style={{ top: c.top }}
+                      style={{ top: `${c.top}%` }}
                     >
                       <div className="t-label leading-tight text-muted">{c.label}</div>
                       <div className="font-display text-sm leading-tight tabular-nums text-fg">
