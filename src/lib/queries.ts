@@ -15,6 +15,10 @@ import type {
   AspectScores,
   AspectSnapshot,
   AspectSnapshotInput,
+  CoachBrief,
+  CoachObservation,
+  CoachObservationInput,
+  CoachRuleNote,
   FitnessAssessment,
   GarminActivity,
   GarminConnectionInfo,
@@ -626,6 +630,88 @@ export async function upsertCoachFindings(rows: CoachRecInput[]): Promise<boolea
   // 0036 and 0038, with nothing anywhere saying why.
   if (error) console.error('upsertCoachFindings failed', error);
   return !error;
+}
+
+/**
+ * Persist this check-in's drift readings — every rule that could be measured,
+ * whether or not it spoke.
+ *
+ * UPSERT ON (owner, rule, day). Two check-ins on one day are two views of the
+ * same 28-day window, not two samples; collapsing them is what stops an anxious
+ * afternoon of tapping from out-voting a month of training in the trajectory.
+ *
+ * Failure is logged and reported, never swallowed. A write path that cannot
+ * report failure hides a schema fault indefinitely — the lesson `user_stats`
+ * taught this codebase (docs/LESSONS.md), and the reason `upsertCoachFindings`
+ * logs its Postgres error rather than returning a bare boolean.
+ */
+export async function upsertCoachObservations(
+  rows: CoachObservationInput[],
+): Promise<boolean> {
+  if (rows.length === 0) return true;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { error } = await supabase.from('coach_observations').upsert(
+    rows.map((r) => ({ ...r, owner_user_id: user.id })),
+    // Non-partial unique index `coach_observations_rule_day_idx`. Do not add a
+    // predicate to it: PostgREST can only send a column list here and Postgres
+    // refuses to infer a partial index without repeating it (42P10, migration
+    // 0038's bug).
+    { onConflict: 'owner_user_id,rule_id,observed_on', ignoreDuplicates: false },
+  );
+  if (error) console.error('upsertCoachObservations failed', error);
+  return !error;
+}
+
+/**
+ * The trajectory substrate: readings from the last `days` days, oldest first.
+ *
+ * Oldest-first because every consumer in recurrence.ts walks the series
+ * forward — sorting it there instead would mean each caller re-deriving the
+ * order the query already knows.
+ */
+export async function getCoachObservations(
+  days = 180,
+  client: SupabaseClient = supabase,
+): Promise<CoachObservation[]> {
+  const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const { data } = await client
+    .from('coach_observations')
+    .select('*')
+    .gte('observed_on', since)
+    .order('observed_on', { ascending: true });
+  return (data as CoachObservation[]) ?? [];
+}
+
+// ---- LLM cross-pollination (0043). READ-ONLY here, deliberately.
+// Rows are written out of band by a Claude Code session against the athlete's
+// own data — the same shape as `rx_deep_results`. There is no client write path
+// because there is no client surface that should be able to author one: every
+// row here is either narrative the app renders or calibration the engine reads,
+// and both are reviewed by src/lib/coach/governor.ts at read time rather than
+// trusted at write. ----
+
+export async function getCoachBriefs(
+  client: SupabaseClient = supabase,
+): Promise<CoachBrief[]> {
+  const { data } = await client
+    .from('coach_briefs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  return (data as CoachBrief[]) ?? [];
+}
+
+export async function getCoachRuleNotes(
+  client: SupabaseClient = supabase,
+): Promise<CoachRuleNote[]> {
+  const { data } = await client
+    .from('coach_rule_notes')
+    .select('*')
+    .order('created_at', { ascending: false });
+  return (data as CoachRuleNote[]) ?? [];
 }
 
 export async function updateRecommendation(

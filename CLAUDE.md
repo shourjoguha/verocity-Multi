@@ -24,6 +24,8 @@ intent, LESSONS describes what actually happened.
 | Touch saved sessions (templates / frames)                                | `docs/SPEC.md` §8, `SessionsView.tsx`             |
 | Change visuals, tokens, or layout                                        | **Hard rules below** (canonical), then `app.config.ts` |
 | Touch the AI coach                                                       | `supabase/functions/coach/index.ts`, `lib/deepGovernors.ts` |
+| **Change when a finding is allowed to speak again**                      | `src/lib/coach/recurrence.ts` — read its header first |
+| Write coach output from a Claude Code session                            | `src/lib/coach/governor.ts` (the boundary), `supabase/migrations/0043_coach_briefs_notes.sql` |
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
 | **Change a component, sheet, token or layout**                           | skill ui-change — `.claude/skills/ui-change/SKILL.md` |
 | **Add a migration, RLS policy, edge function or query helper**           | skill db-change — `.claude/skills/db-change/SKILL.md` |
@@ -223,6 +225,28 @@ UI audit have both run.
   output shape. (This surface was documented as "deferred" for weeks after it
   shipped, which made agents refuse to touch working code. If you defer
   something, say where.)
+- **The check-in button is deterministic; a model may annotate, never measure.**
+  `/app/coach`'s Check-in runs `runCoach` in the browser — no network call to a
+  model — and every finding names the claim it rests on. A Claude Code session
+  can write `coach_briefs` (narrative, rendered, read by nothing in
+  `src/lib/coach/`) and `coach_rule_notes` (context prose, and proposed rule
+  interactions that can raise how eagerly an **already-true** rule re-speaks).
+  That is the whole surface. A model must never change a threshold, invent a
+  rule, write a `recommendations` row, or silence one — `knowledge.ts` is
+  claim-cited and pack-versioned, and a model that can edit it makes every
+  citation in the app worthless. `src/lib/coach/governor.ts` enforces this at
+  **read** time so tightening it disarms rows already written.
+- **Whether a finding may re-speak is a trajectory question, not a clock one.**
+  `coach_observations` records one drift reading per rule per check-in day
+  whether or not the rule spoke, and `src/lib/coach/recurrence.ts` scores
+  relapse from the athlete's own best since deciding, persistence from the
+  slope, and resolution from a run of readings under a floor. **Never re-anchor
+  suppression to the drift frozen on a decided row** — that gate was
+  unsatisfiable for anything decided near drift 1.0 and answered a successful
+  fix with permanent silence. `drift: 0` means measured and clean; a rule that
+  could not be measured writes NO reading at all. Recurrence is a **gate**;
+  `impact.ts` remains the only **sort**. Do not let a fourth number order the
+  page.
 - **Mobile is the primary target.** 44px minimum tap targets
   (`TOUCH.minTargetPx`); no horizontal overflow at 375px; `pointer: coarse` and
   `pointer: fine` get different behaviour in several places (blur, the 3D

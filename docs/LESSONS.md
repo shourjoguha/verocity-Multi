@@ -1390,6 +1390,71 @@ outcome, not a hypothetical.
 → `src/lib/lastPerformance.ts`, `src/lib/progression.ts` (`blockForWeek`),
 `src/components/Logger.tsx`, `src/app.config.ts` (`PREFILL`)
 
+### The coach runs out of things to say, and "check-in" reports nothing new
+`[measured against the live account — 13 decided rules, 0 open, 18 sessions in 28 days]`
+Every deterministic rule had been acted on or dismissed, and the Coach page sat
+permanently empty. It read as an exhausted rule set. It was not: **one comparison
+was holding all thirteen.** `isSuppressed` priced the right to re-speak as
+`driftNow - drift_score_on_the_decided_row >= 0.15` — "has this got WORSE?" — and
+that question is wrong three separate ways:
+- **Unsatisfiable at the top of the scale.** Every helper in
+  `src/lib/coach/impact.ts` clamps drift to 0..1, so a finding acted on at 1.00
+  needed 1.15 and was gagged until `DECISION_EXPIRY_DAYS` (180 days) whatever
+  the athlete did. One real rule was locked six months out on exactly this.
+- **It punishes success with silence.** Act on advice, fix the problem, and the
+  rule can never speak again — including to say that it worked.
+- **It cannot see a relapse.** The anchor is frozen at the decision, so 0.9 →
+  0.1 → 0.8 reads as `-0.1`, "unchanged", after the athlete has undone all of
+  their own gain.
+The day and session halves of the gate were *fine* and had long since passed on
+12 of the 13; only the drift comparison was failing.
+**The fix is not a different constant, it is a different reference.** The engine
+threw away every measurement it did not write, so between two decisions there
+were no samples and a frozen anchor was the only thing available. `coach_observations`
+(migration 0042) now records one drift reading per rule per check-in day whether
+or not the rule spoke, and `src/lib/coach/recurrence.ts` scores against the
+trajectory: relapse from the athlete's own **best since deciding**, persistence
+from the **slope**, resolution from a run of readings under a floor.
+**`drift: 0` means measured and clean; unmeasurable writes NO ROW.** Collapsing
+the two would let a fortnight off training "resolve" every open finding at once,
+which is the `Sufficiency` discipline one level up wearing a different hat.
+**Two bugs found while building it, both caught by tests and neither by review:**
+`interacting` was written as its own branch under `persisting` and was dead code
+the moment it shipped — `persisting` covers every state where a rule is true and
+not improving, so nothing could reach it. What a sibling firing actually changes
+is how SOON a rule may speak, not what kind of thing it is, so it is now paid in
+sessions (`INTERACTION_SESSION_CREDIT`). And dropping the old code's 2dp
+rounding on the drift comparison brought back the ulp bug its comment described:
+`0.6 - 0.5` is `0.09999999999999998`, so a move of exactly the material amount
+read as no move at all. **If a comment explains a rounding, the rounding is load-bearing.**
+→ `src/lib/coach/recurrence.ts`, `src/lib/coach/evaluate.ts`,
+`supabase/migrations/0042_coach_observations.sql`
+
+### A model's prose sitting next to a cited number reads as a cited number
+`[design decision, no symptom yet — recorded before it bites]`
+`coach_briefs` and `coach_rule_notes` (migration 0043) let a Claude Code session
+write observations the app renders and the engine reads. The risk is not that a
+model is wrong; it is that **a page cannot show the difference between an
+inference and a sourced claim unless it says so.** Every value in
+`src/lib/coach/knowledge.ts` is a named person's claim with a verbatim quote and
+a pack version, and a note reading "you only get about 8 hard sets a week" is a
+threshold nobody computed, sourced or tested, in the same paragraph as numbers
+that were all three.
+So `src/lib/coach/governor.ts` refuses **any** note containing a digit that is
+not a clock time or a date, and the refusal is deliberately over-broad: it also
+rejects "their Zone 2 is a bike commute", where the digit claims nothing. That
+cost is accepted — a refused note costs a rewrite, an accepted false threshold
+costs the provenance the whole coach rests on, and nothing downstream would
+catch it. **A model wanting to say something numeric has a legitimate route:
+propose the rule, and let it ship with a claim and a test.**
+Validation is at **read** time, not write — the call `src/lib/deepGovernors.ts`
+already made for `rx_deep_results` — so tightening the governor retroactively
+disarms every row written under a looser one. And there is deliberately no rule
+that lets a note SUPPRESS anything: a wrong "ignore this, it is fine" is
+unfalsifiable from the page, where a wrong note that says too much is visible
+the moment it is read.
+→ `src/lib/coach/governor.ts`, `supabase/migrations/0043_coach_briefs_notes.sql`
+
 ## Superseded
 
 Kept so the search path survives, **demoted so it stops reading as advice.**

@@ -96,6 +96,20 @@ Operational detail lives in `docs/HANDOVER.md`.
   not the scheduled Railway service originally planned. Drift signals from the
   caller's own logs → Claude → `recommendations`. UI at `/app/coach`; claim
   bounds in `lib/deepGovernors.ts`. See SPEC §12.
+- [x] **Coach: trajectory, cycling and closing the loop.** `coach_observations`
+  (0042) records a drift reading per rule per check-in whether or not the rule
+  spoke, and `src/lib/coach/recurrence.ts` scores re-speaking off that series —
+  persistence, relapse from the athlete's own best, and a one-time
+  `outcome.resolved.*` finding when advice that was taken actually worked. This
+  replaced a gate that demanded a finding get *worse* before it could be
+  repeated, which had silenced all thirteen decided rules on the live account.
+- [x] **Coach: findings group by theme.** `src/lib/coach/themes.ts` puts the
+  rules that are one story on one card, so three endurance findings cost one
+  slot rather than the whole headline. Retired `MAX_SURFACED_PER_FAMILY`.
+- [x] **Coach: the two intelligences.** `coach_briefs` and `coach_rule_notes`
+  (0043) let a Claude Code session write narrative the app renders and context
+  the engine reads, bounded by `src/lib/coach/governor.ts` at read time. The
+  Check-in button stays fully deterministic.
 - [ ] parse-plan Edge Function — not built. `lib/planTemplate.ts` gives the user
   a copyable authoring prompt instead, and the strict local parser stays the
   only ingest path.
@@ -203,7 +217,15 @@ parser. When the importer still rejects a file, **Copy fix request**
   `docs/PLAN_RUBRIC_PROMPT.md` is where a regeneration starts.
 - **The coach still ignores the profile.** `supabase/functions/coach/index.ts`
   builds its `signals` payload from `workout_logs` alone — no age, sex, goals or
-  injuries. Same data, same argument for using it; separate change.
+  injuries. Same data, same argument for using it; separate change. (The
+  deterministic engine in `src/lib/coach/` does read goals and stats; this is
+  about the edge function, which is no longer on the check-in path.)
+- **Seventeen rules is a small vocabulary, and cycling will not enlarge it.**
+  The live account burned thirteen in four weeks. `recurrence.ts` fixes *when* a
+  rule may speak again; it cannot invent a rule that was never written. The
+  `coach_observations` series is also the evidence for which direction to grow
+  in — a rule that never fires for anyone is dead weight, and that is now
+  measurable rather than a guess.
 
 ### Phase 7 — Guidance upkeep  `[ongoing]`
 `npm run audit:docs` fails if the docs name code that no longer exists. It was
