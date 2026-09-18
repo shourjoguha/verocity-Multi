@@ -4,12 +4,16 @@ import mealsFixture from './__fixtures__/meals.json';
 import statsFixture from './__fixtures__/userStats.json';
 import {
   DECISION_EXPIRY_DAYS,
-  MATERIAL_DRIFT_DELTA,
   MIN_SILENCE_DAYS,
-  SESSIONS_TO_RESPEAK,
   isSuppressed,
   runCoach,
 } from '@/lib/coach/evaluate';
+import {
+  REGRESSION_DELTA,
+  RESPEAK_DAYS,
+  RESPEAK_SESSIONS,
+  resolvedRuleId,
+} from '@/lib/coach/recurrence';
 import { byImpact, impactScore, impactWeight } from '@/lib/coach/impact';
 import {
   COACH_WINDOW_DAYS,
@@ -27,7 +31,13 @@ import {
   longSessionUnfed,
 } from '@/lib/coach/rules/nutrition';
 import { readinessAndLoad, rpeCalibration } from '@/lib/coach/rules/training';
-import type { MealLog, Recommendation, UserStats, WorkoutLog } from '@/lib/types';
+import type {
+  CoachObservation,
+  MealLog,
+  Recommendation,
+  UserStats,
+  WorkoutLog,
+} from '@/lib/types';
 
 // Anchored one day after the newest fixture row so the 28-day window is stable.
 const TODAY = new Date('2026-08-21T00:00:00Z');
@@ -45,6 +55,28 @@ const trainingOpts = {
   allOutRpe: TRAINING.vo2AllOut.value,
   heavyRestSeconds: TRAINING.strengthRest.value,
 };
+
+/** A `coach_observations` row, for trajectory fixtures. */
+function obs(
+  rule_id: string,
+  observed_on: string,
+  drift: number,
+  fired: boolean,
+): CoachObservation {
+  return {
+    id: crypto.randomUUID(),
+    owner_user_id: 'u',
+    rule_id,
+    observed_on,
+    drift,
+    confidence: 0.6,
+    sufficiency: 'ok',
+    fired,
+    sessions: 12,
+    observed: null,
+    created_at: `${observed_on}T00:00:00Z`,
+  };
+}
 
 function rec(over: Partial<Recommendation>): Recommendation {
   return {
@@ -506,6 +538,172 @@ describe('caveat gates', () => {
   });
 });
 
+describe('observations', () => {
+  const ago = (d: number) => new Date(TODAY.getTime() - d * 86_400_000).toISOString();
+
+  it('records a reading for every rule that fired', () => {
+    const out = runCoach(base);
+    const ids = new Set(out.observations.map((o) => o.rule_id));
+    for (const f of out.findings) expect(ids.has(f.ruleId)).toBe(true);
+  });
+
+  it('stamps every reading with the same day', () => {
+    const out = runCoach(base);
+    const days = new Set(out.observations.map((o) => o.observed_on));
+    expect(days.size).toBe(1);
+    expect([...days][0]).toBe(TODAY.toISOString().slice(0, 10));
+  });
+
+  it('records a clean zero for a rule with history that has stopped firing', () => {
+    // The whole point of the table: without a reading between two decisions
+    // there is no trajectory, and improvement is invisible.
+    const quietRule = 'training.strength.rest-too-short';
+    const fired = new Set(runCoach(base).findings.map((f) => f.ruleId));
+    expect(fired.has(quietRule)).toBe(false);
+
+    const out = runCoach({
+      ...base,
+      existing: [rec({ rule_id: quietRule, status: 'acted', created_at: ago(30) })],
+    });
+    const reading = out.observations.find((o) => o.rule_id === quietRule);
+    expect(reading).toBeDefined();
+    expect(reading!.drift).toBe(0);
+    expect(reading!.fired).toBe(false);
+  });
+
+  it('writes NO reading rather than a zero when there was nothing to look at', () => {
+    // "We do not know" and "you are fine" must never share a value — a
+    // fortnight off training would otherwise clear every open finding at once.
+    const quietRule = 'training.strength.rest-too-short';
+    const out = runCoach({
+      ...base,
+      logs: [],
+      meals: [],
+      existing: [rec({ rule_id: quietRule, status: 'acted', created_at: ago(30) })],
+    });
+    expect(out.observations.find((o) => o.rule_id === quietRule)).toBeUndefined();
+  });
+
+  it('never records a reading for a closing finding', () => {
+    // `outcome.resolved.*` is the end of a story, not a measurement in one.
+    const out = runCoach({
+      ...base,
+      existing: [rec({ rule_id: 'outcome.resolved.training.x.y', status: 'open' })],
+    });
+    expect(out.observations.some((o) => o.rule_id.startsWith('outcome.'))).toBe(false);
+  });
+
+  it('carries the rule numbers so a trajectory can be explained, not only scored', () => {
+    const out = runCoach(base);
+    const fired = out.observations.filter((o) => o.fired);
+    expect(fired.length).toBeGreaterThan(0);
+    for (const o of fired) expect(o.observed).not.toBeNull();
+  });
+});
+
+describe('closing the loop', () => {
+  const ago = (d: number) => new Date(TODAY.getTime() - d * 86_400_000).toISOString();
+  const day = (d: number) => ago(d).slice(0, 10);
+  const RULE = 'training.strength.rest-too-short';
+
+  /** Acted at a real problem, then three readings walking it down to nothing. */
+  const fixedUp = () => ({
+    ...base,
+    existing: [
+      rec({
+        rule_id: RULE,
+        status: 'acted',
+        disposition: 'acted_as_prescribed',
+        created_at: ago(30),
+        drift_score: 0.8,
+        tldr: 'Heavy sets are getting 70s of rest',
+      }),
+    ],
+    observations: [
+      obs(RULE, day(21), 0.5, true),
+      obs(RULE, day(14), 0.2, true),
+      obs(RULE, day(7), 0.05, false),
+    ],
+  });
+
+  it('tells the athlete when advice they took actually worked', () => {
+    const out = runCoach(fixedUp());
+    expect(out.resolved).toContain(RULE);
+    const row = out.write.find((r) => r.rule_id === `outcome.resolved.${RULE}`);
+    expect(row).toBeDefined();
+    expect(row!.tldr).toContain('Heavy sets are getting 70s of rest');
+  });
+
+  it('reports the current reading as drift, not the size of the win', () => {
+    // `drift_score` means "distance past the threshold" on every other row.
+    // Overloading it here would make rank() read a big win as a big problem.
+    const row = runCoach(fixedUp()).write.find((r) => r.rule_id.startsWith('outcome.'))!;
+    expect(row.drift_score).toBeLessThanOrEqual(0.1);
+    // The rule does not fire on this fixture, so the current reading is a clean
+    // 0 and the improvement is the whole of the 0.80 it was decided at.
+    expect(row.evidence.observed.improvementPoints).toBe(80);
+  });
+
+  it('says it once', () => {
+    const first = fixedUp();
+    const already = {
+      ...first,
+      existing: [
+        ...first.existing,
+        rec({ rule_id: `outcome.resolved.${RULE}`, status: 'open', created_at: ago(1) }),
+      ],
+    };
+    expect(runCoach(already).resolved).toEqual([]);
+  });
+
+  it('does not close a loop the athlete refused to enter', () => {
+    const first = fixedUp();
+    const dismissed = {
+      ...first,
+      existing: [rec({ ...first.existing[0], status: 'dismissed' })],
+    };
+    expect(runCoach(dismissed).resolved).toEqual([]);
+  });
+
+  it('never renders "cleared: X" directly above X', () => {
+    // Resolution needs the last readings under the floor, and a rule can sit a
+    // fraction past its own threshold and still be inside that floor. Without
+    // the guard the page carries the closing row and the complaint together.
+    const RPE = 'training.effort.rpe-calibration';
+    const fired = runCoach(base).findings.find((f) => f.ruleId === RPE);
+    expect(fired).toBeDefined();
+
+    const out = runCoach({
+      ...base,
+      existing: [
+        rec({
+          rule_id: RPE,
+          status: 'acted',
+          disposition: 'acted_as_prescribed',
+          created_at: ago(30),
+          drift_score: 0.9,
+          tldr: 'The RPE dial is not being moved',
+        }),
+      ],
+      observations: [
+        obs(RPE, day(21), 0.05, false),
+        obs(RPE, day(14), 0.04, false),
+        obs(RPE, day(7), 0.03, false),
+      ],
+    });
+    // Whether or not it resolves on this fixture, the two must never co-exist.
+    const ids = out.write.map((r) => r.rule_id);
+    if (ids.includes(`outcome.resolved.${RPE}`)) expect(ids).not.toContain(RPE);
+  });
+
+  it('counts a closing finding separately from a new problem', () => {
+    const out = runCoach(fixedUp());
+    // The surface subtracts `resolved` from `write` to report "N new", so a
+    // closing row counted as a discovery is a lie the athlete catches at once.
+    expect(out.write.length - out.refreshed.length - out.resolved.length).toBeGreaterThanOrEqual(0);
+  });
+});
+
 describe('suppression', () => {
   const ruleId = 'training.endurance.zone2-short';
   const ago = (d: number) => new Date(TODAY.getTime() - d * 86_400_000).toISOString();
@@ -549,29 +747,87 @@ describe('suppression', () => {
     expect(isSuppressed(ruleId, '2026-W34', [justNow], TODAY, moved)).toBe('too-soon');
   });
 
-  it('re-speaks once new training has landed AND the number has moved', () => {
+  it('re-speaks on a problem that has simply persisted, without it getting worse', () => {
+    // THE BUG THIS REPLACES. The gate asked for drift 0.15 WORSE than the
+    // decision, so standing still bought silence and the athlete never heard
+    // about anything they had failed to fix. Persisting is now its own reason.
     const dismissed = rec({
       rule_id: ruleId,
       status: 'dismissed',
       created_at: ago(MIN_SILENCE_DAYS.dismissed + 1),
-      drift_score: 0.2,
+      drift_score: 0.6,
     });
-    const enough = SESSIONS_TO_RESPEAK.dismissed;
-    const worse = 0.2 + MATERIAL_DRIFT_DELTA;
-
-    // Both halves required.
+    const enough = RESPEAK_SESSIONS.dismissed;
     expect(
-      isSuppressed(ruleId, '2026-W34', [dismissed], TODAY, { newSessions: enough - 1, drift: worse }),
-    ).toBe('no-new-training');
-    expect(
-      isSuppressed(ruleId, '2026-W34', [dismissed], TODAY, { newSessions: enough, drift: 0.25 }),
-    ).toBe('unchanged');
-    expect(
-      isSuppressed(ruleId, '2026-W34', [dismissed], TODAY, { newSessions: enough, drift: worse }),
+      isSuppressed(ruleId, '2026-W34', [dismissed], TODAY, { newSessions: enough, drift: 0.6 }),
     ).toBeNull();
   });
 
-  it('does not re-raise a finding that improved but is still technically true', () => {
+  it('cannot be gagged by a decision taken at the top of the scale', () => {
+    // Drift is clamped 0..1 everywhere in impact.ts, so `drift + 0.15` was
+    // unreachable for anything decided at 1.0 — one real account had a rule
+    // locked until DECISION_EXPIRY_DAYS on exactly this.
+    const acted = rec({
+      rule_id: ruleId,
+      status: 'acted',
+      disposition: 'acted_as_prescribed',
+      created_at: ago(20),
+      drift_score: 1,
+    });
+    expect(
+      isSuppressed(ruleId, '2026-W34', [acted], TODAY, { newSessions: 9, drift: 1 }),
+    ).toBeNull();
+  });
+
+  it('holds its tongue until enough has happened, in days or in sessions', () => {
+    const dismissed = rec({
+      rule_id: ruleId,
+      status: 'dismissed',
+      created_at: ago(MIN_SILENCE_DAYS.dismissed + 1),
+      drift_score: 0.6,
+    });
+    // One session, and 11 of the 28 days: short on both, so still quiet.
+    expect(
+      isSuppressed(ruleId, '2026-W34', [dismissed], TODAY, { newSessions: 1, drift: 0.6 }),
+    ).toBe('no-new-training');
+    // Days alone are enough — the athlete who trains twice a week must not wait
+    // longest to hear about the frequency rule aimed at them.
+    const old = rec({
+      rule_id: ruleId,
+      status: 'dismissed',
+      created_at: ago(RESPEAK_DAYS.dismissed + 1),
+      drift_score: 0.6,
+    });
+    expect(
+      isSuppressed(ruleId, '2026-W34', [old], TODAY, { newSessions: 1, drift: 0.6 }),
+    ).toBeNull();
+  });
+
+  it('sees a relapse off the athletes own best, not off the decision', () => {
+    // 0.9 -> 0.1 -> 0.8 is a total relapse, and the old gate read it as
+    // "unchanged" because 0.8 is below the 0.9 it was decided at.
+    const acted = rec({
+      rule_id: ruleId,
+      status: 'acted',
+      disposition: 'acted_as_prescribed',
+      created_at: ago(40),
+      drift_score: 0.9,
+    });
+    const since = [
+      { observedOn: '2026-08-01', drift: 0.4, fired: true },
+      { observedOn: '2026-08-08', drift: 0.1, fired: false },
+      { observedOn: '2026-08-15', drift: 0.12, fired: false },
+    ];
+    expect(
+      isSuppressed(ruleId, '2026-W34', [acted], TODAY, {
+        newSessions: 12,
+        drift: 0.1 + REGRESSION_DELTA + 0.01,
+        since,
+      }),
+    ).toBeNull();
+  });
+
+  it('stays quiet on a finding that is genuinely coming down', () => {
     const dismissed = rec({
       rule_id: ruleId,
       status: 'dismissed',
@@ -580,11 +836,31 @@ describe('suppression', () => {
     });
     expect(
       isSuppressed(ruleId, '2026-W34', [dismissed], TODAY, { newSessions: 40, drift: 0.4 }),
-    ).toBe('unchanged');
+    ).toBe('improving');
+  });
+
+  it('retires a decision once the rule has been reported as cleared', () => {
+    const acted = rec({
+      rule_id: ruleId,
+      status: 'acted',
+      disposition: 'acted_as_prescribed',
+      created_at: ago(40),
+      drift_score: 0.8,
+    });
+    const closed = rec({
+      rule_id: resolvedRuleId(ruleId),
+      status: 'open',
+      created_at: ago(10),
+    });
+    // Back over threshold after being cleared: graded as a new event, not
+    // against the pre-fix anchor.
+    expect(
+      isSuppressed(ruleId, '2026-W34', [acted, closed], TODAY, { newSessions: 0, drift: 0.5 }),
+    ).toBeNull();
   });
 
   it('gives acted-on advice fewer sessions to land than a rejection buys', () => {
-    expect(SESSIONS_TO_RESPEAK.acted).toBeLessThan(SESSIONS_TO_RESPEAK.dismissed);
+    expect(RESPEAK_SESSIONS.acted).toBeLessThan(RESPEAK_SESSIONS.dismissed);
     const acted = rec({
       rule_id: ruleId,
       status: 'acted',
@@ -647,11 +923,11 @@ describe('suppression', () => {
         }),
       );
 
-    // Every rule was decided on a WORSE number than it reads today: nothing has
-    // deteriorated, so nothing speaks.
+    // Every rule was decided on a WORSE number than it reads today: each one is
+    // improving, so none of them re-opens.
     const quiet = runCoach({ ...base, existing: decided((d) => d + 1) });
     expect(quiet.write).toHaveLength(0);
-    expect(quiet.suppressed.every((s) => s.reason === 'unchanged')).toBe(true);
+    expect(quiet.suppressed.every((s) => s.reason === 'improving')).toBe(true);
 
     // Same decisions, same dates, but each was made on a clean number and the
     // measurement has since drifted out. The training that landed in between is

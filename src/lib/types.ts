@@ -554,6 +554,87 @@ export interface Recommendation {
   evidence: unknown | null;
 }
 
+/**
+ * One drift reading per coach rule per check-in day (migration 0042).
+ *
+ * The record of what the coach MEASURED, as against `Recommendation`, which is
+ * the record of what it SAID. Written for every rule that could be measured,
+ * whether or not it spoke, because improvement is only visible in the samples
+ * between two decisions — and before this existed there were none.
+ *
+ * `drift: 0` means measured and clean. A rule that could NOT be measured has no
+ * row for that day at all; see the family adequacy gate in runCoach. Never
+ * collapse the two.
+ */
+export interface CoachObservation {
+  id: string;
+  owner_user_id: string;
+  rule_id: string;
+  /** 'YYYY-MM-DD', the local day the check-in ran. */
+  observed_on: string;
+  drift: number;
+  confidence: number | null;
+  /** 'ok' | 'partial' — never 'insufficient', which writes no row. */
+  sufficiency: string;
+  /** Did the rule produce a finding this run? Not derivable from drift. */
+  fired: boolean;
+  /** Completed sessions in the measurement window at the time of reading. */
+  sessions: number;
+  observed: Record<string, number | string | null> | null;
+  created_at: string;
+}
+
+/** What a check-in writes. Owner comes from the session, never the caller. */
+export type CoachObservationInput = Omit<
+  CoachObservation,
+  'id' | 'owner_user_id' | 'created_at'
+>;
+
+// ---- LLM cross-pollination (migration 0043) ----
+// Rows a Claude Code session writes. `CoachBrief` is narrative and nothing in
+// src/lib/coach/** reads it; `CoachRuleNote` is the ONLY model-written row the
+// engine reads, and is validated at read time by src/lib/coach/governor.ts.
+
+/** Narrative synthesis shown above the deterministic findings, labelled with
+ *  its author and age so it can never be mistaken for a cited finding. */
+export interface CoachBrief {
+  id: string;
+  owner_user_id: string;
+  /** ThemeKey from lib/coach/themes.ts, or null for a whole-picture brief. */
+  theme: string | null;
+  rule_ids: string[];
+  headline: string;
+  body_md: string;
+  window_start: string | null;
+  window_end: string | null;
+  author: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export type CoachNoteKind = 'context' | 'edge';
+
+/**
+ * Per-rule context, or a proposed interaction between two rules.
+ *
+ * `context` is prose rendered beside the rule's own body — why the number reads
+ * as it does for this athlete. `edge` feeds only the `interacting` term in
+ * recurrence.ts, which by construction can raise a rule that is independently
+ * true and can do nothing else. Neither may change a threshold.
+ */
+export interface CoachRuleNote {
+  id: string;
+  owner_user_id: string;
+  rule_id: string;
+  kind: CoachNoteKind;
+  related_rule_id: string | null;
+  note: string;
+  confidence: number | null;
+  author: string;
+  expires_at: string;
+  created_at: string;
+}
+
 // ---- rx deep enrichment (retrieval-depth cross-door porting) ----
 // Out-of-band enrichment computed in a Claude Code session (deep retrieval /
 // contradiction / external counter) and written to `rx_deep_results` for the

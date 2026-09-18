@@ -76,6 +76,15 @@ export const RULE_IMPACT: Record<string, number> = {
   // Standing numbers. True at drift 0 by construction, so this weight only ever
   // decides their order among themselves.
   'nutrition.dose.protein-target': 0.15,
+
+  // Closing findings (`outcome.resolved.<ruleId>`), matched by prefix. Weighted
+  // HIGH against a LOW drift, and the pairing is the whole point: a resolved
+  // rule reads at drift ~0 by definition, so on the family default of 0.5 it
+  // scored about 0.15 and sat below every mild open finding on the page. A
+  // "you fixed this" nobody sees is a removed feature. At 0.85 it lands above
+  // the refinements and below anything structural, which is the correct place
+  // for good news — worth reading, never worth leading over a real problem.
+  'outcome.resolved': 0.85,
 };
 
 const FAMILY_DEFAULT = 0.5;
