@@ -30,7 +30,7 @@ import { bestE1rmByMovement } from '@/lib/prs';
 import { completedLogs } from '@/lib/stats';
 import { buildDayInsights, summarizeTiming, toHours } from '@/lib/mealInsights';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
-import { classifyIntent, emptyMix, mixShares, type IntentMix } from '@/lib/coach/intent';
+import { classifyIntent, countIntent, emptyMix, mixShares, type IntentMix } from '@/lib/coach/intent';
 import type { MealLog, UserStats, WorkoutLog } from '@/lib/types';
 import { summarizeMealText, type MealTextSummary } from '@/lib/coach/mealText';
 import type { Measured, Sufficiency } from '@/lib/coach/types';
@@ -257,16 +257,18 @@ export interface TrainingSignals {
    * Loaded sets by what they appear to be FOR — see ./intent.ts.
    *
    * Reps do not separate strength from hypertrophy from loaded conditioning;
-   * prescribed rest and superset relatedness do. `unspecified` is carried
-   * separately and kept out of the shares, because most items prescribe no rest
-   * and a share computed over all of them would be a guess wearing a
-   * percentage.
+   * prescribed rest and superset relatedness do. An untouched rest picker
+   * resolves to UNLOGGED_REST_SECONDS, so every loaded set gets a verdict — and
+   * `assumed` says how many of those verdicts lean on that.
    */
   loadedIntent: Measured<{
     mix: IntentMix;
     shares: { strength: number; hypertrophy: number; conditioning: number };
-    specified: number;
-    unspecified: number;
+    total: number;
+    /** Sets classified on the unlogged-rest assumption, and their share. Carry
+     *  these into anything the surface says, or it overstates what is known. */
+    assumed: number;
+    assumedShare: number;
   }>;
   /** Share of classified minutes the taxonomy could actually resolve, 0..1. */
   coverage: number;
@@ -561,14 +563,15 @@ export function measureTraining(
                   // to each of its sets — the same shape as the `/side` and
                   // `(p)` notations, which are written item-level and priced
                   // set-level.
-                  intentMix[
+                  countIntent(
+                    intentMix,
                     classifyIntent({
                       item,
                       group,
                       restBoundarySeconds: opts.heavyRestSeconds[0],
                       overrides,
-                    }).intent
-                  ] += 1;
+                    }),
+                  );
                 }
               }
             }
@@ -695,13 +698,18 @@ export function measureTraining(
     loadedIntent: measured(
       (() => {
         const m = mixShares(intentMix);
-        return { mix: intentMix, shares: m.shares, specified: m.specified, unspecified: m.unspecified };
+        return {
+          mix: intentMix,
+          shares: m.shares,
+          total: m.total,
+          assumed: m.assumed,
+          assumedShare: m.assumedShare,
+        };
       })(),
-      mixShares(intentMix).specified,
-      // Below this many sets that actually stated their rest, a mix is a
-      // handful of items and not a training style.
+      mixShares(intentMix).total,
+      // Below this many loaded sets a mix is a handful of items, not a style.
       12,
-      'too few loaded sets prescribe a rest for an intent split to mean anything',
+      'too few loaded sets for an intent split to mean anything',
     ),
     heavyRest: measured(
       {

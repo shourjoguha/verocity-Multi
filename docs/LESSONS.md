@@ -1514,12 +1514,23 @@ the **same** muscles — which the region profiles already know, via
 `regionOverlap`. **A rule that ignores a claim's caveat is a rule the claim does
 not support.**
 No new threshold was invented: 120s arrives from both directions, as
-`strengthRest`'s floor and `hypertrophyRest`'s ceiling. And an item with no
-prescribed rest returns `unspecified` rather than a guess — on this log such
-items look statistically like the short-rest band, but that is a correlation
-over ~31 items, and treating an absent value as a measured one is the mistake
-the RPE prefill already taught this codebase. Most items prescribe no rest, so
-the mix is always reported against the sets that **said**.
+`strengthRest`'s floor and `hypertrophyRest`'s ceiling.
+**An untouched rest picker resolves to `UNLOGGED_REST_SECONDS` (30s), not to a
+refusal.** The first version returned `unspecified` and left most of a real log
+unclassified; the athlete's own account is that not opening the picker reliably
+means a short rest, and the data agrees — their unlogged loaded items sit with
+the under-60s band on load and on superset share. That is a stated fact about
+how the control gets used, which is what separates it from the RPE prefill:
+`rpeWasRated` still refuses, because nothing comparable backs a missing rating.
+Every verdict carries `restAssumed` and the mix counts assumed sets, so a
+surface can say how much of its answer is inference — on that log, 46%.
+**DO NOT REACH FOR `TIMERS.defaultRestSeconds` FOR THIS.** It is 120 and belongs
+to the on-screen countdown — what the timer starts at, not a claim about what
+was rested, and nothing writes its elapsed value back to the set. A sensitivity
+run over the live log: assuming 30s, 60s or 90s gives an identical split
+(12% strength / 86% hypertrophy), while 120s flips it to 58% strength. The
+assumption is robust anywhere below the boundary and catastrophic exactly at the
+value a careless reach would have picked.
 -> `src/lib/coach/intent.ts`, `src/lib/coach/signals.ts` (`loadedIntent`)
 
 ## Superseded

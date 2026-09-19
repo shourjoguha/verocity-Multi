@@ -45,9 +45,7 @@ export type LoadedIntent =
   /** The middle: moderate rest, or a superset that shares muscles. */
   | 'hypertrophy'
   /** Short rest against a partner that fatigues the same tissue. */
-  | 'conditioning'
-  /** Loaded, but nothing said about how it was spaced. */
-  | 'unspecified';
+  | 'conditioning';
 
 /**
  * Region overlap between two movements, 0..1.
@@ -82,19 +80,47 @@ export const RELATED_OVERLAP = 0.3;
  *  hypertrophy ceiling by a clear margin, so the middle band stays the middle. */
 export const DENSE_REST_SECONDS = 60;
 
+/**
+ * What to assume when the rest PICKER was never touched.
+ *
+ * `LogItem.restSeconds` is set by the manual selector in the movement sheet
+ * (`TIMERS.restPresets`). Absent means the athlete never opened it — and the
+ * athlete whose log this was built against says that reliably means a short
+ * rest, which the data agrees with: their unlogged loaded items sit with the
+ * under-60s band on load and on superset share, not with the long-rest one.
+ *
+ * DO NOT REACH FOR `TIMERS.defaultRestSeconds` HERE. That constant is 120 and
+ * belongs to the on-screen countdown, which is a different thing entirely — it
+ * is what the timer starts at, not a claim about what was rested, and nothing
+ * writes its elapsed value back to the set. Using it would put every unlogged
+ * item at exactly the strength boundary and classify the majority of a real log
+ * as strength work, which is the precise opposite of what it is.
+ *
+ * This is an ASSUMPTION and is reported as one: every verdict carries
+ * `restAssumed`, and the mix counts assumed sets separately so a surface can
+ * say how much of its own answer rests on this number.
+ */
+export const UNLOGGED_REST_SECONDS = 30;
+
 export interface IntentInput {
   item: LogItem;
   group: LogGroup;
   /** `TRAINING.strengthRest.value[0]`, which is also `hypertrophyRest.value`. */
   restBoundarySeconds: number;
+  /** Override the assumption for an untouched picker. Defaults to
+   *  UNLOGGED_REST_SECONDS; pass it explicitly to test the sensitivity. */
+  unloggedRestSeconds?: number;
   overrides?: OverrideMap;
 }
 
 export interface IntentVerdict {
   intent: LoadedIntent;
-  /** Prescribed rest actually found, item first then group. Null is meaningful
-   *  and is why `unspecified` exists. */
-  restSeconds: number | null;
+  /** The rest the verdict was reached on — the logged value, or the assumed one
+   *  when the picker was never touched. */
+  restSeconds: number;
+  /** True when `restSeconds` is the assumption rather than a logged choice. A
+   *  caller that does not report this is overstating what it knows. */
+  restAssumed: boolean;
   /** Highest region overlap with a partner in the same superset or circuit. */
   partnerOverlap: number | null;
 }
@@ -102,17 +128,21 @@ export interface IntentVerdict {
 /**
  * Classify one item's loaded work.
  *
- * Deliberately returns `unspecified` rather than guessing when no rest was
- * prescribed. On the data that prompted this, unspecified loaded items look
- * statistically like the short-rest band — but that is a correlation across 31
- * items, not a fact, and the codebase has been bitten before by treating an
- * absent value as a measured one (the RPE prefill, and `drift: 0` against no
- * reading at all). A caller that wants the optimistic reading can say so; the
- * measurement will not say it for them.
+ * An untouched rest picker resolves to UNLOGGED_REST_SECONDS rather than
+ * refusing to answer — but the verdict says so via `restAssumed`, and every
+ * caller must carry that through. This is the narrow case where assuming beats
+ * abstaining: the alternative left most of a real log unclassified, and the
+ * assumption is a stated fact about how the picker gets used rather than an
+ * inference the engine invented for itself. It is NOT a licence to do the same
+ * with a missing RPE or a missing reading — those have no such fact behind
+ * them, which is why `rpeWasRated` and `coach_observations` still refuse.
  */
 export function classifyIntent(input: IntentInput): IntentVerdict {
   const { item, group, restBoundarySeconds } = input;
-  const rest = item.restSeconds ?? group.restSeconds ?? null;
+  const logged = item.restSeconds ?? group.restSeconds ?? null;
+  // 0 is a real selection ("no rest"), not an absent one — `??` keeps it.
+  const restAssumed = logged == null;
+  const rest = logged ?? input.unloggedRestSeconds ?? UNLOGGED_REST_SECONDS;
 
   const mine = classifyMovement(item.movement, { overrides: input.overrides }).profile.regions;
   let partnerOverlap: number | null = null;
@@ -124,8 +154,6 @@ export function classifyIntent(input: IntentInput): IntentVerdict {
   }
   const relatedPartner = partnerOverlap != null && partnerOverlap >= RELATED_OVERLAP;
 
-  if (rest == null) return { intent: 'unspecified', restSeconds: null, partnerOverlap };
-
   // Long rest is strength work — UNLESS it is being spent on a partner that
   // fatigues the same muscles, which is the one case the corpus's own caveat
   // does not cover.
@@ -133,46 +161,70 @@ export function classifyIntent(input: IntentInput): IntentVerdict {
     return {
       intent: relatedPartner ? 'hypertrophy' : 'strength',
       restSeconds: rest,
+      restAssumed,
       partnerOverlap,
     };
   }
   // Short rest against a related partner is density work under load.
   if (rest <= DENSE_REST_SECONDS && relatedPartner) {
-    return { intent: 'conditioning', restSeconds: rest, partnerOverlap };
+    return { intent: 'conditioning', restSeconds: rest, restAssumed, partnerOverlap };
   }
-  return { intent: 'hypertrophy', restSeconds: rest, partnerOverlap };
-}
-
-/** Loaded sets by what they appear to be for. Counts SETS, not items, because
- *  an item is a row in a logger and a set is the unit of work. */
-export type IntentMix = Record<LoadedIntent, number>;
-
-export function emptyMix(): IntentMix {
-  return { strength: 0, hypertrophy: 0, conditioning: 0, unspecified: 0 };
+  return { intent: 'hypertrophy', restSeconds: rest, restAssumed, partnerOverlap };
 }
 
 /**
- * The share each intent takes of the sets that SAID what they were for.
+ * Loaded sets by what they appear to be for, plus how many of them leaned on
+ * the unlogged-rest assumption.
  *
- * `unspecified` is excluded from the denominator and reported alongside, so a
- * log that prescribes rest on a third of its items cannot read as "two thirds
- * of your work is hypertrophy" when the honest statement is "of the third that
- * said, two thirds were hypertrophy-shaped".
+ * Counts SETS, not items: an item is a row in a logger and a set is the unit of
+ * work, and rest is prescribed on the item and applies to each of its sets —
+ * the same shape as the `/side` and `(p)` notations.
+ */
+export interface IntentMix {
+  strength: number;
+  hypertrophy: number;
+  conditioning: number;
+  /** Of the above, how many were classified on an assumed rest. Not a fourth
+   *  category — these are already counted in the three. */
+  assumed: number;
+}
+
+export function emptyMix(): IntentMix {
+  return { strength: 0, hypertrophy: 0, conditioning: 0, assumed: 0 };
+}
+
+export function countIntent(mix: IntentMix, verdict: IntentVerdict, sets = 1): void {
+  mix[verdict.intent] += sets;
+  if (verdict.restAssumed) mix.assumed += sets;
+}
+
+/**
+ * The share each intent takes, and how much of that rests on an assumption.
+ *
+ * `assumed` is NOT removed from the denominator — every set now has a verdict,
+ * so the shares are over all of them. It is reported beside so a surface can
+ * say how much of its own answer is inference: on a log that prescribes rest on
+ * a third of its items, "most of your loaded work is hypertrophy-shaped" is
+ * true but two thirds of it is true BY ASSUMPTION, and a reader is entitled to
+ * know which.
  */
 export function mixShares(mix: IntentMix): {
-  shares: Record<Exclude<LoadedIntent, 'unspecified'>, number>;
-  specified: number;
-  unspecified: number;
+  shares: Record<LoadedIntent, number>;
+  total: number;
+  assumed: number;
+  /** 0..1 — how much of the verdict leans on UNLOGGED_REST_SECONDS. */
+  assumedShare: number;
 } {
-  const specified = mix.strength + mix.hypertrophy + mix.conditioning;
-  const share = (n: number) => (specified > 0 ? Number((n / specified).toFixed(2)) : 0);
+  const total = mix.strength + mix.hypertrophy + mix.conditioning;
+  const share = (n: number) => (total > 0 ? Number((n / total).toFixed(2)) : 0);
   return {
     shares: {
       strength: share(mix.strength),
       hypertrophy: share(mix.hypertrophy),
       conditioning: share(mix.conditioning),
     },
-    specified,
-    unspecified: mix.unspecified,
+    total,
+    assumed: mix.assumed,
+    assumedShare: share(mix.assumed),
   };
 }

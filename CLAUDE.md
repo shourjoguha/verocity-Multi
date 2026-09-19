@@ -257,8 +257,12 @@ UI audit have both run.
   `hypertrophyRest`'s ceiling — the same number from both claims, not a new
   threshold. A superset only argues against strength when the partner trains the
   **same** muscles, because `strengthRest`'s caveat explicitly allows rest to be
-  filled by an unrelated one. An item with no prescribed rest is `unspecified`,
-  never a guess, and shares are always reported over the sets that said.
+  filled by an unrelated one. An untouched rest picker resolves to
+  `UNLOGGED_REST_SECONDS` (30s) and the verdict carries `restAssumed`, so the
+  surface can report how much of its answer is inference. **Never use
+  `TIMERS.defaultRestSeconds` for this** — it is 120, it belongs to the
+  countdown rather than to what was rested, and it would classify most of a real
+  log as strength work.
 - **Whether a finding may re-speak is a trajectory question, not a clock one.**
   `coach_observations` records one drift reading per rule per check-in day
   whether or not the rule spoke, and `src/lib/coach/recurrence.ts` scores

@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   DENSE_REST_SECONDS,
   RELATED_OVERLAP,
+  UNLOGGED_REST_SECONDS,
   classifyIntent,
+  countIntent,
   emptyMix,
   mixShares,
   regionOverlap,
 } from '@/lib/coach/intent';
+import { TIMERS } from '@/app.config';
 import { TRAINING } from '@/lib/coach/knowledge';
 import { isLoadedSet, meaningfulRegionShare } from '@/lib/bodyLoad';
 import { classifyMovement } from '@/lib/movementTaxonomy';
@@ -94,15 +97,36 @@ describe('classifyIntent', () => {
     expect(verdict(squat, group('single', [squat], BOUNDARY)).intent).toBe('strength');
   });
 
-  it('says unspecified rather than guessing when no rest was prescribed', () => {
-    // Unspecified loaded items look statistically like the short-rest band, but
-    // that is a correlation over a few dozen items. Treating an absent value as
-    // a measured one is the mistake the RPE prefill already taught this
-    // codebase.
+  it('assumes a short rest when the picker was never touched, and says so', () => {
     const squat = item('Back Squat');
     const v = verdict(squat, group('single', [squat]));
-    expect(v.intent).toBe('unspecified');
-    expect(v.restSeconds).toBeNull();
+    expect(v.restAssumed).toBe(true);
+    expect(v.restSeconds).toBe(UNLOGGED_REST_SECONDS);
+    expect(v.intent).toBe('hypertrophy');
+  });
+
+  it('never calls an unlogged set strength work', () => {
+    // The trap this constant exists to avoid: TIMERS.defaultRestSeconds is 120
+    // and belongs to the on-screen countdown, not to what was rested. Reaching
+    // for it here would put every untouched item exactly on the strength
+    // boundary and classify most of a real log as strength.
+    expect(TIMERS.defaultRestSeconds).toBeGreaterThanOrEqual(BOUNDARY);
+    expect(UNLOGGED_REST_SECONDS).toBeLessThan(BOUNDARY);
+    const squat = item('Back Squat');
+    expect(verdict(squat, group('single', [squat])).intent).not.toBe('strength');
+  });
+
+  it('treats a picked 0s as a real choice, not an absent one', () => {
+    const squat = item('Back Squat', { restSeconds: 0 });
+    const lunge = item('Reverse Lunge');
+    const v = verdict(squat, group('superset', [squat, lunge]));
+    expect(v.restAssumed).toBe(false);
+    expect(v.intent).toBe('conditioning');
+  });
+
+  it('marks a logged rest as not assumed', () => {
+    const squat = item('Back Squat', { restSeconds: BOUNDARY });
+    expect(verdict(squat, group('single', [squat])).restAssumed).toBe(false);
   });
 
   it('takes the most related partner in a circuit, not the first', () => {
@@ -121,18 +145,39 @@ describe('classifyIntent', () => {
 });
 
 describe('mixShares', () => {
-  it('reports shares over the sets that said, and carries the rest separately', () => {
-    const m = { ...emptyMix(), strength: 3, hypertrophy: 6, conditioning: 1, unspecified: 40 };
+  it('reports shares over every loaded set, with the assumed part beside it', () => {
+    const m = { strength: 3, hypertrophy: 6, conditioning: 1, assumed: 7 };
     const out = mixShares(m);
-    expect(out.specified).toBe(10);
+    expect(out.total).toBe(10);
     expect(out.shares.hypertrophy).toBe(0.6);
-    expect(out.unspecified).toBe(40);
+    // Assumed is NOT removed from the denominator — it overlaps the three.
+    expect(out.assumed).toBe(7);
+    expect(out.assumedShare).toBe(0.7);
   });
 
-  it('does not divide by zero when nothing stated a rest', () => {
-    const out = mixShares({ ...emptyMix(), unspecified: 9 });
-    expect(out.specified).toBe(0);
+  it('does not divide by zero on an empty mix', () => {
+    const out = mixShares(emptyMix());
+    expect(out.total).toBe(0);
     expect(out.shares.strength).toBe(0);
+    expect(out.assumedShare).toBe(0);
+  });
+});
+
+describe('countIntent', () => {
+  it('counts the verdict and tallies the assumption separately', () => {
+    const mix = emptyMix();
+    const squat = item('Back Squat');
+    countIntent(mix, verdict(squat, group('single', [squat])), 3);
+    expect(mix.hypertrophy).toBe(3);
+    expect(mix.assumed).toBe(3);
+  });
+
+  it('leaves the assumption tally alone for a logged rest', () => {
+    const mix = emptyMix();
+    const squat = item('Back Squat', { restSeconds: BOUNDARY });
+    countIntent(mix, verdict(squat, group('single', [squat])), 2);
+    expect(mix.strength).toBe(2);
+    expect(mix.assumed).toBe(0);
   });
 });
 

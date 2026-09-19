@@ -67,7 +67,7 @@ export function loadedTooLight(
   const shape =
     i.sufficiency === 'insufficient'
       ? ''
-      : ` Of the ${i.value.specified} loaded sets that prescribed a rest, ${pct(i.value.shares.strength)} are spaced like strength work and ${pct(i.value.shares.conditioning)} like loaded conditioning; ${i.value.unspecified} more prescribed none, so they are not counted either way.`;
+      : ` Of your ${i.value.total} loaded sets, ${pct(i.value.shares.strength)} are spaced like strength work and ${pct(i.value.shares.conditioning)} like loaded conditioning — though ${pct(i.value.assumedShare)} of that read rests on the default for sets where the rest picker was never touched.`;
 
   return {
     ruleId: 'training.intent.loaded-too-light',
@@ -88,7 +88,7 @@ export function loadedTooLight(
       goalWeight: weight,
       strengthShapedShare: i.sufficiency === 'insufficient' ? null : i.value.shares.strength,
       conditioningShapedShare: i.sufficiency === 'insufficient' ? null : i.value.shares.conditioning,
-      restUnspecifiedSets: i.value.unspecified,
+      restAssumedSets: i.value.assumed,
     },
   };
 }
