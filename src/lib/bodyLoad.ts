@@ -85,7 +85,25 @@ export interface BodyLoadSummary {
   planeMinutes: Record<PlaneKey, number>;
   rotaryMinutes: Record<RotaryRole, number>;
   systemicMinutes: number;
+  /**
+   * Fractional share of each resistance set, per region. Sums across regions to
+   * the total completed resistance-set count.
+   *
+   * KEPT AS IT WAS, and read by the body map. `hardSetsByRegion` below is the
+   * one the coach reads; the two answer different questions and the previous
+   * bug was using this one to answer the other's.
+   */
   resistanceSets: Record<RegionKey, number>;
+  /**
+   * WHOLE sets per region — one per set for every region the movement
+   * meaningfully trains (see meaningfulRegionShare), across every loaded set
+   * whatever its modality (see isLoadedSet).
+   *
+   * This is the currency `TRAINING.hypertrophyWeeklySets` is stated in, and it
+   * does NOT sum to the session's set count: a squat set legitimately counts
+   * once for quads and once for glutes. Never total it.
+   */
+  hardSetsByRegion: Record<RegionKey, number>;
   resistanceTonnage: Record<RegionKey, number>;
   unmapped: UnmappedMovement[];
   totalMinutes: number;
@@ -108,6 +126,71 @@ export function setMinutes(set: LogSet): number {
   if (a.reps != null) return (a.reps * LOAD.repSeconds) / 60;
   if (a.distance != null) return a.distance / LOAD.metersPerMinute;
   return LOAD.fallbackSetMinutes;
+}
+
+/**
+ * Does this region take enough of a movement to count as trained by it?
+ *
+ * THE UNIT BUG THIS EXISTS TO FIX. `resistanceSets` adds a region's SHARE of
+ * each set (`+= weight`), and `normalizeWeights` makes those shares sum to
+ * exactly 1.0 per movement. So one squat set is 0.6 quads + 0.18 glutes + the
+ * rest — while the evidence it is compared against
+ * (`TRAINING.hypertrophyWeeklySets`, "10 sets per muscle group per week")
+ * counts that same set as 1 for quads AND 1 for glutes. A share was measured
+ * against a whole, which understates every region by roughly the number of
+ * muscles the movement touches.
+ *
+ * On one real log the effect was not subtle: shoulders read 2.7 sets a week
+ * fractionally and 14.8 counted properly, so the coach reported "no muscle
+ * group reaches 10" when three of them did. Its own suggested fix —
+ * "you need roughly 51 more hard sets a week" — was `9 regions x 10` minus a
+ * FRACTIONAL total, subtracting two different units in one expression.
+ *
+ * WHY THIS IS RELATIVE AND NOT A FLAT NUMBER. The first attempt used a flat
+ * 0.2 and was wrong on the very movements it existed for: Back Squat carries
+ * `glutes 0.18` and Sled Push `calves 0.15`, so a squat counted for quads alone
+ * and 26 sets of sled contributed nothing to calves. A flat floor also
+ * penalises exactly the movements that spread widest — a loaded carry, whose
+ * largest region is 0.35, would lose almost everything.
+ *
+ * So a region counts when it takes at least a QUARTER of what the movement's
+ * biggest region takes, with an absolute floor so a nearly-flat profile cannot
+ * enrol every muscle in the body. Both numbers are this product's editorial
+ * judgement about when a muscle is really being trained — like the impact
+ * weights, and unlike anything in knowledge.ts, which is why they live here and
+ * not there.
+ */
+export const REGION_SHARE_OF_PRIMARY = 0.25;
+export const REGION_SHARE_FLOOR = 0.1;
+
+/** The cutoff for one movement's region profile. */
+export function meaningfulRegionShare(regions: Partial<Record<string, number>>): number {
+  const top = Math.max(0, ...Object.values(regions).map((v) => v ?? 0));
+  return Math.max(REGION_SHARE_FLOOR, REGION_SHARE_OF_PRIMARY * top);
+}
+
+/**
+ * Did this set carry external or bodyweight load?
+ *
+ * Decides whether a set counts toward hard-set volume, and deliberately asks
+ * about the SET rather than the movement's modality. A loaded carry classifies
+ * as `endurance` and a kettlebell swing as `plyometric` — correct for the body
+ * map and the radar, which is why neither is being changed — but both are
+ * weight moved by muscle, and excluding them from the hypertrophy count dropped
+ * 50 of one athlete's 204 completed sets, Farmer Carry's fourteen among them.
+ *
+ * Bodyweight resistance still counts: a pull-up has no `weight` and is
+ * obviously loaded. What does not count is work with neither load nor reps —
+ * a mobility flow, a stretch, a timed erg piece.
+ */
+export function isLoadedSet(set: LogSet, profile: { bwLoad?: number } | null): boolean {
+  const a = set.actual;
+  if (!a.completed) return false;
+  if ((a.weight ?? 0) > 0) return true;
+  // No external load: it only counts if the movement loads bodyweight AND the
+  // set was counted in reps. A 20-minute row logs `time`, not reps, and is not
+  // a set of anything.
+  return (profile?.bwLoad ?? 0) > 0 && (a.reps ?? 0) > 0;
 }
 
 const clamp = (n: number, [lo, hi]: [number, number]) => Math.min(hi, Math.max(lo, n));
@@ -580,6 +663,7 @@ export function summarizeBodyLoad(
   const planeMinutes = zeroed(PLANE_KEYS);
   const rotaryMinutes = zeroed(['rotational', 'antiRotational'] as const);
   const resistanceSets = zeroed(MUSCLE_REGION_KEYS);
+  const hardSetsByRegion = zeroed(MUSCLE_REGION_KEYS);
   const resistanceTonnage = zeroed(MUSCLE_REGION_KEYS);
   const byLens = Object.fromEntries(
     BODY_LENS_KEYS.map((k) => [k, { minutes: zeroed(MUSCLE_REGION_KEYS), volume: zeroed(MUSCLE_REGION_KEYS) }]),
@@ -643,6 +727,9 @@ export function summarizeBodyLoad(
       // reallocated. Only minutes were ever in the wrong unit.
       const rom = romFactor(profile);
       const bw = bwLoadFactor(profile);
+      // One cutoff per movement, not per region: it is a property of the
+      // movement's own profile shape.
+      const regionCutoff = meaningfulRegionShare(profile.regions);
       const itemVolume = item.sets.reduce((acc, s) => acc + setVolume(s, unweightedKg, rom, bw), 0);
 
       const lens = lensFor(modality);
@@ -661,6 +748,16 @@ export function summarizeBodyLoad(
             if (!s.actual.completed) continue;
             resistanceSets[region] += weight;
             resistanceTonnage[region] += (s.actual.weight ?? 0) * (s.actual.reps ?? 0) * weight;
+          }
+        }
+
+        // Whole sets, every modality, gated on the set being loaded and on the
+        // region taking a meaningful share. Outside the `resistance` branch on
+        // purpose: a loaded carry is endurance by modality and still trains the
+        // muscles holding the weight.
+        if (weight >= regionCutoff) {
+          for (const s of item.sets) {
+            if (isLoadedSet(s, profile)) hardSetsByRegion[region] += 1;
           }
         }
       }
@@ -686,6 +783,7 @@ export function summarizeBodyLoad(
     rotaryMinutes,
     systemicMinutes,
     resistanceSets,
+    hardSetsByRegion,
     resistanceTonnage,
     unmapped: [...unmapped.entries()]
       .map(([name, v]) => ({ name, minutes: v.minutes, sessions: v.sessions.size }))

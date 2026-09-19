@@ -669,7 +669,12 @@ const RAW_RULES: MovementRule[] = [
   },
   {
     id: 'arm-isolation',
-    match: ['curl', 'tricep', 'bicep', 'pushdown', 'skullcrusher'],
+    // Both spellings. 'skullcrusher' alone missed the everyday two-word form,
+    // which is what a real log actually contained — and an unmapped movement is
+    // not a small loss: it leaves the sets out of every region count AND drags
+    // `coverage` down, which is the gate hypertrophyVolumeShort refuses to
+    // speak below.
+    match: ['curl', 'tricep', 'bicep', 'pushdown', 'skullcrusher', 'skull crusher'],
     not: ['leg curl', 'ham curl', 'nordic'],
     profile: p({ arms: 1 }, 'resistance', 'sagittal', { rom: ROM.armIsolation }),
   },

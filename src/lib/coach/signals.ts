@@ -30,6 +30,7 @@ import { bestE1rmByMovement } from '@/lib/prs';
 import { completedLogs } from '@/lib/stats';
 import { buildDayInsights, summarizeTiming, toHours } from '@/lib/mealInsights';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
+import { classifyIntent, emptyMix, mixShares, type IntentMix } from '@/lib/coach/intent';
 import type { MealLog, UserStats, WorkoutLog } from '@/lib/types';
 import { summarizeMealText, type MealTextSummary } from '@/lib/coach/mealText';
 import type { Measured, Sufficiency } from '@/lib/coach/types';
@@ -162,8 +163,12 @@ export interface TrainingSignals {
    * being dropped, so a badly-logged session still counts as something.
    */
   sessionMinutesPerWeek: Measured<Record<ModalityKey, number>>;
-  /** Hard resistance sets per week, per muscle region. Sets, because the
-   *  hypertrophy evidence is stated in sets. */
+  /**
+   * Hard sets per week, per muscle region. Sets, because the hypertrophy
+   * evidence is stated in sets — and WHOLE sets, because that is the unit the
+   * evidence means. A squat is one set for quads and one for glutes, so these
+   * do not sum to the session's set count and must never be totalled.
+   */
   regionSetsPerWeek: Measured<Record<RegionKey, number>>;
   /**
    * How resistance sets distribute across the rep bands the evidence names.
@@ -248,6 +253,21 @@ export interface TrainingSignals {
    * so rather than claiming to have timed anything.
    */
   heavyRest: Measured<{ meanSeconds: number; belowBand: number; total: number }>;
+  /**
+   * Loaded sets by what they appear to be FOR — see ./intent.ts.
+   *
+   * Reps do not separate strength from hypertrophy from loaded conditioning;
+   * prescribed rest and superset relatedness do. `unspecified` is carried
+   * separately and kept out of the shares, because most items prescribe no rest
+   * and a share computed over all of them would be a guess wearing a
+   * percentage.
+   */
+  loadedIntent: Measured<{
+    mix: IntentMix;
+    shares: { strength: number; hypertrophy: number; conditioning: number };
+    specified: number;
+    unspecified: number;
+  }>;
   /** Share of classified minutes the taxonomy could actually resolve, 0..1. */
   coverage: number;
   /** Sessions that logged a conditioning block AND a resistance block. */
@@ -339,8 +359,18 @@ export function measureTraining(
 
   const body = summarizeBodyLoad(logs, overrides, { unweightedKg: opts.unweightedKg });
 
+  // WHOLE sets, not each region's share of one. `resistanceSets` splits a set
+  // across the muscles it trains and sums to 1 per set; the evidence this feeds
+  // (`TRAINING.hypertrophyWeeklySets`) counts a squat as a set for quads AND a
+  // set for glutes. Reading the fractional field here understated every region
+  // by roughly the number of muscles each movement touches — see
+  // MEANINGFUL_REGION_SHARE in lib/bodyLoad.ts for what that cost in practice.
+  //
+  // It also now includes loaded carries, swings and holds, which are weight
+  // moved by muscle whatever their modality says. The body map still reads
+  // `resistanceSets`; the two fields answer different questions.
   const regionPerWeek = Object.fromEntries(
-    MUSCLE_REGION_KEYS.map((k) => [k, body.resistanceSets[k] / weeks]),
+    MUSCLE_REGION_KEYS.map((k) => [k, body.hardSetsByRegion[k] / weeks]),
   ) as Record<RegionKey, number>;
 
   // Rep bands and primary intensity need the raw sets, and need to know which
@@ -366,6 +396,7 @@ export function measureTraining(
   let unratedSessions = 0;
   let rpeSetsTotal = 0;
   let rpeSetsAtDefault = 0;
+  const intentMix = emptyMix();
   let heavyRestSum = 0;
   let heavyRestCount = 0;
   let heavyRestBelow = 0;
@@ -525,6 +556,19 @@ export function measureTraining(
                     heavyRestCount += 1;
                     if (rest < opts.heavyRestSeconds[0]) heavyRestBelow += 1;
                   }
+                  // What this loaded set was FOR. Counted per set rather than
+                  // per item because rest is prescribed on the item and applies
+                  // to each of its sets — the same shape as the `/side` and
+                  // `(p)` notations, which are written item-level and priced
+                  // set-level.
+                  intentMix[
+                    classifyIntent({
+                      item,
+                      group,
+                      restBoundarySeconds: opts.heavyRestSeconds[0],
+                      overrides,
+                    }).intent
+                  ] += 1;
                 }
               }
             }
@@ -647,6 +691,17 @@ export function measureTraining(
       rpeSetsTotal,
       30,
       `only ${rpeSetsTotal} sets recorded an RPE at all`,
+    ),
+    loadedIntent: measured(
+      (() => {
+        const m = mixShares(intentMix);
+        return { mix: intentMix, shares: m.shares, specified: m.specified, unspecified: m.unspecified };
+      })(),
+      mixShares(intentMix).specified,
+      // Below this many sets that actually stated their rest, a mix is a
+      // handful of items and not a training style.
+      12,
+      'too few loaded sets prescribe a rest for an intent split to mean anything',
     ),
     heavyRest: measured(
       {

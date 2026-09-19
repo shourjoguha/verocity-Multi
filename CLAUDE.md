@@ -25,6 +25,7 @@ intent, LESSONS describes what actually happened.
 | Change visuals, tokens, or layout                                        | **Hard rules below** (canonical), then `app.config.ts` |
 | Touch the AI coach                                                       | `supabase/functions/coach/index.ts`, `lib/deepGovernors.ts` |
 | **Change when a finding is allowed to speak again**                      | `src/lib/coach/recurrence.ts` — read its header first |
+| **Count sets per muscle, or decide what counts as loaded work**          | `src/lib/bodyLoad.ts` — `meaningfulRegionShare`, `isLoadedSet` |
 | Write coach output from a Claude Code session                            | `src/lib/coach/governor.ts` (the boundary), `supabase/migrations/0043_coach_briefs_notes.sql` |
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
 | **Change a component, sheet, token or layout**                           | skill ui-change — `.claude/skills/ui-change/SKILL.md` |
@@ -236,6 +237,28 @@ UI audit have both run.
   claim-cited and pack-versioned, and a model that can edit it makes every
   citation in the app worthless. `src/lib/coach/governor.ts` enforces this at
   **read** time so tightening it disarms rows already written.
+- **Per-muscle set counts are WHOLE sets, and `resistanceSets` is not them.**
+  `resistanceSets` splits each set across the muscles it trains and sums to 1.0
+  per set; `TRAINING.hypertrophyWeeklySets` counts a squat as a set for quads
+  AND a set for glutes. Reading the fractional field against that floor
+  understated every region by roughly the number of muscles a movement touches,
+  and shipped "No muscle group reaches 10 sets/week" to an athlete for whom
+  three did. The coach reads `hardSetsByRegion`; the body map keeps
+  `resistanceSets`. **Never total `hardSetsByRegion`** — a squat counts twice on
+  purpose — and never gate loaded volume on `modality === 'resistance'`: a
+  loaded carry is `endurance` by modality and still weight moved by muscle
+  (`isLoadedSet`). A region's cutoff is **relative to that movement's own
+  primary region**, because a flat one drops Back Squat's glutes (0.18) and a
+  carry's whole profile (top region 0.35).
+- **What loaded work was FOR is a rest-and-structure question, not a rep one.**
+  Reps barely move across the range; prescribed rest and superset relatedness
+  separate strength from hypertrophy from loaded conditioning
+  (`src/lib/coach/intent.ts`). The 120s boundary is `strengthRest`'s floor and
+  `hypertrophyRest`'s ceiling — the same number from both claims, not a new
+  threshold. A superset only argues against strength when the partner trains the
+  **same** muscles, because `strengthRest`'s caveat explicitly allows rest to be
+  filled by an unrelated one. An item with no prescribed rest is `unspecified`,
+  never a guess, and shares are always reported over the sets that said.
 - **Whether a finding may re-speak is a trajectory question, not a clock one.**
   `coach_observations` records one drift reading per rule per check-in day
   whether or not the rule spoke, and `src/lib/coach/recurrence.ts` scores

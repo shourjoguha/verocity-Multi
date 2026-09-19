@@ -1455,6 +1455,73 @@ unfalsifiable from the page, where a wrong note that says too much is visible
 the moment it is read.
 → `src/lib/coach/governor.ts`, `supabase/migrations/0043_coach_briefs_notes.sql`
 
+### The coach says no muscle group reaches its volume floor, and the athlete is right to doubt it
+`[measured against the live account — the finding was false for three of nine regions]`
+`training.hypertrophy.total-volume-short` reported "No muscle group reaches 10
+sets/week" and told the athlete to add **51 hard sets a week** on top of the 38
+they were already doing. The athlete pushed back. They were right, and the cause
+was a **unit mismatch that had been invisible since the rule shipped**.
+`bodyLoad.ts` accumulates `resistanceSets[region] += weight`, and
+`normalizeWeights` makes a movement's region weights **sum to exactly 1.0**. So
+one Back Squat set is 0.6 quads + 0.18 glutes + 0.12 core + 0.10 hamstrings —
+while `TRAINING.hypertrophyWeeklySets` ("10 sets per muscle group per week")
+counts that same set as **one set for quads AND one for glutes**. A share was
+being measured against a whole, understating every region by roughly the number
+of muscles the movement touches.
+**The giveaway was in the rule's own suggested fix.** `trained * floor - total`
+subtracted a fractional cross-region sum from a whole-set target — two different
+units in one expression. **If an action line's arithmetic mixes units, the
+measurement behind it does too.**
+**Two further things were wrong in the same place.** Loaded carries, swings and
+holds were excluded entirely because the count was gated on
+`modality === 'resistance'`; Farmer Carry classifies as `endurance`, which is
+correct for the body map and the radar and wrong as a reason to ignore fourteen
+loaded sets. And `Skull crusher` (two words) missed the `skullcrusher` matcher,
+so it was unmapped — which costs the sets AND drags `coverage`, the gate the
+rule refuses to speak below.
+**THE FIX'S FIRST ATTEMPT WAS ALSO WRONG, and the data said so immediately.** A
+flat 0.2 "meaningful share" threshold left Back Squat counting for quads alone
+(glutes is 0.18) and 26 sets of Sled Push contributing nothing to calves
+(0.15). A flat floor also punishes exactly the movements that spread widest — a
+carry's largest region is only 0.35. The cutoff is now **relative to each
+movement's own primary region** (a quarter of it, with an absolute floor).
+Glutes went 5.3 to 17.5 sets/week, hamstrings 6.3 to 13.8, calves 1.3 to 7.8,
+and the finding went from "all nine regions short" to four — three of which sit
+at 9.3-9.5, a set away from the floor.
+**`resistanceSets` was left exactly as it was** and `hardSetsByRegion` added
+beside it. The body map reads the first and the coach reads the second; they
+answer different questions, and the bug was using one to answer the other's.
+The new field **must never be totalled** — a squat legitimately counts twice.
+-> `src/lib/bodyLoad.ts` (`meaningfulRegionShare`, `isLoadedSet`),
+`src/lib/coach/signals.ts`, `src/lib/coach/rules/training.ts`
+
+### Reps cannot tell strength from hypertrophy from loaded conditioning
+`[measured over 56 days of one real log]`
+Asked to infer what loaded work was FOR, the obvious discriminator is the rep
+count. On real data it does nothing. Across four prescribed-rest bands the mean
+reps moved **11.7 to 10.2** while the mean top load moved **35 to 58.5 kg** and
+the superset share collapsed **50% to 0%**. Reps alone would have called every
+one of those sets hypertrophy.
+**Rest and superset structure do the separating**, and prescribed rest is the
+right field to read even though the app has never recorded rest *taken* —
+`SetActual` has no rest member at all. Intent is what the work was *for*, and
+the plan is where intent is written down.
+**The corpus corrects the obvious version of the rule.** "Superset means it is
+not strength work" is wrong: `TRAINING.strengthRest`'s own caveat has Galpin
+"explicitly allow the rest to be filled by supersetting an unrelated muscle
+group". So a superset only argues against strength when the partner fatigues
+the **same** muscles — which the region profiles already know, via
+`regionOverlap`. **A rule that ignores a claim's caveat is a rule the claim does
+not support.**
+No new threshold was invented: 120s arrives from both directions, as
+`strengthRest`'s floor and `hypertrophyRest`'s ceiling. And an item with no
+prescribed rest returns `unspecified` rather than a guess — on this log such
+items look statistically like the short-rest band, but that is a correlation
+over ~31 items, and treating an absent value as a measured one is the mistake
+the RPE prefill already taught this codebase. Most items prescribe no rest, so
+the mix is always reported against the sets that **said**.
+-> `src/lib/coach/intent.ts`, `src/lib/coach/signals.ts` (`loadedIntent`)
+
 ## Superseded
 
 Kept so the search path survives, **demoted so it stops reading as advice.**
