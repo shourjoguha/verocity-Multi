@@ -58,12 +58,23 @@ export function loadedTooLight(
       ? ` Your highest estimated 1RM in the window is ${topMovement} at ${topMovementBestKg} kg, and your working sets on it average ${pct(topMovementMeanFraction)} of that.`
       : '';
 
+  // How the loaded work is SHAPED, where it said. Rest and superset structure
+  // separate strength from hypertrophy from loaded conditioning; reps do not
+  // (see ../intent.ts). Stated only when enough sets prescribed a rest to make
+  // a split mean anything, and always against the sets that SAID — never
+  // against all of them, which would turn silence into a percentage.
+  const i = s.loadedIntent;
+  const shape =
+    i.sufficiency === 'insufficient'
+      ? ''
+      : ` Of your ${i.value.total} loaded sets, ${pct(i.value.shares.strength)} are spaced like strength work and ${pct(i.value.shares.conditioning)} like loaded conditioning — though ${pct(i.value.assumedShare)} of that read rests on the default for sets where the rest picker was never touched.`;
+
   return {
     ruleId: 'training.intent.loaded-too-light',
     periodKey,
     tldr: `${pct(share)} of loaded sets reach ${pct(heavy)}`,
     action: `Take one lift per session to ${pct(heavy)} of its best for sets of ${TRAINING.strengthReps.value} or fewer.`,
-    body: `${atOrAboveHeavy} of ${total} loaded sets in the last ${s.windowDays} days sat at or above ${pct(heavy)} of that movement's own best estimate.${lift} Galpin puts true strength work "${TRAINING.strengthIntensity.quote}" at ${TRAINING.strengthReps.value} reps or fewer — below that the adaptation on offer is size, not force. You ranked strength at ${weight}/100, so this is work that is not paying into the goal you set for it. His caveat: that 85% is for the moderately-to-highly trained; at a lower training age far less will do.`,
+    body: `${atOrAboveHeavy} of ${total} loaded sets in the last ${s.windowDays} days sat at or above ${pct(heavy)} of that movement's own best estimate.${lift} Galpin puts true strength work "${TRAINING.strengthIntensity.quote}" at ${TRAINING.strengthReps.value} reps or fewer — below that the adaptation on offer is size, not force. You ranked strength at ${weight}/100, so this is work that is not paying into the goal you set for it. His caveat: that 85% is for the moderately-to-highly trained; at a lower training age far less will do.${shape}`,
     drift: shortfall(share, 0.2),
     confidence: intensity.sufficiency === 'ok' ? 0.7 : 0.45,
     sufficiency: intensity.sufficiency,
@@ -75,6 +86,9 @@ export function loadedTooLight(
       topMovement,
       topMovementBestKg,
       goalWeight: weight,
+      strengthShapedShare: i.sufficiency === 'insufficient' ? null : i.value.shares.strength,
+      conditioningShapedShare: i.sufficiency === 'insufficient' ? null : i.value.shares.conditioning,
+      restAssumedSets: i.value.assumed,
     },
   };
 }
@@ -286,7 +300,17 @@ export function hypertrophyVolumeShort(
   // finding about chest a fortnight later — the monotony failure this engine is
   // most prone to. So the framing switches when nothing clears the bar.
   const global = short.length === trained && trained >= 4;
-  const total = Object.values(per).reduce((a, b) => a + b, 0);
+  // MEAN, never a sum. These are whole sets per region and a squat counts for
+  // quads AND glutes, so totalling them double-counts every compound lift. The
+  // old `action` did exactly that — it offered `trained * floor - total`, which
+  // subtracted a fractional cross-region sum from a whole-set target and told
+  // one athlete to add 51 hard sets a week on top of the 38 they were doing.
+  // There is no honest single number for "sets to add" here, because one added
+  // squat fills several regions at once, so the finding names the regions and
+  // lets the athlete place the work.
+  const meanPerRegion = trained
+    ? Object.values(per).filter((v) => v > 0).reduce((a, b) => a + b, 0) / trained
+    : 0;
 
   return {
     ruleId: global
@@ -297,10 +321,10 @@ export function hypertrophyVolumeShort(
       ? `No muscle group reaches ${floor} sets/week`
       : `${short.length} muscle group${short.length > 1 ? 's' : ''} under ${floor} sets/week`,
     action: global
-      ? `Add a second resistance session a week, or extend the ones you do — you need roughly ${Math.ceil(trained * floor - total)} more hard sets a week to bring every group to ${floor}.`
+      ? `Add a second resistance session a week, or extend the ones you do — start with ${short.slice(0, 2).map(([k]) => k).join(' and ')}, the furthest back.`
       : `Add a set or two per session to ${short.slice(0, 2).map(([k]) => k).join(' and ')} until each clears ${floor} hard sets a week.`,
     body: global
-      ? `None of the ${trained} muscle groups you trained in the last ${s.windowDays} days reached ${floor} hard sets a week — you average ${round(total, 0)} across all of them, against the ${trained * floor} that floor implies. The figure the guest series settles on for an all-round trainee is "${TRAINING.hypertrophyWeeklySets.quote}". When every group is short the constraint is total resistance volume, not any one muscle, so this is one finding rather than ${trained}. You ranked hypertrophy at ${weight}/100.`
+      ? `None of the ${trained} muscle groups you trained in the last ${s.windowDays} days reached ${floor} hard sets a week — they average ${round(meanPerRegion, 1)} each, and the lowest is ${named}. The figure the guest series settles on for an all-round trainee is "${TRAINING.hypertrophyWeeklySets.quote}". When every group is short the constraint is total resistance volume, not any one muscle, so this is one finding rather than ${trained}. Counts a whole set for every muscle a movement meaningfully trains, loaded carries and swings included. You ranked hypertrophy at ${weight}/100.`
       : `Averaged over the last ${s.windowDays} days: ${named} hard sets per week. The figure the guest series settles on for an all-round trainee is "${TRAINING.hypertrophyWeeklySets.quote}" — a floor for maintaining or building, not an optimum. You ranked hypertrophy at ${weight}/100. Note this counts only work the movement taxonomy could place; ${pct(s.coverage)} of your logged minutes were classifiable.`,
     drift: shortfall(worst, floor),
     confidence: s.regionSetsPerWeek.sufficiency === 'ok' ? 0.6 : 0.4,
