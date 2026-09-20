@@ -679,6 +679,24 @@ export const LOAD = {
 // LOAD.metersPerMinute — the same constants `setMinutes` uses — so a plank, a
 // carry and a set of squats stay commensurable the way they already do on the
 // body map.
+// When one movement counts as having done another, for plan adherence.
+// See `lib/movementSimilarity.ts` for why region cosine and not MOVEMENT_FAMILIES.
+export const SIMILARITY = {
+  // Region-profile cosine at or above which a substitution counts as minor.
+  //
+  // CALIBRATED, not chosen. Over the classifier, the swaps a lifter calls minor
+  // land at 0.95-1.00 (Pull-up → Lat Pulldown 1.000, DB → BB Bench 1.000,
+  // Incline → Flat Press 1.000, Back Squat → Front Squat 0.952, Walking Lunge →
+  // Bulgarian Split Squat 0.995) and the ones they do not land at 0.17-0.42
+  // (Bench → Overhead Press 0.421, Back Squat → RDL 0.330, Row → Med-Ball Throw
+  // 0.169). Nothing measured falls between 0.43 and 0.95, so this sits in an
+  // empty band with half a point of margin on each side — moving it anywhere
+  // inside that gap changes no verdict. The pairs are pinned in
+  // movementSimilarity.test.ts, which is what would catch a taxonomy edit
+  // closing the gap.
+  minRegionCosine: 0.85,
+} as const;
+
 export const VOLUME = {
   // Kg-equivalent for one unweighted rep (box jump, push-up, plank second) when
   // the owner's bodyweight is unknown. A UNIT CONVERSION, not a norm: it says

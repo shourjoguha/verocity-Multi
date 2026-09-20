@@ -13,6 +13,8 @@ import { Item, PageStagger } from '@/components/anim';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { isSubroutine } from '@/lib/subroutine';
 import { planWeekByLog, planWeekCount } from '@/lib/progression';
+import { computePlanAdherence } from '@/lib/planAdherence';
+import { PlanAdherenceSection } from '@/components/PlanAdherence';
 
 export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
   const showcase = mode === 'showcase';
@@ -83,6 +85,11 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   );
   const lastCompletedWeek =
     doneLogs.reduce((m, l) => Math.max(m, weekByLog.get(l.id) ?? 0), 0) || null;
+  // How much of the plan was actually done, over its whole life — not the
+  // 8-week window Stats reads. `logs` here is every log, which is what this
+  // needs and what /app/stats does not have.
+  const adherence = computePlanAdherence(plan.id, parsed, logs, new Date());
+
   const actualBest = new Map<string, { e1rm: number; label: string }>();
   for (const log of doneLogs) {
     const wk = weekByLog.get(log.id) as number;
@@ -180,6 +187,10 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
             </span>
           </div>
         </header>
+
+        <div className="mb-6">
+          <PlanAdherenceSection adherence={adherence} />
+        </div>
 
         {/* Deliberately not `ui/SegmentedTabs` — CLAUDE.md says "do not roll a
             sixth" segmented control, so the next reader will otherwise want to

@@ -7,7 +7,7 @@ import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { useAspectProfile } from '@/lib/useAspectProfile';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
-import { flattenSets, familyOf } from '@/lib/stats';
+import { completedLogs, flattenSets, familyOf } from '@/lib/stats';
 import {
   addWork,
   formatWork,
@@ -19,7 +19,7 @@ import {
   ZERO_WORK,
   type WorkTotals,
 } from '@/lib/work';
-import { summarizeBodyLoad } from '@/lib/bodyLoad';
+import { sessionClockSeconds, sessionLens } from '@/lib/bodyLoad';
 import { aspectWindows, logsInWindow } from '@/lib/aspects';
 import { formatDuration, formatRound } from '@/lib/format';
 import { sessionTagColors, stripeBackground } from '@/lib/tags';
@@ -134,26 +134,48 @@ function Sparkline({
 // Extracted from the render body and memoised by the caller. It used to run
 // inline on every render, so hovering a sparkline point re-derived every bucket,
 // map and series over 120 days of LogDocument JSONB just to move a tooltip.
-// How the window's MINUTES split across strength / cardio / mobility, for the
-// small proportion bar under the tiles. Reuses BODY_LENSES (the same split the
-// body map uses) so "kind of work" means one thing across the app, and reads
-// modalityMinutes off summarizeBodyLoad rather than re-deriving. Unmapped work
-// has no modality and is simply absent — this is a share of CLASSIFIED time, not
-// of the wall clock. Returns null when nothing classified, so the bar hides
-// rather than rendering an empty rail.
-function modalityMix(logs: WorkoutLog[]): { key: string; label: string; pct: number }[] | null {
-  const body = summarizeBodyLoad(logs);
-  const parts = BODY_LENS_KEYS.map((key) => ({
-    key,
-    label: BODY_LENSES[key].label,
-    minutes: BODY_LENSES[key].modalities.reduce(
-      (sum, m) => sum + (body.modalityMinutes[m as keyof typeof body.modalityMinutes] ?? 0),
-      0,
-    ),
-  }));
-  const total = parts.reduce((sum, p) => sum + p.minutes, 0);
+const UNCLASSIFIED = 'unclassified';
+
+// One step per lens, plus a fourth for "Other" — which only renders when a
+// session's movements did not classify. Three hardcoded ternaries used to do
+// this and collapsed the third and fourth segments onto the same grey.
+const MIX_SHADES = ['bg-fg/80', 'bg-fg/45', 'bg-fg/25', 'bg-fg/12'] as const;
+
+// Where the window's TIME went, for the small proportion bar under the tiles.
+//
+// PER SESSION, WINNER-TAKE-ALL, WHOLE CLOCK. This used to read
+// `modalityMinutes` off `summarizeBodyLoad`, which splits each session's clock
+// proportionally across the modalities inside it. That is the right question
+// for the body map and the wrong one here, and it made the rail disagree with
+// the TIME tile directly above it in two ways: it dropped the rest between
+// sets, and its denominator was CLASSIFIED minutes only, so any movement the
+// taxonomy could not place silently left the total. Three percentages summing
+// to 100 sat under a duration they were not a share of.
+//
+// An hour in the gym is an hour spent on what that session was for — rest,
+// setup and the warm-up included. So each session lands wholly in one lens and
+// contributes its whole clock, and the rail now sums to the TIME tile.
+// `sessionLens` carries the winner-take-all consequence: a Hyrox session is one
+// lens, not a split one.
+function sessionTimeMix(
+  logs: WorkoutLog[],
+): { key: string; label: string; pct: number }[] | null {
+  const seconds = new Map<string, number>();
+  for (const log of logs) {
+    if (log.status !== 'done') continue;
+    const lens = sessionLens(log);
+    const key = lens ?? UNCLASSIFIED;
+    seconds.set(key, (seconds.get(key) ?? 0) + sessionClockSeconds(log));
+  }
+  const total = [...seconds.values()].reduce((a, b) => a + b, 0);
   if (total <= 0) return null;
-  return parts.map(({ key, label, minutes }) => ({ key, label, pct: (minutes / total) * 100 }));
+  // Unclassified last, and only when it has time in it — a session whose
+  // movements the taxonomy could not place is still time you spent, and
+  // dropping it would put the rail back out of step with the TIME tile.
+  return [...BODY_LENS_KEYS.map((k) => ({ key: k as string, label: BODY_LENSES[k].label })),
+    { key: UNCLASSIFIED, label: 'Other' }]
+    .map(({ key, label }) => ({ key, label, pct: ((seconds.get(key) ?? 0) / total) * 100 }))
+    .filter((p) => p.key !== UNCLASSIFIED || p.pct > 0);
 }
 
 function deriveStats(
@@ -285,18 +307,28 @@ function deriveStats(
   const cards = groupBy === 'family' ? topFams : topMoves;
   const seriesFor = groupBy === 'family' ? famSeries : series;
 
-  // Adherence: completed sets / total sets across the window.
-  let totalSets = 0;
-  let doneSets = 0;
-  for (const log of all) {
-    for (const s of flattenSets(log)) {
-      totalSets += 1;
-      if (s.completed) doneSets += 1;
-    }
-  }
-  const adherence = totalSets ? Math.round((doneSets / totalSets) * 100) : null;
+  // THE TILES READ FINISHED SESSIONS ONLY, and all three read the same ones.
+  // They used to disagree with each other and with the rail beneath them:
+  // Sessions and Time counted every log in the window including the
+  // `in_progress` row that /app/log creates the moment you open it, while the
+  // proportion bar counted `status === 'done'`. Same strip, three populations.
+  const finished = completedLogs(all);
 
-  const totalSeconds = all.reduce((a, l) => a + (l.total_seconds ?? 0), 0);
+  // Completed sets in the window. This tile used to read "Adherence" —
+  // completed sets over sets PRESENT IN THE LOG, which could only ever be near
+  // 100 because a set enters the denominator by being added to a session and
+  // you tick it when you do it. Adherence against the PLAN is a question about
+  // the plan's whole life, needs `plans.parsed`, and lives on /app/plan where
+  // both are loaded. See lib/planAdherence.ts.
+  const doneSets = finished.reduce(
+    (a, l) => a + flattenSets(l).filter((s) => s.completed).length,
+    0,
+  );
+
+  // Same clock the rail splits, so the two cannot disagree about how long a
+  // session was — `sessionClockSeconds` falls back to working minutes when the
+  // timer was not running, which `total_seconds ?? 0` scored as zero.
+  const totalSeconds = finished.reduce((a, l) => a + sessionClockSeconds(l), 0);
 
   return {
     all,
@@ -308,7 +340,8 @@ function deriveStats(
     topMoves,
     cards,
     seriesFor,
-    adherence,
+    finished,
+    doneSets,
     totalSeconds,
   };
 }
@@ -365,7 +398,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   );
 
   // Kept before the loading guard: hooks must not sit behind an early return.
-  const mix = useMemo(() => modalityMix(derived.all), [derived]);
+  const mix = useMemo(() => sessionTimeMix(derived.finished), [derived]);
 
   // The biggest riser and the biggest faller between the current period and the
   // one before it, plus whichever axis is now lowest. Scores are on
@@ -412,7 +445,8 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     topMoves,
     cards,
     seriesFor,
-    adherence,
+    finished,
+    doneSets,
     totalSeconds,
   } = derived;
 
@@ -472,27 +506,23 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
           <section className="mb-6">
             <StatStrip
               stats={[
-                { label: 'Sessions', value: all.length },
+                { label: 'Sessions', value: finished.length },
                 { label: 'Time', value: formatDuration(totalSeconds) },
-                {
-                  label: 'Adherence',
-                  value: adherence != null ? adherence : '—',
-                  unit: adherence != null ? '%' : undefined,
-                },
+                { label: 'Sets', value: doneSets },
               ]}
             />
             {mix ? (
               <div className="mt-2">
                 {/* Where the window's time actually went. Monochrome by design:
-                    three greys plus the labels carry it, and a hue set would
-                    have to be defended against every activity colour already on
-                    the page. Segments below 4% keep their sliver so the rail
-                    always sums to the whole. */}
+                    greys plus the labels carry it, and a hue set would have to
+                    be defended against every activity colour already on the
+                    page. Segments below 4% keep their sliver so the rail always
+                    sums to the whole. */}
                 <div className="flex h-1.5 overflow-hidden rounded-full bg-fg/10">
                   {mix.map((m, i) => (
                     <span
                       key={m.key}
-                      className={i === 0 ? 'bg-fg/80' : i === 1 ? 'bg-fg/45' : 'bg-fg/25'}
+                      className={MIX_SHADES[i] ?? MIX_SHADES[MIX_SHADES.length - 1]}
                       style={{ width: `${Math.max(m.pct, m.pct > 0 ? 1.5 : 0)}%` }}
                     />
                   ))}
@@ -503,7 +533,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                       <span
                         aria-hidden
                         className={`inline-block h-2 w-2 rounded-[1px] ${
-                          i === 0 ? 'bg-fg/80' : i === 1 ? 'bg-fg/45' : 'bg-fg/25'
+                          MIX_SHADES[i] ?? MIX_SHADES[MIX_SHADES.length - 1]
                         }`}
                       />
                       {m.label} {Math.round(m.pct)}%
@@ -511,6 +541,17 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                   ))}
                 </div>
               </div>
+            ) : null}
+            {mode === 'app' ? (
+              // The Adherence tile that used to sit in this strip measured
+              // against the log document, not the plan, so it could only ever
+              // read ~100. The real one needs the plan and its whole history.
+              <a
+                href="/app/plan"
+                className="-my-3 mt-0 inline-flex min-h-11 items-center text-[0.7rem] text-muted underline"
+              >
+                Plan adherence →
+              </a>
             ) : null}
           </section>
         </Item>

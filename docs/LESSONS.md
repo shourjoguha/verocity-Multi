@@ -1187,6 +1187,90 @@ assertion that passes by finding nothing is not an assertion.
 
 ## Data & privacy
 
+### Adherence reads 99% and always will
+
+`[measured — the Stats tile, over 36 sessions]`
+
+The Stats "Adherence" tile was `completedSets / totalSets` over the 8-week
+window, where both counts came from `flattenSets(log)` — **the log document, not
+the plan**. A set enters that denominator by being added to a session, and you
+tick it when you do it, so the ratio measures checkbox hygiene and nothing else.
+It never opened `plans.parsed`. A prescription skipped outright, or a whole
+training day abandoned, could not appear in it at all, and `reduceLogDocument`
+minis trimmed their own denominator away as they trimmed the work.
+
+The metric that was wanted is against the plan, and three things about it are
+not obvious:
+
+- **The denominator must be paced by logging, but advance for the WHOLE plan.**
+  The obvious first cut — a per-day cursor, "how many times has Friday been
+  logged" — never grows for a day you stopped showing up to, hiding precisely
+  the failure worth seeing. `currentProgramWeek` (the most times ANY day has
+  been logged) is the cursor: a week that took ten days costs nothing, and
+  reaching week 8 on Mondays makes week 8's Friday due as well.
+- **The in-flight week has to be exempt**, or Wednesday reads as missed on
+  Monday evening and the number sawtooths every week. Weeks 1..E-1 count in
+  full; week E counts only the days already logged in it.
+- **Overshoot is capped per exercise, and that is not a penalty.** Extra sets
+  are counted and shown beside the bar. The cap exists so five sets of a
+  prescribed three cannot *pay for* a skipped row elsewhere and report 100%.
+
+Lives in `src/lib/planAdherence.ts`, and on `/app/plan` rather than `/app/stats`
+— it is a question about the plan's whole life, and Stats fetches 120 days.
+
+### `familyOf` looks like a movement-equivalence check and cannot be used as one
+
+`MOVEMENT_FAMILIES` already lists `pull: ['pull-up', ..., 'lat pulldown']` and
+`press: ['bench press', 'incline press', ...]`, which is exactly the "is this a
+minor swap" answer adherence needs. It is unusable for it, twice over: it
+matches by bare substring and carries misfires **pinned by test on purpose**
+(`familyOf('Med-Ball Throw') === 'pull'`, because "th-row" contains "row"), so a
+med-ball throw would substitute for a barbell row and the misfire cannot be
+corrected without changing rendered Stats output. And `press` holds Bench Press
+and Overhead Press together — the one pair most needing to be separated.
+
+`src/lib/movementSimilarity.ts` uses the taxonomy's region profiles instead.
+Measured: minor swaps score 0.95-1.00 on region cosine, major ones 0.17-0.42,
+and **nothing measured falls between 0.43 and 0.95**, so the threshold sits in
+an empty band.
+
+Two gates cosine cannot provide, both found by measurement rather than
+reasoning:
+
+- **Isolation vs compound.** Lateral Raise `{shoulders: 1}` against Overhead
+  Press scores **0.899**, and Leg Extension against Back Squat **0.929** — both
+  above any workable threshold, both real substitutions. They point the same
+  way; direction alone cannot see that one is an isolation. An isolation may
+  stand in for an isolation and a compound for a compound, never across.
+- **Conditioning is not a muscle question.** Run → Row Erg scores **0.499**
+  purely because an erg pulls with the upper body, while Run → Bike scores
+  0.920. Those deserve the same verdict. Endurance skips the region test
+  entirely: a conditioning slot filled with conditioning was filled.
+
+### Three tiles, three populations, and a rail that shares none of them
+
+`[measured — the Stats strip]`
+
+The Stats strip's Sessions and Time counted every log in the window —
+**including the `in_progress` row `/app/log` creates the moment you open it** —
+while the proportion bar beneath counted `status === 'done'`. The bar was worse
+than inconsistent: it read `modalityMinutes` off `summarizeBodyLoad`, which
+splits a session's clock proportionally across the modalities inside it and
+excludes anything the taxonomy could not place. So three percentages summing to
+100 sat directly under a duration they were not a share of, and dropped the rest
+between sets.
+
+The proportional split is right for the body map — it shades muscles, so a lift
+that ended in ten minutes of stretching really did spend ten minutes on
+mobility. It is wrong for "where did my time go", which is a **per-session**
+question: an hour in the gym is an hour of what that session was for, rest and
+setup included. `sessionLens` (winner-take-all, `bodyLoad.ts`) answers that one;
+`modalityMinutes` still answers the body map's. **Two splits on purpose** —
+check which question you are asking before reaching for either.
+
+The cost of winner-take-all is that a Hyrox session lands wholly in one lens.
+That is the intended reading here and would be wrong on `/app/body`.
+
 ### A hard session reads 460kg of volume and the number is obviously wrong
 `[measured — one Hyrox session, before and after]`
 The Stats screen's Volume column was `sessionVolume` in `lib/stats.ts`: raw

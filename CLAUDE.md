@@ -26,6 +26,8 @@ intent, LESSONS describes what actually happened.
 | Touch the AI coach                                                       | `supabase/functions/coach/index.ts`, `lib/deepGovernors.ts` |
 | **Change when a finding is allowed to speak again**                      | `src/lib/coach/recurrence.ts` — read its header first |
 | **Count sets per muscle, or decide what counts as loaded work**          | `src/lib/bodyLoad.ts` — `meaningfulRegionShare`, `isLoadedSet` |
+| **Measure how much of a plan was followed, or what counts as a swap**    | `src/lib/planAdherence.ts`, `src/lib/movementSimilarity.ts` |
+| **Split training time by kind of work**                                  | `sessionLens` vs `modalityMinutes` — read the LESSONS entry first |
 | Write coach output from a Claude Code session                            | `src/lib/coach/governor.ts` (the boundary), `supabase/migrations/0043_coach_briefs_notes.sql` |
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
 | **Change a component, sheet, token or layout**                           | skill ui-change — `.claude/skills/ui-change/SKILL.md` |
@@ -237,6 +239,20 @@ UI audit have both run.
   claim-cited and pack-versioned, and a model that can edit it makes every
   citation in the app worthless. `src/lib/coach/governor.ts` enforces this at
   **read** time so tightening it disarms rows already written.
+- **Adherence is measured against the PLAN, and time is measured PER SESSION.**
+  Two metrics that used to be computed from the log document alone, and could
+  only ever flatter. `planAdherence.ts` reads `plans.parsed`: the denominator is
+  paced by logging (`currentProgramWeek`, so a ten-day week costs nothing) but
+  advances for the **whole** plan, because a per-day cursor never grows for a
+  day you stopped showing up to. The in-flight week counts only days already
+  logged in it. Overshoot is capped **per exercise** — not a penalty, just so
+  extra squats cannot pay for a skipped press. A substitution counts when
+  `movementSimilarity.ts` calls it minor; **never use `familyOf` for that**, it
+  is substring-matched with misfires pinned by test (`Med-Ball Throw` → `pull`).
+  For time, `sessionLens` is winner-take-all over the whole clock and
+  `modalityMinutes` stays proportional — **two splits on purpose**: the body map
+  shades muscles, the Stats rail answers what you spent an evening on. Rest
+  counts for the second and must not for the first.
 - **Per-muscle set counts are WHOLE sets, and `resistanceSets` is not them.**
   `resistanceSets` splits each set across the muscles it trains and sums to 1.0
   per set; `TRAINING.hypertrophyWeeklySets` counts a squat as a set for quads
