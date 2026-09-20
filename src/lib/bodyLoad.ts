@@ -548,6 +548,47 @@ interface WalkItem {
 }
 
 /**
+ * What the session was mostly about — the modality that owns its clock.
+ *
+ * Ranked over the session's MAIN WORK — the items outside warmup, cooldown and
+ * conditioning — because those three sections are by definition not what the
+ * session was, and a session that has no main work at all (a run logged as one
+ * conditioning block, a yoga class logged as one cooldown block) falls back to
+ * ranking everything.
+ *
+ * Ranked by `itemShareWeight`, NOT by raw setMinutes. Ranking by raw minutes
+ * reproduces the exact bias being fixed: two sets of stretching out-score a set
+ * of squats on time under tension, so a lift with a cooldown would elect
+ * mobility as its own main work.
+ *
+ * Extracted from `allocateSession` so `sessionLens` can ask the same question
+ * without allocating anything. Unchanged in behaviour — allocation still calls
+ * it for the remainder owner.
+ */
+function ownerModality(log: WorkoutLog, walk: WalkItem[]): ModalityKey | null {
+  const main = walk.filter(
+    (w) => !(SESSION_CLOCK.claimSections as readonly string[]).includes(w.section),
+  );
+  const candidates = main.length > 0 ? main : walk;
+
+  const byModality = new Map<ModalityKey, number>();
+  for (const w of candidates) {
+    if (w.modality) {
+      byModality.set(w.modality, (byModality.get(w.modality) ?? 0) + itemShareWeight(w.item, w.profile));
+    }
+  }
+  const ranked = [...byModality.entries()].sort((a, b) => b[1] - a[1]);
+  const tagged = tagModality(log.tags);
+  const top = ranked[0];
+  const tiedAtTop = top != null && ranked.filter(([, v]) => v === top[1]).length > 1;
+  return top == null
+    ? tagged
+    : tiedAtTop && tagged != null && byModality.get(tagged) === top[1]
+      ? tagged
+      : top[0];
+}
+
+/**
  * Spend one session's wall clock across its items, in place.
  *
  * Warmup, cooldown and conditioning claim an explicit share first; whatever is
@@ -576,37 +617,7 @@ function allocateSession(log: WorkoutLog, walk: WalkItem[]): void {
   }
   const sessionMinutes = elapsed;
 
-  // Who owns the remainder. Ranked over the session's MAIN WORK — the items
-  // outside warmup, cooldown and conditioning — because those three sections
-  // are by definition not what the session was, and a session that has no main
-  // work at all (a run logged as one conditioning block, a yoga class logged as
-  // one cooldown block) falls back to ranking everything.
-  //
-  // Ranked by `itemShareWeight`, NOT by raw setMinutes. Ranking by raw minutes
-  // reproduces the exact bias being fixed: two sets of stretching out-score a
-  // set of squats on time under tension, so a lift with a cooldown would elect
-  // mobility as its own main work.
-  const main = walk.filter(
-    (w) => !(SESSION_CLOCK.claimSections as readonly string[]).includes(w.section),
-  );
-  const candidates = main.length > 0 ? main : walk;
-
-  const byModality = new Map<ModalityKey, number>();
-  for (const w of candidates) {
-    if (w.modality) {
-      byModality.set(w.modality, (byModality.get(w.modality) ?? 0) + itemShareWeight(w.item, w.profile));
-    }
-  }
-  const ranked = [...byModality.entries()].sort((a, b) => b[1] - a[1]);
-  const tagged = tagModality(log.tags);
-  const top = ranked[0];
-  const tiedAtTop = top != null && ranked.filter(([, v]) => v === top[1]).length > 1;
-  const owner: ModalityKey | null =
-    top == null
-      ? tagged
-      : tiedAtTop && tagged != null && byModality.get(tagged) === top[1]
-        ? tagged
-        : top[0];
+  const owner = ownerModality(log, walk);
 
   const isClaim = walk.map((w) => w.modality != null && w.modality !== owner);
   const claims = walk.map((w, i) => (isClaim[i] ? claimMinutes(w.item, w.modality) : 0));
@@ -651,6 +662,74 @@ function allocateSession(log: WorkoutLog, walk: WalkItem[]): void {
   }
 }
 
+/**
+ * Classify a session's items, before any minute is attributed. Shared by
+ * `summarizeBodyLoad`'s first pass and by `sessionLens`, which needs the same
+ * classification to ask what a session was without allocating its clock.
+ */
+function buildWalk(log: WorkoutLog, overrides: OverrideMap): WalkItem[] {
+  const walk: WalkItem[] = [];
+  for (const section of log.data?.sections ?? []) {
+    for (const group of section.groups ?? []) {
+      for (const item of group.items ?? []) {
+        if (isSubroutine(item)) continue;
+
+        const raw = item.sets.reduce((acc, s) => acc + setMinutes(s), 0);
+        if (raw <= 0) continue;
+
+        const c = classifyMovement(item.movement, { overrides });
+        walk.push({
+          item,
+          section: section.key,
+          profile: c.profile,
+          hasRegions: Object.keys(c.profile.regions).length > 0,
+          modality: c.profile.modality ?? inferModality(item.sets, item.primaryMetric, section.key),
+          raw,
+          minutes: 0,
+        });
+      }
+    }
+  }
+  return walk;
+}
+
+/**
+ * Which lens a whole session belongs to — what you dedicated that block of time
+ * to.
+ *
+ * WHY THIS IS NOT `summarizeBodyLoad().modalityMinutes`. That splits a session's
+ * clock proportionally across the modalities inside it, which is the right
+ * question for the body map: it shades muscles, so a lift that ended with ten
+ * minutes of stretching really did spend ten minutes on mobility. It is the
+ * wrong question for "where did my training time go", which is answered per
+ * SESSION: an hour in the gym is an hour of lifting, rest and setup included,
+ * and the warm-up does not make it partly a mobility session.
+ *
+ * Winner-take-all, therefore, and deliberately: a Hyrox session lands wholly in
+ * one lens rather than being split. Falls back to the session's tags when
+ * nothing classifies, which is what carries Garmin rows and empty documents —
+ * they have no set data to rank.
+ */
+/**
+ * How long a session actually took, in seconds.
+ *
+ * `total_seconds` when the clock is plausible, and the sum of its working sets
+ * when it is not — real data holds sessions at 0s and 203s carrying 13-20
+ * completed sets, where the timer was not running but the work was. Same floor
+ * and same fallback `allocateSession` uses, so "where the time went" and "how
+ * the minutes split" cannot disagree about how long a session was.
+ */
+export function sessionClockSeconds(log: WorkoutLog, overrides: OverrideMap = {}): number {
+  const elapsed = log.total_seconds ?? 0;
+  if (elapsed / 60 >= SESSION_CLOCK.minPlausibleMinutes) return elapsed;
+  return buildWalk(log, overrides).reduce((a, w) => a + w.raw, 0) * 60;
+}
+
+export function sessionLens(log: WorkoutLog, overrides: OverrideMap = {}): BodyLensKey | null {
+  const walk = buildWalk(log, overrides);
+  return lensFor(walk.length > 0 ? ownerModality(log, walk) : tagModality(log.tags));
+}
+
 export function summarizeBodyLoad(
   logs: WorkoutLog[],
   overrides: OverrideMap = {},
@@ -681,28 +760,7 @@ export function summarizeBodyLoad(
 
     // PASS 1 — classify. Minutes cannot be attributed yet: the split depends on
     // the whole session, not on any one item.
-    const walk: WalkItem[] = [];
-    for (const section of log.data?.sections ?? []) {
-      for (const group of section.groups ?? []) {
-        for (const item of group.items ?? []) {
-          if (isSubroutine(item)) continue;
-
-          const raw = item.sets.reduce((acc, s) => acc + setMinutes(s), 0);
-          if (raw <= 0) continue;
-
-          const c = classifyMovement(item.movement, { overrides });
-          walk.push({
-            item,
-            section: section.key,
-            profile: c.profile,
-            hasRegions: Object.keys(c.profile.regions).length > 0,
-            modality: c.profile.modality ?? inferModality(item.sets, item.primaryMetric, section.key),
-            raw,
-            minutes: 0,
-          });
-        }
-      }
-    }
+    const walk = buildWalk(log, overrides);
     if (walk.length === 0) continue;
 
     // PASS 2 — spend the session clock across them.
