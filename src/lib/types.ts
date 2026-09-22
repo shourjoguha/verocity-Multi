@@ -610,7 +610,15 @@ export interface CoachBrief {
   author: string;
   expires_at: string | null;
   created_at: string;
+  // ---- migration 0044. Athlete-set; never read by src/lib/coach/**. Deleting
+  // a brief is a row DELETE, so there is no 'dismissed'. ----
+  status: CoachBriefStatus;
+  disposition: Exclude<RecDisposition, 'skipped'> | null;
+  disposition_note: string | null;
+  snooze_until: string | null;
 }
+
+export type CoachBriefStatus = Exclude<RecStatus, 'dismissed'>;
 
 export type CoachNoteKind = 'context' | 'edge';
 

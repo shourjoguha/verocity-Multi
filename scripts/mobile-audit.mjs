@@ -240,8 +240,38 @@ const movements = [
   },
 ];
 
+// Coach rows, so /app/coach renders its brief card, the created-at slider and
+// the Snoozed/Decided lists instead of the empty state — without them this
+// audit measured none of those controls.
+const daysAgo = (d) => new Date(Date.now() - d * 86_400_000).toISOString();
+const rec = (id, status, created, extra = {}) => ({
+  id, owner_user_id: session.user.id, status, drift_score: 0.6, confidence: 0.8,
+  tldr: 'Hard sets for legs are under the weekly floor',
+  action: 'Add two working sets of squats this week', body_md: 'Body.',
+  disposition: null, disposition_note: null, linked_log_id: null, snooze_until: null,
+  created_at: daysAgo(created), rule_id: null, period_key: null, pack_version: null,
+  evidence: null, ...extra,
+});
+const recommendations = [
+  rec('r1', 'open', 2),
+  rec('r2', 'acted', 20, { disposition: 'acted_modified' }),
+];
+const brief = (id, created, extra = {}) => ({
+  id, owner_user_id: session.user.id, theme: null, rule_ids: [],
+  headline: 'Endurance is the limiting side', body_md: 'Body.',
+  window_start: null, window_end: null, author: 'claude-code', expires_at: null,
+  created_at: daysAgo(created), status: 'open', disposition: null,
+  disposition_note: null, snooze_until: null, ...extra,
+});
+const coachBriefs = [
+  brief('b1', 1),
+  brief('b2', 30, { status: 'snoozed', snooze_until: daysAgo(-3) }),
+];
+
 function fixtureFor(url) {
   const path = new URL(url).pathname;
+  if (path.includes('/recommendations')) return recommendations;
+  if (path.includes('/coach_briefs')) return coachBriefs;
   if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog, doneLog];
   if (path.includes('/movements')) return movements;
   if (path.includes('/profiles')) return url.includes('id=eq.') ? null : [];

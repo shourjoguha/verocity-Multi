@@ -10,6 +10,8 @@ import {
   getRecentLogs,
   getRecommendations,
   getUserStats,
+  deleteCoachBrief,
+  updateCoachBrief,
   updateRecommendation,
   upsertCoachFindings,
   upsertCoachObservations,
@@ -21,6 +23,7 @@ import {
   currentBrief,
   governContextNotes,
   governEdges,
+  isBriefLive,
 } from '@/lib/coach/governor';
 import { impactScore } from '@/lib/coach/impact';
 import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
@@ -156,10 +159,14 @@ function RecRow({
  * only once the brief is old. Nothing in src/lib/coach/** reads this row; it
  * changes what the page says and not one finding.
  */
-function BriefCard({ brief }: { brief: CoachBrief }) {
+function BriefCard({ brief, onClick }: { brief: CoachBrief; onClick: () => void }) {
   const age = briefAgeDays(brief);
   return (
-    <div className="lift border border-border bg-surface p-4">
+    <button
+      type="button"
+      onClick={onClick}
+      className="lift block w-full border border-border bg-surface p-4 text-left transition-colors hover:border-fg"
+    >
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <span className="text-[0.6rem] uppercase tracking-[0.3em] text-subtle">Observation</span>
         <span className="shrink-0 text-[0.6rem] uppercase tracking-wider text-muted">
@@ -175,7 +182,69 @@ function BriefCard({ brief }: { brief: CoachBrief }) {
           {brief.window_start} → {brief.window_end}
         </div>
       ) : null}
-    </div>
+    </button>
+  );
+}
+
+/** A brief the athlete has snoozed or answered, listed beside the findings in
+ *  the same state so it is one tap from being reopened rather than gone. */
+function BriefRow({ brief, onClick }: { brief: CoachBrief; onClick: () => void }) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className="hill-btn flex w-full items-start justify-between gap-3 border border-border bg-surface p-4 text-left opacity-60 transition-colors hover:border-fg"
+      >
+        <div>
+          <div className="text-[0.6rem] uppercase tracking-[0.3em] text-subtle">
+            Observation · {brief.author}
+          </div>
+          <div className="mt-0.5 text-sm font-medium text-fg">{brief.headline}</div>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1 text-[0.6rem] uppercase tracking-wider text-muted">
+          {brief.status === 'snoozed' && brief.snooze_until ? (
+            <span>till {formatDate(brief.snooze_until.slice(0, 10))}</span>
+          ) : null}
+          {brief.status === 'acted' && brief.disposition ? (
+            <span>{brief.disposition.replace(/_/g, ' ')}</span>
+          ) : null}
+        </div>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * How far back the page looks, in whole weeks. The slider's top stop is "All":
+ * the range is sized to the oldest row, so the last week already includes it.
+ */
+function WeeksFilter({
+  weeks,
+  max,
+  onChange,
+}: {
+  weeks: number;
+  max: number;
+  onChange: (w: number) => void;
+}) {
+  return (
+    <label className="flex min-h-11 items-center gap-3">
+      <span className="shrink-0 text-[0.6rem] uppercase tracking-[0.3em] text-subtle">Created</span>
+      <input
+        type="range"
+        min={1}
+        max={max}
+        step={1}
+        value={weeks}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label="Show suggestions created within this many weeks"
+        className="h-1 flex-1 accent-fg"
+      />
+      <span className="w-20 shrink-0 text-right text-[0.65rem] uppercase tracking-wider tabular-nums text-muted">
+        {weeks >= max ? 'All' : `Last ${weeks} wk`}
+      </span>
+    </label>
   );
 }
 
@@ -238,6 +307,10 @@ export default function CoachView() {
   const [note, setNote] = useState('');
   const [briefs, setBriefs] = useState<CoachBrief[]>([]);
   const [ruleNotes, setRuleNotes] = useState<CoachRuleNote[]>([]);
+  const [activeBrief, setActiveBrief] = useState<CoachBrief | null>(null);
+  // Null = no filter. Kept apart from the slider position so the default stays
+  // "everything" as older rows arrive and the range grows.
+  const [weeks, setWeeks] = useState<number | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
@@ -353,6 +426,7 @@ export default function CoachView() {
 
   function closeDetail() {
     setActive(null);
+    setActiveBrief(null);
     setNote('');
   }
 
@@ -385,19 +459,72 @@ export default function CoachView() {
     await refresh();
   }
 
+  /** Did it / Modified on a brief. Unlike a finding there is no "skipped" —
+   *  a brief the athlete will not act on is deleted. */
+  async function decideBrief(b: CoachBrief, disposition: 'acted_as_prescribed' | 'acted_modified') {
+    if (
+      !(await updateCoachBrief(b.id, {
+        status: 'acted',
+        disposition,
+        disposition_note: note || null,
+      }))
+    ) {
+      toast('Could not save — try again', 'error');
+      return;
+    }
+    closeDetail();
+    setBriefs(await getCoachBriefs());
+  }
+
+  async function snoozeBrief(b: CoachBrief, days: number) {
+    if (
+      !(await updateCoachBrief(b.id, {
+        status: 'snoozed',
+        snooze_until: new Date(Date.now() + days * 86_400_000).toISOString(),
+      }))
+    ) {
+      toast('Could not save — try again', 'error');
+      return;
+    }
+    closeDetail();
+    setBriefs(await getCoachBriefs());
+  }
+
+  async function removeBrief(b: CoachBrief) {
+    if (!window.confirm('Delete this observation? This cannot be undone.')) return;
+    if (!(await deleteCoachBrief(b.id))) {
+      toast('Could not delete — try again', 'error');
+      return;
+    }
+    closeDetail();
+    setBriefs(await getCoachBriefs());
+  }
+
   if (!ready) return <LoadingScreen />;
 
-  const brief = currentBrief(briefs);
-  const contextNotes = governContextNotes(ruleNotes);
   const now = Date.now();
+  // The created-at filter. Sized to the oldest row so the top stop means "all";
+  // applied to findings and briefs alike, since both are suggestions.
+  const oldest = Math.min(now, ...recs.map((r) => Date.parse(r.created_at)), ...briefs.map((b) => Date.parse(b.created_at)));
+  const maxWeeks = Math.max(1, Math.ceil((now - oldest) / (7 * 86_400_000)));
+  const shownWeeks = weeks == null ? maxWeeks : Math.min(weeks, maxWeeks);
+  const inWindow = (createdAt: string) =>
+    shownWeeks >= maxWeeks || now - Date.parse(createdAt) <= shownWeeks * 7 * 86_400_000;
+  const windowRecs = recs.filter((r) => inWindow(r.created_at));
+  const windowBriefs = briefs.filter((b) => inWindow(b.created_at));
+
+  const brief = currentBrief(windowBriefs);
+  const contextNotes = governContextNotes(ruleNotes);
   const isLive = (r: Recommendation) =>
     r.status === 'open' || (r.status === 'snoozed' && r.snooze_until != null && Date.parse(r.snooze_until) <= now);
-  const open = recs.filter(isLive);
+  const open = windowRecs.filter(isLive);
   const { lead, rest } = partitionOpen(open);
-  const snoozed = recs.filter(
+  const snoozed = windowRecs.filter(
     (r) => r.status === 'snoozed' && r.snooze_until != null && Date.parse(r.snooze_until) > now,
   );
-  const decided = recs.filter((r) => r.status === 'acted' || r.status === 'dismissed');
+  const decided = windowRecs.filter((r) => r.status === 'acted' || r.status === 'dismissed');
+  const snoozedBriefs = windowBriefs.filter((b) => b.status === 'snoozed' && !isBriefLive(b));
+  const decidedBriefs = windowBriefs.filter((b) => b.status === 'acted');
 
   return (
     <>
@@ -418,10 +545,18 @@ export default function CoachView() {
           </header>
         </Item>
 
+        {recs.length + briefs.length > 0 ? (
+          <Item>
+            <div className="mb-6">
+              <WeeksFilter weeks={shownWeeks} max={maxWeeks} onChange={(w) => setWeeks(w)} />
+            </div>
+          </Item>
+        ) : null}
+
         {brief ? (
           <Item>
             <section className="mb-8">
-              <BriefCard brief={brief} />
+              <BriefCard brief={brief} onClick={() => setActiveBrief(brief)} />
             </section>
           </Item>
         ) : null}
@@ -430,7 +565,11 @@ export default function CoachView() {
           <section className="mb-10">
             <SectionHeader>Open</SectionHeader>
             {open.length === 0 ? (
-              <EmptyState>Nothing open. Tap “Check-in” to scan recent sessions.</EmptyState>
+              <EmptyState>
+                {shownWeeks < maxWeeks
+                  ? `Nothing open from the last ${shownWeeks} wk.`
+                  : 'Nothing open. Tap “Check-in” to scan recent sessions.'}
+              </EmptyState>
             ) : (
               <>
                 <ul className="flex flex-col gap-2">
@@ -458,11 +597,14 @@ export default function CoachView() {
           </section>
         </Item>
 
-        {snoozed.length > 0 ? (
+        {snoozed.length + snoozedBriefs.length > 0 ? (
           <Item>
             <section className="mb-10">
               <SectionHeader>Snoozed</SectionHeader>
               <ul className="flex flex-col gap-2">
+                {snoozedBriefs.map((b) => (
+                  <BriefRow key={b.id} brief={b} onClick={() => setActiveBrief(b)} />
+                ))}
                 {snoozed.map((r) => (
                   <RecRow key={r.id} rec={r} onClick={() => setActive(r)} snoozed />
                 ))}
@@ -471,11 +613,14 @@ export default function CoachView() {
           </Item>
         ) : null}
 
-        {decided.length > 0 ? (
+        {decided.length + decidedBriefs.length > 0 ? (
           <Item>
             <section>
               <SectionHeader>Decided</SectionHeader>
               <ul className="flex flex-col gap-2">
+                {decidedBriefs.map((b) => (
+                  <BriefRow key={b.id} brief={b} onClick={() => setActiveBrief(b)} />
+                ))}
                 {decided.map((r) => (
                   <RecRow key={r.id} rec={r} onClick={() => setActive(r)} muted />
                 ))}
@@ -553,6 +698,66 @@ export default function CoachView() {
                 </div>
               </div>
             )}
+          </>
+        ) : null}
+      </Modal>
+
+      <Modal open={activeBrief !== null} onClose={closeDetail} title="Observation">
+        {activeBrief ? (
+          <>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="mb-1 text-[0.6rem] uppercase tracking-[0.3em] text-subtle">
+                {activeBrief.author} · {formatDate(activeBrief.created_at.slice(0, 10))}
+              </div>
+              <div className="mb-2 font-display text-lg text-fg">{activeBrief.headline}</div>
+              <p className="whitespace-pre-line text-sm text-muted">{activeBrief.body_md}</p>
+              {activeBrief.status === 'acted' ? (
+                <div className="mt-4 text-sm text-subtle">
+                  Marked: {activeBrief.disposition?.replace(/_/g, ' ')}
+                  {activeBrief.disposition_note ? ` · ${activeBrief.disposition_note}` : ''}
+                </div>
+              ) : (
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Note (optional)"
+                  rows={2}
+                  className="mt-4 w-full border border-border bg-bg px-3 py-2 text-sm text-fg outline-none focus:border-subtle"
+                />
+              )}
+            </div>
+            <div className="flex flex-col gap-2 border-t border-border p-4">
+              <div className="flex gap-2">
+                {activeBrief.status === 'acted' ? null : (
+                  <>
+                    <button
+                      onClick={() => decideBrief(activeBrief, 'acted_as_prescribed')}
+                      className={`flex-1 ${inkBtn}`}
+                    >
+                      Did it
+                    </button>
+                    <button
+                      onClick={() => decideBrief(activeBrief, 'acted_modified')}
+                      className={`flex-1 ${ghostBtn}`}
+                    >
+                      Modified
+                    </button>
+                  </>
+                )}
+                <button onClick={() => removeBrief(activeBrief)} className={`flex-1 ${ghostBtn}`}>
+                  Delete
+                </button>
+              </div>
+              {activeBrief.status === 'acted' ? null : (
+                <div className="flex gap-2">
+                  {[1, 3, 7].map((d) => (
+                    <button key={d} onClick={() => snoozeBrief(activeBrief, d)} className={`flex-1 ${ghostBtn}`}>
+                      Snooze {d}d
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         ) : null}
       </Modal>

@@ -685,13 +685,12 @@ export async function getCoachObservations(
   return (data as CoachObservation[]) ?? [];
 }
 
-// ---- LLM cross-pollination (0043). READ-ONLY here, deliberately.
-// Rows are written out of band by a Claude Code session against the athlete's
-// own data — the same shape as `rx_deep_results`. There is no client write path
-// because there is no client surface that should be able to author one: every
-// row here is either narrative the app renders or calibration the engine reads,
-// and both are reviewed by src/lib/coach/governor.ts at read time rather than
-// trusted at write. ----
+// ---- LLM cross-pollination (0043). Rows are written out of band by a Claude
+// Code session against the athlete's own data — the same shape as
+// `rx_deep_results`. There is no client path that AUTHORS one: every row here is
+// either narrative the app renders or calibration the engine reads, and both are
+// reviewed by src/lib/coach/governor.ts at read time rather than trusted at
+// write. The only client writes are the athlete's answer to a brief (0044). ----
 
 export async function getCoachBriefs(
   client: SupabaseClient = supabase,
@@ -702,6 +701,27 @@ export async function getCoachBriefs(
     .order('created_at', { ascending: false })
     .limit(20);
   return (data as CoachBrief[]) ?? [];
+}
+
+/**
+ * The athlete's answer to a brief (migration 0044): did it, modified, snooze.
+ * The one client write on these tables, and it is the athlete's, not a model's —
+ * it decides whether a brief is shown and nothing in src/lib/coach/** reads it.
+ */
+export async function updateCoachBrief(
+  id: string,
+  patch: Partial<Pick<CoachBrief, 'status' | 'disposition' | 'disposition_note' | 'snooze_until'>>,
+): Promise<boolean> {
+  const { error } = await supabase.from('coach_briefs').update(patch).eq('id', id);
+  if (error) console.error('updateCoachBrief failed', error);
+  return !error;
+}
+
+/** Delete a brief outright. Owner-only under `cb_delete_own` (0043). */
+export async function deleteCoachBrief(id: string): Promise<boolean> {
+  const { error } = await supabase.from('coach_briefs').delete().eq('id', id);
+  if (error) console.error('deleteCoachBrief failed', error);
+  return !error;
 }
 
 export async function getCoachRuleNotes(

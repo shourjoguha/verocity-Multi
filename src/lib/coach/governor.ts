@@ -165,6 +165,10 @@ export function governEdges(
  * Newest unexpired row wins, scoped to a theme when one is asked for. A brief
  * is never merged with another: two models' syntheses stitched together is a
  * third synthesis nobody wrote.
+ *
+ * The athlete's answer (0044) is applied AFTER picking the newest, not before:
+ * marking the current brief done must clear the slot, not promote the older
+ * synthesis it superseded. A snooze that has run out makes it live again.
  */
 export function currentBrief(
   briefs: readonly CoachBrief[],
@@ -176,7 +180,15 @@ export function currentBrief(
     .filter((b) => (theme == null ? b.theme == null : b.theme === theme))
     .filter((b) => b.headline.trim().length > 0 && b.body_md.trim().length > 0)
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  return live[0] ?? null;
+  const top = live[0];
+  return top && isBriefLive(top, now) ? top : null;
+}
+
+/** Open, or snoozed until a time that has passed. Rows written before 0044
+ *  have no status and read as open. */
+export function isBriefLive(b: CoachBrief, now: Date = new Date()): boolean {
+  if (b.status == null || b.status === 'open') return true;
+  return b.status === 'snoozed' && b.snooze_until != null && Date.parse(b.snooze_until) <= now.getTime();
 }
 
 /**
