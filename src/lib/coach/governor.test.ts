@@ -46,6 +46,10 @@ function brief(over: Partial<CoachBrief> = {}): CoachBrief {
     author: 'claude-code',
     expires_at: null,
     created_at: inDays(-2),
+    status: 'open',
+    disposition: null,
+    disposition_note: null,
+    snooze_until: null,
     ...over,
   };
 }
@@ -212,6 +216,19 @@ describe('currentBrief', () => {
 
   it('refuses a brief with nothing in it', () => {
     expect(currentBrief([brief({ body_md: '  ' })], null, NOW)).toBeNull();
+  });
+
+  it('clears the slot once the athlete has acted, rather than promoting an older brief', () => {
+    const old = brief({ headline: 'old', created_at: inDays(-20) });
+    const done = brief({ headline: 'new', status: 'acted', disposition: 'acted_modified' });
+    expect(currentBrief([old, done], null, NOW)).toBeNull();
+  });
+
+  it('hides a snoozed brief until the snooze runs out', () => {
+    expect(currentBrief([brief({ status: 'snoozed', snooze_until: inDays(2) })], null, NOW)).toBeNull();
+    expect(
+      currentBrief([brief({ status: 'snoozed', snooze_until: inDays(-1) })], null, NOW),
+    ).not.toBeNull();
   });
 });
 
