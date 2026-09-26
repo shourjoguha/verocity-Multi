@@ -22,7 +22,7 @@ import type { Movement, ParsedPlan, PlanBlock, PlanDay, PlanExercise, UserStats 
 import { isSubroutine } from '@/lib/subroutine';
 import { renderRubric } from '@/lib/planRubric';
 import { ageFrom } from '@/lib/userStats';
-import { classifyMovement } from '@/lib/movementTaxonomy';
+import { classifyMovement, normalizeMovementName } from '@/lib/movementTaxonomy';
 
 export const PLAN_CSV_HEADERS = [
   'kind',
@@ -258,7 +258,10 @@ export function buildPlanContextFile({
   lines.push('#');
   lines.push(CONTEXT_LIBRARY_HEADERS.join(delimiter));
   for (const m of sorted(movements)) {
-    const cls = classifyMovement(m.name, { overrides: m.taxonomy ? { [m.name]: m.taxonomy } : {} });
+    // Keyed by the NORMALISED name, as CoachView and BodyView do: the classifier
+    // looks overrides up that way, so a raw-name key misses any mixed-case name.
+    const overrides = m.taxonomy ? { [normalizeMovementName(m.name)]: m.taxonomy } : {};
+    const cls = classifyMovement(m.name, { overrides });
     const row = [
       m.name,
       m.category ?? '',
