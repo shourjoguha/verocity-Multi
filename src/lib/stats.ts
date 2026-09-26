@@ -6,6 +6,9 @@ export interface FlatSet {
   weight?: number;
   reps?: number;
   rpe?: number;
+  time?: number;
+  distance?: number;
+  calories?: number;
   completed: boolean;
 }
 
@@ -18,6 +21,9 @@ export function flattenSets(log: WorkoutLog): FlatSet[] {
           weight: set.actual.weight,
           reps: set.actual.reps,
           rpe: set.actual.rpe,
+          time: set.actual.time,
+          distance: set.actual.distance,
+          calories: set.actual.calories,
           completed: set.actual.completed,
         })),
       ),

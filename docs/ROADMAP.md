@@ -446,7 +446,9 @@ Options to weigh when this is picked up:
 - A cycle-level counter: a cycle closes when every day has been logged (or
   explicitly skipped), and every day's next log takes that cycle's week.
 - Keep per-day counters but surface the spread (e.g. "D is 3 cycles behind")
-  and offer to skip or catch up.
+  and offer to skip or catch up. **The surfacing half shipped:** each day card
+  on /app/plan now reads "Next: cycle N of M · K logged · J behind". Skip and
+  catch-up are still open.
 - Either way, decide what `currentProgramWeek` and the adherence denominator in
   `src/lib/planAdherence.ts` should read, so dashboard, coach and adherence
   agree on one cycle number.

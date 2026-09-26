@@ -534,3 +534,89 @@ describe('validateParsedPlan', () => {
     expect(issues.some((i) => i.includes('exceeds 300 characters'))).toBe(true);
   });
 });
+
+describe('plan CSV — groups, rest and cycle notes', () => {
+  const legacyHeader = PLAN_CSV_HEADERS.slice(0, 8).join(',');
+
+  it('still imports a file written against the 8-column header', () => {
+    const csv = [legacyHeader, 'META,weeks,2', 'DAY,mon,Monday', 'EX,mon,Squat,primary,reps,*,3x5,'].join('\n');
+    const { plan, issues } = parsePlanTabular(csv);
+    expect(issues).toEqual([]);
+    expect(plan.days[0].exercises[0].group).toBeUndefined();
+  });
+
+  it('links neighbouring rows that share a group and reads rest seconds', () => {
+    const csv = [
+      PLAN_CSV_HEADERS.join(','),
+      'META,weeks,2',
+      'DAY,mon,Monday',
+      'EX,mon,Leg Curl,secondary,reps,*,3x12,,superset:legs,60',
+      'EX,mon,Leg Extension,secondary,reps,*,3x12,,superset:legs,60',
+      'EX,mon,Front Squat,primary,reps,*,5x5 @RPE7,,,180',
+    ].join('\n');
+    const { plan, issues } = parsePlanTabular(csv);
+    expect(issues).toEqual([]);
+    const [curl, ext, squat] = plan.days[0].exercises;
+    expect(curl.group).toEqual({ kind: 'superset', id: 'legs' });
+    expect(ext.group).toEqual({ kind: 'superset', id: 'legs' });
+    expect(squat.group).toBeUndefined();
+    expect(squat.restSeconds).toBe(180);
+  });
+
+  it('reads day notes and plan-wide week notes', () => {
+    const csv = [
+      PLAN_CSV_HEADERS.join(','),
+      'META,weeks,4',
+      'DAY,mon,Monday',
+      'EX,mon,Squat,primary,reps,*,3x5,',
+      'NOTE,mon,,,,2,,Add 2.5 kg if week 1 was easy',
+      'NOTE,,,,,4,,Deload week',
+    ].join('\n');
+    const { plan, issues } = parsePlanTabular(csv);
+    expect(issues).toEqual([]);
+    expect(plan.days[0].notesByWeek).toEqual({ 2: 'Add 2.5 kg if week 1 was easy' });
+    expect(plan.weekNotes).toEqual({ 4: 'Deload week' });
+  });
+
+  it('flags a malformed group, a bad rest and a note outside the plan', () => {
+    const csv = [
+      PLAN_CSV_HEADERS.join(','),
+      'META,weeks,2',
+      'DAY,mon,Monday',
+      'EX,mon,Squat,primary,reps,*,3x5,,pair-with-row,1.5',
+      'NOTE,mon,,,,9,,Too late',
+    ].join('\n');
+    const { issues } = parsePlanTabular(csv);
+    expect(issues.some((i) => i.includes('must look like "superset:<name>"'))).toBe(true);
+    expect(issues.some((i) => i.includes('must be whole seconds'))).toBe(true);
+    expect(issues.some((i) => i.includes('outside 1..2'))).toBe(true);
+  });
+
+  it('flags group members that are not next to each other', () => {
+    const csv = [
+      PLAN_CSV_HEADERS.join(','),
+      'META,weeks,1',
+      'DAY,mon,Monday',
+      'EX,mon,Leg Curl,secondary,reps,*,3x12,,superset:legs,',
+      'EX,mon,Calf Raise,secondary,reps,*,3x15,,,',
+      'EX,mon,Leg Extension,secondary,reps,*,3x12,,superset:legs,',
+    ].join('\n');
+    const { issues } = parsePlanTabular(csv);
+    expect(issues.some((i) => i.includes('members must be listed next to each other'))).toBe(true);
+  });
+
+  it('teaches the prompt the new row kind and columns', () => {
+    const prompt = buildPlanAiPrompt();
+    expect(prompt).toContain('META, BLOCK, DAY, EX, SUB, NOTE');
+    expect(prompt).toContain('superset:<name>');
+    expect(prompt).toContain('RPE8');
+  });
+
+  it('round-trips the sample template, superset and notes included, with no issues', () => {
+    const { plan, issues } = parsePlanTabular(buildPlanCsvTemplate());
+    expect(issues).toEqual([]);
+    const grouped = plan.days.flatMap((d) => d.exercises).filter((e) => e.group);
+    expect(grouped.map((e) => e.movement)).toEqual(['Pull-up', 'Dips']);
+    expect(plan.weekNotes?.[8]).toBeTruthy();
+  });
+});

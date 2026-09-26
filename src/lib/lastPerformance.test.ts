@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lastPerformance, plannedReps, repAdjustedWeight } from '@/lib/lastPerformance';
+import { lastPerformance, plannedReps, plannedTarget, repAdjustedWeight } from '@/lib/lastPerformance';
 import type { LogSet, WorkoutLog } from '@/lib/types';
 
 function set(weight: number, reps: number): LogSet {
@@ -34,6 +34,48 @@ describe('lastPerformance', () => {
       new Set(['deload']),
     );
     expect(got).toMatchObject({ weight: 82.5, reps: 12 });
+  });
+});
+
+describe('lastPerformance — unweighted and scored movements', () => {
+  const scored = (actual: Record<string, number>): LogSet => ({
+    planned: null,
+    actual: { ...actual, completed: true, prefilled: false },
+    notations: [],
+  });
+
+  it('references a calorie or distance set that recorded no weight', () => {
+    const ski = lastPerformance([log('Ski-Erg Intervals', [scored({ calories: 14, rpe: 8 })])], 'ski-erg intervals');
+    expect(ski).toMatchObject({ calories: 14, rpe: 8, weight: undefined });
+    const sled = lastPerformance([log('Sled Push', [scored({ weight: 107.5, distance: 20 })])], 'sled push');
+    expect(sled).toMatchObject({ weight: 107.5, distance: 20 });
+  });
+
+  it('fills the load from an older set when the newest one skipped it', () => {
+    const got = lastPerformance(
+      [log('Farmer Carry', [scored({ distance: 40 })], 'new'), log('Farmer Carry', [scored({ weight: 47.5, distance: 50 })], 'old')],
+      'farmer carry',
+    );
+    expect(got).toMatchObject({ distance: 40, weight: 47.5 });
+  });
+});
+
+describe('plannedTarget', () => {
+  it('reads the metric value, a kg load and an RPE off one set label', () => {
+    expect(plannedTarget('8 @27.5kg RPE8', 'reps')).toEqual({ value: 8, weight: 27.5, rpe: 8 });
+    expect(plannedTarget('5 @RPE7', 'reps')).toEqual({ value: 5, rpe: 7 });
+    expect(plannedTarget('12', 'cal')).toEqual({ value: 12 });
+    expect(plannedTarget('20', 'distance')).toEqual({ value: 20 });
+  });
+
+  it('takes the floor of a range and ignores an RPE off the dial', () => {
+    expect(plannedTarget('8-10 @30kg RPE 7-8', 'reps')).toEqual({ value: 8, weight: 30, rpe: 7 });
+    expect(plannedTarget('5 RPE 12', 'reps')).toEqual({ value: 5 });
+  });
+
+  it('returns nothing for a blank label, and reads a whole "3x5" spec per set', () => {
+    expect(plannedTarget(null, 'reps')).toEqual({});
+    expect(plannedTarget('3x5 @100kg', 'reps')).toEqual({ value: 5, weight: 100 });
   });
 });
 

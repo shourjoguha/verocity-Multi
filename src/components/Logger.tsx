@@ -54,7 +54,7 @@ import { activeSessionOf } from '@/lib/activeSession';
 import { typeFromLabel } from '@/lib/timeline';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { DemoIconButton, MovementDemoSheet } from '@/components/MovementDemo';
-import { lastPerformance, plannedReps, repAdjustedWeight } from '@/lib/lastPerformance';
+import { lastPerformance, plannedReps, plannedTarget, repAdjustedWeight } from '@/lib/lastPerformance';
 import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
@@ -146,6 +146,14 @@ function clock(total: number): string {
 }
 
 const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
+
+// The SetActual field a timed, distance or calorie movement is scored in. Reps
+// have their own precedence (plannedReps) and weight/rpe are not primaries.
+const PRIMARY_FIELD: Partial<Record<MetricKey, 'time' | 'distance' | 'calories'>> = {
+  time: 'time',
+  distance: 'distance',
+  cal: 'calories',
+};
 const today = () => new Date().toISOString().slice(0, 10);
 
 // What a finished movement reads as in the Done pile: the same comma-joined
@@ -434,33 +442,40 @@ export default function Logger() {
         }
       }
 
+      // Prefill, per set. The plan's target owns what it states for the
+      // movement's own metric — reps, seconds, metres or calories — so a
+      // programmed increase lands (see plannedReps). The last logged set owns
+      // load and effort once there is one; until then the plan's "@kg" and
+      // "RPE" stand in, so a movement's first session opens on the plan.
       for (const section of built.sections) {
         for (const group of section.groups) {
           for (const item of group.items) {
             const last = lastPerformance(recent, item.movement, skipLogIds);
-            if (!last) continue;
+            const field = PRIMARY_FIELD[item.primaryMetric];
             item.sets = item.sets.map((set) => {
-              // Weight prefills from last session; reps come from the target
-              // when the prescription states one, so a programmed rep increase
-              // is not overwritten by what was lifted last time.
-              const target = plannedReps(set.planned, item.primaryMetric);
-              // And when the target moved, the LOAD has to move with it: the
+              const plan = plannedTarget(set.planned, item.primaryMetric);
+              const repTarget = plannedReps(set.planned, item.primaryMetric);
+              // When the rep target moved, the LOAD has to move with it: the
               // reference weight is re-priced to hold the same estimated 1RM,
               // so a block that cuts reps prescribes more weight instead of
               // repeating last block's.
-              const weight =
-                item.primaryMetric === 'weight'
-                  ? (repAdjustedWeight(last.weight, last.reps, target) ?? last.weight)
-                  : last.weight;
-              return {
-                ...set,
-                actual: {
-                  ...set.actual,
-                  weight,
-                  reps: target ?? last.reps,
-                  prefilled: true,
-                },
-              };
+              const lastWeight =
+                last && item.primaryMetric === 'weight'
+                  ? (repAdjustedWeight(last.weight, last.reps, repTarget) ?? last.weight)
+                  : last?.weight;
+              const patch: Partial<SetActual> = {};
+              const weight = lastWeight ?? plan.weight;
+              if (weight != null) patch.weight = weight;
+              const reps = repTarget ?? last?.reps;
+              if (reps != null) patch.reps = reps;
+              if (field) {
+                const value = plan.value ?? last?.[field];
+                if (value != null) patch[field] = value;
+              }
+              const rpe = last?.rpe ?? plan.rpe;
+              if (rpe != null) patch.rpe = rpe;
+              if (Object.keys(patch).length === 0) return set;
+              return { ...set, actual: { ...set.actual, ...patch, prefilled: true } };
             });
           }
         }
@@ -926,6 +941,8 @@ export default function Logger() {
       if (src.reps != null) patch.reps = src.reps;
       if (src.time != null) patch.time = src.time;
       if (src.distance != null) patch.distance = src.distance;
+      if (src.calories != null) patch.calories = src.calories;
+      if (src.rpe != null) patch.rpe = src.rpe;
       return patchSetActual(next, si, gi, ii, ki + 1, patch);
     });
     const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;

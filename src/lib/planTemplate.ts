@@ -33,7 +33,14 @@ export const PLAN_CSV_HEADERS = [
   'week',
   'planned',
   'notes',
+  'group',
+  'rest',
 ] as const;
+
+// The header before `group` and `rest` existed. Files written against it still
+// import: the two trailing columns are optional, and a row that lacks them
+// reads them as empty.
+export const PLAN_CSV_LEGACY_HEADERS = PLAN_CSV_HEADERS.slice(0, 8);
 
 type Row = Record<(typeof PLAN_CSV_HEADERS)[number], string>;
 
@@ -61,7 +68,7 @@ function joinRows(rows: Row[], delimiter: string): string {
 }
 
 function emptyRow(): Row {
-  return { kind: '', id: '', label: '', section: '', metric: '', week: '', planned: '', notes: '' };
+  return { kind: '', id: '', label: '', section: '', metric: '', week: '', planned: '', notes: '', group: '', rest: '' };
 }
 
 // A deliberately rich sample that exercises every supported feature: blocks,
@@ -131,6 +138,15 @@ function sampleRows(): Row[] {
     planned: '3x12',
   });
 
+  rows.push({
+    ...emptyRow(),
+    kind: 'NOTE',
+    id: 'monday-lower',
+    week: '4',
+    notes: 'Last build week: same sets, add 2.5 kg if week 3 was RPE 8 or less.',
+  });
+  rows.push({ ...emptyRow(), kind: 'NOTE', week: '8', notes: 'Deload: same lifts, about half the sets.' });
+
   rows.push({ ...emptyRow(), kind: 'DAY', id: 'thursday-upper', label: 'Thursday — Upper' });
   rows.push({
     ...emptyRow(),
@@ -150,7 +166,21 @@ function sampleRows(): Row[] {
     section: 'secondary',
     metric: 'reps',
     week: '*',
-    planned: '4x6',
+    planned: '4x6 @RPE8',
+    group: 'superset:pull-dip',
+    rest: '90',
+  });
+  rows.push({
+    ...emptyRow(),
+    kind: 'EX',
+    id: 'thursday-upper',
+    label: 'Dips',
+    section: 'secondary',
+    metric: 'reps',
+    week: '*',
+    planned: '4x8 @10kg',
+    group: 'superset:pull-dip',
+    rest: '90',
   });
   rows.push({
     ...emptyRow(),
@@ -479,7 +509,7 @@ OUTPUT FORMAT
 - A single CSV file. The first row must be exactly:
   ${PLAN_CSV_HEADERS.join(',')}
 - One row per record. Allowed values for the first column ("kind"):
-  META, BLOCK, DAY, EX, SUB.
+  META, BLOCK, DAY, EX, SUB, NOTE.
 - Cells that contain commas, quotes, or newlines must be wrapped in double
   quotes; embedded quotes are doubled ("").
 - Leave unused columns empty. Do not invent new columns.
@@ -497,13 +527,24 @@ ROW SHAPES
 - EX: id = the day slug; label = movement name; section ∈ {${sectionList}};
        metric ∈ {${Object.keys(METRICS).join(', ')}}; week is "1".."N" or "*";
        planned is a set spec like "3x5", "4x8", "5x3 @70%", "1x300";
-       notes is free text (units, tempo, cues).
+       a per-set target may add a load and an effort, e.g. "4x8 @27.5kg RPE8"
+       or "5x5 @RPE7" — the logger prefills reps, kg and RPE from it;
+       notes is free text (units, tempo, cues);
+       group (optional) links neighbouring EX rows of one day and section
+       into a superset or circuit: "superset:<name>" or "circuit:<name>",
+       the same name on every member, members listed next to each other;
+       rest (optional) is the rest after each set in whole seconds, and
+       preselects the logger's rest timer.
     • Use "*" for the week column when every week uses the same prescription.
     • Use multiple rows for per-week variation (one row per week).
 - SUB: a subroutine — a free-text block (protocol, instructions, a link) that
        sits among the movements. id = the day slug; label = a short title;
        section ∈ {${sectionList}}; notes = the description (≤${SUBROUTINE.maxDescriptionChars} chars);
        planned = an optional URL. Leave metric and week empty.
+- NOTE: guidance for one week (= one cycle). week = an integer; notes = the
+       text (≤${SUBROUTINE.maxDescriptionChars} chars). id = a day slug for that day's note, which the
+       logger shows when the day opens on that week; leave id empty for a
+       plan-wide note on how the whole week progresses.
 
 DOMAIN VOCABULARY (single source of truth — app.config.ts)
 - Units: weight in ${UNITS.weight}.
@@ -522,12 +563,15 @@ INVARIANTS THE APP WILL CHECK ON UPLOAD
 6. Every EX has at least one planned cell across its week rows.
 7. BLOCK weeks fall within 1..weeks and do not overlap.
 8. Every SUB has a title (label) and a description (notes) ≤${SUBROUTINE.maxDescriptionChars} chars.
+9. group is empty or "superset:<name>" / "circuit:<name>", and members of one
+   group sit next to each other in one day and section. rest is empty or whole
+   seconds.
+10. Every NOTE has an integer week in 1..weeks and notes ≤${SUBROUTINE.maxDescriptionChars} chars.
 
 NOTES ON CURRENT CAPABILITY
-- Supersets and circuits are configured by the user in the logger after the
-  plan is loaded; the plan format itself stores each exercise as a single
-  movement. List supersetted lifts as adjacent EX rows in the same section and
-  mention the intent in the notes column ("superset with next").
+- Supersets and circuits come from the group column: EX rows that share a
+  group name open in the logger already linked. Leave group empty for a
+  movement done on its own.
 - Plan length is implicit from META.weeks plus per-week EX rows.
 
 PRESCRIPTION RUBRIC
@@ -545,7 +589,7 @@ athlete gets nothing.
 [ ] Nothing precedes the header row and nothing follows the last data row — no
     prose, no "Here is your plan", no \`\`\` fences anywhere in the response.
 [ ] Every row has exactly ${PLAN_CSV_HEADERS.length} fields. Any cell containing a comma is quoted.
-[ ] Every row's first column is one of META, BLOCK, DAY, EX, SUB.
+[ ] Every row's first column is one of META, BLOCK, DAY, EX, SUB, NOTE.
 [ ] META rows include title and weeks; weeks is a positive integer.
 [ ] Every EX and SUB id exactly matches the id of a DAY row you wrote — same
     spelling, same dashes, no capitals.
@@ -556,6 +600,10 @@ athlete gets nothing.
 [ ] Every EX has a non-empty planned cell.
 [ ] BLOCK rows tile 1..META.weeks with no gaps and no overlaps.
 [ ] Every SUB has a label and a notes description of ≤${SUBROUTINE.maxDescriptionChars} characters.
+[ ] Every group cell is empty or "superset:<name>" / "circuit:<name>", with the
+    members of each group on adjacent rows; every rest cell is empty or whole
+    seconds.
+[ ] Every NOTE has an integer week and a notes text of ≤${SUBROUTINE.maxDescriptionChars} characters.
 If any check fails, fix it and run the list again. Do not send a CSV that fails
 a check.
 
@@ -666,7 +714,7 @@ function stripLlmWrapper(text: string): string[] {
 }
 
 function dropPreamble(lines: string[], delimiter: string): string[] {
-  const expected = PLAN_CSV_HEADERS.map((h) => h.toLowerCase());
+  const expected = PLAN_CSV_LEGACY_HEADERS.map((h) => h.toLowerCase());
   const headerAt = lines.findIndex((l) => {
     const cells = splitCsvLine(l, delimiter).map((c) => c.trim().toLowerCase());
     return expected.every((h, i) => cells[i] === h);
@@ -688,7 +736,8 @@ export function parsePlanTabular(text: string): PlanParseResult {
 
   const header = splitCsvLine(rawLines[0], delimiter).map((c) => c.trim().toLowerCase());
   const expected = PLAN_CSV_HEADERS.map((h) => h.toLowerCase());
-  if (header.join(',') !== expected.join(',')) {
+  const legacy = PLAN_CSV_LEGACY_HEADERS.map((h) => h.toLowerCase());
+  if (header.join(',') !== expected.join(',') && header.join(',') !== legacy.join(',')) {
     issues.push(
       `Header row must be exactly: ${PLAN_CSV_HEADERS.join(',')} (got: ${header.join(',')})`,
     );
@@ -706,6 +755,8 @@ export function parsePlanTabular(text: string): PlanParseResult {
   // (dayKey,label,section,metric) → exercise reference, so multiple week rows
   // accumulate into a single PlanExercise.
   const exKey = new Map<string, PlanExercise>();
+  const weekNotes: Record<number, string> = {};
+  const dayNotes = new Map<string, Record<number, string>>();
 
   for (let r = 1; r < rawLines.length; r++) {
     const cells = splitCsvLine(rawLines[r], delimiter).map((c) => c.trim());
@@ -761,6 +812,32 @@ export function parsePlanTabular(text: string): PlanParseResult {
       continue;
     }
 
+    if (kind === 'NOTE') {
+      const dayKey = get('id');
+      const w = parseInt(get('week'), 10);
+      const text = get('notes');
+      if (!Number.isFinite(w) || w < 1) {
+        issues.push(`Row ${r + 1}: NOTE week must be a positive integer.`);
+        continue;
+      }
+      if (!text) {
+        issues.push(`Row ${r + 1}: NOTE needs its text in the notes column.`);
+        continue;
+      }
+      if (!dayKey) {
+        weekNotes[w] = text;
+      } else {
+        if (!daysByKey.has(dayKey)) {
+          issues.push(`Row ${r + 1}: NOTE refers to undeclared day "${dayKey}".`);
+          continue;
+        }
+        const notes = dayNotes.get(dayKey) ?? {};
+        notes[w] = text;
+        dayNotes.set(dayKey, notes);
+      }
+      continue;
+    }
+
     if (kind === 'SUB') {
       const dayKey = get('id');
       const title = get('label');
@@ -807,6 +884,8 @@ export function parsePlanTabular(text: string): PlanParseResult {
       const weekCell = get('week') || '*';
       const planned = get('planned');
       const notes = get('notes');
+      const groupCell = get('group');
+      const restCell = get('rest');
 
       if (!dayKey) {
         issues.push(`Row ${r + 1}: EX missing day id.`);
@@ -850,6 +929,16 @@ export function parsePlanTabular(text: string): PlanParseResult {
       } else if (notes && !ex.notes) {
         ex.notes = notes;
       }
+      if (groupCell && !ex.group) {
+        const m = groupCell.match(/^(superset|circuit)\s*:\s*(\S.*)$/i);
+        if (m) ex.group = { kind: m[1].toLowerCase() as 'superset' | 'circuit', id: m[2].trim() };
+        else issues.push(`Row ${r + 1}: group "${groupCell}" must look like "superset:<name>" or "circuit:<name>".`);
+      }
+      if (restCell && ex.restSeconds == null) {
+        const rest = Number(restCell);
+        if (Number.isInteger(rest) && rest >= 0) ex.restSeconds = rest;
+        else issues.push(`Row ${r + 1}: rest "${restCell}" must be whole seconds.`);
+      }
 
       if (weekCell === '*') {
         ex.plannedByWeek[0] = planned; // sentinel for "all weeks", expanded below
@@ -864,7 +953,7 @@ export function parsePlanTabular(text: string): PlanParseResult {
       continue;
     }
 
-    issues.push(`Row ${r + 1}: unknown kind "${kind}". Allowed: META, BLOCK, DAY, EX, SUB.`);
+    issues.push(`Row ${r + 1}: unknown kind "${kind}". Allowed: META, BLOCK, DAY, EX, SUB, NOTE.`);
   }
 
   const maxBlockEnd = blocks.reduce((m, b) => Math.max(m, b.endWeek), 1);
@@ -895,6 +984,7 @@ export function parsePlanTabular(text: string): PlanParseResult {
     dayKey: k,
     label: daysByKey.get(k)!.label,
     exercises: daysByKey.get(k)!.exercises,
+    ...(dayNotes.has(k) ? { notesByWeek: dayNotes.get(k) } : {}),
   }));
 
   const plan: ParsedPlan = {
@@ -904,6 +994,7 @@ export function parsePlanTabular(text: string): PlanParseResult {
     blocks,
     weeklyTemplate: dayOrder,
     days,
+    ...(Object.keys(weekNotes).length > 0 ? { weekNotes } : {}),
   };
 
   issues.push(...validateParsedPlan(plan, { maxWeek }));
@@ -1037,6 +1128,40 @@ export function validateParsedPlan(
         }
       }
     }
+  }
+
+  // Notes: short, and on a week the plan has.
+  const checkNotes = (where: string, notes: Record<number, string> | undefined) => {
+    for (const [k, text] of Object.entries(notes ?? {})) {
+      const w = Number(k);
+      if (!Number.isInteger(w) || w < 1 || w > maxWeek) issues.push(`${where} has a note on week ${k} outside 1..${maxWeek}.`);
+      if (text.length > SUBROUTINE.maxDescriptionChars) {
+        issues.push(`${where} note for week ${k} exceeds ${SUBROUTINE.maxDescriptionChars} characters.`);
+      }
+    }
+  };
+  checkNotes('The plan', plan.weekNotes);
+  for (const day of plan.days) {
+    checkNotes(`Day "${day.label}"`, day.notesByWeek);
+    // A group only links NEIGHBOURS in one section, so members split apart by
+    // another exercise would silently open as two groups.
+    const seen = new Map<string, number>();
+    day.exercises.forEach((ex, i) => {
+      if (ex.restSeconds != null && (!Number.isInteger(ex.restSeconds) || ex.restSeconds < 0)) {
+        issues.push(`"${ex.movement}" rest must be whole seconds.`);
+      }
+      if (!ex.group) return;
+      if (ex.group.kind !== 'superset' && ex.group.kind !== 'circuit') {
+        issues.push(`"${ex.movement}" has unknown group kind "${ex.group.kind}".`);
+      }
+      if (!ex.group.id) issues.push(`"${ex.movement}" has a group with no id.`);
+      const key = `${ex.section}|${ex.group.id}`;
+      const prev = seen.get(key);
+      if (prev != null && prev !== i - 1) {
+        issues.push(`Day "${day.label}": group "${ex.group.id}" members must be listed next to each other.`);
+      }
+      seen.set(key, i);
+    });
   }
 
   // Block coverage: must lie within plan, must not overlap.

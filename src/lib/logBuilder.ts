@@ -101,19 +101,67 @@ function buildLogFromExercises(exercises: FrameExercise[]): LogDocument {
 // odd/even alternation, or a movement swapped out mid-plan in the editor), and
 // PlanView and planAdherence already read it that way. Subroutines carry no
 // weeks and always stay.
+//
+// Consecutive exercises in one section that share a `group.id` become one
+// superset or circuit group, so a plan day opens with its pairings already
+// linked. Anything without a group opens as a single, as before. A plan's
+// `restSeconds` lands on the item, which is what the rest presets and the
+// coach's intent read.
+//
+// The day's note for this week, when there is one, opens first in the warm-up
+// as a subroutine: it is guidance for this cycle, and as part of the document
+// it survives a reopen without the Logger having to look the plan up again.
 export function buildLogFromPlanDay(day: PlanDay, week: number): LogDocument {
-  return buildLogFromExercises(
-    day.exercises.filter((ex) => isSubroutine(ex) || ex.plannedByWeek[week]?.trim()).map((ex) => ({
-      movement: ex.movement,
-      section: ex.section,
-      primaryMetric: ex.primaryMetric,
-      planned: ex.plannedByWeek[week] ?? '',
-      notes: ex.notes,
-      kind: ex.kind,
-      description: ex.description,
-      url: ex.url,
-    })),
-  );
+  const bySection = new Map<SectionKey, LogGroup[]>();
+  let open: { section: SectionKey; id: string; group: LogGroup } | null = null;
+
+  const note = day.notesByWeek?.[week]?.trim();
+  if (note) {
+    bySection.set('warmup', [
+      {
+        id: newId(),
+        kind: 'single',
+        items: [
+          { id: newId(), kind: 'subroutine', movement: `Cycle ${week} note`, description: note, primaryMetric: 'reps', sets: [] },
+        ],
+      },
+    ]);
+  }
+
+  for (const ex of day.exercises) {
+    if (!isSubroutine(ex) && !ex.plannedByWeek[week]?.trim()) continue;
+    const [item] = buildLogFromExercises([
+      {
+        movement: ex.movement,
+        section: ex.section,
+        primaryMetric: ex.primaryMetric,
+        planned: ex.plannedByWeek[week] ?? '',
+        notes: ex.notes,
+        kind: ex.kind,
+        description: ex.description,
+        url: ex.url,
+      },
+    ]).sections[0].groups[0].items;
+    if (ex.restSeconds != null) item.restSeconds = ex.restSeconds;
+
+    const ref = ex.group;
+    if (ref && open && open.section === ex.section && open.id === ref.id) {
+      open.group.items.push(item);
+      continue;
+    }
+    const group: LogGroup = { id: newId(), kind: ref ? ref.kind : 'single', items: [item] };
+    bySection.set(ex.section, [...(bySection.get(ex.section) ?? []), group]);
+    open = ref ? { section: ex.section, id: ref.id, group } : null;
+  }
+
+  // A group whose partners are all off this week is a lone item, not a superset.
+  for (const groups of bySection.values()) {
+    for (const g of groups) if (g.items.length === 1) g.kind = 'single';
+  }
+
+  return {
+    sections: SECTIONS.filter((k) => bySection.has(k)).map((key) => ({ key, groups: bySection.get(key) ?? [] })),
+  };
 }
 
 // The scaling levels a frame offers, in canonical order, or [] when the session

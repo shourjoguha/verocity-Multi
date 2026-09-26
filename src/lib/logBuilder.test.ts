@@ -54,6 +54,55 @@ const DAY: PlanDay = {
   ],
 };
 
+describe('buildLogFromPlanDay — groups, rest and cycle notes', () => {
+  const day: PlanDay = {
+    dayKey: 'b',
+    label: 'Press',
+    notesByWeek: { 2: 'Add a rep per set.' },
+    exercises: [
+      { movement: 'Push-up (med ball)', section: 'primary', primaryMetric: 'reps', plannedByWeek: { 1: '3x10', 2: '3x12' }, restSeconds: 90 },
+      { movement: 'Iso-Lateral Row', section: 'primary', primaryMetric: 'reps', plannedByWeek: { 1: '4x10', 2: '4x10' }, group: { id: 'r', kind: 'superset' }, restSeconds: 90 },
+      { movement: 'Tibialis Raise', section: 'primary', primaryMetric: 'reps', plannedByWeek: { 1: '4x15', 2: '4x15' }, group: { id: 'r', kind: 'superset' } },
+      { movement: 'Face Pull', section: 'accessory', primaryMetric: 'reps', plannedByWeek: { 1: '3x15' }, group: { id: 'd', kind: 'superset' } },
+      { movement: 'Rear Delt Fly', section: 'accessory', primaryMetric: 'reps', plannedByWeek: { 2: '3x15' }, group: { id: 'd', kind: 'superset' } },
+      { movement: 'Ski-Erg Intervals', section: 'conditioning', primaryMetric: 'cal', plannedByWeek: { 1: '6x12' }, group: { id: 'e', kind: 'circuit' }, restSeconds: 0 },
+      { movement: 'Dumbbell Snatch', section: 'conditioning', primaryMetric: 'reps', plannedByWeek: { 1: '6x5/side' }, group: { id: 'e', kind: 'circuit' }, restSeconds: 0 },
+    ],
+  };
+  const shape = (w: number) =>
+    buildLogFromPlanDay(day, w).sections.map((s) => [s.key, s.groups.map((g) => [g.kind, g.items.map((i) => i.movement)])]);
+
+  it('opens neighbours that share a group as one superset or circuit', () => {
+    expect(shape(1)).toEqual([
+      ['primary', [['single', ['Push-up (med ball)']], ['superset', ['Iso-Lateral Row', 'Tibialis Raise']]]],
+      ['accessory', [['single', ['Face Pull']]]],
+      ['conditioning', [['circuit', ['Ski-Erg Intervals', 'Dumbbell Snatch']]]],
+    ]);
+  });
+
+  it('reads a group whose partner is off this week as a single', () => {
+    expect(shape(2)[2]).toEqual(['accessory', [['single', ['Rear Delt Fly']]]]);
+  });
+
+  it('carries prescribed rest onto the item, including zero', () => {
+    const doc = buildLogFromPlanDay(day, 1);
+    const items = doc.sections.flatMap((s) => s.groups.flatMap((g) => g.items));
+    expect(items.find((i) => i.movement === 'Push-up (med ball)')?.restSeconds).toBe(90);
+    expect(items.find((i) => i.movement === 'Ski-Erg Intervals')?.restSeconds).toBe(0);
+    expect(items.find((i) => i.movement === 'Tibialis Raise')?.restSeconds).toBeUndefined();
+  });
+
+  it("opens with that cycle's note first in the warm-up, and only on that cycle", () => {
+    const w2 = buildLogFromPlanDay(day, 2);
+    expect(w2.sections[0].key).toBe('warmup');
+    const note = w2.sections[0].groups[0].items[0];
+    expect(note.kind).toBe('subroutine');
+    expect(note.movement).toBe('Cycle 2 note');
+    expect(note.description).toBe('Add a rep per set.');
+    expect(buildLogFromPlanDay(day, 1).sections.some((s) => s.key === 'warmup')).toBe(false);
+  });
+});
+
 describe('buildLogFromPlanDay', () => {
   it('orders sections canonically regardless of exercise order', () => {
     const doc = buildLogFromPlanDay(DAY, 1);

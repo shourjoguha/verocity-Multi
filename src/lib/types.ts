@@ -428,6 +428,8 @@ export interface ParsedPlan {
   blocks: PlanBlock[];
   weeklyTemplate: string[]; // ordered day keys, e.g. ["mon","wed","fri"]
   days: PlanDay[];
+  // Plan-wide note per program week: how that week progresses as a whole.
+  weekNotes?: Record<number, string>;
 }
 
 export interface PlanBlock {
@@ -440,6 +442,9 @@ export interface PlanDay {
   dayKey: string;
   label: string;
   exercises: PlanExercise[];
+  // Short guidance for this day, keyed by 1-based program week (= cycle). The
+  // Logger shows the note for the cycle it opens; PlanView shows it per week.
+  notesByWeek?: Record<number, string>;
 }
 
 export interface PlanExercise {
@@ -454,6 +459,17 @@ export interface PlanExercise {
   kind?: ItemKind;
   description?: string;
   url?: string;
+  // Optional link to neighbouring exercises of the same day and section:
+  // consecutive exercises sharing `group.id` open in the Logger as one
+  // superset or circuit. Absent ⇒ a single, as every plan before it.
+  group?: PlanGroupRef;
+  // Prescribed rest after each set, carried onto the logged item.
+  restSeconds?: number;
+}
+
+export interface PlanGroupRef {
+  id: string;
+  kind: Exclude<GroupKind, 'single'>;
 }
 
 // ---- workout_logs.data JSONB contract: LogDocument (SPEC §8) ----

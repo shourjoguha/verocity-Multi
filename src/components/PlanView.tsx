@@ -12,7 +12,7 @@ import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { isSubroutine } from '@/lib/subroutine';
-import { planWeekByLog, planWeekCount } from '@/lib/progression';
+import { nextWeekForDay, planWeekByLog, planWeekCount } from '@/lib/progression';
 import { computePlanAdherence } from '@/lib/planAdherence';
 import { PlanAdherenceSection } from '@/components/PlanAdherence';
 
@@ -132,6 +132,15 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const weekProgrammed = (w: number) =>
     parsed.days.some((d) => d.exercises.some((ex) => ex.plannedByWeek[w]));
 
+  // Each day advances on its own counter (see nextWeekForDay): the Nth log of
+  // a day is its cycle N. The rail above is one week for every day, so this is
+  // where a day that has been skipped shows how far behind the others it sits.
+  const dayLogged = (dayKey: string) =>
+    logs.filter((l) => l.plan_id === plan.id && l.day_key === dayKey && l.status !== 'cancelled').length;
+  const dayCycle = (dayKey: string) => nextWeekForDay(logs, plan.id, dayKey, maxWeek);
+  const leadCycle = Math.max(1, ...parsed.days.map((d) => dayCycle(d.dayKey)));
+  const weekNote = parsed.weekNotes?.[activeWeek];
+
   const toggleDay = (dayKey: string) => {
     setCollapsedDays((prev) => {
       const next = new Set(prev);
@@ -225,6 +234,11 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   />
                   <span className={`t-control ${active ? 'font-medium text-fg' : 'text-muted'}`}>
                     W{w}
+                    {parsed.weekNotes?.[w] ? (
+                      <span aria-label="has a note" className="ml-0.5 text-fg">
+                        !
+                      </span>
+                    ) : null}
                   </span>
                   <span className="t-label text-faint">{programmed ? 'set' : 'open'}</span>
                 </button>
@@ -232,6 +246,13 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
             })}
           </div>
         </div>
+
+        {weekNote ? (
+          <div className="mb-6 rounded-card border border-border bg-surface px-4 py-3">
+            <p className="t-label text-muted">W{activeWeek} · how this week progresses</p>
+            <p className="mt-1 text-sm text-fg">{weekNote}</p>
+          </div>
+        ) : null}
       </Item>
 
       {parsed.days.map((day, i) => {
@@ -240,6 +261,10 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
         const hasContent = count > 0;
         const isCollapsed = collapsedDays.has(day.dayKey);
         const isMatrix = matrixDayId === day.dayKey;
+        const logged = dayLogged(day.dayKey);
+        const cycle = dayCycle(day.dayKey);
+        const behind = leadCycle - cycle;
+        const dayNote = day.notesByWeek?.[activeWeek];
 
         return (
           <Item key={day.dayKey}>
@@ -292,9 +317,21 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   </a>
                 )}
               </div>
+              <p className="px-4 pb-2 t-label text-muted tabular-nums">
+                {logged >= maxWeek
+                  ? `All ${maxWeek} cycles logged`
+                  : `Next: cycle ${cycle} of ${maxWeek} · ${logged} logged`}
+                {behind > 0 && logged < maxWeek ? ` · ${behind} behind` : ''}
+              </p>
 
               {isCollapsed ? null : (
                 <div className="border-t border-border">
+                  {dayNote && hasContent ? (
+                    <p className="border-b border-border-soft px-4 py-2 text-sm text-fg">
+                      <span className="t-label text-muted">W{activeWeek} note · </span>
+                      {dayNote}
+                    </p>
+                  ) : null}
                   {!hasContent ? (
                     <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
                       <p className="t-label text-faint">Not programmed yet</p>
