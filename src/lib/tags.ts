@@ -1,5 +1,22 @@
 import { ACTIVITY_TAGS, MEAL_TAGS, type ActivityTagKey } from '@/app.config';
 
+// Switch the ActivityLogger's type and carry that type's default tag with it.
+// `autoTag` is the tag the PREVIOUS type switched on by itself; it comes off on
+// the way out, so picking Padel and then Run does not leave a run tagged Sport.
+// A tag the athlete set by hand is never removed, and never becomes automatic.
+export function retagForType(
+  tags: string[],
+  autoTag: string | null,
+  nextDefault: string | null,
+): { tags: string[]; autoTag: string | null } {
+  const kept = autoTag && autoTag !== nextDefault ? tags.filter((t) => t !== autoTag) : tags;
+  if (!nextDefault) return { tags: kept, autoTag: null };
+  if (kept.includes(nextDefault)) {
+    return { tags: kept, autoTag: autoTag === nextDefault ? autoTag : null };
+  }
+  return { tags: [...kept, nextDefault], autoTag: nextDefault };
+}
+
 // Resolve an activity tag to its token color; unknown tags fall back to muted.
 export function tagColor(tag: string): string {
   const known = ACTIVITY_TAGS[tag as ActivityTagKey];

@@ -430,6 +430,25 @@ describe('buildPlanContextFile', () => {
     expect(file).toContain('"Farmer, Carry"');
     expect(file).toContain('"Grip, forearms"');
   });
+
+  // The classifier looks overrides up by NORMALISED name, so a map keyed by the
+  // raw library name silently missed every override on a mixed-case name —
+  // "Kettlebell press" rendered with no regions at all.
+  it('applies a taxonomy override on a mixed-case library name', () => {
+    const file = buildPlanContextFile({
+      stats: null,
+      movements: [
+        mv({
+          name: 'Kettlebell press',
+          taxonomy: { regions: { shoulders: 1 }, modality: 'resistance', planes: { sagittal: 1 } },
+        }),
+      ],
+      delimiter: ',',
+    });
+    const row = file.split('\n').find((l) => l.startsWith('Kettlebell press,'));
+    expect(row).toContain('shoulders:1.00');
+    expect(row).toContain('sagittal:1.00');
+  });
 });
 
 describe('buildPlanAiPrompt — context file section', () => {
