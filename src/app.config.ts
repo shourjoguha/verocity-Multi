@@ -292,6 +292,7 @@ export const ACTIVITY_TAGS = {
 // Each is written VERBATIM as the log's movement name, so each is classifier
 // input as much as a label (asserted in movementTaxonomy.test.ts). With no
 // court sport on offer, padel was logged as 'Run' and read as sagittal running.
+// Tennis resolves through the same rule:racket-sport as Padel.
 export const ACTIVITY_TYPES = [
   'Run',
   'Walk',
@@ -300,6 +301,7 @@ export const ACTIVITY_TYPES = [
   'Swim',
   'Hike',
   'Padel',
+  'Tennis',
   'Yoga',
   'Mobility',
 ] as const;

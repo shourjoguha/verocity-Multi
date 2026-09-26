@@ -456,6 +456,14 @@ describe('ActivityLogger quick-picks', () => {
     expect(BODY_LENSES.strength.modalities).not.toContain(modality);
   });
 
+  // Tennis was added as a quick-pick so it stops being logged as 'Run'; it has
+  // to land on exactly the court-sport profile Padel does, not a sibling.
+  it('reads the Tennis quick-pick exactly as Padel', () => {
+    expect(ACTIVITY_TYPES).toContain('Tennis');
+    expect(classifyMovement('Tennis').matchedIds).toEqual(['racket-sport']);
+    expect(classifyMovement('Tennis').profile).toEqual(classifyMovement('Padel').profile);
+  });
+
   it('reads the Row quick-pick as systemic rowing conditioning', () => {
     const c = classifyMovement('Row');
     expect(c.matchedIds).toEqual(['exact:row']);
