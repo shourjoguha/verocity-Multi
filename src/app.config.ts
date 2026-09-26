@@ -289,7 +289,20 @@ export const ACTIVITY_TAGS = {
 } as const;
 
 // Quick-pick activity types for the lightweight non-strength ActivityLogger.
-export const ACTIVITY_TYPES = ['Run', 'Walk', 'Cycle', 'Row', 'Swim', 'Hike', 'Yoga', 'Mobility'] as const;
+// Each is written VERBATIM as the log's movement name, so each is classifier
+// input as much as a label (asserted in movementTaxonomy.test.ts). With no
+// court sport on offer, padel was logged as 'Run' and read as sagittal running.
+export const ACTIVITY_TYPES = [
+  'Run',
+  'Walk',
+  'Cycle',
+  'Row',
+  'Swim',
+  'Hike',
+  'Padel',
+  'Yoga',
+  'Mobility',
+] as const;
 
 // ----------------------------------------------------------------
 // Meals
