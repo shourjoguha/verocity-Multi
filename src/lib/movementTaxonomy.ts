@@ -801,6 +801,82 @@ const RAW_RULES: MovementRule[] = [
       { systemic: true },
     ),
   },
+  // Named mobility drills. The athlete names mobility items "... Mobility" so a
+  // single search finds them, and the generic rule below would then file every
+  // one of them under its hip-and-leg profile — "Shoulder mobility flow" read
+  // as quads and glutes. Each rule here carries the joint it targets. Every
+  // fragment outlengthens 'mobility' (8) and 'stretch' (7); a bare name that
+  // would tie or lose to them ('shin box', 'cat cow') gets a "... mobility" twin
+  // so no ordering is needed.
+  {
+    id: 'shoulder-mobility',
+    match: ['shoulder mobility', 'shoulder car', 'wall slide', 'shoulder dislocate'],
+    profile: p({ shoulders: 0.7, back: 0.3 }, 'mobility', { frontal: 0.4, transverse: 0.4, sagittal: 0.2 }),
+  },
+  {
+    // Band pull-aparts done as warm-up prep. Bare, they stay upper-back-prehab
+    // resistance, which is how the logs already hold them.
+    id: 'scapular-mobility',
+    match: ['pull apart mobility', 'scap mobility', 'scapular mobility'],
+    profile: p({ back: 0.6, shoulders: 0.4 }, 'mobility', 'transverse'),
+  },
+  {
+    // Upper-back rotation and segmental flexion/extension. 'thoracic rotation'
+    // outlengthens rule:rotation's 'rotation', which would otherwise price an
+    // open book as loaded core work.
+    id: 'thoracic-mobility',
+    match: [
+      'thoracic mobility', 'thoracic spine', 'thoracic rotation', 'spine mobility',
+      'open book', 'thread the needle', 'cat cow', 'cat cow mobility',
+    ],
+    profile: p({ back: 0.5, core: 0.3, shoulders: 0.2 }, 'mobility', { transverse: 0.5, sagittal: 0.5 }),
+  },
+  {
+    // Hip rotation: the 90/90 (written "Shin Box", because the numbers are
+    // stripped by normalisation), hip CARs, pigeon. Adductors fold into `quads`.
+    id: 'hip-rotation-mobility',
+    match: [
+      'shin box', 'shin box mobility', 'hip car', 'hip car mobility', 'pigeon mobility',
+      'hip rotation mobility', 'hip internal rotation', 'hip external rotation',
+    ],
+    profile: p({ glutes: 0.45, quads: 0.35, hamstrings: 0.2 }, 'mobility', { transverse: 0.6, frontal: 0.4 }),
+  },
+  {
+    // Hip-flexor length — rectus femoris folds into `quads`, as in 'couch stretch'.
+    id: 'hip-flexor-mobility',
+    match: ['couch stretch', 'hip flexor'],
+    profile: p({ quads: 1 }, 'mobility', 'sagittal'),
+  },
+  {
+    id: 'ankle-mobility',
+    match: ['ankle mobility', 'ankle rock', 'knee to wall'],
+    profile: p({ calves: 1 }, 'mobility', 'sagittal'),
+  },
+  {
+    // 'jefferson curl' outlengthens rule:arm-isolation's 'curl', which read a
+    // loaded spinal-flexion drill as a biceps curl.
+    id: 'hamstring-mobility',
+    match: ['hamstring mobility', 'hamstring floss', 'jefferson curl'],
+    profile: p({ hamstrings: 0.6, back: 0.4 }, 'mobility', 'sagittal'),
+  },
+  {
+    id: 'adductor-mobility',
+    match: ['adductor mobility', 'adductor rock', 'frog stretch', 'frog mobility'],
+    profile: p({ quads: 1 }, 'mobility', 'frontal'),
+  },
+  {
+    // A held deep squat is a position, not a set: 'squat hold' outlengthens
+    // rule:squat-pattern's 'squat'.
+    id: 'squat-mobility',
+    match: ['squat mobility', 'deep squat hold'],
+    profile: p({ quads: 0.35, glutes: 0.3, calves: 0.2, hamstrings: 0.15 }, 'mobility', 'sagittal'),
+  },
+  {
+    // Tibialis anterior folds into `calves`, the only lower-leg region.
+    id: 'tibialis',
+    match: ['tibialis', 'tib raise', 'tib bar'],
+    profile: p({ calves: 1 }, 'resistance', 'sagittal', { rom: ROM.calf }),
+  },
   {
     id: 'mobility',
     match: ['stretch', 'mobility', 'flow', 'halo', 'prep', 'foam roll', 'pigeon', 'yoga'],
@@ -888,6 +964,7 @@ const BW_LOAD: Record<string, number> = {
   'pallof press'                      : 0.2,
   'rule:anti-rotation'                : 0.2,
   'rule:rotation'                     : 0.2,
+  'rule:tibialis'                     : 0.1,
   'band pull apart'                   : 0.0,
   'banded hip thrust'                 : 0.0,
   'bench press'                       : 0.0,

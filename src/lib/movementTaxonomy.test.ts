@@ -126,6 +126,34 @@ const LATERAL_AND_COURT = [
   'Tennis Elbow Curl',
 ];
 
+// Mobility drills named "... Mobility" so one search finds them. Each is a
+// longest-fragment contest against the generic 'mobility' / 'stretch' rule, so
+// they join the shuffle test too.
+const NAMED_MOBILITY = [
+  'Shoulder Mobility Prep',
+  'Shoulder mobility flow',
+  'Shoulder CARs Mobility',
+  'Wall Slides',
+  'Band Pull-apart Mobility',
+  'Thoracic Spine Mobility',
+  'T-Spine Mobility',
+  'Thoracic Rotation',
+  'Open Book Mobility',
+  'Cat-Cow Mobility',
+  'Shin Box Mobility (90/90)',
+  'Hip CARs Mobility',
+  'Pigeon Mobility',
+  'Couch Stretch Mobility',
+  'Hip Flexor Stretch',
+  'Ankle Mobility',
+  'Hamstring Mobility',
+  'Jefferson Curl Mobility',
+  'Adductor Mobility',
+  'Frog Stretch',
+  'Deep Squat Mobility',
+  'Tibialis Raise',
+];
+
 // Truncated at import — almost certainly "Weighted Pull-up" and "Deficit
 // Deadlift". They cannot be resolved from the string, and must stay unknown
 // rather than being bucketed somewhere plausible.
@@ -575,6 +603,64 @@ describe('lateral patterns carry frontal-plane weight', () => {
   });
 });
 
+// The generic mobility rule is hip-and-leg shaped, so a shoulder or spine drill
+// named "... Mobility" landed on quads and glutes. The named rules put each
+// drill on the joint it targets.
+describe('named mobility drills land on their joint', () => {
+  const top = (name: string) =>
+    Object.entries(classifyMovement(name).profile.regions).sort((a, b) => b[1]! - a[1]!)[0]?.[0];
+
+  it.each(NAMED_MOBILITY.filter((n) => n !== 'Tibialis Raise'))('reads %s as mobility, not a lift', (name) => {
+    const c = classifyMovement(name);
+    expect(c.profile.modality).toBe('mobility');
+    expect(c.matchedIds).not.toEqual(['mobility']);
+  });
+
+  it.each([
+    ['Shoulder Mobility Prep', 'shoulders'],
+    ['Shoulder mobility flow', 'shoulders'],
+    ['Shoulder CARs Mobility', 'shoulders'],
+    ['Band Pull-apart Mobility', 'back'],
+    ['Thoracic Spine Mobility', 'back'],
+    ['T-Spine Mobility', 'back'],
+    ['Cat-Cow Mobility', 'back'],
+    ['Shin Box Mobility (90/90)', 'glutes'],
+    ['Pigeon Mobility', 'glutes'],
+    ['Couch Stretch Mobility', 'quads'],
+    ['Ankle Mobility', 'calves'],
+    ['Hamstring Mobility', 'hamstrings'],
+    ['Jefferson Curl Mobility', 'hamstrings'],
+    ['Adductor Mobility', 'quads'],
+  ])('puts %s on %s', (name, region) => {
+    expect(top(name)).toBe(region);
+  });
+
+  it('keeps the exact names and the bare prehab lift where they were', () => {
+    expect(classifyMovement('Couch Stretch').matchedIds).toEqual(['exact:couch stretch']);
+    expect(classifyMovement('Hip Mobility Flow').matchedIds).toEqual(['exact:hip mobility flow']);
+    expect(classifyMovement('Shoulder Prep').matchedIds).toEqual(['exact:shoulder prep']);
+    expect(classifyMovement('Band pull-apart').matchedIds).toEqual(['exact:band pull apart']);
+    expect(classifyMovement('Face Pull').profile.modality).toBe('resistance');
+    expect(classifyMovement('Yoga').matchedIds).toEqual(['mobility']);
+  });
+
+  // The neighbours the new fragments must NOT capture.
+  it('leaves loaded namesakes on their lifting rules', () => {
+    expect(classifyMovement('Landmine Twist').matchedIds).toEqual(['exact:landmine twist']);
+    expect(classifyMovement('Russian Twist').matchedIds).toEqual(['rotation']);
+    expect(classifyMovement('Goblet Squat').profile.modality).toBe('resistance');
+    expect(classifyMovement('Bicep Curl').matchedIds).toEqual(['arm-isolation']);
+    expect(classifyMovement('Standing Calf Raise').profile.modality).toBe('resistance');
+  });
+
+  it('reads Tibialis Raise as lower-leg resistance work', () => {
+    const c = classifyMovement('Tibialis Raise');
+    expect(c.matchedIds).toEqual(['tibialis']);
+    expect(c.profile.modality).toBe('resistance');
+    expect(c.profile.regions).toEqual({ calves: 1 });
+  });
+});
+
 describe('compounds', () => {
   it('merges both halves of a slash compound', () => {
     const c = classifyMovement('Cable Fly/Machine Press');
@@ -603,7 +689,7 @@ describe('compounds', () => {
 
 describe('rule matching is order-independent', () => {
   it('gives identical results with the rule array shuffled', () => {
-    const names = [...VOCABULARY, ...LATERAL_AND_COURT];
+    const names = [...VOCABULARY, ...LATERAL_AND_COURT, ...NAMED_MOBILITY];
     const baseline = names.map((n) => JSON.stringify(classifyMovement(n).profile));
     const original = [...RULES];
     // Deterministic shuffle — no reliance on Math.random in a test.
