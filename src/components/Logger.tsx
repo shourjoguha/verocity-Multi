@@ -259,6 +259,9 @@ export default function Logger() {
   // source / source_text / instructions — under Session details. Null for
   // plan days and blank workouts, which have none of these fields.
   const [linkedSession, setLinkedSession] = useState<Session | null>(null);
+  // Which cycle of the active plan this session is, and that day's note for
+  // it. Shown in the Session details row rather than as a card in the workout.
+  const [cycle, setCycle] = useState<{ week: number; of: number; note?: string } | null>(null);
   // Editing a past workout (opened via ?logId=…&edit=1): reuse every logging
   // control but freeze the live-session behaviors (stopwatch, auto-end, finish).
   const [editing, setEditing] = useState(false);
@@ -317,6 +320,17 @@ export default function Logger() {
           setTags(log.tags ?? []);
           if (log.plan_id) setSubs(await getMovementSubs(log.plan_id));
           if (log.session_id) setLinkedSession(await getSessionById(log.session_id));
+          if (log.plan_id && log.day_key && log.week_number) {
+            const plan = await getPlanById(log.plan_id);
+            const day = plan?.parsed.days.find((d) => d.dayKey === log.day_key);
+            if (plan && day) {
+              setCycle({
+                week: log.week_number,
+                of: planWeekCount(plan.parsed),
+                note: day.notesByWeek?.[log.week_number],
+              });
+            }
+          }
           setStartedAt(log.started_at);
           // Seed the clock BEFORE starting it. Without this the stopwatch
           // resumed from 0 and the autosave wrote that straight over the real
@@ -410,7 +424,9 @@ export default function Logger() {
             weekNumber = planParam
               ? resolveWeek(planDay, weekFromDate(plan.start_date, new Date(logDate)))
               : nextWeekForDay(allLogs, plan.id, dk, planWeekCount(plan.parsed));
-            built = buildLogFromPlanDay(planDay, resolveWeek(planDay, weekNumber));
+            const openedWeek = resolveWeek(planDay, weekNumber);
+            built = buildLogFromPlanDay(planDay, openedWeek);
+            setCycle({ week: openedWeek, of: planWeekCount(plan.parsed), note: planDay.notesByWeek?.[openedWeek] });
             // "Short on time?" — trim to a mini of the same plan day (primary
             // work intact). plan_id + day_key still link it, so it stays on-plan.
             if (miniParam === 'express' || miniParam === 'half') {
@@ -1572,6 +1588,16 @@ export default function Logger() {
               ▸
             </span>
             Session details
+            {cycle ? (
+              <span className="t-label text-faint tabular-nums">
+                · {cycle.week}/{cycle.of}
+                {cycle.note && !showDetails ? (
+                  <span aria-label="has a note for this cycle" className="ml-1 text-fg">
+                    !
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
           </button>
           <span className="ml-auto flex items-center gap-3">
             <span className="t-label text-faint tabular-nums">
@@ -1587,6 +1613,13 @@ export default function Logger() {
             </span>
           </span>
         </div>
+
+        {showDetails && cycle?.note ? (
+          <p className="mt-1.5 border border-border px-3 py-2 text-sm text-fg">
+            <span className="t-label text-muted">Cycle {cycle.week} · </span>
+            {cycle.note}
+          </p>
+        ) : null}
 
         {showDetails ? (
           <div className="mt-1.5 flex flex-wrap items-center gap-2">

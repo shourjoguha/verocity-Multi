@@ -81,7 +81,7 @@ describe('buildLogFromPlanDay — groups, rest and cycle notes', () => {
   });
 
   it('reads a group whose partner is off this week as a single', () => {
-    expect(shape(2)[2]).toEqual(['accessory', [['single', ['Rear Delt Fly']]]]);
+    expect(shape(2).find(([key]) => key === 'accessory')).toEqual(['accessory', [['single', ['Rear Delt Fly']]]]);
   });
 
   it('carries prescribed rest onto the item, including zero', () => {
@@ -92,14 +92,10 @@ describe('buildLogFromPlanDay — groups, rest and cycle notes', () => {
     expect(items.find((i) => i.movement === 'Tibialis Raise')?.restSeconds).toBeUndefined();
   });
 
-  it("opens with that cycle's note first in the warm-up, and only on that cycle", () => {
+  it('keeps the cycle note out of the document — the Logger shows it under Session details', () => {
     const w2 = buildLogFromPlanDay(day, 2);
-    expect(w2.sections[0].key).toBe('warmup');
-    const note = w2.sections[0].groups[0].items[0];
-    expect(note.kind).toBe('subroutine');
-    expect(note.movement).toBe('Cycle 2 note');
-    expect(note.description).toBe('Add a rep per set.');
-    expect(buildLogFromPlanDay(day, 1).sections.some((s) => s.key === 'warmup')).toBe(false);
+    const items = w2.sections.flatMap((s) => s.groups.flatMap((g) => g.items));
+    expect(items.some((i) => i.kind === 'subroutine')).toBe(false);
   });
 });
 

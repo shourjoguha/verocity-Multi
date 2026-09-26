@@ -108,25 +108,12 @@ function buildLogFromExercises(exercises: FrameExercise[]): LogDocument {
 // `restSeconds` lands on the item, which is what the rest presets and the
 // coach's intent read.
 //
-// The day's note for this week, when there is one, opens first in the warm-up
-// as a subroutine: it is guidance for this cycle, and as part of the document
-// it survives a reopen without the Logger having to look the plan up again.
+// The day's cycle note (`notesByWeek`) is deliberately NOT written into the
+// document: the Logger shows it under Session details, so it guides the
+// session without becoming a card in the workout or a row in its history.
 export function buildLogFromPlanDay(day: PlanDay, week: number): LogDocument {
   const bySection = new Map<SectionKey, LogGroup[]>();
   let open: { section: SectionKey; id: string; group: LogGroup } | null = null;
-
-  const note = day.notesByWeek?.[week]?.trim();
-  if (note) {
-    bySection.set('warmup', [
-      {
-        id: newId(),
-        kind: 'single',
-        items: [
-          { id: newId(), kind: 'subroutine', movement: `Cycle ${week} note`, description: note, primaryMetric: 'reps', sets: [] },
-        ],
-      },
-    ]);
-  }
 
   for (const ex of day.exercises) {
     if (!isSubroutine(ex) && !ex.plannedByWeek[week]?.trim()) continue;

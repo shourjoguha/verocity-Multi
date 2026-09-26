@@ -296,6 +296,24 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   <span className="min-w-0 truncate t-control">
                     Day {letter} · {day.label}
                   </span>
+                  {/* This day's own cycle: the one its next log will be. Its
+                      counter runs apart from the other days', so a day that
+                      has been skipped reads as behind the furthest one. */}
+                  <span
+                    className="shrink-0 t-control tabular-nums text-muted"
+                    title={
+                      logged >= maxWeek
+                        ? `All ${maxWeek} cycles logged`
+                        : `Next log is cycle ${cycle} of ${maxWeek}${behind > 0 ? `, ${behind} behind` : ''}`
+                    }
+                  >
+                    {logged >= maxWeek ? 'done' : `${cycle}/${maxWeek}`}
+                    {behind > 0 && logged < maxWeek ? (
+                      <sub className="ml-0.5 text-down" aria-label={`${behind} behind`}>
+                        −{behind}
+                      </sub>
+                    ) : null}
+                  </span>
                   <span className="shrink-0 t-control text-faint tabular-nums">{count}</span>
                 </button>
                 <button
@@ -317,12 +335,6 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   </a>
                 )}
               </div>
-              <p className="px-4 pb-2 t-label text-muted tabular-nums">
-                {logged >= maxWeek
-                  ? `All ${maxWeek} cycles logged`
-                  : `Next: cycle ${cycle} of ${maxWeek} · ${logged} logged`}
-                {behind > 0 && logged < maxWeek ? ` · ${behind} behind` : ''}
-              </p>
 
               {isCollapsed ? null : (
                 <div className="border-t border-border">

@@ -129,8 +129,11 @@ const logDoc = {
 const workoutLog = {
   id: LOG_ID,
   owner_user_id: session.user.id,
-  plan_id: null,
-  day_key: null,
+  // Linked to the active plan's day 1, cycle 1, so the Logger's Session
+  // details row renders its cycle and note marker while measured.
+  plan_id: '33333333-3333-3333-3333-333333333333',
+  day_key: 'day-1',
+  week_number: 1,
   session_id: null,
   week: null,
   log_date: new Date().toISOString().slice(0, 10),
