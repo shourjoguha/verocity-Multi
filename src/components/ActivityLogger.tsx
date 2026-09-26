@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { createLog } from '@/lib/queries';
 import { track } from '@/lib/analytics';
-import { ACTIVITY_TAGS, ACTIVITY_TYPES, METRICS } from '@/app.config';
+import { ACTIVITY_TAGS, ACTIVITY_TYPE_TAGS, ACTIVITY_TYPES, METRICS } from '@/app.config';
+import { retagForType } from '@/lib/tags';
 import type { LogDocument, VibeCheck } from '@/lib/types';
 import { Button, LoadingScreen } from '@/components/ui/primitives';
 import { Disclosure } from '@/components/ui/Disclosure';
@@ -78,6 +79,9 @@ export default function ActivityLogger() {
   const [minutes, setMinutes] = useState('');
   const [distance, setDistance] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  // The tag the current type switched on by itself (Padel/Tennis -> Sport), so
+  // it can come off again if the type changes. Null once the athlete touches it.
+  const [autoTag, setAutoTag] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   // Optional readiness + HR, mirroring what workouts capture (VibeCheck on
   // doc.session.vibe; hr_avg / hr_max columns). Each vibe field is nullable so
@@ -99,8 +103,17 @@ export default function ActivityLogger() {
 
   if (!ready) return <LoadingScreen />;
 
-  const toggleTag = (t: string) =>
+  const toggleTag = (t: string) => {
+    if (t === autoTag) setAutoTag(null);
     setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
+  };
+
+  const pickType = (t: (typeof ACTIVITY_TYPES)[number]) => {
+    const next = retagForType(tags, autoTag, ACTIVITY_TYPE_TAGS[t] ?? null);
+    setType(t);
+    setTags(next.tags);
+    setAutoTag(next.autoTag);
+  };
 
   async function save() {
     if (!type.trim()) {
@@ -165,7 +178,7 @@ export default function ActivityLogger() {
           <button
             key={t}
             type="button"
-            onClick={() => setType(t)}
+            onClick={() => pickType(t)}
             className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
               type === t ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
             }`}

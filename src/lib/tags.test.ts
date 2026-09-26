@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIVITY_TAGS } from '@/app.config';
-import { sessionTagColors, stripeBackground, tagColor } from '@/lib/tags';
+import { ACTIVITY_TAGS, ACTIVITY_TYPE_TAGS } from '@/app.config';
+import { retagForType, sessionTagColors, stripeBackground, tagColor } from '@/lib/tags';
 
 describe('stripeBackground', () => {
   it('returns undefined below two colors, so the caller stays on a solid fill', () => {
@@ -41,5 +41,40 @@ describe('sessionTagColors', () => {
   it('collapses unknown tags onto one fallback color', () => {
     // Both resolve to the muted fallback, so they must not read as two activities.
     expect(sessionTagColors(['whittling', 'yodelling'])).toEqual([tagColor('whittling')]);
+  });
+});
+
+describe('retagForType', () => {
+  it('switches Sport on for the court sports', () => {
+    expect(ACTIVITY_TYPE_TAGS.Padel).toBe('sport');
+    expect(ACTIVITY_TYPE_TAGS.Tennis).toBe('sport');
+    expect(retagForType([], null, 'sport')).toEqual({ tags: ['sport'], autoTag: 'sport' });
+  });
+
+  it('takes an automatic tag back off when the type changes away', () => {
+    // Padel, then Run: the run must not be saved tagged Sport.
+    expect(retagForType(['sport'], 'sport', null)).toEqual({ tags: [], autoTag: null });
+  });
+
+  it('keeps the automatic tag across Padel -> Tennis', () => {
+    expect(retagForType(['sport'], 'sport', 'sport')).toEqual({ tags: ['sport'], autoTag: 'sport' });
+  });
+
+  it('never removes a tag the athlete set by hand', () => {
+    // Sport was on before Padel was picked, so it is not Padel's to take away.
+    const picked = retagForType(['sport'], null, 'sport');
+    expect(picked).toEqual({ tags: ['sport'], autoTag: null });
+    expect(retagForType(picked.tags, picked.autoTag, null)).toEqual({ tags: ['sport'], autoTag: null });
+  });
+
+  it('leaves other tags alone', () => {
+    expect(retagForType(['recovery'], null, 'sport')).toEqual({
+      tags: ['recovery', 'sport'],
+      autoTag: 'sport',
+    });
+    expect(retagForType(['recovery', 'sport'], 'sport', null)).toEqual({
+      tags: ['recovery'],
+      autoTag: null,
+    });
   });
 });

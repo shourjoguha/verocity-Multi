@@ -306,6 +306,15 @@ export const ACTIVITY_TYPES = [
   'Mobility',
 ] as const;
 
+// The tag a quick-pick switches on by itself in the ActivityLogger. Court sports
+// only: they were always tagged Sport by hand, and the tag was the ONLY thing
+// that told a padel session from a run while both were typed 'Run'. Types with
+// no entry leave the tags alone.
+export const ACTIVITY_TYPE_TAGS: Partial<Record<(typeof ACTIVITY_TYPES)[number], ActivityTagKey>> = {
+  Padel: 'sport',
+  Tennis: 'sport',
+};
+
 // ----------------------------------------------------------------
 // Meals
 // ----------------------------------------------------------------
