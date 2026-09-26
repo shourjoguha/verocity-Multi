@@ -8,7 +8,7 @@ import {
   splitCompound,
 } from '@/lib/movementTaxonomy';
 import { familyOf } from '@/lib/stats';
-import { ACTIVITY_TYPES, MUSCLE_REGION_KEYS, PLANE_KEYS } from '@/app.config';
+import { ACTIVITY_TYPES, BODY_LENSES, MUSCLE_REGION_KEYS, PLANE_KEYS } from '@/app.config';
 
 // The real production vocabulary, verbatim from the user's 46 logs. This list
 // is the ratchet: every name here must classify, or the suite fails.
@@ -448,6 +448,47 @@ describe('ActivityLogger quick-picks', () => {
   it.each([...ACTIVITY_TYPES])('classifies %s', (name) => {
     expect(isClassified(classifyMovement(name))).toBe(true);
   });
+
+  // Log Activity is the NON-strength logger, so no quick-pick may land in the
+  // strength lens. 'Row' did: a rowing session was filed as barbell rows.
+  it.each([...ACTIVITY_TYPES])('keeps %s out of the strength lens', (name) => {
+    const { modality } = classifyMovement(name).profile;
+    expect(BODY_LENSES.strength.modalities).not.toContain(modality);
+  });
+
+  it('reads the Row quick-pick as systemic rowing conditioning', () => {
+    const c = classifyMovement('Row');
+    expect(c.matchedIds).toEqual(['exact:row']);
+    expect(c.profile.modality).toBe('endurance');
+    expect(c.profile.systemic).toBe(true);
+  });
+});
+
+// A bare 'Row' is the rowing machine here — the shared library seeds it as a
+// distance movement and the Hyrox sessions prescribe it in calories — while a
+// strength row is always qualified. EXACT matches the whole name, so only the
+// bare name moves.
+describe("a bare 'Row' is the erg", () => {
+  // Every estimate, not just the anatomy: the entry exists so a Log Activity
+  // row prices like any other, and a missing forceFactor priced it at zero.
+  it('classifies and prices Row exactly as Rower Intervals', () => {
+    expect(classifyMovement('Row').profile).toEqual(classifyMovement('Rower Intervals').profile);
+  });
+
+  it.each([
+    'Barbell Row',
+    'DB Row',
+    'Gorilla Row',
+    'Iso-Lateral Row',
+    'Landmine Row',
+    'Seated Cable Row',
+    'Bent-Over Row',
+    'Ring Row',
+  ])('leaves %s a resistance row', (name) => {
+    const { profile } = classifyMovement(name);
+    expect(profile.modality).toBe('resistance');
+    expect(profile.regions.back ?? 0).toBeGreaterThan(0.5);
+  });
 });
 
 // Lateral patterns fell to their sagittal family by longest fragment — 'lunge',
@@ -605,6 +646,8 @@ describe('familyOf is unchanged by the taxonomy work', () => {
     expect(familyOf('Rower Intervals')).toBe('pull');
     expect(familyOf('Med-Ball Throw')).toBe('pull');
     expect(familyOf('Zone 2 (row/bike/walk)')).toBe('pull');
+    // The taxonomy reads a bare 'Row' as the erg; Stats still calls it a pull.
+    expect(familyOf('Row')).toBe('pull');
     expect(familyOf('Back Squat')).toBe('squat');
     expect(familyOf('Bulgarian Split Squat')).toBe('lunge');
   });

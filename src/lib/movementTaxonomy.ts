@@ -414,6 +414,20 @@ const RAW_EXACT: Record<string, MovementProfile> = {
     'sagittal',
     { systemic: true },
   ),
+  // A bare "Row" is the erg in this app, not a barbell row. The shared library
+  // seeds it as a distance/time movement (0024_seed_hyrox.sql), the seeded Hyrox
+  // sessions prescribe it in calories and metres, and Log Activity writes it
+  // for a rowing session. The athlete's strength rows are always qualified —
+  // Iso-Lateral, Gorilla, Landmine — and EXACT matches the whole atom only, so
+  // every qualified name still reaches rule:horizontal-pull. That rule used to
+  // take this one too: 30 minutes of rowing read as back/arms lifting, and with
+  // its bwLoad of 0 and no forceFactor, priced at zero work.
+  row: p(
+    { back: 0.4, quads: 0.3, hamstrings: 0.09, glutes: 0.11, arms: 0.1 },
+    'endurance',
+    'sagittal',
+    { systemic: true },
+  ),
   zone: p(
     { quads: 0.35, hamstrings: 0.1575, glutes: 0.1925, calves: 0.15, back: 0.15 },
     'endurance',
@@ -895,6 +909,7 @@ const BW_LOAD: Record<string, number> = {
   'med ball throw'                    : 0.0,
   'overhead press'                    : 0.0,
   'overhead tricep'                   : 0.0,
+  'row'                               : 0.0,
   'row erg interval'                  : 0.0,
   'rower interval'                    : 0.0,
   'rule:arm-isolation'                : 0.0,
@@ -927,6 +942,7 @@ const BW_LOAD: Record<string, number> = {
 const FORCE_FACTOR: Record<string, number> = {
   'row erg interval'                  : 0.45,
   'rower interval'                    : 0.45,
+  'row'                               : 0.45,
   'ski erg interval'                  : 0.3,
   'cycle'                             : 0.4,
   'rule:cycling'                      : 0.4,
@@ -956,6 +972,7 @@ const HORIZ_FACTOR: Record<string, number> = {
   'rule:locomotion-endurance'         : 0.1,
   'row erg interval'                  : 0.1,
   'rower interval'                    : 0.1,
+  'row'                               : 0.1,
   'ski erg interval'                  : 0.1,
   'rule:erg-endurance'                : 0.1,
   // An air bike is priced as a rower, not as a bicycle — see rule:air-bike.
@@ -976,6 +993,7 @@ const HORIZ_FACTOR: Record<string, number> = {
 const CAL_METRES: Record<string, number> = {
   'row erg interval'                  : 15,
   'rower interval'                    : 15,
+  'row'                               : 15,
   // Smaller working muscle mass per stroke, so a calorie buys less distance.
   'ski erg interval'                  : 12,
   // A calorie is a calorie: this is set so a cycled calorie prices near a rowed
