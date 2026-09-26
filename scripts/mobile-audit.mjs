@@ -129,8 +129,11 @@ const logDoc = {
 const workoutLog = {
   id: LOG_ID,
   owner_user_id: session.user.id,
-  plan_id: null,
-  day_key: null,
+  // Linked to the active plan's day 1, cycle 1, so the Logger's Session
+  // details row renders its cycle and note marker while measured.
+  plan_id: '33333333-3333-3333-3333-333333333333',
+  day_key: 'day-1',
+  week_number: 1,
   session_id: null,
   week: null,
   log_date: new Date().toISOString().slice(0, 10),
@@ -189,11 +192,17 @@ const planDays = [
 ].map((label, i) => ({
   dayKey: `day-${i + 1}`,
   label,
+  // A long cycle note and a linked pair on day 1, so /app/plan and the Logger
+  // render the note line and a superset rather than only the bare case.
+  ...(i === 0
+    ? { notesByWeek: { 1: 'Cycle 1: open every lift at RPE 7 and write the load down; next cycle adds 2.5 kg where all reps were clean.' } }
+    : {}),
   exercises: Array.from({ length: 5 + (i % 4) }, (_, k) => ({
     movement: `movement ${k + 1}`,
     section: 'primary',
     primaryMetric: 'weight',
     plannedByWeek: { 1: '5x5', 2: '5x5' },
+    ...(i === 0 && k < 2 ? { group: { id: 'pair', kind: 'superset' }, restSeconds: 90 } : {}),
   })),
 }));
 
@@ -211,6 +220,7 @@ const activePlan = {
     blocks: [],
     weeklyTemplate: planDays.map((d) => d.dayKey),
     days: planDays,
+    weekNotes: { 1: 'Build-up week: every strength lift at RPE 7; hypertrophy work at the bottom of its rep range.' },
   },
   is_active: true,
   is_public: false,

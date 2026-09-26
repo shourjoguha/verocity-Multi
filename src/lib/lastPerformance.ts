@@ -1,7 +1,7 @@
-import { PREFILL, type MetricKey } from '@/app.config';
+import { PREFILL, RPE, type MetricKey } from '@/app.config';
 import type { SetActual, WorkoutLog } from '@/lib/types';
 import { parsePlanned } from '@/lib/logBuilder';
-import { flattenSets } from '@/lib/stats';
+import { flattenSets, type FlatSet } from '@/lib/stats';
 import { e1rm } from '@/lib/e1rm';
 
 // Most recent completed performance for a movement across prior logs, used to
@@ -13,28 +13,70 @@ import { e1rm } from '@/lib/e1rm';
 // load and the programmed step up never happened: week 6 (intensification)
 // built on week 5 (deload) instead of on week 4. Skipping deloads makes the
 // reference the last week that was actually pushed.
+//
+// The reference is the newest completed set that recorded ANYTHING — reps,
+// time, distance or calories — not only a weight. Requiring a weight left every
+// erg and every unloaded timed or distance movement with no reference at all,
+// so a Ski-Erg or a mobility hold was retyped from blank each session. When
+// that set carries no weight, the newest weight logged for the movement fills
+// in, so one set logged without a load does not wipe the load out.
 export function lastPerformance(
   logs: WorkoutLog[],
   movement: string,
   skipLogIds?: ReadonlySet<string>,
 ): SetActual | null {
   const target = movement.toLowerCase();
+  let base: FlatSet | null = null;
+  let weight: number | undefined;
   for (const log of logs) {
     if (skipLogIds?.has(log.id)) continue;
-    const match = flattenSets(log).find(
-      (s) => s.movement.toLowerCase() === target && s.completed && s.weight != null,
-    );
-    if (match) {
-      return {
-        weight: match.weight,
-        reps: match.reps,
-        rpe: match.rpe,
-        completed: false,
-        prefilled: true,
-      };
+    for (const s of flattenSets(log)) {
+      if (s.movement.toLowerCase() !== target || !s.completed) continue;
+      const recorded = [s.weight, s.reps, s.time, s.distance, s.calories].some((v) => v != null);
+      if (!base && recorded) base = s;
+      if (weight == null && s.weight != null) weight = s.weight;
+      if (base && weight != null) break;
     }
+    if (base && weight != null) break;
   }
-  return null;
+  if (!base) return null;
+  return {
+    weight: base.weight ?? weight,
+    reps: base.reps,
+    rpe: base.rpe,
+    time: base.time,
+    distance: base.distance,
+    calories: base.calories,
+    completed: false,
+    prefilled: true,
+  };
+}
+
+// What one planned set asks for, read off its label: the leading number in the
+// movement's own metric (reps, seconds, metres or calories), a load written
+// "@27.5kg", and an effort written "RPE8". A range ("8-10", "RPE 7-8") reads as
+// its lower bound — the floor of the prescription is what a prefilled set
+// should show before the athlete moves it. Anything absent stays undefined.
+export interface PlannedTarget {
+  value?: number;
+  weight?: number;
+  rpe?: number;
+}
+
+export function plannedTarget(label: string | null, metric: MetricKey): PlannedTarget {
+  if (!label) return {};
+  const body = parsePlanned(label).label;
+  const out: PlannedTarget = {};
+  const lead = body.match(/^(\d+(?:\.\d+)?)/);
+  if (lead && metric !== 'rpe') out.value = Number(lead[1]);
+  const kg = body.match(/@\s*(\d+(?:\.\d+)?)\s*kg\b/i);
+  if (kg) out.weight = Number(kg[1]);
+  const rpe = body.match(/RPE\s*(\d+(?:\.\d+)?)/i);
+  if (rpe) {
+    const n = Number(rpe[1]);
+    if (n >= RPE.min && n <= RPE.max) out.rpe = n;
+  }
+  return out;
 }
 
 // Reps the PRESCRIPTION asks for, read off a per-set planned label ("12",

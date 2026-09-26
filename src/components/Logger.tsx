@@ -54,7 +54,7 @@ import { activeSessionOf } from '@/lib/activeSession';
 import { typeFromLabel } from '@/lib/timeline';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { DemoIconButton, MovementDemoSheet } from '@/components/MovementDemo';
-import { lastPerformance, plannedReps, repAdjustedWeight } from '@/lib/lastPerformance';
+import { lastPerformance, plannedReps, plannedTarget, repAdjustedWeight } from '@/lib/lastPerformance';
 import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
@@ -146,6 +146,14 @@ function clock(total: number): string {
 }
 
 const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
+
+// The SetActual field a timed, distance or calorie movement is scored in. Reps
+// have their own precedence (plannedReps) and weight/rpe are not primaries.
+const PRIMARY_FIELD: Partial<Record<MetricKey, 'time' | 'distance' | 'calories'>> = {
+  time: 'time',
+  distance: 'distance',
+  cal: 'calories',
+};
 const today = () => new Date().toISOString().slice(0, 10);
 
 // What a finished movement reads as in the Done pile: the same comma-joined
@@ -251,6 +259,9 @@ export default function Logger() {
   // source / source_text / instructions — under Session details. Null for
   // plan days and blank workouts, which have none of these fields.
   const [linkedSession, setLinkedSession] = useState<Session | null>(null);
+  // Which cycle of the active plan this session is, and that day's note for
+  // it. Shown in the Session details row rather than as a card in the workout.
+  const [cycle, setCycle] = useState<{ week: number; of: number; note?: string } | null>(null);
   // Editing a past workout (opened via ?logId=…&edit=1): reuse every logging
   // control but freeze the live-session behaviors (stopwatch, auto-end, finish).
   const [editing, setEditing] = useState(false);
@@ -309,6 +320,17 @@ export default function Logger() {
           setTags(log.tags ?? []);
           if (log.plan_id) setSubs(await getMovementSubs(log.plan_id));
           if (log.session_id) setLinkedSession(await getSessionById(log.session_id));
+          if (log.plan_id && log.day_key && log.week_number) {
+            const plan = await getPlanById(log.plan_id);
+            const day = plan?.parsed.days.find((d) => d.dayKey === log.day_key);
+            if (plan && day) {
+              setCycle({
+                week: log.week_number,
+                of: planWeekCount(plan.parsed),
+                note: day.notesByWeek?.[log.week_number],
+              });
+            }
+          }
           setStartedAt(log.started_at);
           // Seed the clock BEFORE starting it. Without this the stopwatch
           // resumed from 0 and the autosave wrote that straight over the real
@@ -402,7 +424,9 @@ export default function Logger() {
             weekNumber = planParam
               ? resolveWeek(planDay, weekFromDate(plan.start_date, new Date(logDate)))
               : nextWeekForDay(allLogs, plan.id, dk, planWeekCount(plan.parsed));
-            built = buildLogFromPlanDay(planDay, resolveWeek(planDay, weekNumber));
+            const openedWeek = resolveWeek(planDay, weekNumber);
+            built = buildLogFromPlanDay(planDay, openedWeek);
+            setCycle({ week: openedWeek, of: planWeekCount(plan.parsed), note: planDay.notesByWeek?.[openedWeek] });
             // "Short on time?" — trim to a mini of the same plan day (primary
             // work intact). plan_id + day_key still link it, so it stays on-plan.
             if (miniParam === 'express' || miniParam === 'half') {
@@ -434,33 +458,40 @@ export default function Logger() {
         }
       }
 
+      // Prefill, per set. The plan's target owns what it states for the
+      // movement's own metric — reps, seconds, metres or calories — so a
+      // programmed increase lands (see plannedReps). The last logged set owns
+      // load and effort once there is one; until then the plan's "@kg" and
+      // "RPE" stand in, so a movement's first session opens on the plan.
       for (const section of built.sections) {
         for (const group of section.groups) {
           for (const item of group.items) {
             const last = lastPerformance(recent, item.movement, skipLogIds);
-            if (!last) continue;
+            const field = PRIMARY_FIELD[item.primaryMetric];
             item.sets = item.sets.map((set) => {
-              // Weight prefills from last session; reps come from the target
-              // when the prescription states one, so a programmed rep increase
-              // is not overwritten by what was lifted last time.
-              const target = plannedReps(set.planned, item.primaryMetric);
-              // And when the target moved, the LOAD has to move with it: the
+              const plan = plannedTarget(set.planned, item.primaryMetric);
+              const repTarget = plannedReps(set.planned, item.primaryMetric);
+              // When the rep target moved, the LOAD has to move with it: the
               // reference weight is re-priced to hold the same estimated 1RM,
               // so a block that cuts reps prescribes more weight instead of
               // repeating last block's.
-              const weight =
-                item.primaryMetric === 'weight'
-                  ? (repAdjustedWeight(last.weight, last.reps, target) ?? last.weight)
-                  : last.weight;
-              return {
-                ...set,
-                actual: {
-                  ...set.actual,
-                  weight,
-                  reps: target ?? last.reps,
-                  prefilled: true,
-                },
-              };
+              const lastWeight =
+                last && item.primaryMetric === 'weight'
+                  ? (repAdjustedWeight(last.weight, last.reps, repTarget) ?? last.weight)
+                  : last?.weight;
+              const patch: Partial<SetActual> = {};
+              const weight = lastWeight ?? plan.weight;
+              if (weight != null) patch.weight = weight;
+              const reps = repTarget ?? last?.reps;
+              if (reps != null) patch.reps = reps;
+              if (field) {
+                const value = plan.value ?? last?.[field];
+                if (value != null) patch[field] = value;
+              }
+              const rpe = last?.rpe ?? plan.rpe;
+              if (rpe != null) patch.rpe = rpe;
+              if (Object.keys(patch).length === 0) return set;
+              return { ...set, actual: { ...set.actual, ...patch, prefilled: true } };
             });
           }
         }
@@ -926,6 +957,8 @@ export default function Logger() {
       if (src.reps != null) patch.reps = src.reps;
       if (src.time != null) patch.time = src.time;
       if (src.distance != null) patch.distance = src.distance;
+      if (src.calories != null) patch.calories = src.calories;
+      if (src.rpe != null) patch.rpe = src.rpe;
       return patchSetActual(next, si, gi, ii, ki + 1, patch);
     });
     const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
@@ -1555,6 +1588,16 @@ export default function Logger() {
               ▸
             </span>
             Session details
+            {cycle ? (
+              <span className="t-label text-faint tabular-nums">
+                · {cycle.week}/{cycle.of}
+                {cycle.note && !showDetails ? (
+                  <span aria-label="has a note for this cycle" className="ml-1 text-fg">
+                    !
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
           </button>
           <span className="ml-auto flex items-center gap-3">
             <span className="t-label text-faint tabular-nums">
@@ -1570,6 +1613,13 @@ export default function Logger() {
             </span>
           </span>
         </div>
+
+        {showDetails && cycle?.note ? (
+          <p className="mt-1.5 border border-border px-3 py-2 text-sm text-fg">
+            <span className="t-label text-muted">Cycle {cycle.week} · </span>
+            {cycle.note}
+          </p>
+        ) : null}
 
         {showDetails ? (
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
