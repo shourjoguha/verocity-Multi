@@ -14,6 +14,7 @@ export function StepperField({
   onChange,
   step,
   clamp,
+  typed = clamp,
   display,
   label,
   ariaLabel,
@@ -23,6 +24,10 @@ export function StepperField({
   onChange: (v: number) => void;
   step: number;
   clamp: (n: number) => number;
+  // What a typed value becomes. Defaults to `clamp`; pass a looser one where
+  // the step is only a convenience for −/+ and an off-step value is real
+  // (28 kg on a 2.5 kg step).
+  typed?: (n: number) => number;
   // Overrides the rendered glyph (e.g. RPE shows "—" while empty). Defaults to the number.
   display?: (v: number) => ReactNode;
   label: string;
@@ -77,8 +82,8 @@ export function StepperField({
         <div className="flex min-w-0 flex-1 flex-col items-center justify-center border-x border-border px-2">
           <EditableNumber
             value={value}
-            onCommit={(v) => onChange(clamp(v))}
-            clampParse={clamp}
+            onCommit={(v) => onChange(typed(v))}
+            clampParse={typed}
             ariaLabel={ariaLabel}
             className="font-display text-4xl leading-none tabular-nums text-fg"
           >
@@ -134,8 +139,8 @@ export function StepperField({
             <div className="flex min-w-24 flex-col items-center justify-center border-x border-border px-2">
               <EditableNumber
                 value={value}
-                onCommit={(v) => onChange(clamp(v))}
-                clampParse={clamp}
+                onCommit={(v) => onChange(typed(v))}
+                clampParse={typed}
                 ariaLabel={ariaLabel}
                 className="font-display text-5xl leading-none tabular-nums text-fg"
               >

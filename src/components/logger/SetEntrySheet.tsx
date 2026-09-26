@@ -7,6 +7,9 @@ import { haptic } from '@/lib/haptics';
 import { useScrollLock } from '@/lib/scrollLock';
 
 const snap = (step: number) => (n: number) => Math.max(0, Math.round(n / step) * step);
+// A typed load is kept as entered: plates and dumbbells come in more than one
+// step, and snapping 28 kg to 27.5 logged a weight nobody lifted.
+const keepTyped = (n: number) => Math.max(0, Math.round(n * 100) / 100);
 const whole = (n: number) => Math.max(0, Math.round(n));
 const snapRpe = (n: number) => Math.min(RPE.max, Math.max(RPE.min, Math.round(n / RPE.step) * RPE.step));
 
@@ -225,6 +228,7 @@ export function SetEntrySheet({
                     onChange={(v) => onPatch({ weight: v })}
                     step={METRICS.weight.step}
                     clamp={snap(METRICS.weight.step)}
+                    typed={keepTyped}
                     label={METRICS.weight.unit}
                     ariaLabel="weight"
                   />

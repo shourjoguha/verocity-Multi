@@ -60,7 +60,7 @@ describe('buildLogFromPlanDay — groups, rest and cycle notes', () => {
     label: 'Press',
     notesByWeek: { 2: 'Add a rep per set.' },
     exercises: [
-      { movement: 'Push-up (med ball)', section: 'primary', primaryMetric: 'reps', plannedByWeek: { 1: '3x10', 2: '3x12' }, restSeconds: 90 },
+      { movement: 'Push-up (med ball)', section: 'primary', primaryMetric: 'reps', plannedByWeek: { 1: '3x10', 2: '3x12' }, restSeconds: 90, notes: 'Not to failure', notesByWeek: { 2: '+2 reps' } },
       { movement: 'Iso-Lateral Row', section: 'primary', primaryMetric: 'reps', plannedByWeek: { 1: '4x10', 2: '4x10' }, group: { id: 'r', kind: 'superset' }, restSeconds: 90 },
       { movement: 'Tibialis Raise', section: 'primary', primaryMetric: 'reps', plannedByWeek: { 1: '4x15', 2: '4x15' }, group: { id: 'r', kind: 'superset' } },
       { movement: 'Face Pull', section: 'accessory', primaryMetric: 'reps', plannedByWeek: { 1: '3x15' }, group: { id: 'd', kind: 'superset' } },
@@ -96,6 +96,14 @@ describe('buildLogFromPlanDay — groups, rest and cycle notes', () => {
     const w2 = buildLogFromPlanDay(day, 2);
     const items = w2.sections.flatMap((s) => s.groups.flatMap((g) => g.items));
     expect(items.some((i) => i.kind === 'subroutine')).toBe(false);
+  });
+
+  it("leads a movement's note with its cue for the week, and leaves other weeks alone", () => {
+    const note = (w: number, m: string) =>
+      buildLogFromPlanDay(day, w).sections.flatMap((s) => s.groups.flatMap((g) => g.items)).find((i) => i.movement === m)?.notes;
+    expect(note(2, 'Push-up (med ball)')).toBe('+2 reps\nNot to failure');
+    expect(note(1, 'Push-up (med ball)')).toBe('Not to failure');
+    expect(note(1, 'Iso-Lateral Row')).toBeUndefined();
   });
 });
 

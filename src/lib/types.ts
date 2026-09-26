@@ -454,6 +454,9 @@ export interface PlanExercise {
   // per-week planned-set strings, keyed by 1-based week number
   plannedByWeek: Record<number, string>;
   notes?: string;
+  // Per-week progression cue, keyed like plannedByWeek ("+2.5 kg", "hold").
+  // The Logger leads the movement's note with the one for the week it opens on.
+  notesByWeek?: Record<number, string>;
   // Subroutine fields (kind === 'subroutine'): movement holds the title,
   // description the ≤300-char body, url an optional link. No sets/weeks.
   kind?: ItemKind;

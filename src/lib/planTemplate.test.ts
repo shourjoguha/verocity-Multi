@@ -578,6 +578,25 @@ describe('plan CSV — groups, rest and cycle notes', () => {
     expect(plan.weekNotes).toEqual({ 4: 'Deload week' });
   });
 
+  it("reads a NOTE with a label as that movement's cue for the week, in any row order", () => {
+    const csv = [
+      PLAN_CSV_HEADERS.join(','),
+      'META,weeks,4',
+      'DAY,mon,Monday',
+      'NOTE,mon,squat,,,2,,+2.5 kg',
+      'EX,mon,Squat,primary,reps,*,3x5,',
+      'NOTE,mon,Squat,,,3,,Hold',
+      'NOTE,mon,Lunge,,,3,,Not on this day',
+      'NOTE,,Squat,,,3,,No day',
+    ].join('\n');
+    const { plan, issues } = parsePlanTabular(csv);
+    expect(plan.days[0].exercises[0].notesByWeek).toEqual({ 2: '+2.5 kg', 3: 'Hold' });
+    expect(plan.days[0].notesByWeek).toBeUndefined();
+    expect(issues).toHaveLength(2);
+    expect(issues.some((i) => i.includes('"Lunge", which is not an EX on day "mon"'))).toBe(true);
+    expect(issues.some((i) => i.includes('needs the day id'))).toBe(true);
+  });
+
   it('flags a malformed group, a bad rest and a note outside the plan', () => {
     const csv = [
       PLAN_CSV_HEADERS.join(','),
@@ -618,5 +637,13 @@ describe('plan CSV — groups, rest and cycle notes', () => {
     const grouped = plan.days.flatMap((d) => d.exercises).filter((e) => e.group);
     expect(grouped.map((e) => e.movement)).toEqual(['Pull-up', 'Dips']);
     expect(plan.weekNotes?.[8]).toBeTruthy();
+    const squat = plan.days.flatMap((d) => d.exercises).find((e) => e.movement === 'Back Squat');
+    expect(squat?.notesByWeek?.[3]).toBeTruthy();
+  });
+
+  it('flags a movement cue on a week outside the plan', () => {
+    const plan = parsePlanTabular(buildPlanCsvTemplate()).plan;
+    plan.days[0].exercises.find((e) => !e.kind)!.notesByWeek = { 99: 'Too late' };
+    expect(validateParsedPlan(plan).some((i) => i.includes('note on week 99'))).toBe(true);
   });
 });

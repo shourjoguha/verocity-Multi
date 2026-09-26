@@ -259,9 +259,10 @@ export default function Logger() {
   // source / source_text / instructions — under Session details. Null for
   // plan days and blank workouts, which have none of these fields.
   const [linkedSession, setLinkedSession] = useState<Session | null>(null);
-  // Which cycle of the active plan this session is, and that day's note for
-  // it. Shown in the Session details row rather than as a card in the workout.
-  const [cycle, setCycle] = useState<{ week: number; of: number; note?: string } | null>(null);
+  // Which plan day and cycle this session is, and that day's note for it. The
+  // day and cycle sit under the clock so they can be checked mid-workout; the
+  // note stays under Session details rather than as a card in the workout.
+  const [cycle, setCycle] = useState<{ day: string; week: number; of: number; note?: string } | null>(null);
   // Editing a past workout (opened via ?logId=…&edit=1): reuse every logging
   // control but freeze the live-session behaviors (stopwatch, auto-end, finish).
   const [editing, setEditing] = useState(false);
@@ -325,6 +326,7 @@ export default function Logger() {
             const day = plan?.parsed.days.find((d) => d.dayKey === log.day_key);
             if (plan && day) {
               setCycle({
+                day: day.label,
                 week: log.week_number,
                 of: planWeekCount(plan.parsed),
                 note: day.notesByWeek?.[log.week_number],
@@ -426,7 +428,12 @@ export default function Logger() {
               : nextWeekForDay(allLogs, plan.id, dk, planWeekCount(plan.parsed));
             const openedWeek = resolveWeek(planDay, weekNumber);
             built = buildLogFromPlanDay(planDay, openedWeek);
-            setCycle({ week: openedWeek, of: planWeekCount(plan.parsed), note: planDay.notesByWeek?.[openedWeek] });
+            setCycle({
+              day: planDay.label,
+              week: openedWeek,
+              of: planWeekCount(plan.parsed),
+              note: planDay.notesByWeek?.[openedWeek],
+            });
             // "Short on time?" — trim to a mini of the same plan day (primary
             // work intact). plan_id + day_key still link it, so it stays on-plan.
             if (miniParam === 'express' || miniParam === 'half') {
@@ -838,6 +845,18 @@ export default function Logger() {
       }),
       { done: 0, total: 0 },
     );
+
+  // Plan day and cycle, under the clock. Cycle first and never truncated — it
+  // is the part you forget mid-workout; a long day label gives way instead, so
+  // this line cannot widen the clock column and push Home/Pause to a new row.
+  const cycleLine = cycle ? (
+    <div className="flex max-w-48 items-baseline gap-1.5 t-label text-fg tabular-nums">
+      <span className="shrink-0">
+        Cycle {cycle.week}/{cycle.of}
+      </span>
+      <span className="truncate text-muted">· {cycle.day}</span>
+    </div>
+  ) : null;
 
   if (!ready) return <LoadingScreen />;
 
@@ -1515,6 +1534,7 @@ export default function Logger() {
                 {saving ? ' · saving…' : ''}
                 {unsaved && !saving ? ' · not saved' : ''}
               </div>
+              {cycleLine}
             </div>
           ) : (
             <>
@@ -1543,6 +1563,7 @@ export default function Logger() {
                   {saving ? ' · saving…' : ''}
                   {unsaved && !saving ? ' · not saved' : ''}
                 </div>
+                {cycleLine}
               </div>
               {/* Home leaves the session RUNNING — it is not a third way to
                   end one, which is why it sits up here with the clock rather
@@ -1588,14 +1609,9 @@ export default function Logger() {
               ▸
             </span>
             Session details
-            {cycle ? (
-              <span className="t-label text-faint tabular-nums">
-                · {cycle.week}/{cycle.of}
-                {cycle.note && !showDetails ? (
-                  <span aria-label="has a note for this cycle" className="ml-1 text-fg">
-                    !
-                  </span>
-                ) : null}
+            {cycle?.note && !showDetails ? (
+              <span aria-label="has a note for this cycle" className="t-label text-fg">
+                !
               </span>
             ) : null}
           </button>
