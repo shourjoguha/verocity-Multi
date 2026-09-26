@@ -75,6 +75,11 @@ const SPELLING_FIXES: Record<string, string> = {
   dl: 'deadlift',
   ohp: 'overhead press',
   bw: 'bodyweight',
+  // "Kirsty squat" is how a curtsy squat is spelled in the real logs, and
+  // "curtsey" is the other dictionary spelling. Both fold onto one token so
+  // rule:curtsy-lunge covers them — as a squat they read bilateral and sagittal.
+  kirsty: 'curtsy',
+  curtsey: 'curtsy',
 };
 
 // Crude de-pluralisation. It exists only to make the EXACT table
@@ -164,6 +169,10 @@ const PUSH_HORIZONTAL: RegionWeights = { chest: 0.6, shoulders: 0.25, arms: 0.15
 const DIP: RegionWeights = { chest: 0.45, arms: 0.35, shoulders: 0.2 };
 const ROW: RegionWeights = { back: 0.7, arms: 0.3 };
 const VERTICAL_PULL: RegionWeights = { back: 0.7, arms: 0.3 };
+// Shared so a lateral variant cannot drift from its sagittal family: the
+// lateral rules below change the PLANE of a lunge or a jump, not its anatomy.
+const LUNGE: RegionWeights = { quads: 0.5, hamstrings: 0.16, glutes: 0.24, core: 0.1 };
+const BW_JUMP: RegionWeights = { quads: 0.5, hamstrings: 0.2, glutes: 0.2, calves: 0.1 };
 
 const RAW_EXACT: Record<string, MovementProfile> = {
   // --- lower, knee-dominant
@@ -381,9 +390,7 @@ const RAW_EXACT: Record<string, MovementProfile> = {
   ),
 
   // --- plyometric
-  'box jump': p({ quads: 0.5, hamstrings: 0.2, glutes: 0.2, calves: 0.1 }, 'plyometric', 'sagittal', {
-    systemic: true, rom: ROM.jump },
-  ),
+  'box jump': p(BW_JUMP, 'plyometric', 'sagittal', { systemic: true, rom: ROM.jump }),
   'med ball throw': p(
     { core: 0.4, chest: 0.25, shoulders: 0.25, back: 0.1 },
     'plyometric',
@@ -402,6 +409,20 @@ const RAW_EXACT: Record<string, MovementProfile> = {
     { systemic: true },
   ),
   'row erg interval': p(
+    { back: 0.4, quads: 0.3, hamstrings: 0.09, glutes: 0.11, arms: 0.1 },
+    'endurance',
+    'sagittal',
+    { systemic: true },
+  ),
+  // A bare "Row" is the erg in this app, not a barbell row. The shared library
+  // seeds it as a distance/time movement (0024_seed_hyrox.sql), the seeded Hyrox
+  // sessions prescribe it in calories and metres, and Log Activity writes it
+  // for a rowing session. The athlete's strength rows are always qualified —
+  // Iso-Lateral, Gorilla, Landmine — and EXACT matches the whole atom only, so
+  // every qualified name still reaches rule:horizontal-pull. That rule used to
+  // take this one too: 30 minutes of rowing read as back/arms lifting, and with
+  // its bwLoad of 0 and no forceFactor, priced at zero work.
+  row: p(
     { back: 0.4, quads: 0.3, hamstrings: 0.09, glutes: 0.11, arms: 0.1 },
     'endurance',
     'sagittal',
@@ -570,11 +591,44 @@ const RAW_RULES: MovementRule[] = [
     ),
   },
   {
+    // Court and racket sports. `endurance` because a match is sustained heart
+    // rate broken into short bursts — conditioning, the cardio lens — and there
+    // is no `sport` modality to put it in. Planes are the point of the entry:
+    // footwork is mostly side-to-side shuffles and crossover steps (frontal),
+    // nearly every stroke is a trunk rotation (transverse), and straight-line
+    // sprints are the minority. Padel used to be logged as 'Run', which read it
+    // as 100% sagittal. Legs carry most of it — split-step landings and braking
+    // into shots (quads), lateral push-offs (glutes), a game played on the balls
+    // of the feet (calves) — and the hitting arm serves and smashes overhead.
+    // No bwLoad estimate: absence falls back to VOLUME.bodyweightFraction, which
+    // is already the value `run` carries.
+    id: 'racket-sport',
+    match: ['padel', 'tennis', 'squash', 'pickleball', 'badminton', 'racquetball'],
+    // A different sport, a ball used as a tool, and an injury used as a name.
+    not: ['table tennis', 'tennis ball', 'tennis elbow'],
+    profile: p(
+      { quads: 0.25, glutes: 0.15, hamstrings: 0.1, calves: 0.15, core: 0.15, shoulders: 0.12, arms: 0.08 },
+      'endurance',
+      { frontal: 0.4, transverse: 0.35, sagittal: 0.25 },
+      { systemic: true },
+    ),
+  },
+  {
     id: 'jump-plyo',
     match: ['jump', 'hop', 'bound', 'throw', 'slam', 'clean', 'snatch', 'jerk'],
     profile: p({ quads: 0.4, hamstrings: 0.175, glutes: 0.175, core: 0.25 }, 'plyometric', 'sagittal', {
       systemic: true, rom: ROM.jump },
   ),
+  },
+  {
+    // Bounding sideways off one leg. Box Jump's anatomy rather than jump-plyo's:
+    // that rule is a mixed bucket that also holds throws and cleans, and every
+    // name here projects the athlete's own body, as a box jump does.
+    // 'skater' is NOT a fragment on its own — a Skater Squat is a single-leg
+    // squat, and 'skater' would outlength 'squat' and turn it into a jump.
+    id: 'lateral-plyo',
+    match: ['lateral bound', 'lateral jump', 'lateral hop', 'skater jump', 'skater bound', 'skater hop'],
+    profile: p(BW_JUMP, 'plyometric', { frontal: 0.7, sagittal: 0.3 }, { systemic: true, rom: ROM.jump }),
   },
   {
     id: 'squat-pattern',
@@ -592,10 +646,29 @@ const RAW_RULES: MovementRule[] = [
   {
     id: 'lunge-pattern',
     match: ['lunge', 'split squat', 'step up'],
+    profile: p(LUNGE, 'resistance', 'sagittal', { rom: ROM.lunge }),
+  },
+  {
+    // A lunge stepped out to the side. Same anatomy as the lunge family, and the
+    // same plane split as the Cossack squat, its deeper cousin: the body travels
+    // sideways while the working hip and knee still bend forward to take it.
+    // Every fragment outlengthens 'lunge' / 'step up', so no ordering is needed.
+    id: 'lateral-lunge',
+    match: ['lateral lunge', 'side lunge', 'lateral step up'],
+    profile: p(LUNGE, 'resistance', { frontal: 0.7, sagittal: 0.3 }, { rom: ROM.lunge }),
+  },
+  {
+    // The rear leg crosses BEHIND the front one. The descent is still a lunge —
+    // sagittal is the largest single share — but crossing the midline adducts
+    // the hip (frontal) and the pelvis turns to follow it (transverse). Unilateral,
+    // so lunge anatomy: filed as a bilateral squat, "Kirsty squat" lost both its
+    // posterior share and everything it did off the sagittal plane.
+    id: 'curtsy-lunge',
+    match: ['curtsy lunge', 'curtsy squat'],
     profile: p(
-      { quads: 0.5, hamstrings: 0.16, glutes: 0.24, core: 0.1 },
+      LUNGE,
       'resistance',
-      'sagittal',
+      { sagittal: 0.4, frontal: 0.3, transverse: 0.3 },
       { rom: ROM.lunge },
     ),
   },
@@ -694,6 +767,16 @@ const RAW_RULES: MovementRule[] = [
     profile: p({ core: 1 }, 'isometric', 'sagittal'),
   },
   {
+    // A side plank held up by the top leg's adductors — which fold into `quads`
+    // at this granularity, as in 'adductor work' and the Cossack squat — while
+    // the trunk resists side-bending. Frontal on both counts. The dynamic
+    // version raises and lowers from the same position and the names are used
+    // interchangeably, so both land here. 'copenhagen' outlengthens 'plank'.
+    id: 'copenhagen',
+    match: ['copenhagen'],
+    profile: p({ quads: 0.6, core: 0.4 }, 'isometric', 'frontal'),
+  },
+  {
     id: 'core-dynamic',
     match: ['crunch', 'sit up', 'knee raise', 'leg raise', 'ab wheel', 'rollout', 'ab routine'],
     profile: p({ core: 1 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
@@ -753,6 +836,7 @@ const BW_LOAD: Record<string, number> = {
   'weighted dip'                      : 0.9,
   'box jump'                          : 0.85,
   'pistol'                            : 0.85,
+  'rule:lateral-plyo'                 : 0.85,
   'standing calf raise'               : 0.85,
   'back squat'                        : 0.8,
   'farmer carry'                      : 0.8,
@@ -769,6 +853,8 @@ const BW_LOAD: Record<string, number> = {
   'bulgarian split squat'             : 0.75,
   'cossack squat'                     : 0.75,
   'reverse lunge'                     : 0.75,
+  'rule:curtsy-lunge'                 : 0.75,
+  'rule:lateral-lunge'                : 0.75,
   'rule:lunge-pattern'                : 0.75,
   'burpee'                            : 0.65,
   'wall ball'                         : 0.8,
@@ -787,6 +873,7 @@ const BW_LOAD: Record<string, number> = {
   'calf raise'                        : 0.5,
   'rule:calf'                         : 0.5,
   'rule:locomotion-endurance'         : 0.5,
+  'rule:copenhagen'                   : 0.45,
   'side plank'                        : 0.45,
   'kettlebell snatch'                 : 0.4,
   'kettlebell swing'                  : 0.4,
@@ -822,6 +909,7 @@ const BW_LOAD: Record<string, number> = {
   'med ball throw'                    : 0.0,
   'overhead press'                    : 0.0,
   'overhead tricep'                   : 0.0,
+  'row'                               : 0.0,
   'row erg interval'                  : 0.0,
   'rower interval'                    : 0.0,
   'rule:arm-isolation'                : 0.0,
@@ -854,6 +942,7 @@ const BW_LOAD: Record<string, number> = {
 const FORCE_FACTOR: Record<string, number> = {
   'row erg interval'                  : 0.45,
   'rower interval'                    : 0.45,
+  'row'                               : 0.45,
   'ski erg interval'                  : 0.3,
   'cycle'                             : 0.4,
   'rule:cycling'                      : 0.4,
@@ -883,6 +972,7 @@ const HORIZ_FACTOR: Record<string, number> = {
   'rule:locomotion-endurance'         : 0.1,
   'row erg interval'                  : 0.1,
   'rower interval'                    : 0.1,
+  'row'                               : 0.1,
   'ski erg interval'                  : 0.1,
   'rule:erg-endurance'                : 0.1,
   // An air bike is priced as a rower, not as a bicycle — see rule:air-bike.
@@ -903,6 +993,7 @@ const HORIZ_FACTOR: Record<string, number> = {
 const CAL_METRES: Record<string, number> = {
   'row erg interval'                  : 15,
   'rower interval'                    : 15,
+  'row'                               : 15,
   // Smaller working muscle mass per stroke, so a calorie buys less distance.
   'ski erg interval'                  : 12,
   // A calorie is a calorie: this is set so a cycled calorie prices near a rowed

@@ -36,3 +36,6 @@
 "dumbbell facing burpee","rom","0.7","medium","As burpee.",""
 "wall ball","rom","0.9","medium","Squat depth, then the ball travels on up to the target. New EXACT entry — it classified as unknown before this.",""
 "wall ball","bwLoad","0.8","medium","A front squat under a light ball; the squat pattern figure.",""
+"row","forceFactor","0.45","medium","As rower interval. Under rule:horizontal-pull a bare 'Row' had bwLoad 0 and no forceFactor, so a logged row priced at zero work.",""
+"row","horizFactor","0.1","medium","As rower interval. Under rule:horizontal-pull a bare 'Row' had bwLoad 0 and no forceFactor, so a logged row priced at zero work.",""
+"row","calMetres","15","medium","As rower interval. Under rule:horizontal-pull a bare 'Row' had bwLoad 0 and no forceFactor, so a logged row priced at zero work.",""

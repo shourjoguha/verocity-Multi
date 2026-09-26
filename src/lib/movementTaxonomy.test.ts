@@ -3,11 +3,12 @@ import {
   EXACT,
   RULES,
   classifyMovement,
+  isClassified,
   normalizeMovementName,
   splitCompound,
 } from '@/lib/movementTaxonomy';
 import { familyOf } from '@/lib/stats';
-import { MUSCLE_REGION_KEYS, PLANE_KEYS } from '@/app.config';
+import { ACTIVITY_TYPES, BODY_LENSES, MUSCLE_REGION_KEYS, PLANE_KEYS } from '@/app.config';
 
 // The real production vocabulary, verbatim from the user's 46 logs. This list
 // is the ratchet: every name here must classify, or the suite fails.
@@ -97,6 +98,32 @@ const VOCABULARY = [
   'Push-up',
   'Inverted Row',
   'Nordic Curl',
+  // A curtsy squat, spelled as the real log spells it.
+  'Kirsty squat',
+];
+
+// Names the lateral and court-sport rules were added for, plus the neighbours
+// they must not capture. Fed to the shuffle test below, because every one of
+// them is a longest-fragment contest against an older, shorter rule.
+const LATERAL_AND_COURT = [
+  'Padel',
+  'Tennis',
+  'Squash',
+  'Pickleball',
+  'Badminton',
+  'Lateral Lunge',
+  'Side Lunge',
+  'Lateral Step-Up',
+  'Curtsy Lunge',
+  'Curtsey Squat',
+  'Lateral Bound',
+  'Skater Jump',
+  'Skater Bound',
+  'Copenhagen Plank',
+  'Copenhagen Adduction',
+  'Skater Squat',
+  'Walking Lunge',
+  'Tennis Elbow Curl',
 ];
 
 // Truncated at import — almost certainly "Weighted Pull-up" and "Deficit
@@ -136,6 +163,11 @@ describe('normalizeMovementName', () => {
 
   it('drops bare trailing digits', () => {
     expect(normalizeMovementName('Abb routine 2')).toBe('ab routine');
+  });
+
+  it('folds the curtsy spellings onto one token', () => {
+    expect(normalizeMovementName('Kirsty squat')).toBe('curtsy squat');
+    expect(normalizeMovementName('Curtsey Lunges')).toBe('curtsy lunge');
   });
 
   // This is the familyOf bug, written as a test.
@@ -360,6 +392,181 @@ describe('plane and rotary axis', () => {
   });
 });
 
+// Court sports used to be unknown. What the entry is FOR is the plane: a match
+// is mostly side-to-side footwork and rotation, and padel logged as 'Run' filed
+// every minute of it as sagittal running.
+describe('court and racket sports', () => {
+  const COURT = ['Padel', 'Tennis', 'Squash', 'Pickleball', 'Badminton'];
+
+  it('classifies Padel as systemic and not sagittal-only', () => {
+    const c = classifyMovement('Padel');
+    expect(isClassified(c)).toBe(true);
+    expect(c.profile.systemic).toBe(true);
+    expect(c.profile.planes.sagittal ?? 0).toBeLessThan(1);
+    expect(c.matchedIds).not.toContain('exact:run');
+  });
+
+  it.each(COURT)('classifies %s as systemic endurance', (name) => {
+    const c = classifyMovement(name);
+    expect(c.matchedIds).toEqual(['racket-sport']);
+    expect(c.profile.modality).toBe('endurance');
+    expect(c.profile.systemic).toBe(true);
+  });
+
+  it.each(COURT)('weights %s toward the frontal and transverse planes', (name) => {
+    const { planes } = classifyMovement(name).profile;
+    const sagittal = planes.sagittal ?? 0;
+    expect(planes.frontal ?? 0).toBeGreaterThan(sagittal);
+    expect(planes.transverse ?? 0).toBeGreaterThan(sagittal);
+  });
+
+  it('spreads a match across legs, trunk and the hitting shoulder', () => {
+    const { regions } = classifyMovement('Padel').profile;
+    for (const r of ['quads', 'glutes', 'calves', 'core', 'shoulders'] as const) {
+      expect(regions[r] ?? 0, r).toBeGreaterThan(0);
+    }
+  });
+
+  it('catches a court sport named with a qualifier', () => {
+    expect(classifyMovement('Padel Match').matchedIds).toEqual(['racket-sport']);
+    expect(classifyMovement('Tennis (doubles)').matchedIds).toEqual(['racket-sport']);
+  });
+
+  // 'tennis' outlengthens every other fragment in these names, so without the
+  // veto each would become an hour of court footwork.
+  it('does not claim table tennis, a tennis ball, or tennis elbow', () => {
+    expect(classifyMovement('Table Tennis').source).toBe('unknown');
+    expect(classifyMovement('Tennis Ball Squeeze').source).toBe('unknown');
+    expect(classifyMovement('Tennis Elbow Curl').matchedIds).toEqual(['arm-isolation']);
+  });
+});
+
+// ActivityLogger writes the chosen quick-pick VERBATIM as the log's movement
+// name, so this list is classifier input. An option that resolves to nothing is
+// a way to log training the body map and the coach cannot see.
+describe('ActivityLogger quick-picks', () => {
+  it.each([...ACTIVITY_TYPES])('classifies %s', (name) => {
+    expect(isClassified(classifyMovement(name))).toBe(true);
+  });
+
+  // Log Activity is the NON-strength logger, so no quick-pick may land in the
+  // strength lens. 'Row' did: a rowing session was filed as barbell rows.
+  it.each([...ACTIVITY_TYPES])('keeps %s out of the strength lens', (name) => {
+    const { modality } = classifyMovement(name).profile;
+    expect(BODY_LENSES.strength.modalities).not.toContain(modality);
+  });
+
+  it('reads the Row quick-pick as systemic rowing conditioning', () => {
+    const c = classifyMovement('Row');
+    expect(c.matchedIds).toEqual(['exact:row']);
+    expect(c.profile.modality).toBe('endurance');
+    expect(c.profile.systemic).toBe(true);
+  });
+});
+
+// A bare 'Row' is the rowing machine here — the shared library seeds it as a
+// distance movement and the Hyrox sessions prescribe it in calories — while a
+// strength row is always qualified. EXACT matches the whole name, so only the
+// bare name moves.
+describe("a bare 'Row' is the erg", () => {
+  // Every estimate, not just the anatomy: the entry exists so a Log Activity
+  // row prices like any other, and a missing forceFactor priced it at zero.
+  it('classifies and prices Row exactly as Rower Intervals', () => {
+    expect(classifyMovement('Row').profile).toEqual(classifyMovement('Rower Intervals').profile);
+  });
+
+  it.each([
+    'Barbell Row',
+    'DB Row',
+    'Gorilla Row',
+    'Iso-Lateral Row',
+    'Landmine Row',
+    'Seated Cable Row',
+    'Bent-Over Row',
+    'Ring Row',
+  ])('leaves %s a resistance row', (name) => {
+    const { profile } = classifyMovement(name);
+    expect(profile.modality).toBe('resistance');
+    expect(profile.regions.back ?? 0).toBeGreaterThan(0.5);
+  });
+});
+
+// Lateral patterns fell to their sagittal family by longest fragment — 'lunge',
+// 'bound', 'jump', 'squat', 'plank' — and inherited its plane with its anatomy.
+// The lateral rules keep the family's anatomy and correct the plane.
+describe('lateral patterns carry frontal-plane weight', () => {
+  const planesOf = (name: string) => classifyMovement(name).profile.planes;
+  const regionsOf = (name: string) => classifyMovement(name).profile.regions;
+
+  it('reads Lateral Lunge as frontal-dominant, not pure sagittal', () => {
+    const planes = planesOf('Lateral Lunge');
+    expect(planes.sagittal ?? 0).toBeLessThan(1);
+    expect(planes.frontal ?? 0).toBeGreaterThan(planes.sagittal ?? 0);
+  });
+
+  it.each(['Lateral Lunge', 'Side Lunge', 'Lateral Step-Up'])(
+    'routes %s past the shorter lunge fragments',
+    (name) => {
+      expect(classifyMovement(name).matchedIds).toEqual(['lateral-lunge']);
+    },
+  );
+
+  it.each(['Lateral Bound', 'Lateral Jump', 'Lateral Hop', 'Skater Jump', 'Skater Bound', 'Skater Hop'])(
+    'reads %s as a frontal-dominant plyometric',
+    (name) => {
+      const c = classifyMovement(name);
+      expect(c.matchedIds).toEqual(['lateral-plyo']);
+      expect(c.profile.modality).toBe('plyometric');
+      expect(c.profile.systemic).toBe(true);
+      expect(c.profile.planes.frontal ?? 0).toBeGreaterThan(c.profile.planes.sagittal ?? 0);
+    },
+  );
+
+  it.each(['Kirsty squat', 'Curtsy Squat', 'Curtsy Lunge', 'Curtsey Lunge'])(
+    'reads %s as a crossover lunge, not a bilateral squat',
+    (name) => {
+      const c = classifyMovement(name);
+      expect(c.matchedIds).toEqual(['curtsy-lunge']);
+      expect(c.profile.planes.frontal ?? 0).toBeGreaterThan(0);
+      expect(c.profile.planes.transverse ?? 0).toBeGreaterThan(0);
+      expect(c.profile.planes.sagittal ?? 0).toBeLessThan(0.5);
+    },
+  );
+
+  it('gives the curtsy squat a unilateral posterior share', () => {
+    const pc = (n: string) => (regionsOf(n).hamstrings ?? 0) + (regionsOf(n).glutes ?? 0);
+    expect(pc('Kirsty squat')).toBeGreaterThan(pc('Back Squat'));
+  });
+
+  it.each(['Copenhagen Plank', 'Copenhagen Adduction'])('reads %s as frontal adductor work', (name) => {
+    const c = classifyMovement(name);
+    expect(c.matchedIds).toEqual(['copenhagen']);
+    expect(c.profile.planes.frontal).toBeCloseTo(1, 3);
+    // Adductors fold into `quads` at this granularity, as in 'adductor work'.
+    expect(c.profile.regions.quads ?? 0).toBeGreaterThan(0);
+    expect(c.profile.regions.core ?? 0).toBeGreaterThan(0);
+  });
+
+  it('keeps each lateral variant on its family anatomy — only the plane moved', () => {
+    expect(regionsOf('Lateral Lunge')).toEqual(regionsOf('Walking Lunge'));
+    expect(regionsOf('Kirsty squat')).toEqual(regionsOf('Walking Lunge'));
+    expect(regionsOf('Skater Jump')).toEqual(regionsOf('Box Jump'));
+  });
+
+  // The neighbours the new fragments must NOT capture.
+  it('leaves the sagittal and upper-body namesakes where they were', () => {
+    // A single-leg squat, not a jump — the reason 'skater' alone is no fragment.
+    expect(classifyMovement('Skater Squat').matchedIds).toEqual(['squat-pattern']);
+    expect(classifyMovement('Walking Lunge').matchedIds).toEqual(['lunge-pattern']);
+    expect(classifyMovement('Step-Up').matchedIds).toEqual(['lunge-pattern']);
+    expect(classifyMovement('Lateral Raise').matchedIds).toEqual(['delt-isolation']);
+    expect(classifyMovement('Iso-Lateral Row').matchedIds).toEqual(['exact:iso lateral row']);
+    expect(classifyMovement('Side Plank').matchedIds).toEqual(['exact:side plank']);
+    expect(planesOf('Reverse Lunge')).toEqual({ sagittal: 1 });
+    expect(planesOf('Box Jump')).toEqual({ sagittal: 1 });
+  });
+});
+
 describe('compounds', () => {
   it('merges both halves of a slash compound', () => {
     const c = classifyMovement('Cable Fly/Machine Press');
@@ -388,11 +595,12 @@ describe('compounds', () => {
 
 describe('rule matching is order-independent', () => {
   it('gives identical results with the rule array shuffled', () => {
-    const baseline = VOCABULARY.map((n) => JSON.stringify(classifyMovement(n).profile));
+    const names = [...VOCABULARY, ...LATERAL_AND_COURT];
+    const baseline = names.map((n) => JSON.stringify(classifyMovement(n).profile));
     const original = [...RULES];
     // Deterministic shuffle — no reliance on Math.random in a test.
     RULES.sort((a, b) => a.id.localeCompare(b.id));
-    const shuffled = VOCABULARY.map((n) => JSON.stringify(classifyMovement(n).profile));
+    const shuffled = names.map((n) => JSON.stringify(classifyMovement(n).profile));
     RULES.length = 0;
     RULES.push(...original);
     expect(shuffled).toEqual(baseline);
@@ -438,6 +646,8 @@ describe('familyOf is unchanged by the taxonomy work', () => {
     expect(familyOf('Rower Intervals')).toBe('pull');
     expect(familyOf('Med-Ball Throw')).toBe('pull');
     expect(familyOf('Zone 2 (row/bike/walk)')).toBe('pull');
+    // The taxonomy reads a bare 'Row' as the erg; Stats still calls it a pull.
+    expect(familyOf('Row')).toBe('pull');
     expect(familyOf('Back Squat')).toBe('squat');
     expect(familyOf('Bulgarian Split Squat')).toBe('lunge');
   });
@@ -486,6 +696,17 @@ describe('bodyweight load (bwLoad)', () => {
 
   it('does not let the push-up entry swallow the handstand push-up', () => {
     expect(bw('Handstand Push-up')).toBe(0.9);
+  });
+
+  // A lateral rule moves the plane, not how much of the athlete is lifted, so
+  // each takes the price of the anatomy it borrows. The bounds take Box Jump's
+  // and not jump-plyo's 0.3: that rule is a mixed bucket that also holds
+  // throws, and every lateral bound projects the athlete's whole body.
+  it('prices a lateral variant like the family whose anatomy it shares', () => {
+    expect(bw('Lateral Lunge')).toBe(bw('Walking Lunge'));
+    expect(bw('Kirsty squat')).toBe(bw('Walking Lunge'));
+    expect(bw('Skater Jump')).toBe(bw('Box Jump'));
+    expect(bw('Copenhagen Plank')).toBe(bw('Side Plank'));
   });
 
   // The `cycling` rule must not swallow the air bikes, which are a different
