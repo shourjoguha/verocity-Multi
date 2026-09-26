@@ -69,13 +69,40 @@ describe('buildLogFromPlanDay', () => {
     expect(squat.primaryMetric).toBe('weight');
   });
 
-  it('uses the requested week and falls back to a single blank set when absent', () => {
+  it('uses the requested week and leaves out a movement with nothing prescribed for it', () => {
     const doc = buildLogFromPlanDay(DAY, 2);
     const squat = doc.sections[0].groups[0].items[0];
     expect(squat.sets).toHaveLength(4); // W2 = 4x5
-    const legPress = doc.sections[1].groups[0].items[0];
-    expect(legPress.sets).toHaveLength(1); // no W2 entry
-    expect(legPress.sets[0].planned).toBeNull();
+    // Leg Press has no W2 entry: it is not this week's work, so no blank set.
+    expect(doc.sections.map((s) => s.key)).toEqual(['primary']);
+  });
+
+  it('alternates odd/even movements in the same slot without leftovers', () => {
+    const day: PlanDay = {
+      dayKey: 'alt',
+      label: 'Alternating',
+      exercises: [
+        { movement: 'Face Pull', section: 'accessory', primaryMetric: 'weight', plannedByWeek: { 1: '3x15', 3: '3x15' } },
+        { movement: 'Rear Delt Fly', section: 'accessory', primaryMetric: 'weight', plannedByWeek: { 2: '3x15', 4: '3x15' } },
+        { movement: 'Shoulder Prep', section: 'warmup', primaryMetric: 'time', plannedByWeek: {}, kind: 'subroutine', description: 'Band work.' },
+      ],
+    };
+    const names = (w: number) =>
+      buildLogFromPlanDay(day, w).sections.flatMap((s) => s.groups.flatMap((g) => g.items.map((i) => i.movement)));
+    expect(names(1)).toEqual(['Shoulder Prep', 'Face Pull']);
+    expect(names(2)).toEqual(['Shoulder Prep', 'Rear Delt Fly']);
+  });
+
+  it('treats a whitespace-only cell as not prescribed', () => {
+    const day: PlanDay = {
+      dayKey: 'ws',
+      label: 'Whitespace',
+      exercises: [
+        { movement: 'Back Squat', section: 'primary', primaryMetric: 'weight', plannedByWeek: { 1: '3x5' } },
+        { movement: 'Leg Press', section: 'accessory', primaryMetric: 'weight', plannedByWeek: { 1: '  ' } },
+      ],
+    };
+    expect(buildLogFromPlanDay(day, 1).sections.map((s) => s.key)).toEqual(['primary']);
   });
 
   it('wraps each exercise in its own single-kind group', () => {

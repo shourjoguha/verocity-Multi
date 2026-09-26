@@ -95,9 +95,15 @@ function buildLogFromExercises(exercises: FrameExercise[]): LogDocument {
 }
 
 // Build an in-progress LogDocument from a plan day for a given week.
+//
+// A movement with nothing prescribed for this week is left out, not shown as a
+// blank set: a gap in plannedByWeek is how a plan says "not this cycle" (an
+// odd/even alternation, or a movement swapped out mid-plan in the editor), and
+// PlanView and planAdherence already read it that way. Subroutines carry no
+// weeks and always stay.
 export function buildLogFromPlanDay(day: PlanDay, week: number): LogDocument {
   return buildLogFromExercises(
-    day.exercises.map((ex) => ({
+    day.exercises.filter((ex) => isSubroutine(ex) || ex.plannedByWeek[week]?.trim()).map((ex) => ({
       movement: ex.movement,
       section: ex.section,
       primaryMetric: ex.primaryMetric,
