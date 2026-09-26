@@ -145,6 +145,7 @@ function sampleRows(): Row[] {
     week: '4',
     notes: 'Last build week: same sets, add 2.5 kg if week 3 was RPE 8 or less.',
   });
+  rows.push({ ...emptyRow(), kind: 'NOTE', id: 'monday-lower', label: 'Back Squat', week: '3', notes: 'Add a 4th set; same load.' });
   rows.push({ ...emptyRow(), kind: 'NOTE', week: '8', notes: 'Deload: same lifts, about half the sets.' });
 
   rows.push({ ...emptyRow(), kind: 'DAY', id: 'thursday-upper', label: 'Thursday — Upper' });
@@ -544,7 +545,13 @@ ROW SHAPES
 - NOTE: guidance for one week (= one cycle). week = an integer; notes = the
        text (≤${SUBROUTINE.maxDescriptionChars} chars). id = a day slug for that day's note, which the
        logger shows when the day opens on that week; leave id empty for a
-       plan-wide note on how the whole week progresses.
+       plan-wide note on how the whole week progresses. Add label = a
+       movement on that day to give THAT movement a cue for the week — a few
+       words on what changes this cycle ("+2.5 kg", "reps to 12", "hold"),
+       shown first on the movement's note in the logger. State load changes
+       relative to last time, never as an absolute weight: the logger
+       carries the athlete's own last load forward, so "→ 85 kg" goes stale
+       the first time they lift something else.
 
 DOMAIN VOCABULARY (single source of truth — app.config.ts)
 - Units: weight in ${UNITS.weight}.
@@ -566,7 +573,8 @@ INVARIANTS THE APP WILL CHECK ON UPLOAD
 9. group is empty or "superset:<name>" / "circuit:<name>", and members of one
    group sit next to each other in one day and section. rest is empty or whole
    seconds.
-10. Every NOTE has an integer week in 1..weeks and notes ≤${SUBROUTINE.maxDescriptionChars} chars.
+10. Every NOTE has an integer week in 1..weeks and notes ≤${SUBROUTINE.maxDescriptionChars} chars; a
+    NOTE with a label names a movement that has an EX row on that day.
 
 NOTES ON CURRENT CAPABILITY
 - Supersets and circuits come from the group column: EX rows that share a
@@ -603,7 +611,8 @@ athlete gets nothing.
 [ ] Every group cell is empty or "superset:<name>" / "circuit:<name>", with the
     members of each group on adjacent rows; every rest cell is empty or whole
     seconds.
-[ ] Every NOTE has an integer week and a notes text of ≤${SUBROUTINE.maxDescriptionChars} characters.
+[ ] Every NOTE has an integer week and a notes text of ≤${SUBROUTINE.maxDescriptionChars} characters,
+    and a NOTE with a label names a movement with an EX row on that day.
 If any check fails, fix it and run the list again. Do not send a CSV that fails
 a check.
 
@@ -757,6 +766,9 @@ export function parsePlanTabular(text: string): PlanParseResult {
   const exKey = new Map<string, PlanExercise>();
   const weekNotes: Record<number, string> = {};
   const dayNotes = new Map<string, Record<number, string>>();
+  // Movement cues are resolved after every row is read, so a NOTE may sit
+  // above or below the EX rows it names.
+  const movementNotes: { row: number; dayKey: string; movement: string; week: number; text: string }[] = [];
 
   for (let r = 1; r < rawLines.length; r++) {
     const cells = splitCsvLine(rawLines[r], delimiter).map((c) => c.trim());
@@ -824,7 +836,11 @@ export function parsePlanTabular(text: string): PlanParseResult {
         issues.push(`Row ${r + 1}: NOTE needs its text in the notes column.`);
         continue;
       }
-      if (!dayKey) {
+      const movement = get('label');
+      if (movement) {
+        if (!dayKey) issues.push(`Row ${r + 1}: NOTE for "${movement}" needs the day id.`);
+        else movementNotes.push({ row: r + 1, dayKey, movement, week: w, text });
+      } else if (!dayKey) {
         weekNotes[w] = text;
       } else {
         if (!daysByKey.has(dayKey)) {
@@ -954,6 +970,17 @@ export function parsePlanTabular(text: string): PlanParseResult {
     }
 
     issues.push(`Row ${r + 1}: unknown kind "${kind}". Allowed: META, BLOCK, DAY, EX, SUB, NOTE.`);
+  }
+
+  for (const n of movementNotes) {
+    const ex = daysByKey
+      .get(n.dayKey)
+      ?.exercises.find((e) => !isSubroutine(e) && e.movement.toLowerCase() === n.movement.toLowerCase());
+    if (!ex) {
+      issues.push(`Row ${n.row}: NOTE names "${n.movement}", which is not an EX on day "${n.dayKey}".`);
+      continue;
+    }
+    ex.notesByWeek = { ...ex.notesByWeek, [n.week]: n.text };
   }
 
   const maxBlockEnd = blocks.reduce((m, b) => Math.max(m, b.endWeek), 1);
@@ -1143,6 +1170,7 @@ export function validateParsedPlan(
   checkNotes('The plan', plan.weekNotes);
   for (const day of plan.days) {
     checkNotes(`Day "${day.label}"`, day.notesByWeek);
+    for (const ex of day.exercises) checkNotes(`"${ex.movement}"`, ex.notesByWeek);
     // A group only links NEIGHBOURS in one section, so members split apart by
     // another exercise would silently open as two groups.
     const seen = new Map<string, number>();

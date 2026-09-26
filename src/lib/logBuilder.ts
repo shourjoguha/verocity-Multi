@@ -111,6 +111,9 @@ function buildLogFromExercises(exercises: FrameExercise[]): LogDocument {
 // The day's cycle note (`notesByWeek`) is deliberately NOT written into the
 // document: the Logger shows it under Session details, so it guides the
 // session without becoming a card in the workout or a row in its history.
+// A movement's own cue for the week (`PlanExercise.notesByWeek`) is different:
+// it leads that movement's note, first line, so the collapsed one-line note
+// reads as this cycle's progression and the standing note follows it.
 export function buildLogFromPlanDay(day: PlanDay, week: number): LogDocument {
   const bySection = new Map<SectionKey, LogGroup[]>();
   let open: { section: SectionKey; id: string; group: LogGroup } | null = null;
@@ -123,7 +126,7 @@ export function buildLogFromPlanDay(day: PlanDay, week: number): LogDocument {
         section: ex.section,
         primaryMetric: ex.primaryMetric,
         planned: ex.plannedByWeek[week] ?? '',
-        notes: ex.notes,
+        notes: [ex.notesByWeek?.[week], ex.notes].filter(Boolean).join('\n') || undefined,
         kind: ex.kind,
         description: ex.description,
         url: ex.url,
