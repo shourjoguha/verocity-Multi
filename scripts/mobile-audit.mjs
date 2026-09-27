@@ -302,6 +302,7 @@ const ROUTES = [
   '/app/body',
   '/app/coach',
   '/app/plan',
+  '/app/review',
   '/app/sessions',
   '/app/library',
   '/app/settings',
