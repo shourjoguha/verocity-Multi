@@ -64,6 +64,17 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
             </a>
           )}
         </EmptyState>
+        {showcase ? null : (
+          <div className="mt-4">
+            <a
+                  href="/app/review"
+                  className="hill-btn flex min-h-11 items-center justify-between border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg"
+                >
+                  Review past training
+                  <span aria-hidden>→</span>
+                </a>
+          </div>
+        )}
       </div>
     );
   }
@@ -478,6 +489,18 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           </Item>
         );
       })}
+      {showcase ? null : (
+        <Item>
+          {/* Every plan's history, not just this one — see ReviewView. */}
+          <a
+                href="/app/review"
+                className="hill-btn flex min-h-11 items-center justify-between border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg"
+              >
+                Review past training
+                <span aria-hidden>→</span>
+              </a>
+        </Item>
+      )}
     </PageStagger>
   );
 }

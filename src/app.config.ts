@@ -849,6 +849,24 @@ export const E1RM = { formula: 'brzycki' } as const;
 // a deload's reduced load is not the base the next hard week builds on.
 export const PREFILL = { roundKg: 2.5, maxRefReps: 12 } as const;
 
+// Comparing one session of a lift with another when the sets were not the same
+// kind of set (the review page's staple lifts). A PRODUCT estimate, not a cited
+// claim — keep it conservative, because over-crediting a harder variant hides
+// exactly the stall the comparison exists to catch.
+//   `pauseTempo`       — a (p) or (t) set counts as this much heavier. The
+//                        athlete's own estimate was 10–15%; this is its floor.
+//                        Deliberately NOT VOLUME.pauseFactor: that one prices
+//                        time under tension, this one prices load.
+//   `maxEffectiveReps` — reps plus reps-in-reserve above this are too many for
+//                        Brzycki to say anything; the set is not estimated.
+//                        Higher than PREFILL.maxRefReps (12) because this only
+//                        compares two sets by ratio, but not much higher: on
+//                        real logs a 20 cap read 25×12 → 30×20 calf raises as
+//                        +61%, because the formula runs away past ~15.
+// A (v) variation is never priced: some variations are easier at the same load
+// (heel-elevated, machine), so it is compared only with itself.
+export const LOAD_EQUIVALENCE = { pauseTempo: 1.1, maxEffectiveReps: 15 } as const;
+
 // Fitness-profile radar axes (Stats spider chart). All six derive from logged
 // data (lib/aspects.ts); a recent check-in overrides any of them. There is no
 // `auto` flag any more — power and mobility used to carry `auto: false` and so
