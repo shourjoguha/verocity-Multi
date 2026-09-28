@@ -15,6 +15,7 @@ import { GOAL_MODALITIES, measureGoals, measureTraining, rpeWasRated, type GoalS
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import { computePlanAdherence, type PlanAdherence } from '@/lib/planAdherence';
 import { e1rm } from '@/lib/e1rm';
+import { hasNotation } from '@/lib/notations';
 import { completedLogs, flattenSets } from '@/lib/stats';
 import { isSubroutine } from '@/lib/subroutine';
 import { sessionTagColors } from '@/lib/tags';
@@ -318,13 +319,6 @@ function measureEffort(logs: WorkoutLog[], dayLabel: (log: WorkoutLog) => string
   }
   const byGroup = [...groups.values()].sort((a, b) => b.hard / b.total - a.hard / a.total);
   return { hard, total, ratedSessions, unratedSessions, byGroup };
-}
-
-// A notation, read in both spellings: logs from before the logger wrote the
-// parenthesised form carry bare `p` / `t` / `v`, and ignoring them silently
-// reads a spring of paused sets as plain ones.
-function hasNotation(notations: string[], letter: 'p' | 't' | 'v'): boolean {
-  return notations.includes(`(${letter})`) || notations.includes(letter);
 }
 
 // Loaded movements done in enough sessions to have a trend, first session

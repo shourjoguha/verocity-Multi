@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { bestE1rmByMovement, e1rmOf, isPrSet } from '@/lib/prs';
+import { bestE1rmByMovement, bestE1rmByTrack, e1rmOf, isPrSet } from '@/lib/prs';
 import type { SetActual, WorkoutLog } from '@/lib/types';
 
-function log(movement: string, sets: Partial<SetActual>[]): WorkoutLog {
+function log(movement: string, sets: Partial<SetActual>[], notations: string[] = []): WorkoutLog {
   return {
     data: {
       sections: [
@@ -12,7 +12,7 @@ function log(movement: string, sets: Partial<SetActual>[]): WorkoutLog {
               items: [
                 {
                   movement,
-                  sets: sets.map((a) => ({ actual: { completed: true, ...a } })),
+                  sets: sets.map((a) => ({ actual: { completed: true, ...a }, notations })),
                 },
               ],
             },
@@ -53,5 +53,21 @@ describe('prs', () => {
     expect(isPrSet({ completed: true, weight: 90, reps: 5 } as SetActual, prior)).toBe(false);
     expect(isPrSet({ completed: false, weight: 200, reps: 5 } as SetActual, prior)).toBe(false);
     expect(isPrSet({ completed: true, weight: 200, reps: 5 } as SetActual, null)).toBe(false); // no prior
+  });
+
+  it('bestE1rmByTrack keeps a variation apart and does not credit a pause', () => {
+    const logs = [
+      log('Back Squat', [{ weight: 100, reps: 5 }]),
+      log('Back Squat', [{ weight: 110, reps: 5 }], ['(v)']),
+      log('Back Squat', [{ weight: 95, reps: 5 }], ['(p)']),
+      log('Back Squat', [{ weight: 105, reps: 5 }], ['v']),
+    ];
+    const best = bestE1rmByTrack(logs);
+    expect(best.get('Back Squat')).toBeCloseTo(e1rmOf({ weight: 100, reps: 5 }) as number, 5);
+    expect(best.get('Back Squat (v)')).toBeCloseTo(e1rmOf({ weight: 110, reps: 5 }) as number, 5);
+    // The plain lift's record: a heavier variation does not break it...
+    expect(isPrSet({ weight: 105, reps: 5, completed: true, prefilled: false }, best.get('Back Squat'))).toBe(true);
+    // ...and a paused set is judged on its literal weight × reps.
+    expect(isPrSet({ weight: 98, reps: 5, completed: true, prefilled: false }, best.get('Back Squat'))).toBe(false);
   });
 });

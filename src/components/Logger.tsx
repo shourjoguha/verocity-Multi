@@ -55,7 +55,8 @@ import { typeFromLabel } from '@/lib/timeline';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { DemoIconButton, MovementDemoSheet } from '@/components/MovementDemo';
 import { lastPerformance, plannedReps, plannedTarget, repAdjustedWeight } from '@/lib/lastPerformance';
-import { bestE1rmByMovement, isPrSet } from '@/lib/prs';
+import { bestE1rmByTrack, isPrSet } from '@/lib/prs';
+import { trackName } from '@/lib/notations';
 import { useCountdown, useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
 import { weekFromDate } from '@/lib/week';
@@ -377,7 +378,7 @@ export default function Logger() {
         getRecentLogs(50),
         getAllLogs(),
       ]);
-      setBestByMovement(bestE1rmByMovement(allLogs));
+      setBestByMovement(bestE1rmByTrack(allLogs));
 
       // Everything below builds and creates a NEW row, so this is the one
       // place every entry point converges on — the Home CTA and its ⋯ chooser,
@@ -1229,7 +1230,7 @@ export default function Logger() {
                   set={set}
                   index={ki}
                   showPlanned={anyPlanned}
-                  isPr={isPrSet(set.actual, bestByMovement.get(item.movement) ?? null)}
+                  isPr={isPrSet(set.actual, bestByMovement.get(trackName(item.movement, set.notations)) ?? null)}
                   onOpen={() => {
                     activate(groupId);
                     setEntryFor({ si, gi, ii, ki });
