@@ -15,6 +15,7 @@
 
 import { VOLUME, WORK, type MovementProfile } from '@/app.config';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
+import { isHeld } from '@/lib/notations';
 import { isSubroutine } from '@/lib/subroutine';
 import type { LogSet, UserStats, WorkoutLog } from '@/lib/types';
 
@@ -99,8 +100,7 @@ export function addSetWork(
     const metres = profile?.rom ?? WORK.defaultRomM;
     // Both notations are the same claim — more time under tension per rep than
     // a touch-and-go one — so both earn the same scaling.
-    const tempo =
-      set.notations.includes('(p)') || set.notations.includes('(t)') ? VOLUME.pauseFactor : 1;
+    const tempo = isHeld(set.notations) ? VOLUME.pauseFactor : 1;
     const side = set.notations.includes('/side') ? 2 : 1;
     into.resistance += force * metres * (a.reps ?? 0) * side * tempo;
     return;

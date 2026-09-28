@@ -103,6 +103,8 @@ describe('the resistance lane', () => {
     const tempo = work('Back Squat', set({ reps: 5, weight: 100 }, ['(t)'])).resistance;
     expect(paused).toBeCloseTo(plain * VOLUME.pauseFactor, 4);
     expect(tempo).toBeCloseTo(paused, 4);
+    const bare = work('Back Squat', set({ reps: 5, weight: 100 }, ['t'])).resistance;
+    expect(bare).toBeCloseTo(paused, 4);
   });
 
   it('ignores RPE — perceived effort is not work done', () => {

@@ -1617,6 +1617,18 @@ assumption is robust anywhere below the boundary and catastrophic exactly at the
 value a careless reach would have picked.
 -> `src/lib/coach/intent.ts`, `src/lib/coach/signals.ts` (`loadedIntent`)
 
+### A lift reads as stalled or dropping when the athlete made it harder
+
+`[measured in Chromium]` Staple lifts compared raw kilos: a tempo leg curl
+(90×12 → 82.5×15 (t)) read "down 7.5 kg", a one-arm iso row (70 kg) was ranked
+against the later two-arm paused one (45 kg). Two causes. The measure ignored
+reps, RPE and tags; and logs from before the logger wrote `(p)` / `(t)` / `(v)`
+carry the bare `p` / `t` / `v`, which every reader matched only in the
+parenthesised form — so a spring of paused sets was invisible, and a claim that
+"this lift was never tagged" was simply wrong. Read tags through
+`src/lib/notations.ts` only. A variation is its own track (`trackName`), never
+priced; a genuinely different exercise gets its own movement name.
+
 ## Superseded
 
 Kept so the search path survives, **demoted so it stops reading as advice.**

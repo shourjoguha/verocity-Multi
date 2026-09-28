@@ -102,6 +102,13 @@ describe('setVolume', () => {
     expect(paused).toBeCloseTo(500 * VOLUME.pauseFactor, 5);
   });
 
+  it('raises a tempo set, and the bare p / t older logs carry, the same as (p)', () => {
+    const paused = ext(notated({ weight: 100, reps: 5 }, ['(p)']));
+    expect(ext(notated({ weight: 100, reps: 5 }, ['(t)']))).toBeCloseTo(paused, 5);
+    expect(ext(notated({ weight: 100, reps: 5 }, ['p']))).toBeCloseTo(paused, 5);
+    expect(ext(notated({ weight: 100, reps: 5 }, ['t', '/side']))).toBeCloseTo(paused * 2, 5);
+  });
+
   it('stacks /side and (p)', () => {
     expect(ext(notated({ weight: 100, reps: 5 }, ['/side', '(p)']))).toBeCloseTo(
       500 * 2 * VOLUME.pauseFactor,
@@ -110,7 +117,8 @@ describe('setVolume', () => {
   });
 
   it('ignores notations it does not price', () => {
-    expect(ext(notated({ weight: 100, reps: 5 }, ['(t)', '→']))).toBeCloseTo(500, 5);
+    // (t) used to be one of these; it is priced like (p) now (work.ts always did).
+    expect(ext(notated({ weight: 100, reps: 5 }, ['(v)', '→', '+5%']))).toBeCloseTo(500, 5);
   });
 
   it('scales with RPE either side of the default', () => {

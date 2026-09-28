@@ -8,6 +8,7 @@ import { useAspectProfile } from '@/lib/useAspectProfile';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
 import { completedLogs, flattenSets, familyOf } from '@/lib/stats';
+import { trackName } from '@/lib/notations';
 import {
   addWork,
   formatWork,
@@ -274,7 +275,9 @@ function deriveStats(
       if (s.weight == null || s.reps == null) continue;
       const est = e1rm(s.weight, s.reps);
       if (est == null) continue;
-      bestThis.set(s.movement, Math.max(bestThis.get(s.movement) ?? 0, est));
+      // A variation is its own line, never a point on the plain lift's.
+      const track = trackName(s.movement, s.notations);
+      bestThis.set(track, Math.max(bestThis.get(track) ?? 0, est));
     }
     for (const [m, v] of bestThis) {
       best.set(m, Math.max(best.get(m) ?? 0, v));

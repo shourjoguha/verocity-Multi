@@ -36,6 +36,7 @@ import {
   type SectionKey,
 } from '@/app.config';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
+import { isHeld } from '@/lib/notations';
 import { isSubroutine } from '@/lib/subroutine';
 import type { LogItem, LogSet, WorkoutLog } from '@/lib/types';
 
@@ -265,7 +266,8 @@ export function setVolume(
   const load = borne + external > 0 ? borne + external : unweightedKg;
   const reps = repEquivalents(a);
   const side = set.notations.includes('/side') ? 2 : 1;
-  const pause = set.notations.includes('(p)') ? VOLUME.pauseFactor : 1;
+  // Paused and tempo reps alike: more time under tension at the same load.
+  const pause = isHeld(set.notations) ? VOLUME.pauseFactor : 1;
   const rpe =
     a.rpe != null
       ? clamp(1 + (a.rpe - RPE.default) * VOLUME.rpePerPoint, VOLUME.rpeFactorRange)
