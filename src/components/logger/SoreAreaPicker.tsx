@@ -1,18 +1,18 @@
 import { useState } from 'react';
-import { MUSCLE_REGIONS, MUSCLE_REGION_KEYS, SORE_AREAS, type SoreAreaKey } from '@/app.config';
+import { SORE_AREAS, type SoreAreaKey } from '@/app.config';
 import type { VibeCheck } from '@/lib/types';
 
 type Sore = NonNullable<VibeCheck['sore']>;
-const AREA_KEYS = Object.keys(SORE_AREAS) as SoreAreaKey[];
-// A region that is also a coarse area (core) is offered once, in the coarse row.
-const SPECIFIC_KEYS = MUSCLE_REGION_KEYS.filter((k) => !(k in SORE_AREAS));
+const KEYS = Object.keys(SORE_AREAS) as SoreAreaKey[];
+const COARSE_KEYS = KEYS.filter((k) => SORE_AREAS[k].coarse);
+const SPECIFIC_KEYS = KEYS.filter((k) => !SORE_AREAS[k].coarse);
 
 // Where the soreness is: four coarse toggles, with the muscle regions one tap
 // further in for when "Lower" is not enough to tell a squat day from a run.
 // Multi-select, so these are toggle buttons with aria-pressed, not a radiogroup.
 export function SoreAreaPicker({ value, onChange }: { value: Sore; onChange: (next: Sore) => void }) {
   // Opens already expanded when a specific region is set.
-  const [specific, setSpecific] = useState(() => value.some((k) => !(k in SORE_AREAS)));
+  const [specific, setSpecific] = useState(() => value.some((k) => !SORE_AREAS[k]?.coarse));
   const toggle = (k: Sore[number]) =>
     onChange(value.includes(k) ? value.filter((x) => x !== k) : [...value, k]);
 
@@ -49,10 +49,10 @@ export function SoreAreaPicker({ value, onChange }: { value: Sore; onChange: (ne
           {specific ? '− Muscles' : '+ Muscles'}
         </button>
       </div>
-      <div className="grid grid-cols-4 gap-1">{AREA_KEYS.map((k) => chip(k, SORE_AREAS[k].label))}</div>
+      <div className="grid grid-cols-4 gap-1">{COARSE_KEYS.map((k) => chip(k, SORE_AREAS[k].label))}</div>
       {specific ? (
         <div className="grid grid-cols-4 gap-1">
-          {SPECIFIC_KEYS.map((k) => chip(k, MUSCLE_REGIONS[k].short))}
+          {SPECIFIC_KEYS.map((k) => chip(k, SORE_AREAS[k].label))}
         </div>
       ) : null}
     </div>

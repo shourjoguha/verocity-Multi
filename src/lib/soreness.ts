@@ -11,7 +11,6 @@
 // novel the work was, which drive DOMS more than volume does.
 
 import {
-  MUSCLE_REGIONS,
   SORE_AREAS,
   SORENESS,
   type RegionKey,
@@ -27,19 +26,15 @@ export interface SorenessCandidate {
   score: number;
 }
 
-const isArea = (k: string): k is SoreAreaKey => k in SORE_AREAS;
-
-export function soreLabel(k: SoreAreaKey | RegionKey): string {
-  return isArea(k) ? SORE_AREAS[k].label : (MUSCLE_REGIONS[k]?.short ?? k);
+/** Area key → display label. */
+export function soreLabel(k: SoreAreaKey): string {
+  return SORE_AREAS[k]?.label ?? k;
 }
 
-/** Coarse areas expanded to muscle regions, deduplicated. */
+/** Areas expanded to the muscle regions they are scored against, deduplicated. */
 export function soreRegions(sore: VibeCheck['sore']): RegionKey[] {
   const out = new Set<RegionKey>();
-  for (const k of sore ?? []) {
-    if (isArea(k)) for (const r of SORE_AREAS[k].regions) out.add(r as RegionKey);
-    else if (k in MUSCLE_REGIONS) out.add(k);
-  }
+  for (const k of sore ?? []) for (const r of SORE_AREAS[k]?.regions ?? []) out.add(r as RegionKey);
   return [...out];
 }
 

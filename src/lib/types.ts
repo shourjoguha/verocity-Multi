@@ -487,10 +487,10 @@ export interface VibeCheck {
   sleep: number;
   energy: number;
   soreness: number;
-  // Optional, additive: where it is sore — a coarse area (SORE_AREAS) or a
-  // specific muscle region. Absent on every log written before it existed, and
-  // whenever soreness is below SORENESS.askAreaFrom. Feeds lib/soreness.ts.
-  sore?: (SoreAreaKey | RegionKey)[];
+  // Optional, additive: where it is sore — a key of SORE_AREAS. Absent on every
+  // log written before it existed, and whenever soreness is below
+  // SORENESS.askAreaFrom. Feeds lib/soreness.ts.
+  sore?: SoreAreaKey[];
 }
 
 export interface LogSection {

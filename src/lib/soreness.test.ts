@@ -31,8 +31,9 @@ function log(id: string, date: string, movements: string[], vibe?: VibeCheck): W
 const sore = (s: VibeCheck['sore']): VibeCheck => ({ sleep: 3, energy: 3, soreness: 4, sore: s });
 
 describe('soreRegions', () => {
-  it('expands coarse areas and dedupes against specific regions', () => {
+  it('expands coarse areas and dedupes against specific ones', () => {
     expect(soreRegions(['lower', 'quads']).sort()).toEqual(['calves', 'glutes', 'hamstrings', 'quads']);
+    expect(soreRegions(['upperBack'])).toEqual(['back']);
     expect(soreRegions(undefined)).toEqual([]);
   });
 });
@@ -57,6 +58,14 @@ describe('attributeSoreness', () => {
   it('names the upper-body session for upper soreness', () => {
     const target = log('t', '2026-09-10', [], sore(['upper']));
     expect(attributeSoreness(target, [legs, push])[0].log.id).toBe('push');
+  });
+
+  it('splits the back: low back points at the hinge day, up back at the row day', () => {
+    const hinge = log('hinge', '2026-09-08', ['Romanian Deadlift', 'Good Morning']);
+    const rows = log('rows', '2026-09-08', ['Barbell Row', 'Pull-up']);
+    const at = (s: VibeCheck['sore']) => attributeSoreness(log('t', '2026-09-10', [], sore(s)), [hinge, rows])[0].log.id;
+    expect(at(['lowerBack'])).toBe('hinge');
+    expect(at(['upperBack'])).toBe('rows');
   });
 
   it('attributes nothing without an area, and ignores same-day and out-of-window logs', () => {

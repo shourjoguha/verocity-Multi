@@ -329,7 +329,7 @@ see a regression, and it cannot see whether a mapping is anatomically correct.
 - `workout_logs.data` → `LogDocument` (sections → groups → items → sets; each set
   has `planned`, `actual {weight,reps,rpe,distance,time,completed,prefilled}`,
   `notations[]`; plus optional `session.vibe {sleep,energy,soreness,sore?}`, where
-  `sore` names coarse areas or muscle regions so `lib/soreness.ts` can trace DOMS
+  `sore` names `SORE_AREAS` keys (coarse, or specific incl. upper/lower back) so `lib/soreness.ts` can trace DOMS
   to the session 1–4 days earlier that most likely caused it).
 - `sessions.frame` → `SessionFrame` (`{ exercises: SessionExercise[] }`, a flat
   ordered list of `{movement, section, primaryMetric, planned, notes?}` — a plan

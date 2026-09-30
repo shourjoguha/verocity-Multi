@@ -1014,12 +1014,26 @@ export const RECOVERY = { neutralVibe: 0.5 } as const;
 // between the session that caused it and the one that reported it. Same-day
 // sessions are excluded: DOMS does not arrive in hours, and the order of two
 // logs on one date is not recorded.
+// `coarse` entries are the first row; the rest sit behind "+ Muscles". Upper and
+// lower back are split here although the taxonomy has one `back` region: that
+// region is really lats/upper back (rows and pulls weight it 0.7, hinges 0.1),
+// and there is no erector region at all. So Low back scores against the
+// posterior chain hinges load instead — a proxy that also counts leg curls and
+// hip thrusts, which is the price of not splitting `back` in the taxonomy.
 export const SORE_AREAS = {
-  upper: { label: 'Upper', regions: ['chest', 'back', 'shoulders', 'arms'] },
-  lower: { label: 'Lower', regions: ['glutes', 'hamstrings', 'quads', 'calves'] },
-  core: { label: 'Core', regions: ['core'] },
-  full: { label: 'Full', regions: Object.keys(MUSCLE_REGIONS) },
-} as const satisfies Record<string, { label: string; regions: readonly string[] }>;
+  upper: { label: 'Upper', coarse: true, regions: ['chest', 'back', 'shoulders', 'arms'] },
+  lower: { label: 'Lower', coarse: true, regions: ['glutes', 'hamstrings', 'quads', 'calves'] },
+  core: { label: 'Core', coarse: true, regions: ['core'] },
+  full: { label: 'Full', coarse: true, regions: Object.keys(MUSCLE_REGIONS) },
+  chest: { label: 'Chest', coarse: false, regions: ['chest'] },
+  upperBack: { label: 'Up back', coarse: false, regions: ['back'] },
+  lowerBack: { label: 'Low back', coarse: false, regions: ['glutes', 'hamstrings', 'core'] },
+  arms: { label: 'Arms', coarse: false, regions: ['arms'] },
+  glutes: { label: 'Glutes', coarse: false, regions: ['glutes'] },
+  hamstrings: { label: 'Hams', coarse: false, regions: ['hamstrings'] },
+  quads: { label: 'Quads', coarse: false, regions: ['quads'] },
+  calves: { label: 'Calves', coarse: false, regions: ['calves'] },
+} as const satisfies Record<string, { label: string; coarse: boolean; regions: readonly string[] }>;
 
 export const SORENESS = {
   // Soreness at or above this asks where. 1 is "not sore".
