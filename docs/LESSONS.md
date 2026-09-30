@@ -846,6 +846,9 @@ go hunting for it in your own diff. `package-lock.json` is untouched.
 **Drive interactive checks against `npm run build && npm run preview`**, where
 islands hydrate normally. A Playwright script pointed at the dev server will
 report "button not found" for a button that is perfectly fine.
+**Worse, `audit:mobile` goes GREEN against the dev server** — every route is a
+loading screen with no overflow and no small targets, so it passes vacuously.
+A green run only counts if it was pointed at `preview`.
 
 ### `astro preview` serves a startup snapshot
 `[confirmed in the wild]`

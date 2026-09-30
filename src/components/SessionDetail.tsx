@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { createSession, getLogById } from '@/lib/queries';
+import { createSession, getLogById, getLogsInRange } from '@/lib/queries';
 import { frameFromLogDocument } from '@/lib/logBuilder';
 import { toast } from '@/lib/toast';
 import type { WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
 import { formatDate, formatDuration, formatSetActual } from '@/lib/format';
 import { SECTIONS, type SectionKey } from '@/app.config';
+import {
+  attributeSoreness,
+  lagWindow,
+  likelySources,
+  soreLabel,
+  type SorenessCandidate,
+} from '@/lib/soreness';
 import { EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { SessionTime } from '@/components/SessionTime';
@@ -15,7 +22,7 @@ import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { LogShareControl } from '@/components/LogShareControl';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Item, PageStagger } from '@/components/anim';
-import { clientFor, isReadOnly, type Surface } from '@/lib/surface';
+import { clientFor, hrefFor, isReadOnly, type Surface } from '@/lib/surface';
 
 const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
 
@@ -27,6 +34,7 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
   const [log, setLog] = useState<WorkoutLog | null>(null);
   const [savingSession, setSavingSession] = useState(false);
   const [savedAsSession, setSavedAsSession] = useState(false);
+  const [soreFrom, setSoreFrom] = useState<SorenessCandidate[]>([]);
 
   async function saveAsSession(current: WorkoutLog) {
     if (savingSession || savedAsSession) return;
@@ -62,8 +70,15 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
         setLoading(false);
         return;
       }
-      setLog(await getLogById(id, clientFor(mode)));
+      const found = await getLogById(id, clientFor(mode));
+      setLog(found);
       setLoading(false);
+      // Only worth a second read when the athlete said where it is sore.
+      if (found?.data?.session?.vibe?.sore?.length) {
+        const { from, to } = lagWindow(found.log_date);
+        const prior = await getLogsInRange(from, to, clientFor(mode));
+        setSoreFrom(likelySources(attributeSoreness(found, prior)));
+      }
     })();
   }, []);
 
@@ -139,6 +154,29 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
               <span>Energy {vibe.energy}</span>
               <span>Soreness {vibe.soreness}</span>
             </div>
+          ) : null}
+          {vibe?.sore?.length ? (
+            <p className="mt-1 t-control text-muted">
+              Sore:{' '}
+              {vibe.sore.map(soreLabel).join(', ')}
+              {soreFrom.length ? (
+                <>
+                  {' · likely from '}
+                  {soreFrom.map((c, i) => (
+                    <span key={c.log.id}>
+                      {i > 0 ? ' or ' : ''}
+                      <a
+                        href={`${hrefFor('/app/session', mode)}?id=${c.log.id}`}
+                        className="text-fg underline decoration-border underline-offset-2 hover:decoration-fg"
+                      >
+                        {c.log.activity_type ?? (c.log.day_key ? `Day ${c.log.day_key}` : 'Session')}
+                      </a>{' '}
+                      ({c.daysBefore}d before)
+                    </span>
+                  ))}
+                </>
+              ) : null}
+            </p>
           ) : null}
           {!readOnly ? (
             <div className="mt-5 border-t border-border pt-4">
