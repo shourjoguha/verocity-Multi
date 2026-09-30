@@ -1,15 +1,18 @@
 import { useState } from 'react';
+import { SORENESS } from '@/app.config';
 import type { VibeCheck } from '@/lib/types';
+import { SoreAreaPicker } from '@/components/logger/SoreAreaPicker';
 
 const SCALE = [1, 2, 3, 4, 5];
-const FIELDS: { key: keyof VibeCheck; label: string }[] = [
+const FIELDS: { key: 'sleep' | 'energy' | 'soreness'; label: string }[] = [
   { key: 'sleep', label: 'Sleep' },
   { key: 'energy', label: 'Energy' },
   { key: 'soreness', label: 'Soreness' },
 ];
 
-// Quick pre-session readiness capture (sleep / energy / soreness, 1–5).
-// Stored on doc.session.vibe; skippable.
+// Quick pre-session readiness capture (sleep / energy / soreness, 1–5, plus
+// where it is sore once soreness is reported). Stored on doc.session.vibe;
+// skippable.
 export function VibeCheckCard({
   onSave,
   onSkip,
@@ -64,11 +67,19 @@ export function VibeCheckCard({
             </div>
           </div>
         ))}
+        {vibe.soreness >= SORENESS.askAreaFrom ? (
+          <SoreAreaPicker value={vibe.sore ?? []} onChange={(sore) => setVibe((v) => ({ ...v, sore }))} />
+        ) : null}
       </div>
       <div className="flex gap-3 p-4">
         <button
           type="button"
-          onClick={() => onSave(vibe)}
+          onClick={() => {
+            // Drop the area when soreness was dialled back below the ask, and
+            // an empty pick entirely — absent means "not said", not "nowhere".
+            const { sore, ...rest } = vibe;
+            onSave(sore?.length && vibe.soreness >= SORENESS.askAreaFrom ? { ...rest, sore } : rest);
+          }}
           className="inline-flex min-h-11 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg hover:bg-subtle"
         >
           Start session

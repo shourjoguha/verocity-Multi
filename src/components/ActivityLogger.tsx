@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { createLog } from '@/lib/queries';
 import { track } from '@/lib/analytics';
-import { ACTIVITY_TAGS, ACTIVITY_TYPE_TAGS, ACTIVITY_TYPES, METRICS } from '@/app.config';
+import { ACTIVITY_TAGS, ACTIVITY_TYPE_TAGS, ACTIVITY_TYPES, METRICS, SORENESS } from '@/app.config';
 import { retagForType } from '@/lib/tags';
 import type { LogDocument, VibeCheck } from '@/lib/types';
 import { Button, LoadingScreen } from '@/components/ui/primitives';
 import { Disclosure } from '@/components/ui/Disclosure';
+import { SoreAreaPicker } from '@/components/logger/SoreAreaPicker';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -18,12 +19,13 @@ const MAX_BPM = 230;
 const clampBpm = (n: number) => Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(n)));
 
 const VIBE_SCALE = [1, 2, 3, 4, 5];
-const VIBE_FIELDS: { key: keyof VibeCheck; label: string }[] = [
+const VIBE_FIELDS: { key: VibeScore; label: string }[] = [
   { key: 'sleep', label: 'Sleep' },
   { key: 'energy', label: 'Energy' },
   { key: 'soreness', label: 'Soreness' },
 ];
-type PartialVibe = { [K in keyof VibeCheck]: number | null };
+type VibeScore = 'sleep' | 'energy' | 'soreness';
+type PartialVibe = { [K in VibeScore]: number | null } & Pick<VibeCheck, 'sore'>;
 
 // Build a contract-faithful log: a single conditioning movement carrying the
 // session's distance/time, so the activity shows up in stats like any session.
@@ -129,7 +131,15 @@ export default function ActivityLogger() {
     // fields fall back to the neutral 3 the workout logger also defaults to.
     if (vibe.sleep != null || vibe.energy != null || vibe.soreness != null) {
       doc.session = {
-        vibe: { sleep: vibe.sleep ?? 3, energy: vibe.energy ?? 3, soreness: vibe.soreness ?? 3 },
+        vibe: {
+          sleep: vibe.sleep ?? 3,
+          energy: vibe.energy ?? 3,
+          soreness: vibe.soreness ?? 3,
+          // Only kept while the soreness that asked for it is still set.
+          ...(vibe.sore?.length && (vibe.soreness ?? 0) >= SORENESS.askAreaFrom
+            ? { sore: vibe.sore }
+            : {}),
+        },
       };
     }
     const hr_avg = hrAvg.trim() === '' ? null : clampBpm(Number(hrAvg));
@@ -289,6 +299,12 @@ export default function ActivityLogger() {
                 </div>
               </div>
             ))}
+            {(vibe.soreness ?? 0) >= SORENESS.askAreaFrom ? (
+              <SoreAreaPicker
+                value={vibe.sore ?? []}
+                onChange={(sore) => setVibe((v) => ({ ...v, sore }))}
+              />
+            ) : null}
           </div>
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>

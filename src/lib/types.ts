@@ -12,6 +12,7 @@ import type {
   MovementProfile,
   RegionKey,
   SectionKey,
+  SoreAreaKey,
 } from '@/app.config';
 
 // ---- DB row types (mirror supabase/migrations) ----
@@ -486,6 +487,10 @@ export interface VibeCheck {
   sleep: number;
   energy: number;
   soreness: number;
+  // Optional, additive: where it is sore — a key of SORE_AREAS. Absent on every
+  // log written before it existed, and whenever soreness is below
+  // SORENESS.askAreaFrom. Feeds lib/soreness.ts.
+  sore?: SoreAreaKey[];
 }
 
 export interface LogSection {
