@@ -57,6 +57,10 @@ export const RULE_IMPACT: Record<string, number> = {
   // missing accumulating fatigue is asymmetric with the cost of mentioning it.
   'training.recovery.symptoms-and-load': 0.8,
   'training.recovery.consecutive-days': 0.5,
+  // An explanation, not a defect: it answers "why am I sore", so it sits with
+  // the refinements rather than with the recovery problems above — and it is
+  // deliberately in no theme, so it never raises how eagerly those re-speak.
+  'training.recovery.soreness-source': 0.3,
 
   // Real inefficiencies with a known fix.
   'training.strength.rest-too-short': 0.5,
