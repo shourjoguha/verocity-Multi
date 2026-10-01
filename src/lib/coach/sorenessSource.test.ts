@@ -59,11 +59,15 @@ describe('training.recovery.soreness-source', () => {
     expect(f.periodKey).toBe('2026-09-10');
   });
 
-  it('turns "train it" into "train it lighter" at high soreness, citing that claim instead', () => {
-    const report = log('c', '2026-09-10', 'Upper', [], { sleep: 3, energy: 3, soreness: 4, sore: ['quads'] });
-    const f = run([twoBack, oneBack, report])!;
-    expect(f.action).toMatch(/RPE 6/);
-    expect(f.claims.map((c) => c.id)).toContain(READINESS.respondLighter.id);
+  it('rests the area past Galpin\'s 6/10 ceiling, and trains it below', () => {
+    const at = (soreness: number) =>
+      run([twoBack, oneBack, log('c', '2026-09-10', 'Upper', [], { sleep: 3, energy: 3, soreness, sore: ['quads'] })])!;
+    // 3/5 maps to 5.5/10, under the ceiling; 4/5 maps to 7.75, over it.
+    expect(at(3).action).toMatch(/^Train it/);
+    expect(at(3).claims.map((c) => c.id)).toContain(READINESS.trainSore.id);
+    expect(at(4).action).toMatch(/^Rest that area/);
+    expect(at(4).claims.map((c) => c.id)).toContain(READINESS.sorenessCeiling.id);
+    expect(at(4).body).toContain(READINESS.sorenessCeiling.quote);
   });
 
   it('stays silent with no area named, or on a stale report', () => {

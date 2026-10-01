@@ -333,6 +333,21 @@ export const READINESS = {
     caveat:
       'Galpin ties the timing to the immune and inflammatory response and names no time for soreness to clear. The log holds dates, not hours, so the app reads the window as one or two calendar days back — a late-evening session sits nearer its edge than that suggests.',
   }),
+  // The ceiling on training a sore muscle. Galpin's scale is 1-10 and the vibe
+  // check's is 1-5; the rule maps one onto the other end to end (1→1, 5→10),
+  // which is OUR assumption and is said so in the caveat. Under that mapping
+  // 4/5 reads 7.75 and 3/5 reads 5.5, so the line falls between them — and it
+  // would fall there under a proportional mapping (×2) too.
+  sorenessCeiling: claim({
+    id: 'recovery.sorenessCeiling',
+    statement: 'Above six out of ten soreness in a muscle, it is probably not trained that day.',
+    value: 6,
+    unit: 'out of 10, soreness in the muscle',
+    source: 'galpinProtocols',
+    quote: "If you're higher than six out of 10, we're probably not training.",
+    caveat:
+      'His scale is 1-10 and subjective, used with athletes at the level of one muscle; the app maps its 1-5 vibe check onto it end to end, which is an assumption, not his. He starts "asking questions" from three out of ten.',
+  }),
   trainSore: claim({
     id: 'recovery.trainSore',
     statement: 'A sore muscle can still be trained.',

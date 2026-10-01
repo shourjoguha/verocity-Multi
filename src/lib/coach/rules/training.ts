@@ -622,8 +622,10 @@ export function sorenessSource(
   const shared = areas.filter((a) => a.peak.length > 1).length;
   const tail = areas.filter((a) => a.peak.length === 0 && a.tail).length;
   const labels = areas.map((a) => soreLabel(a.area)).join(', ');
-  // High soreness turns "train it" into "train it lighter"; both are cited.
-  const heavy = soreness >= 4;
+  // Past Galpin's ceiling the muscle sits the day out; under it, train it.
+  // The 1-5 → 1-10 mapping is the assumption named in the claim's caveat.
+  const onTen = 1 + ((soreness - 1) * 9) / 4;
+  const heavy = onTen > READINESS.sorenessCeiling.value;
 
   return {
     ruleId: 'training.recovery.soreness-source',
@@ -632,13 +634,13 @@ export function sorenessSource(
     periodKey: report.log_date.slice(0, 10),
     tldr: `Where the ${labels} soreness came from`.slice(0, 60),
     action: heavy
-      ? `Train it, but take that area's work to RPE ${READINESS.respondLighter.value} — lighter, not skipped.`
+      ? 'Rest that area today and train around it — the rest of the session can go ahead.'
       : 'Train it if the plan calls for it — soreness on its own is not a reason to skip.',
-    body: `Soreness ${soreness}/5 at the start of ${name(report)} on ${report.log_date.slice(0, 10)}. ${lines.join(' ')} Galpin on timing: "${READINESS.domsPeak.quote}" ${heavy ? `At ${soreness}/5 his answer to a bad day applies: "${READINESS.respondLighter.quote}".` : `And on whether it matters: "${READINESS.trainSore.quote}"`}`,
+    body: `Soreness ${soreness}/5 at the start of ${name(report)} on ${report.log_date.slice(0, 10)}. ${lines.join(' ')} Galpin on timing: "${READINESS.domsPeak.quote}" ${heavy ? `At ${soreness}/5 — about ${round(onTen, 1)} on his 1-10 scale — his ceiling applies: "${READINESS.sorenessCeiling.quote}"` : `And on whether it matters: "${READINESS.trainSore.quote}"`}`,
     drift: (soreness - 1) / 4,
     confidence: single + shared === areas.length ? 0.5 : 0.35,
     sufficiency: m.sufficiency,
-    claims: [READINESS.domsPeak, heavy ? READINESS.respondLighter : READINESS.trainSore],
+    claims: [READINESS.domsPeak, heavy ? READINESS.sorenessCeiling : READINESS.trainSore],
     observed: {
       reportDate: report.log_date.slice(0, 10),
       soreness,
