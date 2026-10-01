@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { attributeSoreness, lagWindow, likelySources, soreRegions } from '@/lib/soreness';
+import {
+  attributeSoreness,
+  explainSoreness,
+  hoursToDays,
+  lagWindow,
+  likelySources,
+  soreRegions,
+} from '@/lib/soreness';
+import { SORENESS } from '@/app.config';
+import { READINESS } from '@/lib/coach/knowledge';
 import type { LogItem, VibeCheck, WorkoutLog } from '@/lib/types';
 
 function item(movement: string, sets = 4): LogItem {
@@ -76,12 +85,60 @@ describe('attributeSoreness', () => {
     expect(attributeSoreness(target, [sameDay, old])).toEqual([]);
   });
 
-  it('weights a 2-day lag above a 1-day lag for identical work', () => {
+  it('weighs the two days of the cited peak window the same', () => {
     const d1 = log('d1', '2026-09-09', ['Back Squat']);
     const d2 = log('d2', '2026-09-08', ['Back Squat']);
-    const ranked = attributeSoreness(log('t', '2026-09-10', [], sore(['quads'])), [d1, d2]);
-    expect(ranked.map((c) => c.log.id)).toEqual(['d2', 'd1']);
-    // 0.7 of the leader is under the 0.75 ambiguity bar, so only one is named.
-    expect(likelySources(ranked)).toHaveLength(1);
+    const d3 = log('d3', '2026-09-07', ['Back Squat']);
+    const ranked = attributeSoreness(log('t', '2026-09-10', [], sore(['quads'])), [d1, d2, d3]);
+    expect(ranked[0].score).toBeCloseTo(ranked[1].score);
+    // The uncited tail ranks below, and at half the leader is still named.
+    expect(ranked[2].log.id).toBe('d3');
+    expect(likelySources(ranked).map((c) => c.log.id)).toContain('d3');
+  });
+
+  it('names the movements that carried the load', () => {
+    const target = log('t', '2026-09-10', [], sore(['lower']));
+    expect(attributeSoreness(target, [legs])[0].movements.map((m) => m.movement)).toEqual([
+      'Back Squat',
+      'Romanian Deadlift',
+    ]);
+  });
+});
+
+describe('the cited window', () => {
+  it('maps Galpin\'s 24-48h to one and two calendar days, weighted equally', () => {
+    const days = hoursToDays(READINESS.domsPeak.value);
+    expect(days).toEqual([1, 2]);
+    // The session page's weights must not drift from the claim the coach cites.
+    for (const d of days) expect(SORENESS.lagWeights[d]).toBe(1);
+    for (const [d, w] of Object.entries(SORENESS.lagWeights)) {
+      if (!days.includes(Number(d))) expect(w).toBeLessThan(1);
+    }
+  });
+});
+
+describe('explainSoreness — the athlete\'s two cases', () => {
+  // Front squats + ab work two days back, sled push the day before, soreness
+  // reported at the start of the next session.
+  const twoBack = log('fs', '2026-09-08', ['Front Squat', 'Landmine Twist', 'Ab Wheel Rollout']);
+  const oneBack = log('sled', '2026-09-09', ['Sled Push']);
+  const report = log('t', '2026-09-10', [], sore(['quads', 'core']));
+  const [quads, core] = explainSoreness(report, [twoBack, oneBack], hoursToDays(READINESS.domsPeak.value));
+
+  it('quads: both sessions loaded them, so both are named', () => {
+    expect(quads.peak.map((c) => c.log.id).sort()).toEqual(['fs', 'sled']);
+  });
+
+  it('core: only the session two days back loaded it; the sled day is the quiet one', () => {
+    expect(core.peak.map((c) => c.log.id)).toEqual(['fs']);
+    expect(core.peak[0].movements.map((m) => m.movement)).toEqual(['Ab Wheel Rollout', 'Landmine Twist']);
+    expect(core.quietInPeak.map((l) => l.id)).toEqual(['sled']);
+  });
+
+  it('falls back to a tail match only when nothing in the peak window loaded it', () => {
+    const old = log('old', '2026-09-07', ['Back Squat']);
+    const [only] = explainSoreness(log('t', '2026-09-10', [], sore(['quads'])), [old], [1, 2]);
+    expect(only.peak).toEqual([]);
+    expect(only.tail?.log.id).toBe('old');
   });
 });

@@ -28,7 +28,7 @@
 // stamped onto every recommendation row so a finding can always be traced to
 // the exact evidence that produced it, including after the pack moves on.
 
-export const KNOWLEDGE_PACK_VERSION = '2026.08.1';
+export const KNOWLEDGE_PACK_VERSION = '2026.10.1';
 
 export interface Source {
   /** A person. Never an institution, never "research". */
@@ -316,6 +316,32 @@ export const READINESS = {
     quote: "can we go real light? Let's go to six out of 10 RPE",
     caveat:
       'Said with hypertrophy as the goal, where volume is the driver and keeping some volume in matters. For a strength block the same logic favours cutting volume and keeping load.',
+  }),
+  // Soreness TIMING, the only window in the corpus. Nothing in it states when
+  // soreness clears, and nothing states the repeated-bout effect — so no rule
+  // may say that two sessions' soreness adds up, or that it should be gone by
+  // a given day. The sentence before this one in the transcript reads "28 to
+  // 48 hour window", a transcription error, which is why it is not the quote.
+  domsPeak: claim({
+    id: 'recovery.domsPeak',
+    statement: 'Soreness peaks 24 to 48 hours after the session that caused it.',
+    value: [24, 48] as [number, number],
+    unit: 'hours after the session',
+    source: 'galpinRecovery',
+    quote:
+      "When we look at that immune response and we see that that is actually peak 24 to 48 hours later. And then that's the same time the pain kicked in.",
+    caveat:
+      'Galpin ties the timing to the immune and inflammatory response and names no time for soreness to clear. The log holds dates, not hours, so the app reads the window as one or two calendar days back — a late-evening session sits nearer its edge than that suggests.',
+  }),
+  trainSore: claim({
+    id: 'recovery.trainSore',
+    statement: 'A sore muscle can still be trained.',
+    value: true,
+    unit: 'whether soreness bars training',
+    source: 'galpinStrength',
+    quote: 'you can certainly train a sore muscle.',
+    caveat:
+      'His target is low soreness, not none — "probably less than 3 out of 10" for hypertrophy work, on a 1-10 scale this app does not use. Very high soreness is a different case.',
   }),
 } as const;
 

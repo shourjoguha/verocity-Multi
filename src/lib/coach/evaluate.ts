@@ -50,7 +50,8 @@ import {
   measureNutrition,
   measureTraining,
 } from '@/lib/coach/signals';
-import { NUTRITION as N, TRAINING as T } from '@/lib/coach/knowledge';
+import { NUTRITION as N, READINESS as R, TRAINING as T } from '@/lib/coach/knowledge';
+import { hoursToDays } from '@/lib/soreness';
 import { TRAINING_RULES, rpeCalibration } from '@/lib/coach/rules/training';
 import { goalDrift } from '@/lib/coach/rules/goals';
 import {
@@ -146,6 +147,14 @@ export interface CoachInput {
  * scope.
  */
 export const MIN_SESSIONS_FOR_CLEAN = 3;
+
+/**
+ * The one training rule whose silence is never a clean reading. It speaks only
+ * when a vibe check said where it is sore, so its absence means "not asked",
+ * not "not sore" — a zero here would let an acted-on explanation "resolve" the
+ * week the athlete simply stopped naming an area.
+ */
+const SORENESS_SOURCE = 'training.recovery.soreness-source';
 
 /** The same guard for the nutrition family, whose denominator is days with any
  *  intake logged rather than sessions. */
@@ -404,6 +413,7 @@ export function runCoach(input: CoachInput): {
       // flat constant, exactly as the radar does. Falls back on its own when
       // there is no bodyweight on file.
       unweightedKg: unweightedRepKg(input.stats),
+      sorenessPeakDays: hoursToDays(R.domsPeak.value),
     },
     today,
     windowDays,
@@ -453,9 +463,11 @@ export function runCoach(input: CoachInput): {
   // firing is what enrols it.
   const observedOn = localDay(today);
   const cleanIsMeasurable = (ruleId: string) =>
-    family(ruleId) === 'nutrition'
-      ? nutrition.daysLogged >= MIN_MEAL_DAYS_FOR_CLEAN
-      : training.sessions >= MIN_SESSIONS_FOR_CLEAN;
+    ruleId === SORENESS_SOURCE
+      ? false
+      : family(ruleId) === 'nutrition'
+        ? nutrition.daysLogged >= MIN_MEAL_DAYS_FOR_CLEAN
+        : training.sessions >= MIN_SESSIONS_FOR_CLEAN;
 
   const firedById = new Map(findings.map((f) => [f.ruleId, f]));
   const withHistory = new Set(

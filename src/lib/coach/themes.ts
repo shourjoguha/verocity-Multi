@@ -35,7 +35,8 @@ export type ThemeKey =
   | 'recovery'
   | 'fuelling'
   | 'consistency'
-  | 'alignment';
+  | 'alignment'
+  | 'soreness';
 
 export interface Theme {
   key: ThemeKey;
@@ -47,7 +48,7 @@ export interface Theme {
 }
 
 /**
- * Six themes, in the order they lead a page when they tie.
+ * Seven themes, in the order they lead a page when they tie.
  *
  * A rule may appear in exactly one theme — `themeOf` returns the first match
  * and a rule in two groups is a rule whose story has not been decided.
@@ -111,6 +112,16 @@ export const THEMES: readonly Theme[] = [
     // app.config's to grow, so this matches on the PREFIX — the same fallback
     // impactWeight() makes, and for the same reason.
     ruleIds: ['goal.underserved'],
+  },
+  // Alone on purpose. It explains a symptom rather than naming a problem, and a
+  // theme's members raise each other's recurrence — sitting under 'recovery'
+  // would let "your quads are sore from Tuesday" make the overreaching rule
+  // re-speak sooner. A one-member theme never forms a card and has no sibling.
+  {
+    key: 'soreness',
+    title: 'Where the soreness comes from',
+    blurb: 'Reported soreness traced back to the sessions that loaded it.',
+    ruleIds: ['training.recovery.soreness-source'],
   },
 ];
 

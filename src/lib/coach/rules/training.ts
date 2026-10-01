@@ -6,12 +6,13 @@
 // from becoming a weekly recital of the same four complaints — see the cooldown
 // in ../evaluate.ts for the other half of that problem.
 
-import { RPE, RPE_LADDER } from '@/app.config';
+import { RPE, RPE_LADDER, SORENESS } from '@/app.config';
 import { RPE_DRIFT_SPAN, below, share as shareOf, shortfall } from '@/lib/coach/impact';
 import { READINESS, TRAINING } from '@/lib/coach/knowledge';
 import type { Finding } from '@/lib/coach/types';
 import type { TrainingSignals } from '@/lib/coach/signals';
-import type { UserStats } from '@/lib/types';
+import type { UserStats, WorkoutLog } from '@/lib/types';
+import { daysBetween, soreLabel, type SorenessCandidate } from '@/lib/soreness';
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const round = (n: number, d = 0) => Number(n.toFixed(d));
@@ -565,9 +566,95 @@ export function readinessAndLoad(
   };
 }
 
+/**
+ * Where the latest reported soreness came from.
+ *
+ * The athlete's question: "my quads are sore — yesterday's squats, today's sled,
+ * or both?" Answered per area against the one timing window the corpus states
+ * (`recovery.domsPeak`, 24-48h), and nothing more. In particular it NEVER says
+ * two sessions' soreness adds up: the corpus has no repeated-bout claim, and a
+ * second bout can as easily leave less soreness as more. So several sessions
+ * are reported as "both loaded it", with no split of the blame.
+ *
+ * Informational rather than a defect, so its drift is how sore, not how wrong.
+ */
+export function sorenessSource(
+  s: TrainingSignals,
+  _stats: UserStats | null,
+  _periodKey: string,
+): Finding | null {
+  const m = s.sorenessSource;
+  if (m.sufficiency === 'insufficient' || !m.value) return null;
+  const { report, soreness, areas } = m.value;
+  if (areas.length === 0) return null;
+
+  const [lo, hi] = READINESS.domsPeak.value;
+  const name = (l: WorkoutLog) => l.activity_type ?? (l.day_key ? `Day ${l.day_key}` : 'the session');
+  const ago = (d: number) => (d === 1 ? 'the day before' : `${d} days before`);
+  const who = (c: SorenessCandidate) =>
+    `${name(c.log)} ${ago(c.daysBefore)} (${c.movements
+      .slice(0, 2)
+      .map((mv) => mv.movement)
+      .join(', ')})`;
+
+  const lines = areas.map((a) => {
+    const label = soreLabel(a.area);
+    if (a.peak.length === 1) {
+      const src = a.peak[0];
+      const since = a.quietInPeak.filter((l) => daysBetween(l.log_date, report.log_date) < src.daysBefore);
+      // The athlete's case: "the core is from two days back, not from today's
+      // sled" — only sayable when a more recent session left the area alone.
+      const quiet = since.length
+        ? ` ${since.map((l) => `${name(l)} ${ago(daysBetween(l.log_date, report.log_date))}`).join(' and ')} didn't load it, so this is delayed soreness from the earlier session, not from the later one.`
+        : '';
+      return `${label}: ${who(a.peak[0])} is the only session in the ${lo}-${hi}h window that loaded it.${quiet}`;
+    }
+    if (a.peak.length > 1) {
+      return `${label}: ${a.peak.map(who).join(' and ')} both loaded it inside the ${lo}-${hi}h window. The log can't say how much of the soreness each one caused.`;
+    }
+    if (a.tail) {
+      return `${label}: nothing 1-2 days back loaded it. The nearest is ${who(a.tail)}, past the ${lo}-${hi}h peak, and the evidence gives no time for soreness to clear.`;
+    }
+    return `${label}: no session logged in the ${SORENESS.maxLagDays} days before loaded it, so the cause isn't in the log.`;
+  });
+
+  const single = areas.filter((a) => a.peak.length === 1).length;
+  const shared = areas.filter((a) => a.peak.length > 1).length;
+  const tail = areas.filter((a) => a.peak.length === 0 && a.tail).length;
+  const labels = areas.map((a) => soreLabel(a.area)).join(', ');
+  // High soreness turns "train it" into "train it lighter"; both are cited.
+  const heavy = soreness >= 4;
+
+  return {
+    ruleId: 'training.recovery.soreness-source',
+    // The report's own date: each new report may speak once, and the same
+    // report never mints a second row.
+    periodKey: report.log_date.slice(0, 10),
+    tldr: `Where the ${labels} soreness came from`.slice(0, 60),
+    action: heavy
+      ? `Train it, but take that area's work to RPE ${READINESS.respondLighter.value} — lighter, not skipped.`
+      : 'Train it if the plan calls for it — soreness on its own is not a reason to skip.',
+    body: `Soreness ${soreness}/5 at the start of ${name(report)} on ${report.log_date.slice(0, 10)}. ${lines.join(' ')} Galpin on timing: "${READINESS.domsPeak.quote}" ${heavy ? `At ${soreness}/5 his answer to a bad day applies: "${READINESS.respondLighter.quote}".` : `And on whether it matters: "${READINESS.trainSore.quote}"`}`,
+    drift: (soreness - 1) / 4,
+    confidence: single + shared === areas.length ? 0.5 : 0.35,
+    sufficiency: m.sufficiency,
+    claims: [READINESS.domsPeak, heavy ? READINESS.respondLighter : READINESS.trainSore],
+    observed: {
+      reportDate: report.log_date.slice(0, 10),
+      soreness,
+      areas: areas.length,
+      singleSource: single,
+      sharedSource: shared,
+      outsidePeak: tail,
+      unexplained: areas.length - single - shared - tail,
+    },
+  };
+}
+
 export const TRAINING_RULES = [
   intervalsNotAllOut,
   readinessAndLoad,
+  sorenessSource,
   loadedTooLight,
   hypertrophyEffortLow,
   heavyRestTooShort,

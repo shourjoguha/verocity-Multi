@@ -1008,18 +1008,8 @@ export const ACWR = { acuteDays: 7, chronicDays: 28, sweetMax: 1.3, penaltySpan:
 export const RECOVERY = { neutralVibe: 0.5 } as const;
 
 // Where the vibe check's soreness sits, so it can be traced to a session.
-// DOMS starts ~12-24h after the work, peaks around 24-72h and fades by day 4-5,
-// which is why the session immediately before is often NOT the culprit. The
-// lag weights are that curve, heuristic, and keyed on whole calendar days
-// between the session that caused it and the one that reported it. Same-day
-// sessions are excluded: DOMS does not arrive in hours, and the order of two
-// logs on one date is not recorded.
-// `coarse` entries are the first row; the rest sit behind "+ Muscles". Upper and
-// lower back are split here although the taxonomy has one `back` region: that
-// region is really lats/upper back (rows and pulls weight it 0.7, hinges 0.1),
-// and there is no erector region at all. So Low back scores against the
-// posterior chain hinges load instead — a proxy that also counts leg curls and
-// hip thrusts, which is the price of not splitting `back` in the taxonomy.
+// Same-day sessions are excluded: the vibe check opens a session, and the
+// order of two logs on one date is not recorded.
 export const SORE_AREAS = {
   upper: { label: 'Upper', coarse: true, regions: ['chest', 'back', 'shoulders', 'arms'] },
   lower: { label: 'Lower', coarse: true, regions: ['glutes', 'hamstrings', 'quads', 'calves'] },
@@ -1038,10 +1028,20 @@ export const SORE_AREAS = {
 export const SORENESS = {
   // Soreness at or above this asks where. 1 is "not sore".
   askAreaFrom: 2,
-  lagWeights: { 1: 0.7, 2: 1, 3: 0.8, 4: 0.4 } as Record<number, number>,
+  // Calendar days between the session that caused it and the one reporting it.
+  // Days 1-2 weigh the same because they are the cited peak window — the coach
+  // claim `recovery.domsPeak`, Galpin's 24-48h, pinned to these keys by test.
+  // Days 3-4 are an UNCITED tail: the source names no time for soreness to
+  // clear, so the session page still looks there, and the coach (which reads
+  // the window from the claim, not from here) reports a tail match as outside
+  // the peak rather than as the cause.
+  lagWeights: { 1: 1, 2: 1, 3: 0.5, 4: 0.25 } as Record<number, number>,
   maxLagDays: 4,
-  // A runner-up this close to the leader is named alongside it rather than hidden.
-  ambiguousRatio: 0.75,
+  // A session is named as a contributor when it put at least this share of the
+  // leading session's load on the sore area. An app choice, not a claim.
+  contributorShare: 0.5,
+  // The coach explains only a report this recent; an older one has moved on.
+  reportFreshDays: 7,
 } as const;
 
 export const appConfig = {

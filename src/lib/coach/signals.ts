@@ -22,12 +22,14 @@ import {
   MUSCLE_REGION_KEYS,
   RPE,
   RPE_LADDER,
+  SORENESS,
   type ModalityKey,
   type RegionKey,
 } from '@/app.config';
 import { summarizeBodyLoad } from '@/lib/bodyLoad';
 import { bestE1rmByMovement } from '@/lib/prs';
 import { completedLogs } from '@/lib/stats';
+import { explainSoreness, type AreaExplanation } from '@/lib/soreness';
 import { buildDayInsights, summarizeTiming, toHours } from '@/lib/mealInsights';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import { classifyIntent, countIntent, emptyMix, mixShares, type IntentMix } from '@/lib/coach/intent';
@@ -330,6 +332,16 @@ export interface TrainingSignals {
   }>;
   /** Local clock hour each session started, for sessions that recorded one. */
   startHours: number[];
+  /**
+   * The latest vibe check that said WHERE it is sore, traced back per area to
+   * the sessions that loaded it (lib/soreness.ts). Null when no recent check
+   * named an area — that is "not asked", never "not sore".
+   */
+  sorenessSource: Measured<{
+    report: WorkoutLog;
+    soreness: number;
+    areas: AreaExplanation[];
+  } | null>;
 }
 
 /** Fraction of 1RM at which a set is being treated as strength work. Passed in
@@ -346,6 +358,8 @@ export interface TrainingOptions {
   heavyRestSeconds: [number, number];
   overrides?: OverrideMap;
   unweightedKg?: number;
+  /** Calendar days back the evidence puts peak soreness at. */
+  sorenessPeakDays?: readonly number[];
 }
 
 export function measureTraining(
@@ -761,7 +775,45 @@ export function measureTraining(
       `only ${rated} of ${logs.length} sessions recorded a vibe check`,
     ),
     startHours,
+    sorenessSource: measureSorenessSource(allLogs, opts, today),
   };
+}
+
+/**
+ * The newest done session whose vibe check named a sore area, no older than
+ * SORENESS.reportFreshDays, explained against every done log — not only the
+ * window, because the cause of a report on its first day sits before it.
+ */
+function measureSorenessSource(
+  allLogs: WorkoutLog[],
+  opts: TrainingOptions,
+  today: Date,
+): TrainingSignals['sorenessSource'] {
+  const done = completedLogs(allLogs);
+  const freshFrom = windowStart(today, SORENESS.reportFreshDays);
+  const report = done
+    .filter((l) => {
+      const v = l.data?.session?.vibe;
+      return (
+        l.log_date.slice(0, 10) >= freshFrom &&
+        v?.sore?.length &&
+        v.soreness >= SORENESS.askAreaFrom
+      );
+    })
+    .sort((a, b) => (a.log_date < b.log_date ? 1 : -1))[0];
+  if (!report || !opts.sorenessPeakDays) {
+    return measured(null, 0, 1, 'no recent vibe check said where it is sore');
+  }
+  return measured(
+    {
+      report,
+      soreness: report.data.session!.vibe!.soreness,
+      areas: explainSoreness(report, done, opts.sorenessPeakDays, opts.overrides),
+    },
+    1,
+    1,
+    '',
+  );
 }
 
 // --- goals -----------------------------------------------------------------
