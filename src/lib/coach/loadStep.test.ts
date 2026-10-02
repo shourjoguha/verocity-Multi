@@ -150,6 +150,11 @@ describe('measureLoadSteps', () => {
     expect(m.sufficiency).toBe('insufficient');
   });
 
+  it('ignores a timed hold written as a range of seconds', () => {
+    const hold = ranged({ movement: 'Copenhagen Plank', primaryMetric: 'time', plannedByWeek: { 1: '3x20-30/side RPE8' } });
+    expect(measureLoadSteps([log('2026-10-07', 'Copenhagen Plank', sets(3, 0, 8))], plan([hold]), TODAY).sufficiency).toBe('insufficient');
+  });
+
   it('is insufficient without a plan', () => {
     expect(measureLoadSteps([], null, TODAY).sufficiency).toBe('insufficient');
   });

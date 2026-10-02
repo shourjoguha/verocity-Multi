@@ -93,6 +93,9 @@ export function parseLoadStep(note: string | undefined): string | null {
 
 /** The exercise's range, read from its most common ranged label. */
 function rangeOf(ex: PlanExercise): RepRange | null {
+  // A timed hold written "3x20-30/side" is a range of SECONDS; the reps this
+  // module reads would never reach it. Only rep-counted lifts are ranged here.
+  if (ex.primaryMetric !== 'reps' && ex.primaryMetric !== 'weight') return null;
   const counts = new Map<string, number>();
   for (const v of Object.values(ex.plannedByWeek)) {
     if (parseRepRange(v)) counts.set(v, (counts.get(v) ?? 0) + 1);
