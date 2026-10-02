@@ -61,7 +61,7 @@ export function loadedTooLight(
 
   // How the loaded work is SHAPED, where it said. Rest and superset structure
   // separate strength from hypertrophy from loaded conditioning; reps do not
-  // (see ../intent.ts). Stated only when enough sets prescribed a rest to make
+  // (see ../intent.ts). Stated only when enough sets carried a rest tag to make
   // a split mean anything, and always against the sets that SAID — never
   // against all of them, which would turn silence into a percentage.
   const i = s.loadedIntent;
@@ -223,11 +223,11 @@ export function rpeCalibration(s: TrainingSignals, periodKey: string): Finding |
 }
 
 /**
- * Heavy low-rep sets prescribed less rest than the strength band names.
+ * Heavy low-rep sets tagged with less rest than the strength band names.
  *
- * `restSeconds` is the PRESCRIBED rest on the item or its group; nothing in this
- * app records the rest actually taken. So this reads programming intent and the
- * body says as much rather than claiming to have timed anything.
+ * `restSeconds` is the athlete's rest TAG on the item or its group — the preset
+ * they tapped, pre-filled from the plan. It is stated, not timed, and the body
+ * says so rather than claiming to have timed anything.
  */
 export function heavyRestTooShort(
   s: TrainingSignals,
@@ -246,8 +246,8 @@ export function heavyRestTooShort(
     ruleId: 'training.strength.rest-too-short',
     periodKey,
     tldr: `Heavy sets rest ${Math.round(meanSeconds)}s, not ${floor / 60}–${ceil / 60} min`,
-    action: `Set ${floor}–${ceil}s rest on your heavy low-rep work, and superset something unrelated to fill it.`,
-    body: `${belowBand} of ${total} heavy low-rep sets in the last ${s.windowDays} days were prescribed under ${floor}s rest, averaging ${Math.round(meanSeconds)}s. Galpin's figure is "${TRAINING.strengthRest.quote}", and his reason is that intensity rather than volume drives strength — fatigue carried into the next set costs exactly the signal you came for. He is explicit that the rest need not be idle: superset an unrelated muscle group through it. Note this reads the rest you PRESCRIBED; the app does not record the rest you took. For hypertrophy work the advice inverts — he prefers "${TRAINING.hypertrophyRest.quote}".`,
+    action: `Rest ${floor}–${ceil}s on your heavy low-rep work (tag it), and superset something unrelated to fill it.`,
+    body: `${belowBand} of ${total} heavy low-rep sets in the last ${s.windowDays} days were tagged under ${floor}s rest, averaging ${Math.round(meanSeconds)}s. Galpin's figure is "${TRAINING.strengthRest.quote}", and his reason is that intensity rather than volume drives strength — fatigue carried into the next set costs exactly the signal you came for. He is explicit that the rest need not be idle: superset an unrelated muscle group through it. This reads the rest you tagged on each lift (the preset you tapped, or the plan's if you left it). For hypertrophy work the advice inverts — he prefers "${TRAINING.hypertrophyRest.quote}".`,
     drift: shortfall(meanSeconds, floor),
     confidence: rest.sufficiency === 'ok' ? 0.55 : 0.35,
     sufficiency: rest.sufficiency,

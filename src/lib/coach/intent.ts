@@ -8,16 +8,17 @@
 // would have called every one of those sets hypertrophy.
 //
 // WHAT DOES SEPARATE THEM is how the set is SPACED and what it is spaced
-// AGAINST — prescribed rest, and whether the movement shares a superset with
-// something that fatigues the same muscles. On the same data, as prescribed
+// AGAINST — tagged rest, and whether the movement shares a superset with
+// something that fatigues the same muscles. On the same data, as tagged
 // rest lengthened the load climbed monotonically and supersets disappeared
 // (39% -> 50% -> 13% -> 0%).
 //
-// PRESCRIBED REST IS THE RIGHT FIELD, and it is worth being explicit about why,
-// because it looks like a weakness. `SetActual` has no `rest` member: the app
-// has never recorded rest TAKEN, only rest PLANNED on the item. For this
-// question that is not a compromise but the correct reading — intent is what
-// the work was for, and the plan is where intent is written down.
+// THE REST TAG IS THE RIGHT FIELD. `SetActual` has no `rest` member; rest
+// lives on the item as `restSeconds`, which the plan pre-fills and the athlete
+// re-taps from TIMERS.restPresets to say what they actually rested. There is
+// deliberately no countdown behind it (it paused when the phone locked and was
+// fiddly mid-set, so it was removed): the tag is a statement, not a timing.
+// An untouched tag therefore reads as "rested as prescribed".
 //
 // THE CORPUS CORRECTS THE OBVIOUS VERSION OF THIS RULE. "Superset means it is
 // not strength work" is wrong, and `TRAINING.strengthRest`'s own caveat says
@@ -177,7 +178,7 @@ export function classifyIntent(input: IntentInput): IntentVerdict {
  * the unlogged-rest assumption.
  *
  * Counts SETS, not items: an item is a row in a logger and a set is the unit of
- * work, and rest is prescribed on the item and applies to each of its sets —
+ * work, and rest is tagged on the item and applies to each of its sets —
  * the same shape as the `/side` and `(p)` notations.
  */
 export interface IntentMix {

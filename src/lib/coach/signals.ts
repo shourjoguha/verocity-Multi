@@ -250,16 +250,18 @@ export interface TrainingSignals {
   }>;
   /**
    * Rest between sets on HEAVY low-rep work, where the evidence names a band.
-   * `restSeconds` is the PRESCRIBED rest on the item or its group — the app
-   * never records actual rest taken — so this reads intent, and rules must say
-   * so rather than claiming to have timed anything.
+   * `restSeconds` is the rest TAG on the item or its group: the athlete taps a
+   * preset (TIMERS.restPresets) to say how long they rested. It opens on the
+   * plan's prescription, so an untouched tag means "rested as prescribed". It
+   * is a stated value, not a timed one, and rules must not claim to have
+   * timed anything.
    */
   heavyRest: Measured<{ meanSeconds: number; belowBand: number; total: number }>;
   /**
    * Loaded sets by what they appear to be FOR — see ./intent.ts.
    *
    * Reps do not separate strength from hypertrophy from loaded conditioning;
-   * prescribed rest and superset relatedness do. An untouched rest picker
+   * tagged rest and superset relatedness do. An untouched rest picker
    * resolves to UNLOGGED_REST_SECONDS, so every loaded set gets a verdict — and
    * `assumed` says how many of those verdicts lean on that.
    */
@@ -561,8 +563,8 @@ export function measureTraining(
                   if (item.movement === topMovement) topFractions.push(fraction);
 
                   // Rest is only interesting where the evidence names a band:
-                  // heavy, low-rep work. `restSeconds` is PRESCRIBED — item
-                  // first, then the group it sits in. Absent rest is absent
+                  // heavy, low-rep work. `restSeconds` is the athlete's rest
+                  // TAG — item first, then the group it sits in. Absent rest is absent
                   // data, never a zero.
                   const isHeavyLowRep =
                     fraction >= opts.heavyFraction && a.reps <= opts.strengthRepMax;
@@ -573,7 +575,7 @@ export function measureTraining(
                     if (rest < opts.heavyRestSeconds[0]) heavyRestBelow += 1;
                   }
                   // What this loaded set was FOR. Counted per set rather than
-                  // per item because rest is prescribed on the item and applies
+                  // per item because rest is tagged on the item and applies
                   // to each of its sets — the same shape as the `/side` and
                   // `(p)` notations, which are written item-level and priced
                   // set-level.
@@ -733,7 +735,7 @@ export function measureTraining(
       },
       heavyRestCount,
       8,
-      `only ${heavyRestCount} heavy low-rep sets carried a prescribed rest`,
+      `only ${heavyRestCount} heavy low-rep sets carried a rest tag`,
     ),
     coverage: body.coverage,
     mixedSessions: mixed,
