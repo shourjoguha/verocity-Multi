@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { METRICS, type MetricKey } from '@/app.config';
 import { showsWeightField } from '@/lib/metrics';
-import type { LogSet } from '@/lib/types';
+import type { JumpMarkKind, LogSet } from '@/lib/types';
+import { markLabel } from '@/lib/jumpMark';
 import { EASE } from '@/components/anim';
 import { haptic } from '@/lib/haptics';
 
@@ -15,6 +16,7 @@ import { haptic } from '@/lib/haptics';
 // [planned][summary, flex-1, truncating][✓] and cannot overflow at any width.
 export function SetRow({
   metric,
+  markKind = null,
   set,
   index,
   showPlanned,
@@ -23,6 +25,8 @@ export function SetRow({
   onToggle,
 }: {
   metric: MetricKey;
+  /** Jump mark this movement records, appended to the summary. */
+  markKind?: JumpMarkKind | null;
   set: LogSet;
   // 0-based position in the movement, rendered 1-based as the ordinal gutter.
   index: number;
@@ -83,7 +87,8 @@ export function SetRow({
   const value = () => {
     const head = showsWeightField(metric) && a.weight ? `${a.weight}${METRICS.weight.unit}` : '';
     const tail = primary();
-    return [head, tail].filter(Boolean).join(' ');
+    const mark = markKind ? markLabel(markKind, a.mark) : '';
+    return [head, tail, mark ? `· ${mark}` : ''].filter(Boolean).join(' ');
   };
 
   const main = value();

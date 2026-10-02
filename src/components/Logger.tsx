@@ -43,12 +43,15 @@ import {
   setItemMetric,
   setItemNotes,
   setItemRest,
+  setItemMark,
+  setItemMarkKind,
   setSubroutine,
   swapItemMovement,
   toggleItemNotation,
   ungroup,
 } from '@/lib/logEdits';
 import { isSubroutine } from '@/lib/subroutine';
+import { inToCm, markKindOf } from '@/lib/jumpMark';
 import { formatSetActual } from '@/lib/format';
 import { activeSessionOf } from '@/lib/activeSession';
 import { typeFromLabel } from '@/lib/timeline';
@@ -67,6 +70,7 @@ import {
   PRIMARY_METRICS,
   SECTIONS,
   TIMERS,
+  JUMP_MARK,
   type MetricKey,
   type SectionKey,
 } from '@/app.config';
@@ -493,6 +497,9 @@ export default function Logger() {
               }
               const rpe = last?.rpe ?? plan.rpe;
               if (rpe != null) patch.rpe = rpe;
+              // A box height or a distance mark carries over like a load: last
+              // session's is the reference the athlete tries to match or beat.
+              if (last?.mark != null && markKindOf(item)) patch.mark = last.mark;
               if (Object.keys(patch).length === 0) return set;
               return { ...set, actual: { ...set.actual, ...patch, prefilled: true } };
             });
@@ -972,6 +979,7 @@ export default function Logger() {
       if (src.time != null) patch.time = src.time;
       if (src.distance != null) patch.distance = src.distance;
       if (src.calories != null) patch.calories = src.calories;
+      if (src.mark != null) patch.mark = src.mark;
       if (src.rpe != null) patch.rpe = src.rpe;
       return patchSetActual(next, si, gi, ii, ki + 1, patch);
     });
@@ -1206,6 +1214,7 @@ export default function Logger() {
               <div key={ki} className="flex flex-col gap-2">
                 <SetRow
                   metric={item.primaryMetric}
+                  markKind={markKindOf(item)}
                   set={set}
                   index={ki}
                   showPlanned={anyPlanned}
@@ -1770,6 +1779,7 @@ export default function Logger() {
       <SetEntrySheet
         open={entrySet !== null}
         metric={entryItem?.primaryMetric ?? DEFAULT_PRIMARY_METRIC}
+        markKind={entryItem && !isSubroutine(entryItem) ? markKindOf(entryItem) : null}
         movement={entryItem?.movement ?? ''}
         setIndex={entryFor?.ki ?? 0}
         setCount={entryItem?.sets.length ?? 0}
@@ -2006,6 +2016,63 @@ export default function Logger() {
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Jump mark. Defaults from the name (lib/jumpMark.ts) and can be
+                      switched for any movement, so the pattern list is a default,
+                      not a gate. Box presets write every set at once — a box does
+                      not change height between sets; distances are per jump, in
+                      the set sheet. */}
+                  <div className="mt-5">
+                    <div className="mb-2 t-label text-muted">Jump mark</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(
+                        [
+                          ['off', 'Off'],
+                          ['height', 'Box height'],
+                          ['distance', 'Distance'],
+                        ] as const
+                      ).map(([key, label]) => {
+                        const on = (markKindOf(item) ?? 'off') === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setDoc((d) => setItemMarkKind(d, si, gi, ii, key))}
+                            aria-pressed={on}
+                            className={`hill-btn border bg-surface px-2 py-1 text-xs transition-colors ${
+                              on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {markKindOf(item) === 'height' ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {JUMP_MARK.boxPresetsIn.map((inches) => {
+                          const cm = inToCm(inches);
+                          const on = item.sets.length > 0 && item.sets.every((st) => st.actual.mark === cm);
+                          return (
+                            <button
+                              key={inches}
+                              type="button"
+                              onClick={() => setDoc((d) => setItemMark(d, si, gi, ii, cm))}
+                              aria-pressed={on}
+                              aria-label={`Box ${inches} inches, ${cm} centimetres, all sets`}
+                              className={`hill-btn border bg-surface px-2 py-1 text-xs tabular-nums transition-colors ${
+                                on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                              }`}
+                            >
+                              {inches}in
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : markKindOf(item) === 'distance' ? (
+                      <div className="mt-2 t-control text-muted">Log each jump's distance in the set.</div>
+                    ) : null}
                   </div>
                   </>
                   ) : null}

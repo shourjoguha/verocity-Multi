@@ -113,6 +113,24 @@ export const RPE_LADDER = {
   minDistinctPerSession: 2,
 } as const;
 
+// Jump marks — how high or how far a plyometric rep went, in centimetres.
+//
+// Only jumps whose outcome is a measurable mark: a box (height) or a landing
+// spot (distance). Not every plyometric: a snatch carries load, a med-ball
+// throw usually hits a wall, and a pogo or jump rope stays in place. The name
+// patterns pick the default; the athlete can switch any movement on or off in
+// its options, which is what makes the list a default rather than a gate.
+export const JUMP_MARK = {
+  /** Checked first: a name matching any of these never gets a mark by default. */
+  exclude: ['jump rope', 'rope', 'skipping', 'pogo', 'tuck jump', 'jump squat', 'jumping jack', 'step up', 'step-up'],
+  height: ['box jump', 'depth jump', 'hurdle'],
+  distance: ['broad jump', 'long jump', 'triple jump', 'lateral bound', 'bound', 'skater', 'hop'],
+  /** Common box heights, in inches because that is how boxes are sold. */
+  boxPresetsIn: [12, 16, 20, 24, 30],
+  /** −/+ step in the set sheet, cm. */
+  step: { height: 1, distance: 5 },
+} as const;
+
 // Timer tunables (seconds).
 export const TIMERS = {
   defaultRestSeconds: 120,

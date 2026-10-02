@@ -2,7 +2,7 @@
 // from setDoc(...) so all the structural editing (sets, metric swap, movement
 // add/swap/remove, superset grouping) stays out of the component and testable.
 import { RPE, type MetricKey } from '@/app.config';
-import type { GroupKind, LogDocument, LogGroup, LogItem, SetActual } from '@/lib/types';
+import type { GroupKind, ItemMarkKind, LogDocument, LogGroup, LogItem, SetActual } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
 
 function newId(): string {
@@ -61,7 +61,7 @@ export function patchSetActual(
   }));
 }
 
-// Append a set, carrying weight/reps forward from the last set as a prefill.
+// Append a set, carrying weight/reps (and a jump mark) forward from the last set as a prefill.
 export function addSet(doc: LogDocument, si: number, gi: number, ii: number): LogDocument {
   return mapItem(doc, si, gi, ii, (it) => {
     if (isSubroutine(it)) return it; // subroutines have no sets
@@ -75,6 +75,7 @@ export function addSet(doc: LogDocument, si: number, gi: number, ii: number): Lo
           actual: {
             weight: prev?.actual.weight,
             reps: prev?.actual.reps,
+            mark: prev?.actual.mark,
             rpe: prev?.actual.rpe ?? RPE.default,
             completed: false,
             prefilled: true,
@@ -96,6 +97,20 @@ export function setItemMetric(doc: LogDocument, si: number, gi: number, ii: numb
 
 export function setItemRest(doc: LogDocument, si: number, gi: number, ii: number, seconds: number): LogDocument {
   return mapItem(doc, si, gi, ii, (it) => ({ ...it, restSeconds: seconds }));
+}
+
+// Choose what a movement's jump mark measures, or switch it off. Values already
+// logged are kept: switching off hides the field, it does not erase a record.
+export function setItemMarkKind(doc: LogDocument, si: number, gi: number, ii: number, kind: ItemMarkKind): LogDocument {
+  return mapItem(doc, si, gi, ii, (it) => ({ ...it, markKind: kind }));
+}
+
+// Set the same jump mark (cm) on every set of a movement — a box height does not
+// change between sets. Per-set edits happen in the set sheet.
+export function setItemMark(doc: LogDocument, si: number, gi: number, ii: number, cm: number): LogDocument {
+  return mapItem(doc, si, gi, ii, (it) =>
+    isSubroutine(it) ? it : { ...it, sets: it.sets.map((set) => ({ ...set, actual: { ...set.actual, mark: cm } })) },
+  );
 }
 
 // Set (or clear, when blank) an item's free-text note. Trimmed to undefined so

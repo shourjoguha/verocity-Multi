@@ -515,12 +515,19 @@ export interface LogGroup {
   completedAt?: string;
 }
 
+/** What a jump's mark measures. 'off' is the athlete switching a default off. */
+export type JumpMarkKind = 'height' | 'distance';
+export type ItemMarkKind = JumpMarkKind | 'off';
+
 export interface LogItem {
   id: string;
   movement: string;
   primaryMetric: MetricKey;
   sets: LogSet[];
   restSeconds?: number;
+  /** Jump mark setting chosen in movement options. Absent ⇒ the default from
+   *  the movement name (lib/jumpMark.ts). */
+  markKind?: ItemMarkKind;
   notes?: string;
   // Subroutine fields (kind === 'subroutine'): movement holds the title,
   // description the ≤300-char body, url an optional link. sets stays [].
@@ -542,6 +549,9 @@ export interface SetActual {
   distance?: number;
   time?: number;
   calories?: number;
+  /** Jump mark in cm — box height or jump distance, per the item's markKind.
+   *  Never priced as work: it records the outcome of a jump, not its load. */
+  mark?: number;
   completed: boolean;
   prefilled: boolean;
 }
