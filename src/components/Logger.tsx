@@ -30,6 +30,7 @@ import {
 import {
   addItem,
   addSet,
+  copyForward,
   addSubroutine,
   groupWithAcrossSections,
   mergeWithNext,
@@ -961,20 +962,13 @@ export default function Logger() {
   }
 
   function cloneForward(si: number, gi: number, ii: number, ki: number) {
-    setDoc((d) => {
-      const it = d.sections[si].groups[gi].items[ii];
-      const src = it.sets[ki].actual;
-      let next = d;
-      if (ki + 1 >= it.sets.length) next = addSet(next, si, gi, ii);
-      const patch: Partial<SetActual> = { prefilled: true };
-      if (src.weight != null) patch.weight = src.weight;
-      if (src.reps != null) patch.reps = src.reps;
-      if (src.time != null) patch.time = src.time;
-      if (src.distance != null) patch.distance = src.distance;
-      if (src.calories != null) patch.calories = src.calories;
-      if (src.rpe != null) patch.rpe = src.rpe;
-      return patchSetActual(next, si, gi, ii, ki + 1, patch);
-    });
+    // Decided on the current doc so the toast and the edit agree; see
+    // copyForward in lib/logEdits.ts for when it may add a set.
+    if (copyForward(doc, si, gi, ii, ki).outcome === 'last-open') {
+      toast('Last set — log it first, or tap + to add one');
+      return;
+    }
+    setDoc((d) => copyForward(d, si, gi, ii, ki).doc);
   }
 
   // `footerTrailing` rides in the SAME row as Add set rather than a band of its

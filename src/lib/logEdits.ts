@@ -61,7 +61,10 @@ export function patchSetActual(
   }));
 }
 
-// Append a set, carrying weight/reps forward from the last set as a prefill.
+// Append a set that copies the LAST set's logged values — every metric (load,
+// reps, time, distance, calories, RPE, and any field added later, since the
+// actual is spread rather than listed) plus its notations, so a `/side` or `(p)`
+// movement does not grow an un-notated set. It arrives open and prefilled.
 export function addSet(doc: LogDocument, si: number, gi: number, ii: number): LogDocument {
   return mapItem(doc, si, gi, ii, (it) => {
     if (isSubroutine(it)) return it; // subroutines have no sets
@@ -73,17 +76,48 @@ export function addSet(doc: LogDocument, si: number, gi: number, ii: number): Lo
         {
           planned: prev?.planned ?? null,
           actual: {
-            weight: prev?.actual.weight,
-            reps: prev?.actual.reps,
+            ...prev?.actual,
             rpe: prev?.actual.rpe ?? RPE.default,
             completed: false,
             prefilled: true,
           },
-          notations: [],
+          notations: prev ? [...prev.notations] : [],
         },
       ],
     };
   });
+}
+
+/** What "Copy to next" did. `last-open` means nothing: the set is the last one
+ *  and the movement still has an open set, so there is no next set to fill and
+ *  adding one would grow the movement past its prescription. */
+export type CopyForwardOutcome = 'copied' | 'added' | 'last-open';
+
+// "Copy to next" from set `ki`:
+//   - a later set exists        → copy into set ki+1; never add a set.
+//   - ki is the last set, and every set is done → add a new set copied from it.
+//   - ki is the last set, and a set is still open → do nothing (`last-open`).
+// The middle case is the only way Copy to next grows a movement. It used to add
+// a set whenever it ran off the end, which silently turned a 4-set prescription
+// into 5 when the last set was copied before it was logged.
+export function copyForward(
+  doc: LogDocument,
+  si: number,
+  gi: number,
+  ii: number,
+  ki: number,
+): { doc: LogDocument; outcome: CopyForwardOutcome } {
+  const it = doc.sections[si]?.groups[gi]?.items[ii];
+  if (!it || isSubroutine(it) || !it.sets[ki]) return { doc, outcome: 'last-open' };
+  if (ki + 1 < it.sets.length) {
+    // Every logged metric, never the completion state of either set.
+    const { completed: _c, prefilled: _p, ...metrics } = it.sets[ki].actual;
+    const patch: Partial<SetActual> = { prefilled: true };
+    for (const [k, v] of Object.entries(metrics)) if (v != null) (patch as Record<string, unknown>)[k] = v;
+    return { doc: patchSetActual(doc, si, gi, ii, ki + 1, patch), outcome: 'copied' };
+  }
+  if (it.sets.every((s) => s.actual.completed)) return { doc: addSet(doc, si, gi, ii), outcome: 'added' };
+  return { doc, outcome: 'last-open' };
 }
 
 export function removeSet(doc: LogDocument, si: number, gi: number, ii: number, ki: number): LogDocument {
