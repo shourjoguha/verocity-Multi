@@ -19,6 +19,7 @@ export function SetRow({
   index,
   showPlanned,
   isPr = false,
+  restOverride = null,
   onOpen,
   onToggle,
 }: {
@@ -33,6 +34,9 @@ export function SetRow({
   // just indent every row past 48px of nothing.
   showPlanned: boolean;
   isPr?: boolean;
+  /** Rest before this set when it differs from the movement's tag; shown as a
+   *  quiet suffix so the row says nothing extra for the common case. */
+  restOverride?: number | null;
   onOpen: () => void;
   onToggle: () => void;
 }) {
@@ -83,7 +87,8 @@ export function SetRow({
   const value = () => {
     const head = showsWeightField(metric) && a.weight ? `${a.weight}${METRICS.weight.unit}` : '';
     const tail = primary();
-    return [head, tail].filter(Boolean).join(' ');
+    const rest = restOverride != null ? `· rest ${restOverride}s` : '';
+    return [head, tail, rest].filter(Boolean).join(' ');
   };
 
   const main = value();

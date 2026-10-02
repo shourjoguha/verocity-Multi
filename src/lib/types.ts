@@ -542,6 +542,10 @@ export interface SetActual {
   distance?: number;
   time?: number;
   calories?: number;
+  /** Rest taken BEFORE this set, in seconds, when it differs from the item's
+   *  `restSeconds` tag ("vary by set" in movement options). Absent ⇒ the item's
+   *  tag applies. Stated, not timed — see lib/coach/intent.ts. */
+  rest?: number;
   completed: boolean;
   prefilled: boolean;
 }

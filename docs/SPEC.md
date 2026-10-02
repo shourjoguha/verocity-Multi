@@ -497,7 +497,8 @@ Function, which validates the token and performs scoped read-only queries.
 - **Logger (core)** — sectioned, grouped (single/superset/circuit) movement
   logging; per-set weight/reps|time|distance/RPE/notes; completion checks;
   **WeightWheel** drum picker, **RepsStepper**, voice input; per-movement rest tag
-  (tap a preset: 0/30/60/90/120/180/300s — logged, not timed; no countdown); clone-forward on long-press; multi-select grouping; metric swapping;
+  (tap a preset: 0/30/45/60/75/90/120/180/300s — logged, not timed; no countdown),
+  optionally varied per set ("Vary by set": `SetActual.rest`, rest before that set); clone-forward on long-press; multi-select grouping; metric swapping;
   movement swap/add/remove via library; substitution suggestions; VibeCheck on
   start; session stopwatch with pause/resume/finish/cancel; autosave (15s);
   light-day "why" prompt; custom (plan-less) workouts.

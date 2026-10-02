@@ -44,6 +44,7 @@ import {
   setItemMetric,
   setItemNotes,
   setItemRest,
+  setSetRest,
   setSubroutine,
   swapItemMovement,
   toggleItemNotation,
@@ -189,6 +190,10 @@ export default function Logger() {
   const [picker, setPicker] = useState<Picker | null>(null);
   const [subEditor, setSubEditor] = useState<SubEditor | null>(null);
   const [optionsFor, setOptionsFor] = useState<{ si: number; gi: number; ii: number } | null>(null);
+  // "Vary by set" under the rest tags: collapsed per opening of the sheet, and
+  // forced open whenever a set already carries its own rest.
+  const [varyRest, setVaryRest] = useState(false);
+  useEffect(() => setVaryRest(false), [optionsFor]);
   // Which set the entry sheet is editing. Set rows are read-only summaries;
   // all numeric entry happens in SetEntrySheet.
   const [entryFor, setEntryFor] = useState<{ si: number; gi: number; ii: number; ki: number } | null>(
@@ -1204,6 +1209,9 @@ export default function Logger() {
                   index={ki}
                   showPlanned={anyPlanned}
                   isPr={isPrSet(set.actual, bestByMovement.get(trackName(item.movement, set.notations)) ?? null)}
+                  restOverride={
+                    set.actual.rest != null && set.actual.rest !== item.restSeconds ? set.actual.rest : null
+                  }
                   onOpen={() => {
                     activate(groupId);
                     setEntryFor({ si, gi, ii, ki });
@@ -2000,6 +2008,60 @@ export default function Logger() {
                         </button>
                       ))}
                     </div>
+                    {/* Vary by set. Rest often climbs through a movement (60s for
+                        the early sets, 180s before the last), so a set can carry its
+                        own rest BEFORE it. Collapsed by default to keep the sheet
+                        short; native selects keep each row one line on a phone.
+                        Set 1 has no rest before it, so rows start at set 2. */}
+                    {item.sets.length > 1 ? (
+                      (() => {
+                        const varied = item.sets.some((st) => st.actual.rest != null);
+                        const open = varyRest || varied;
+                        return (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => setVaryRest((v) => !v)}
+                              aria-expanded={open}
+                              disabled={varied}
+                              className="flex min-h-11 items-center gap-1 t-control text-muted transition-colors hover:text-fg disabled:hover:text-muted"
+                            >
+                              <span aria-hidden>{open ? '▾' : '▸'}</span>
+                              Vary by set{varied ? ' · on' : ''}
+                            </button>
+                            {open ? (
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                                {item.sets.slice(1).map((st, j) => {
+                                  const ki = j + 1;
+                                  const base = item.restSeconds;
+                                  return (
+                                    <label key={ki} className="flex min-w-0 items-center gap-2 t-control text-muted">
+                                      <span className="shrink-0 tabular-nums">Set {ki + 1}</span>
+                                      <select
+                                        value={st.actual.rest ?? ''}
+                                        onChange={(e) => {
+                                          const v = e.target.value;
+                                          setDoc((d) => setSetRest(d, si, gi, ii, ki, v === '' ? null : Number(v)));
+                                        }}
+                                        aria-label={`Rest before set ${ki + 1}`}
+                                        className="min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-xs tabular-nums text-fg"
+                                      >
+                                        <option value="">{base != null ? `Same (${base}s)` : 'Same'}</option>
+                                        {TIMERS.restPresets.map((sec) => (
+                                          <option key={sec} value={sec}>
+                                            {sec}s
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })()
+                    ) : null}
                   </div>
                   </>
                   ) : null}

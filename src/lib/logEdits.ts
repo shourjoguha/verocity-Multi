@@ -132,6 +132,31 @@ export function setItemRest(doc: LogDocument, si: number, gi: number, ii: number
   return mapItem(doc, si, gi, ii, (it) => ({ ...it, restSeconds: seconds }));
 }
 
+// Rest before ONE set, when it differs from the movement's tag ("vary by set").
+// null clears the override so the set follows the movement's tag again.
+export function setSetRest(
+  doc: LogDocument,
+  si: number,
+  gi: number,
+  ii: number,
+  ki: number,
+  seconds: number | null,
+): LogDocument {
+  return mapItem(doc, si, gi, ii, (it) => ({
+    ...it,
+    sets: it.sets.map((set, i) => {
+      if (i !== ki) return set;
+      const { rest: _old, ...actual } = set.actual;
+      return { ...set, actual: seconds == null ? actual : { ...actual, rest: seconds } };
+    }),
+  }));
+}
+
+/** The rest that applied before set `ki`: its own override, else the movement's tag. */
+export function restBeforeSet(item: LogItem, ki: number): number | undefined {
+  return item.sets[ki]?.actual.rest ?? item.restSeconds;
+}
+
 // Set (or clear, when blank) an item's free-text note. Trimmed to undefined so
 // an empty note never lingers in the JSONB.
 export function setItemNotes(doc: LogDocument, si: number, gi: number, ii: number, notes: string): LogDocument {

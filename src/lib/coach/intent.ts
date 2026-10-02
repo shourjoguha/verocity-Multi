@@ -91,9 +91,8 @@ export const DENSE_REST_SECONDS = 60;
  * under-60s band on load and on superset share, not with the long-rest one.
  *
  * DO NOT REACH FOR `TIMERS.defaultRestSeconds` HERE. That constant is 120 and
- * belongs to the on-screen countdown, which is a different thing entirely — it
- * is what the timer starts at, not a claim about what was rested, and nothing
- * writes its elapsed value back to the set. Using it would put every unlogged
+ * is only the default a brand-new movement's tag opens on — not a claim about
+ * what was rested. (It used to seed an on-screen countdown, since removed.) Using it would put every unlogged
  * item at exactly the strength boundary and classify the majority of a real log
  * as strength work, which is the precise opposite of what it is.
  *
@@ -106,6 +105,9 @@ export const UNLOGGED_REST_SECONDS = 30;
 export interface IntentInput {
   item: LogItem;
   group: LogGroup;
+  /** The set's own rest override (`SetActual.rest`), which wins over the
+   *  item's tag when the athlete varied rest by set. */
+  setRestSeconds?: number;
   /** `TRAINING.strengthRest.value[0]`, which is also `hypertrophyRest.value`. */
   restBoundarySeconds: number;
   /** Override the assumption for an untouched picker. Defaults to
@@ -140,7 +142,7 @@ export interface IntentVerdict {
  */
 export function classifyIntent(input: IntentInput): IntentVerdict {
   const { item, group, restBoundarySeconds } = input;
-  const logged = item.restSeconds ?? group.restSeconds ?? null;
+  const logged = input.setRestSeconds ?? item.restSeconds ?? group.restSeconds ?? null;
   // 0 is a real selection ("no rest"), not an absent one — `??` keeps it.
   const restAssumed = logged == null;
   const rest = logged ?? input.unloggedRestSeconds ?? UNLOGGED_REST_SECONDS;
