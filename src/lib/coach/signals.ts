@@ -568,15 +568,16 @@ export function measureTraining(
                   // data, never a zero.
                   const isHeavyLowRep =
                     fraction >= opts.heavyFraction && a.reps <= opts.strengthRepMax;
-                  const rest = item.restSeconds ?? group.restSeconds ?? null;
+                  // A per-set override ("vary by set") wins over the item's tag.
+                  const rest = a.rest ?? item.restSeconds ?? group.restSeconds ?? null;
                   if (isHeavyLowRep && rest != null && rest > 0) {
                     heavyRestSum += rest;
                     heavyRestCount += 1;
                     if (rest < opts.heavyRestSeconds[0]) heavyRestBelow += 1;
                   }
                   // What this loaded set was FOR. Counted per set rather than
-                  // per item because rest is tagged on the item and applies
-                  // to each of its sets — the same shape as the `/side` and
+                  // per item because rest is tagged on the item, applies to
+                  // each of its sets, and may be varied per set — the same shape as the `/side` and
                   // `(p)` notations, which are written item-level and priced
                   // set-level.
                   countIntent(
@@ -584,6 +585,7 @@ export function measureTraining(
                     classifyIntent({
                       item,
                       group,
+                      setRestSeconds: a.rest,
                       restBoundarySeconds: opts.heavyRestSeconds[0],
                       overrides,
                     }),
