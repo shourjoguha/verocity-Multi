@@ -54,6 +54,8 @@ import { NUTRITION as N, READINESS as R, TRAINING as T } from '@/lib/coach/knowl
 import { hoursToDays } from '@/lib/soreness';
 import { TRAINING_RULES, rpeCalibration } from '@/lib/coach/rules/training';
 import { goalDrift } from '@/lib/coach/rules/goals';
+import { loadStepDue } from '@/lib/coach/rules/progression';
+import { measureLoadSteps } from '@/lib/coach/loadStep';
 import {
   arrivingHungry,
   carbSourceConcentration,
@@ -437,6 +439,10 @@ export function runCoach(input: CoachInput): {
   if (g) findings.push(g);
   const cal = rpeCalibration(training, weekKey);
   if (cal) findings.push(cal);
+  // The plan's own double progression: range, cap and step all come from the
+  // prescription, so this is the one training rule that needs the plan itself.
+  const step = loadStepDue(measureLoadSteps(input.logs, input.plan, today), input.stats, weekKey);
+  if (step) findings.push(step);
 
   // Monthly cadence for the standing protein target — it restates a number that
   // only moves when bodyweight does. Everything else is weekly.

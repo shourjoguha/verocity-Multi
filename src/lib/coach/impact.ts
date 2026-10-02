@@ -52,6 +52,8 @@ export const RULE_IMPACT: Record<string, number> = {
   'training.hypertrophy.effort-low': 0.75,
   'training.intent.loaded-too-light': 0.75,
   'training.endurance.intervals-not-all-out': 0.7,
+  // A met prescription left unactioned: the stimulus stops climbing.
+  'training.progression.load-step-due': 0.6,
 
   // Recovery. Weighted above its confidence deserves on purpose: the cost of
   // missing accumulating fatigue is asymmetric with the cost of mentioning it.
