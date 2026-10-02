@@ -1611,9 +1611,10 @@ how the control gets used, which is what separates it from the RPE prefill:
 `rpeWasRated` still refuses, because nothing comparable backs a missing rating.
 Every verdict carries `restAssumed` and the mix counts assumed sets, so a
 surface can say how much of its answer is inference — on that log, 46%.
-**DO NOT REACH FOR `TIMERS.defaultRestSeconds` FOR THIS.** It is 120 and belongs
-to the on-screen countdown — what the timer starts at, not a claim about what
-was rested, and nothing writes its elapsed value back to the set. A sensitivity
+**DO NOT REACH FOR `TIMERS.defaultRestSeconds` FOR THIS.** It is 120 and is only
+the default a brand-new movement's tag opens on, not a claim about what was
+rested. (It used to seed an on-screen countdown; that was removed 2026-10 —
+see "Rest is a tag" below.) A sensitivity
 run over the live log: assuming 30s, 60s or 90s gives an identical split
 (12% strength / 86% hypertrophy), while 120s flips it to 58% strength. The
 assumption is robust anywhere below the boundary and catastrophic exactly at the
@@ -1762,3 +1763,19 @@ The fitness radar:
   28-day reading against 60-day samples is wrong on every axis and looks
   completely normal, so the separation lives in one named function with a test
   rather than at each call site.
+
+### Rest analysis read the wrong thing: the countdown, not the tag
+
+The rest countdown paused when the phone locked and was awkward mid-set, so the
+athlete never relied on it. They log rest by tapping a preset in movement
+options ("Rest between sets": 0/30/60/90/120/180/300s), which writes
+`item.restSeconds`. An analysis that inferred rest from countdown use or from
+gaps between group `completedAt` stamps contradicted what they had tagged.
+**Decision:** the countdown (its hook, the sticky rest bar, the toolbar
+clock button, auto-start on log/clone-forward) is removed. `restSeconds` is the
+rest TAG: pre-filled from the plan, re-tapped to say what was actually rested,
+stated rather than timed. Coach copy says "tagged", never "prescribed" or
+"timed". Do not infer rest from timestamps: `completedAt` gaps include setup,
+plate changes and walking, and say nothing reliable about rest.
+-> `src/components/Logger.tsx`, `src/lib/coach/intent.ts`, `src/lib/coach/signals.ts`
+

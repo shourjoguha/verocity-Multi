@@ -155,11 +155,11 @@ describe('signals', () => {
     expect(training.loadedIntensity.value.topMovementBestKg).toBeGreaterThan(0);
   });
 
-  it('measures effort and prescribed rest, which real logs actually carry', () => {
+  it('measures effort and tagged rest, which real logs actually carry', () => {
     expect(training.hypertrophyEffort.samples).toBeGreaterThan(25);
     expect(training.hypertrophyEffort.value.meanRpe).toBeGreaterThan(5);
     expect(training.hypertrophyEffort.value.meanRpe).toBeLessThanOrEqual(10);
-    // Rest is PRESCRIBED, never timed — absent rest must not read as zero.
+    // Rest is a TAG (the preset tapped), never timed — absent rest must not read as zero.
     expect(training.heavyRest.value.meanSeconds).not.toBeNaN();
   });
 

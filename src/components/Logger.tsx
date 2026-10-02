@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AnimatePresence, motion, MotionConfig } from 'motion/react';
+import { motion, MotionConfig } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 import {
   bumpMovementSub,
@@ -57,7 +57,7 @@ import { DemoIconButton, MovementDemoSheet } from '@/components/MovementDemo';
 import { lastPerformance, plannedReps, plannedTarget, repAdjustedWeight } from '@/lib/lastPerformance';
 import { bestE1rmByTrack, isPrSet } from '@/lib/prs';
 import { trackName } from '@/lib/notations';
-import { useCountdown, useStopwatch } from '@/lib/useTimer';
+import { useStopwatch } from '@/lib/useTimer';
 import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
 import { weekFromDate } from '@/lib/week';
 import { blockForWeek, nextWeekForDay, planWeekByLog, planWeekCount } from '@/lib/progression';
@@ -132,10 +132,6 @@ const METRIC_GLYPH: Record<MetricKey, (p: { className?: string }) => ReactNode> 
 const ICON_BTN =
   'hill-btn flex h-11 w-11 shrink-0 items-center justify-center transition-colors';
 const GLYPH = 'h-[1.15rem] w-[1.15rem]';
-
-// Module-level so the identity is stable across renders (useCountdown takes it
-// as a dependency). The countdown also vibrates; this is the on-screen half.
-const onRestDone = () => toast('Rest complete');
 
 function clock(total: number): string {
   const h = Math.floor(total / 3600);
@@ -272,7 +268,6 @@ export default function Logger() {
   const [blockedBy, setBlockedBy] = useState<{ log: WorkoutLog; label: string } | null>(null);
 
   const stopwatch = useStopwatch(0, false);
-  const rest = useCountdown(onRestDone);
   const voice = useVoiceInput();
 
   const docRef = useRef(doc);
@@ -966,7 +961,6 @@ export default function Logger() {
   }
 
   function cloneForward(si: number, gi: number, ii: number, ki: number) {
-    const item = doc.sections[si].groups[gi].items[ii];
     setDoc((d) => {
       const it = d.sections[si].groups[gi].items[ii];
       const src = it.sets[ki].actual;
@@ -981,8 +975,6 @@ export default function Logger() {
       if (src.rpe != null) patch.rpe = src.rpe;
       return patchSetActual(next, si, gi, ii, ki + 1, patch);
     });
-    const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
-    if (restSeconds > 0 && !editing) rest.start(restSeconds);
   }
 
   // `footerTrailing` rides in the SAME row as Add set rather than a band of its
@@ -1151,19 +1143,6 @@ export default function Logger() {
                 }`}
               >
                 <VoiceGlyph className={GLYPH} />
-              </button>
-            ) : null}
-            {!editing ? (
-              <button
-                onClick={() => {
-                  const restSeconds = item.restSeconds ?? TIMERS.defaultRestSeconds;
-                  if (restSeconds > 0) rest.start(restSeconds);
-                }}
-                className={`${ICON_BTN} hover:text-fg`}
-                aria-label={`Start ${item.restSeconds ?? TIMERS.defaultRestSeconds} second rest`}
-                title="Rest timer"
-              >
-                <TimeGlyph className={GLYPH} />
               </button>
             ) : null}
             {/* Options sits hard right, opposite the act-on-this-set controls
@@ -1517,12 +1496,12 @@ export default function Logger() {
           DELIBERATE DEVIATION from the mockup: the mockup's header is
           `sticky top-0`. Ours stays IN FLOW, not sticky. App.astro already
           sticks its own h-12 header at top-0 and auto-hides it on 24px of
-          committed downward scroll, and the rest-timer bar below already
-          sticks at top-12 underneath it — a third sticky bar in the same
+          committed downward scroll, and a second sticky bar in the same
           scroller means either a hard-coded offset that detaches when the
           app header retracts, or stacked stickies that must know each
-          other's heights. The clock is not what you need mid-set; the rest
-          timer is, and it is already sticky. */}
+          other's heights. The clock is not what you need mid-set. (There is
+          no rest countdown: it paused when the phone locked. Rest is logged
+          as a tag — the "Rest between sets" presets in movement options.) */}
       <header className="mb-3">
         {/* Wraps: at 375px a session past the hour mark ("1:05:23" at
             text-4xl) plus Home and Pause does not fit on one line. */}
@@ -1681,42 +1660,6 @@ export default function Logger() {
 
       {showVibe ? <VibeCheckCard onSave={saveVibe} onSkip={() => setShowVibe(false)} /> : null}
 
-      <AnimatePresence>
-        {rest.running ? (
-          <motion.div
-            key="rest"
-            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-            animate={{ opacity: 1, height: 'auto', marginBottom: 12 }}
-            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-            transition={{ duration: 0.3, ease: EASE }}
-            className="sticky top-12 z-30 overflow-hidden border border-teal bg-bg pointer-fine:bg-bg/95 pointer-fine:backdrop-blur"
-          >
-            <div className="flex items-center justify-between gap-3 px-4">
-              <span className="t-control text-teal">Rest</span>
-              <span className="font-display text-2xl tabular-nums text-fg">{clock(rest.secondsLeft)}</span>
-              <button
-                onClick={rest.stop}
-                className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
-              >
-                Skip
-              </button>
-            </div>
-            {/* Remaining-fraction rule from the design — the countdown made
-                glanceable, which is the whole job of a bar you look at from
-                across a rack. Width only, so it composites without repainting
-                the sticky bar's blurred backdrop on every tick. `aria-hidden`:
-                the clock beside it already announces the real value. */}
-            <div aria-hidden className="h-0.5 w-full bg-border-soft">
-              <div
-                className="h-full bg-teal"
-                style={{
-                  width: `${Math.min(100, Math.max(0, (rest.secondsLeft / Math.max(1, rest.totalSeconds)) * 100))}%`,
-                }}
-              />
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
 
       {ordered.map((section) => {
         const si = doc.sections.findIndex((s) => s.key === section.key);
@@ -1840,8 +1783,6 @@ export default function Logger() {
           if (!entryFor || !entryItem) return;
           const { si, gi, ii, ki } = entryFor;
           setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: true }));
-          const restSeconds = entryItem.restSeconds ?? TIMERS.defaultRestSeconds;
-          if (restSeconds > 0 && !editing) rest.start(restSeconds);
           setEntryFor(null);
         }}
         onCloneForward={() => {

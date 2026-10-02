@@ -319,7 +319,7 @@ see a regression, and it cannot see whether a mapping is anatomically correct.
   exercises[] and per-week planned-set strings). Additive, all optional: an
   exercise may carry `group {id, kind}` — neighbours in one section sharing an
   id open in the Logger as one superset or circuit — and `restSeconds`, which
-  preselects the rest timer; a day may carry `notesByWeek`, shown by the Logger
+  pre-fills the movement's rest tag; a day may carry `notesByWeek`, shown by the Logger
   for the cycle it opens and by PlanView per week; an exercise may carry its
   own `notesByWeek`, a short progression cue that leads that movement's note in
   the Logger for the cycle it opens; the plan may carry
@@ -496,8 +496,8 @@ Function, which validates the token and performs scoped read-only queries.
   preview; save (activates, deactivates prior); **adopt** another user's plan.
 - **Logger (core)** — sectioned, grouped (single/superset/circuit) movement
   logging; per-set weight/reps|time|distance/RPE/notes; completion checks;
-  **WeightWheel** drum picker, **RepsStepper**, voice input; per-set + per-movement
-  rest timers; clone-forward on long-press; multi-select grouping; metric swapping;
+  **WeightWheel** drum picker, **RepsStepper**, voice input; per-movement rest tag
+  (tap a preset: 0/30/60/90/120/180/300s — logged, not timed; no countdown); clone-forward on long-press; multi-select grouping; metric swapping;
   movement swap/add/remove via library; substitution suggestions; VibeCheck on
   start; session stopwatch with pause/resume/finish/cancel; autosave (15s);
   light-day "why" prompt; custom (plan-less) workouts.
