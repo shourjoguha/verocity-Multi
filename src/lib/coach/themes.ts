@@ -73,6 +73,7 @@ export const THEMES: readonly Theme[] = [
       'training.intent.loaded-too-light',
       'training.strength.rest-too-short',
       'training.effort.rpe-calibration',
+      'training.progression.load-step-due',
     ],
   },
   {

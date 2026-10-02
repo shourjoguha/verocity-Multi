@@ -28,7 +28,7 @@
 // stamped onto every recommendation row so a finding can always be traced to
 // the exact evidence that produced it, including after the pack moves on.
 
-export const KNOWLEDGE_PACK_VERSION = '2026.10.1';
+export const KNOWLEDGE_PACK_VERSION = '2026.10.2';
 
 export interface Source {
   /** A person. Never an institution, never "research". */
@@ -75,6 +75,13 @@ export const SOURCES = {
     published: '2026-05-11',
     url: 'https://www.youtube.com/watch?v=UIy-WQCZd4M',
     vaultPath: 'Videos/fitness/galpin/2026-w20-optimize-your-training-program-for-fitness-longevity.md',
+  },
+  galpinFundamentals: {
+    speaker: 'Andy Galpin',
+    work: 'The Fundamentals of Training for Muscle, Strength & Longevity',
+    published: '2026-09-28',
+    url: 'https://www.youtube.com/watch?v=DVZIUoW61Kc',
+    vaultPath: 'Videos/fitness/galpin/2026-w40-the-fundamentals-of-training-for-muscle-strength-longevity.md',
   },
   galpinNutrition: {
     speaker: 'Andy Galpin',
@@ -186,6 +193,24 @@ export const TRAINING = {
     quote: 'The only caveat for hypertrophy is you have to take it to muscular failure',
     caveat:
       'Galpin speaks in FAILURE, never in RPE. The number here is the athlete\'s own calibration of their own dial (RPE_LADDER in app.config.ts): 8 is the last good rep, 9 is almost-failure and deliberately avoided. So 8 is the bar a set should clear and 9 is NOT a target to chase — a rule pushing toward it would be pushing this athlete into something they consciously avoid. He also notes the higher the rep range, the harder genuine failure is to reach: "It is very challenging to maintain the focus required at rep 27 to actually get sufficient failure by rep 30."',
+  }),
+  progressiveOverload: claim({
+    id: 'progression.repsThenLoad',
+    statement: 'Progress a lift by adding reps at a fixed load before adding load.',
+    value: 'reps-then-load',
+    unit: 'progression model',
+    source: 'galpinFundamentals',
+    quote: 'So the more common ways are to progress with something like adding a few more repetitions per set.',
+    caveat:
+      'Galpin offers reps as the more sustainable route because adding load every session "only lasts four or five weeks". He does not name a rep ceiling: the top of the range is the athlete\'s own prescription, read from their plan, and the effort cap is their own RPE ladder. He also says progressing every two or three weeks is "still fine", so a held load is not a fault until the range has been topped.',
+  }),
+  consistentOverload: claim({
+    id: 'progression.consistentOverload',
+    statement: 'Strength and hypertrophy need consistent, predictable overload.',
+    value: true,
+    unit: 'requirement',
+    source: 'galpinProtocols',
+    quote: 'But if you want to see these gains in strength and hypertrophy, you really need to progressively overload.',
   }),
   strengthRest: claim({
     id: 'strength.rest',
