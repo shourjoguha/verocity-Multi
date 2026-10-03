@@ -3,7 +3,6 @@ import { SECTIONS, type SectionKey } from '@/app.config';
 import { formatDate, formatDuration, formatSetActual } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
 import { Tag } from '@/components/ui/primitives';
-import { SetShapeStrip } from '@/components/SetShapeStrip';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { isSubroutine } from '@/lib/subroutine';
 import { SessionTime } from '@/components/SessionTime';
@@ -80,10 +79,6 @@ export function LogQuickView({
                 <HeartRate log={log} onUpdate={(hr) => onUpdated?.({ ...log, ...hr })} />
               </div>
             ) : null}
-            <div className="mt-4">
-              <SetShapeStrip data={log.data} />
-            </div>
-
             {orderedSections.length > 0 ? (
               <div className="mt-5 flex flex-col gap-4">
                 {orderedSections.map((section) => (
