@@ -98,6 +98,10 @@
      `font-display font-bold` do not each need editing. */
   --font-display: "Archivo Black", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  /* Home's Start bar label, and nothing else. Loaded in Base.astro with a
+     `text=` subset, so it carries only the glyphs that label uses — reuse it
+     for other copy and those characters fall back silently. */
+  --font-cta: "Unbounded", ui-sans-serif, system-ui, sans-serif;
   --font-serif: ui-serif, Georgia, "Times New Roman", serif;
 
   /* Motion */
@@ -816,6 +820,39 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
     animation: none;
     transform: none;
     opacity: 0.14;
+  }
+}
+
+/* Home's Start bar: one accent sheen, left to right, each time a different
+   day is picked. Keyed by remount (ProfileView's sheenKey), so it runs once
+   per switch and never loops — the looping sheen stays Resume's alone.
+   Translated overlay, never background-position, same as .shimmer-resume.
+   Under reduced motion the global clamp would still flash it for 0.01ms, so
+   it is switched off by name. */
+.cta-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    color-mix(in hsl, var(--color-teal) 70%, transparent) 50%,
+    transparent 75%
+  );
+  transform: translateX(-101%);
+  animation: cta-sheen 1.8s cubic-bezier(0.25, 0.7, 0.25, 1) 1 both;
+}
+@keyframes cta-sheen {
+  from {
+    transform: translateX(-101%);
+  }
+  to {
+    transform: translateX(101%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cta-sheen {
+    display: none;
   }
 }
 
