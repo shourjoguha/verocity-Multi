@@ -7,6 +7,7 @@ import {
   getMealLogsInRange,
   getMealPresets,
   getRecentLogs,
+  getRecommendations,
 } from '@/lib/queries';
 import { getCached, setCached } from '@/lib/queryCache';
 import { todayLocal } from '@/lib/mealPhoto';
@@ -45,6 +46,8 @@ import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { displayNameFor, hrefFor, isReadOnly, type Surface } from '@/lib/surface';
 import { READ_ONLY_NOTICE, readOnlyProps } from '@/components/ui/ReadOnly';
 import { toast } from '@/lib/toast';
+import { CoachTab } from '@/components/CoachTab';
+import { coachSignal, getCoachSeenAt } from '@/lib/coachSignal';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;
@@ -607,6 +610,22 @@ export default function ProfileView({ mode }: { mode: Surface }) {
     };
   }, [mode, profile]);
 
+  // The Coach tab's count and runner. Its own fetch, outside the loader above:
+  // it is chrome rather than content, so a slow or failed read leaves the tab
+  // quiet instead of holding up — or failing — the whole Home. App only; the
+  // coach is private and the tab never renders on the showcase.
+  const [coach, setCoach] = useState({ live: 0, unseen: 0 });
+  useEffect(() => {
+    if (mode !== 'app') return;
+    let active = true;
+    getRecommendations().then((recs) => {
+      if (active) setCoach(coachSignal(recs, getCoachSeenAt(), Date.now()));
+    });
+    return () => {
+      active = false;
+    };
+  }, [mode]);
+
   // The headline tiles read the FULL history, not the recent-30 window that
   // feeds "Recent sessions" below. Off that window "Sessions" was pinned at 30
   // once you had 30 logs, total time was a sliding sum that could fall after a
@@ -793,12 +812,21 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           what the app's Home actually is. Its write controls go inert rather
           than disappearing (ui/ReadOnly); RLS refuses them regardless. */}
       <Item>
-          {/* mb-3, not mb-8: the "Coach →" link below already carries a
-              min-h-11 box, which alone supplies ~44px of whitespace under the
-              card. Stacking mb-8 on top of that was 32px of dead space above
-              the activity strip. The link's own tap target is untouched. */}
-          <section className="mb-3">
-            <SectionHeader>Active plan</SectionHeader>
+          {/* mb-6, like the sections below it. This was mb-3 while a "Coach →"
+              link sat under the card supplying ~44px of its own whitespace;
+              that link is now the tab above. */}
+          <section className="mb-6">
+            {/* With a plan, the label shares a row with the Coach tab and is
+                centred on the tab's 36px face (h-9, the bottom of the 44px
+                row), not on the row — so the two read as one line of type. */}
+            {plan && !readOnly ? (
+              <div className="flex items-end justify-between gap-2">
+                <h2 className="t-label flex h-9 items-center text-muted">Active plan</h2>
+                <CoachTab live={coach.live} unseen={coach.unseen} />
+              </div>
+            ) : (
+              <SectionHeader>Active plan</SectionHeader>
+            )}
             {plan ? (
               <>
                 {/* The gutters are `--color-border-soft`, not `--color-border`:
@@ -927,19 +955,10 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                   {/* Meals and Coach stay app-only, and that is a DATA fact
                       rather than a design one: meal_logs has no anon policy
                       (0032) and the coach is deliberately private, so both
-                      would render permanently empty on the showcase. */}
+                      would render permanently empty on the showcase. (Coach's
+                      way in is the tab above the card.) */}
                   {!readOnly ? <MealChipRail presets={mealPresets} onOpen={openMeal} onManage={() => setSavedMealsOpen(true)} /> : null}
                 </div>
-                {!readOnly ? (
-                  <div className="flex justify-end">
-                    <a
-                      href="/app/coach"
-                      className="t-control -mr-2 inline-flex min-h-11 items-center px-2 text-muted transition-colors hover:text-fg"
-                    >
-                      Coach →
-                    </a>
-                  </div>
-                ) : null}
               </>
             ) : (
               <>

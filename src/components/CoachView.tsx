@@ -30,6 +30,7 @@ import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy'
 import type { CoachBrief, CoachRuleNote, Recommendation, RecDisposition } from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { toast } from '@/lib/toast';
+import { isLiveRec, setCoachSeenAt } from '@/lib/coachSignal';
 import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
@@ -312,6 +313,13 @@ export default function CoachView() {
   // "everything" as older rows arrive and the range grows.
   const [weeks, setWeeks] = useState<number | null>(null);
 
+  // Opening Coach is what stops Home's tab runner (lib/coachSignal.ts). Re-stamped
+  // whenever the list changes, so findings a check-in mints while you are here
+  // count as seen rather than greeting you on the way back to Home.
+  useEffect(() => {
+    if (ready) setCoachSeenAt(Date.now());
+  }, [ready, recs]);
+
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!data.session) {
@@ -515,9 +523,7 @@ export default function CoachView() {
 
   const brief = currentBrief(windowBriefs);
   const contextNotes = governContextNotes(ruleNotes);
-  const isLive = (r: Recommendation) =>
-    r.status === 'open' || (r.status === 'snoozed' && r.snooze_until != null && Date.parse(r.snooze_until) <= now);
-  const open = windowRecs.filter(isLive);
+  const open = windowRecs.filter((r) => isLiveRec(r, now));
   const { lead, rest } = partitionOpen(open);
   const snoozed = windowRecs.filter(
     (r) => r.status === 'snoozed' && r.snooze_until != null && Date.parse(r.snooze_until) > now,
