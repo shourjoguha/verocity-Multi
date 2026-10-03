@@ -41,12 +41,14 @@ export function MovementPicker({
   }, []);
 
   const [q, setQ] = useState('');
+  // No result cap: a `.slice(0, 60)` here made everything past the 60th name
+  // alphabetically unreachable by scrolling. Trimmed because iOS autocomplete
+  // appends a space, and "skull crusher " matched nothing — which offered
+  // "Add …" and created a duplicate of a movement that already existed.
+  const needle = q.trim().replace(/\s+/g, ' ').toLowerCase();
   const filtered = useMemo(
-    () =>
-      movements
-        .filter((m) => !q || m.name.toLowerCase().includes(q.toLowerCase()))
-        .slice(0, 60),
-    [movements, q],
+    () => movements.filter((m) => !needle || m.name.toLowerCase().includes(needle)),
+    [movements, needle],
   );
 
   return (
@@ -126,7 +128,7 @@ export function MovementPicker({
         />
 
         <ul className="flex-1 divide-y divide-border overflow-y-auto border-t border-border">
-          {q.trim() && !filtered.some((m) => m.name.toLowerCase() === q.trim().toLowerCase()) ? (
+          {needle && !filtered.some((m) => m.name.trim().toLowerCase() === needle) ? (
             <li>
               <button
                 type="button"
