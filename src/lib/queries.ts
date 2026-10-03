@@ -254,9 +254,13 @@ export type MovementInput = {
 };
 
 export async function createMovement(input: MovementInput): Promise<Movement | null> {
+  // getSession, not getUser: getUser is a network round-trip to the auth
+  // server before the insert, which doubled the chance a gym-signal phone lost
+  // the write. RLS checks owner_user_id = auth.uid() on the insert regardless.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return null;
   const { data, error } = await supabase
     .from('movements')
