@@ -423,7 +423,9 @@ function DayAccordion({
           <button
             key={d.dayKey}
             type="button"
-            aria-label={`${d.label}${isToday ? ' (today)' : ''}`}
+            aria-label={`${d.label}${isToday ? ' (today)' : ''}, ${d.exercises.length} ${
+              d.exercises.length === 1 ? 'movement' : 'movements'
+            }`}
             aria-pressed={isActive}
             data-active={isActive}
             onClick={() => (isActive ? onPreview(d) : onSelect(d.dayKey))}
@@ -444,19 +446,19 @@ function DayAccordion({
                 {dayBadge(i)}
               </span>
             </span>
-            <span className="day-card-face day-card-detail flex flex-col justify-center gap-0.5 whitespace-nowrap px-3.5">
-              <span aria-hidden className="t-label flex items-center gap-1.5 opacity-60">
-                {isToday ? <span className="inline-block h-1.5 w-1.5 shrink-0 bg-teal" /> : null}
-                {dayNameFromLabel(d.label).slice(0, 3) || `Day ${i + 1}`}
-              </span>
+            {/* No eyebrow: the collapsed letters beside it already say which
+                day this is. The today dot moved in front of the title, and the
+                movement count shrank to a trailing subscript. */}
+            <span className="day-card-face day-card-detail flex items-center gap-1.5 whitespace-nowrap px-3.5">
+              {isToday ? <span aria-hidden className="inline-block h-1.5 w-1.5 shrink-0 bg-teal" /> : null}
               <span
                 aria-hidden
-                className="font-display text-[0.8125rem] font-semibold tracking-[-0.02em]"
+                className="min-w-0 truncate font-display text-[0.8125rem] font-semibold tracking-[-0.02em]"
               >
                 {typeFromLabel(d.label)}
               </span>
-              <span aria-hidden className="t-label opacity-60">
-                {d.exercises.length} {d.exercises.length === 1 ? 'movement' : 'movements'}
+              <span aria-hidden className="shrink-0 self-end pb-[1.4rem] text-[10px] leading-none tabular-nums opacity-55">
+                {d.exercises.length} mv
               </span>
             </span>
           </button>
@@ -503,6 +505,9 @@ export default function ProfileView({ mode }: { mode: Surface }) {
   // an effect, because the plan arrives async and an effect-set default would
   // paint the wrong card expanded for one frame.
   const [activeDayKey, setActiveDayKey] = useState<string | null>(null);
+  // Bumped on every day switch; it keys the Start bar's one-shot sheen so the
+  // CSS animation restarts by remount. 0 = nothing switched yet, no sheen.
+  const [sheenKey, setSheenKey] = useState(0);
   const [quickLog, setQuickLog] = useState<WorkoutLog | null>(null);
   const [failed, setFailed] = useState(false);
   // Bumped by the retry button to re-run the loader below.
@@ -791,11 +796,6 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                         <div className="font-display text-xl font-semibold leading-tight tracking-tight text-fg">
                           {plan.name}
                         </div>
-                        {week ? (
-                          <div className="t-label mt-1 text-muted">
-                            Week {week} of {totalWeeks}
-                          </div>
-                        ) : null}
                       </div>
                       {/* The glyph stays small; the TARGET may not — inline-flex
                           + min-h-11 gives it the 44px box without changing how it
@@ -807,13 +807,21 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                         View →
                       </a>
                     </div>
+                    {/* The "Week N of M" line went; the dashes carry it, and the
+                        fraction restates the count for plans too long to count
+                        by eye. TickProgress keeps the full sentence for AT. */}
                     {week ? (
-                      <div className="mt-3">
-                        <TickProgress
-                          value={week}
-                          total={totalWeeks}
-                          label={`Week ${week} of ${totalWeeks}`}
-                        />
+                      <div className="mt-3 flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <TickProgress
+                            value={week}
+                            total={totalWeeks}
+                            label={`Week ${week} of ${totalWeeks}`}
+                          />
+                        </div>
+                        <span aria-hidden className="shrink-0 text-[10px] leading-none tabular-nums text-muted">
+                          {week}/{totalWeeks}
+                        </span>
                       </div>
                     ) : null}
                   </div>
@@ -823,7 +831,10 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                       days={days}
                       activeKey={activeKey}
                       todayDayName={todayDayName}
-                      onSelect={setActiveDayKey}
+                      onSelect={(key) => {
+                        setActiveDayKey(key);
+                        setSheenKey((n) => n + 1);
+                      }}
                       onPreview={setPreviewDay}
                     />
                   ) : null}
@@ -848,18 +859,33 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                               : '/app/log'))
                       }
                       {...readOnlyProps(readOnly)}
-                      className={`flex min-h-13 flex-1 items-center justify-center overflow-hidden px-4 transition-colors ${
+                      // The visible label no longer names the day (the panel above
+                      // does), so the accessible name has to.
+                      aria-label={
+                        resumeHref
+                          ? undefined
+                          : activeDay
+                            ? `Start ${typeFromLabel(activeDay.label)}`
+                            : 'Start workout'
+                      }
+                      className={`relative flex min-h-11 flex-1 items-center justify-center gap-2 overflow-hidden px-4 transition-colors ${
                         resumeHref ? resumeClass : 'bg-fg text-bg hover:bg-fg/85'
                       }`}
                     >
+                      {!resumeHref && sheenKey > 0 ? (
+                        <span key={sheenKey} aria-hidden className="cta-sheen" />
+                      ) : null}
                       {/* Above the sheen, which is an ::after on the anchor. */}
-                      <span className="t-control relative truncate">
-                        {resumeHref
-                          ? resumeLabel
-                          : activeDay
-                            ? `Start ${typeFromLabel(activeDay.label)}`
-                            : 'Start workout'}
-                      </span>
+                      {resumeHref ? (
+                        <span className="t-control relative truncate">{resumeLabel}</span>
+                      ) : (
+                        <>
+                          <span className="relative font-cta text-[15px] font-semibold uppercase leading-none tracking-[0.14em]">
+                            ..send it
+                          </span>
+                          <span aria-hidden className="relative text-base leading-none">→</span>
+                        </>
+                      )}
                     </a>
                     {/* The chooser is the only route to minis, saved sessions,
                         past-plan days, a blank workout and Log activity — it
@@ -869,9 +895,9 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                       type="button"
                       aria-label="Other ways to start a session"
                       {...(readOnly ? readOnlyProps(true) : { onClick: () => setAddOpen(true) })}
-                      className="flex min-h-13 w-14 items-center justify-center bg-surface text-muted transition-colors hover:bg-elevated hover:text-fg"
+                      className="flex min-h-11 w-8 items-center justify-center bg-surface text-muted transition-colors hover:bg-elevated hover:text-fg"
                     >
-                      <span aria-hidden className="text-base leading-none">⋯</span>
+                      <span aria-hidden className="text-base leading-none">⋮</span>
                     </button>
                   </div>
                   {/* Meals and Coach stay app-only, and that is a DATA fact

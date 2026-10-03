@@ -329,6 +329,9 @@ const ALLOW = [
   // control strip. Widening them to 44px would destroy the visualization; the
   // same data is reachable from Calendar, where the cells are real targets.
   // (Keep every bar's aria-label date-first, or they stop matching this.)
+  /^Add meal: /, // Home meal strip segments: 40px tall by the owner's decision
+  // (MealChipRail.tsx header). The alternative was 44px hit boxes overlapping
+  // the Start bar above, where a mis-tap starts a meal instead of a workout.
 ];
 
 const results = [];
