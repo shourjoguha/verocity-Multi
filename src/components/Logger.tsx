@@ -626,6 +626,7 @@ export default function Logger() {
         log_date: logDateRef.current,
         tags: tagsRef.current,
       });
+      await persistDocumentMovements(docRef.current);
     }
     toast('Workout passed 2 hours — auto-ended at 2:00. You can edit the time anytime.', 'success');
   }
@@ -684,7 +685,12 @@ export default function Logger() {
     metric: MetricKey,
     library?: Movement[],
   ): Promise<boolean> {
-    if (resolveMovement(name, library ?? movements)) return true;
+    const known = library ?? movements;
+    // The library is never empty — it carries the shared rows — so an empty one
+    // means the load failed. Inserting against it would duplicate every shared
+    // movement as a custom row; leave it to the sweep, which reloads.
+    if (known.length === 0) return false;
+    if (resolveMovement(name, known)) return true;
     const created = await createMovement({
       name,
       category: null,
@@ -701,12 +707,15 @@ export default function Logger() {
     return true;
   }
 
-  // Every movement in the finished document gets a library row, so it is
+  // Every movement in the saved document gets a library row, so it is
   // searchable next time. Covers a pick whose insert failed mid-workout (a
   // phone in a gym loses signal; the error used to vanish), plan-prefilled
   // names, and anything else that reached the document without the picker.
+  // Runs on every way out of the Logger — finish, finish-edit, auto-end and
+  // leave-for-later — and reloads the library first, because the copy loaded
+  // at mount may be empty (a failed load) or stale (a row added elsewhere).
   async function persistDocumentMovements(d: LogDocument) {
-    const library = movements.slice();
+    const library = await getMovements();
     for (const section of d.sections) {
       for (const group of section.groups) {
         for (const item of group.items) {
@@ -823,6 +832,7 @@ export default function Logger() {
         toast('Save failed — check your connection and try again', 'error');
         return;
       }
+      await persistDocumentMovements(docRef.current);
     }
     window.location.href = '/app';
   }

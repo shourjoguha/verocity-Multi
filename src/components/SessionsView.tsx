@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
+  createMovement,
   createSession,
   deleteSession,
   getAllPlans,
   getMovements,
   getSessions,
+  resolveMovement,
   updateSession,
   type SessionInput,
 } from '@/lib/queries';
@@ -12,7 +14,7 @@ import { firstWeekWithContent, frameFromPlanDay } from '@/lib/logBuilder';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { clientFor, isReadOnly, type Surface } from '@/lib/surface';
 import type { Movement, Plan, PlanDay, Session, SessionExercise, SessionType } from '@/lib/types';
-import { ACTIVITY_TAGS, METRICS, SECTIONS, type ActivityTagKey, type MetricKey, type SectionKey, PRIMARY_METRICS } from '@/app.config';
+import { ACTIVITY_TAGS, METRICS, SECTIONS, TIMERS, type ActivityTagKey, type MetricKey, type SectionKey, PRIMARY_METRICS } from '@/app.config';
 import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { tagColor } from '@/lib/tags';
 import { distinctSessionMovements, formatSessionMeta, sessionMovementKeys, TYPE_SHORT } from '@/lib/sessionMeta';
@@ -241,6 +243,20 @@ function SessionForm({
     // First exercise lands in primary; later ones in accessory — a sane default
     // the user can change per row.
     const section: SectionKey = draft.exercises.length === 0 ? 'primary' : 'accessory';
+    // A name typed into the picker's "Add …" row joins the library, as it does
+    // in the Logger — otherwise it stays unsearchable until a workout using
+    // this session is finished. Skipped while the library has not loaded: an
+    // empty one would turn every shared movement into a custom duplicate.
+    if (!('id' in picked) && movements.length > 0 && !resolveMovement(name, movements)) {
+      createMovement({
+        name,
+        category: null,
+        primary_metric: primaryMetric,
+        default_rest_seconds: TIMERS.defaultRestSeconds,
+      }).then((created) => {
+        if (!created) toast(`Couldn't add “${name}” to your library`, 'error');
+      });
+    }
     setDraft({
       ...draft,
       exercises: [...draft.exercises, { movement: name, section, primaryMetric, planned: '' }],
