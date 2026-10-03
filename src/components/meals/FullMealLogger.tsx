@@ -8,17 +8,18 @@ import {
   CompositionFields,
   ExtrasRow,
   FieldRow,
-  HungerSection,
+  HungerRows,
   NotesRow,
+  OptionalDivider,
   PhotoRow,
   SegmentedChoice,
-  TimeRow,
+  WhenRow,
 } from '@/components/meals/MealFields';
 
 // Dedicated page (docs/MEAL_LOGGING.md §10.5), not a modal — opened by the
 // drawer's secondary button. Same MealDraft state and the exact same §10.1
 // field components as MealDrawer; zero duplicated field code. Every field is
-// shown flat except Hunger, which stays its own collapsible.
+// shown flat, with the optional ones below the same dotted divider.
 export default function FullMealLogger() {
   const [draft, setDraft] = useState<MealDraft>(() => draftFor({ kind: 'meal' }));
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -69,8 +70,13 @@ export default function FullMealLogger() {
       </div>
 
       <div className="flex flex-col gap-4">
-        <FieldRow label="Time">
-          <TimeRow value={draft.time} onChange={(time) => patch({ time })} />
+        <FieldRow label="When">
+          <WhenRow
+            time={draft.time}
+            date={draft.date}
+            onTime={(time) => patch({ time })}
+            onDate={(date) => patch({ date })}
+          />
         </FieldRow>
         <FieldRow label="Size">
           <SegmentedChoice axis="size" active={draft.size} onChange={(size) => patch({ size: size as MealDraft['size'] })} />
@@ -88,32 +94,20 @@ export default function FullMealLogger() {
         <FieldRow label="Photo">
           <PhotoRow value={photoFile} onChange={setPhotoFile} />
         </FieldRow>
-        <FieldRow label="Date">
-          <input
-            type="date"
-            value={draft.date}
-            onChange={(e) => patch({ date: e.target.value })}
-            aria-label="Date eaten"
-            className="min-h-11 w-full rounded-control border border-border bg-surface px-3 tabular-nums text-fg outline-none focus:border-subtle"
-          />
-        </FieldRow>
 
-        <HungerSection
+        <CompositionFields draft={draft} onChange={setDraft} />
+
+        <OptionalDivider />
+        <FieldRow label="Also">
+          <ExtrasRow tags={draft.tags} onToggle={(key) => setDraft(toggleTag(draft, key))} />
+        </FieldRow>
+        <HungerRows
           before={draft.hungerBefore}
           after={draft.hungerAfter}
           onChangeBefore={(hungerBefore) => patch({ hungerBefore })}
           onChangeAfter={(hungerAfter) => patch({ hungerAfter })}
         />
-
-        <CompositionFields draft={draft} onChange={setDraft} />
-        <FieldRow label="Also">
-          <ExtrasRow tags={draft.tags} onToggle={(key) => setDraft(toggleTag(draft, key))} />
-        </FieldRow>
-
-        <div>
-          <div className="t-label mb-2 text-muted">Notes</div>
-          <NotesRow value={draft.notes} onChange={(notes) => patch({ notes })} />
-        </div>
+        <NotesRow value={draft.notes} onChange={(notes) => patch({ notes })} />
       </div>
 
       {/* Sticky against [data-scroll-root], NOT the viewport — the Logger's

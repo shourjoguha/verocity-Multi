@@ -77,7 +77,7 @@ function blankDraft(now: Date): MealDraft {
     kind: MEAL_DEFAULTS.kind,
     source: MEAL_DEFAULTS.source,
     date: todayLocal(now),
-    tags: [],
+    tags: [...MEAL_DEFAULTS.tags],
     tagMix: null,
     carbFibrePct: null,
     presetId: null,
