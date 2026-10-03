@@ -32,6 +32,7 @@ import {
   TickProgress,
 } from '@/components/ui/primitives';
 import { LogList } from '@/components/LogList';
+import { SessionShapeLegend } from '@/components/SessionShape';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { DayPreviewDialog } from '@/components/DayPreviewDialog';
@@ -1035,6 +1036,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
               size="sm"
             />
           </div>
+          <SessionShapeLegend />
           {sessionsTab === 'month' ? (
             thisMonthLogs.length === 0 ? (
               <EmptyState>No sessions logged in this month.</EmptyState>
@@ -1042,6 +1044,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
               <>
                 <LogList
                   logs={showAllMonth ? thisMonthLogs : thisMonthLogs.slice(0, 5)}
+                  history={allLogs}
                   onSelect={setQuickLog}
                 />
                 {thisMonthLogs.length > 5 ? (
@@ -1062,6 +1065,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
             <>
               <LogList
                 logs={logs.slice(0, showAllRecent ? 12 : 5)}
+                history={allLogs}
                 onSelect={setQuickLog}
               />
               {/* A plain text button, deliberately not a card and not a

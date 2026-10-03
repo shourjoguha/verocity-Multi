@@ -1015,6 +1015,27 @@ export const ASPECT_SOFTNESS = { z: 1.5 } as const;
 // no hr_avg is assumed to have been worth.
 export const HR = { maxFallback: 190, defaultIntensity: 0.65 } as const;
 
+// The session-shape bar in the session lists (lib/sessionShape.ts). Width is a
+// block's share of the session's completed sets; height compares that block
+// with the same block across sessions carrying the same first tag.
+//
+// referencePercentile: 90, not the max — one outlier day would flatten every
+//   other bar. 98 was tried on paper: below ~50 sessions per tag it IS the max.
+// minHeight: floor so a small block stays visible next to a large one.
+// hrTags: sessions whose height is heart-rate effort instead of set counts —
+//   the athlete's call; their set counts mean nothing (one "Football" set).
+// hrWeights: average dominates; a higher max is a slight bonus.
+// hrFloorOfMax: heart rate never starts at zero, so height is measured from
+//   this fraction of the highest recorded hr_max. At 0.5 every bar bunched
+//   between ~75% and 100% height on sample data.
+export const SESSION_SHAPE = {
+  referencePercentile: 90,
+  minHeight: 0.22,
+  hrTags: ['sport', 'endurance'],
+  hrWeights: { avg: 0.85, max: 0.15 },
+  hrFloorOfMax: 0.65,
+} as const;
+
 // Acute:chronic workload ratio, the training-stress term in the recovery axis.
 // Ratios inside the sweet spot cost nothing; the penalty ramps in above it and
 // is fully applied `penaltySpan` beyond. Standard sports-science bounds.

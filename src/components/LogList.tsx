@@ -1,19 +1,28 @@
+import { useMemo } from 'react';
 import type { WorkoutLog } from '@/lib/types';
 import { formatDate, formatDuration } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
-import { SetShapeStrip } from '@/components/SetShapeStrip';
-import { Tag } from '@/components/ui/primitives';
+import { sessionShaper } from '@/lib/sessionShape';
+import { SessionShapeBar } from '@/components/SessionShape';
 
+// `history` is what each bar's height is compared against. Defaults to the
+// rows themselves; pass the full log set where one is loaded so a five-row
+// slice is not judged only against itself.
 export function LogList({
   logs,
+  history,
   onSelect,
 }: {
   logs: WorkoutLog[];
+  history?: WorkoutLog[];
   onSelect?: (log: WorkoutLog) => void;
 }) {
+  const shapeOf = useMemo(() => sessionShaper(history ?? logs), [history, logs]);
   return (
     <ul className="lift border border-border bg-surface">
       {logs.map((log) => {
+        // The stripe is the only place the tag shows: the pill beside it said
+        // the same thing and was the widest thing in the row.
         const accent = log.tags[0] ? tagColor(log.tags[0]) : 'transparent';
         const inner = (
           <>
@@ -25,23 +34,7 @@ export function LogList({
                 </div>
               ) : null}
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-1">
-              {log.tags.length > 0 ? (
-                <>
-                  <Tag label={log.tags[0]} color={tagColor(log.tags[0])} />
-                  {log.tags.length > 1 ? (
-                    <span className="shrink-0 text-[0.6rem] text-muted">
-                      +{log.tags.length - 1}
-                    </span>
-                  ) : null}
-                </>
-              ) : (
-                <span className="truncate text-[0.7rem] text-muted">
-                  {log.day_key ?? log.activity_type ?? 'Session'}
-                </span>
-              )}
-            </div>
-            <SetShapeStrip data={log.data} className="shrink-0" />
+            <SessionShapeBar shape={shapeOf(log)} />
           </>
         );
         return (
