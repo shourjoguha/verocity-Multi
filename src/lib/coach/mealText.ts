@@ -114,7 +114,7 @@ export interface MealTextSummary {
   /** Meals per carb family, descending by count. */
   carbCounts: { key: CarbSourceKey; label: string; count: number }[];
   /**
-   * Meals with a fibrous carb: a recorded fibre share above zero, the pre-0046
+   * Meals with a fibrous carb: a recorded fibre share above zero, the pre-0047
    * `veg` tag, or a vegetable named in the note. Kept under its old name
    * because it is persisted in `observed` on coach rows.
    */

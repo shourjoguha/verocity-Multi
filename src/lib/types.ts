@@ -708,8 +708,8 @@ export interface RxDeepResult {
  * silently renders BLANK for anything longer. getMealLogs trims it at the read
  * boundary so no component has to know that.
  *
- * `tags` is the fixed MEAL_TAGS vocabulary. Rows written before 0046 may
- * still carry `veg`; 0046 moved free-text "custom" tags into meal_presets.
+ * `tags` is the fixed MEAL_TAGS vocabulary. Rows written before 0047 may
+ * still carry `veg`; 0047 moved free-text "custom" tags into meal_presets.
  *
  * `tag_mix` is the optional macro split: integer percents per macro that sum
  * to 100 (e.g. { protein: 60, carbs: 40 }). NULL when no split was recorded.
@@ -720,7 +720,7 @@ export interface RxDeepResult {
  * MEAL_CARB_FIBRE_STEPS. NULL = not recorded; always NULL without carbs.
  *
  * `preset_id` is the saved meal the row started from — provenance only, the
- * values were copied at log time (0046).
+ * values were copied at log time (0047).
  */
 export type MealTagMix = Record<string, number>;
 
@@ -750,7 +750,7 @@ export type MealLogInput = Partial<
 > & { log_date: string; eaten_time: string };
 
 /**
- * meal_presets (0046). A saved meal: the fields a meal draft is prefilled
+ * meal_presets (0047). A saved meal: the fields a meal draft is prefilled
  * from. Copied on log, so editing or deleting one never touches history.
  */
 export interface MealPreset {

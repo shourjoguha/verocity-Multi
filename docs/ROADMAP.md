@@ -310,11 +310,9 @@ here derives a judgment from that data.
 `MealChipRail` inside the active-plan card, directly below Start workout:
 saved meals (newest-first) → Meal → Snack, each opening a bottom drawer
 (`MealDrawer`) prefilled per opener, plus a pinned "•••" that opens
-`SavedMealsSheet` to edit or delete saved meals (migration 0046 replaced the
-original free-text custom-tag shortcuts). **Migration 0046 is authored but not
-applied** — the session that wrote it had no Supabase MCP connection. The
-client writes `carb_fibre_pct` and `preset_id`, so meal logging fails until it
-is applied: apply it before this build deploys. `Today's meals`
+`SavedMealsSheet` to edit or delete saved meals (migration 0047 replaced the
+original free-text custom-tag shortcuts; applied 2026-10-03, with the pre-backfill
+rows kept in `backup.meal_logs_pre_0047`). `Today's meals`
 sits on Home below the activity chart. A dedicated `/app/meals/log` page
 (`FullMealLogger`) is the drawer's "expand" target and shows every field flat;
 `/app/meals` (`MealsView`) is the day-grouped history, tap to edit, delete

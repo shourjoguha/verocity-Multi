@@ -1,5 +1,9 @@
 -- Saved meals, and the fibrous share of a meal's carbs.
 --
+-- Numbered 0047: a different 0046 (movement_category_vocabulary) was applied
+-- to the live project first. Applied 2026-10-03; meal_logs as it stood before
+-- the backfill is in backup.meal_logs_pre_0047 (schema not exposed to the API).
+--
 -- WHY A TABLE. Repeat-meal shortcuts used to be derived from "custom tags" —
 -- free text sharing `meal_logs.tags` with the fixed vocabulary. That made a
 -- label ("post-workout") and a description ("3+ eggs only") the same kind of

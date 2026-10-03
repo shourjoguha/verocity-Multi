@@ -40,7 +40,7 @@ function todayLocal(d: Date): string {
  *
  * `tags` is the fixed vocabulary only — there is no free-text tag any more; a
  * meal you repeat is a saved meal (meal_presets). When an older row is opened
- * for editing, any tag outside the vocabulary (a pre-0046 `veg`) rides along
+ * for editing, any tag outside the vocabulary (a pre-0047 `veg`) rides along
  * untouched, so editing a meal never silently drops what it recorded.
  *
  * `tagMix` is null until the athlete actually sets the split. The bar shows an

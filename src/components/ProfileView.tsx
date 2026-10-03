@@ -542,7 +542,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           // 0032_meal_logs.sql). Skip the read there rather than surface a
           // permanently-empty widget.
           mode === 'app' ? getMealLogsInRange(today, today, client) : Promise.resolve([]),
-          // Same reason: meal_presets is owner-only with no anon policy (0046).
+          // Same reason: meal_presets is owner-only with no anon policy (0047).
           mode === 'app' ? getMealPresets(client) : Promise.resolve([]),
         ]);
         if (!active) return;
