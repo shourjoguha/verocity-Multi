@@ -7,6 +7,7 @@ import {
   isMealKindKey,
   isMealSizeKey,
   isMealSourceKey,
+  MEAL_CARB_FIBRE_STEPS,
   MEAL_DEFAULTS,
   type MetricKey,
 } from '@/app.config';
@@ -26,6 +27,9 @@ import type {
   ItemKind,
   MealLog,
   MealLogInput,
+  MealPreset,
+  MealPresetInput,
+  MealTagMix,
   Movement,
   MovementSub,
   MovementTaxonomyOverride,
@@ -819,16 +823,35 @@ function normalizeMealLog(row: MealLog): MealLog {
   return {
     ...row,
     eaten_time: row.eaten_time.slice(0, 5),
+    ...normalizeMealShape(row),
+    preset_id: typeof row.preset_id === 'string' ? row.preset_id : null,
+  };
+}
+
+// The fields meal_logs and meal_presets share, guarded identically.
+function normalizeMealShape(row: {
+  size: unknown;
+  kind: unknown;
+  source: unknown;
+  tags: unknown;
+  tag_mix: unknown;
+  carb_fibre_pct?: unknown;
+}) {
+  return {
     size: isMealSizeKey(row.size) ? row.size : MEAL_DEFAULTS.size,
     kind: isMealKindKey(row.kind) ? row.kind : MEAL_DEFAULTS.kind,
     source: isMealSourceKey(row.source) ? row.source : MEAL_DEFAULTS.source,
-    tags: Array.isArray(row.tags) ? row.tags : [],
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
     // Missing (pre-migration rows) or malformed reads as "no mix". Guarded here
     // so no component has to defend against a non-object.
     tag_mix:
       row.tag_mix && typeof row.tag_mix === 'object' && !Array.isArray(row.tag_mix)
-        ? row.tag_mix
+        ? (row.tag_mix as MealTagMix)
         : null,
+    // Pre-0046 rows have no column at all; anything off the step list is noise.
+    carb_fibre_pct: (MEAL_CARB_FIBRE_STEPS as readonly unknown[]).includes(row.carb_fibre_pct)
+      ? (row.carb_fibre_pct as number)
+      : null,
   };
 }
 
@@ -886,6 +909,62 @@ export async function updateMealLog(id: string, patch: Partial<MealLogInput>): P
 
 export async function deleteMealLog(id: string): Promise<boolean> {
   const { error } = await supabase.from('meal_logs').delete().eq('id', id);
+  if (!error) clearQueryCache();
+  return !error;
+}
+
+// ---- meal_presets (saved meals; owner-only by RLS, no anon read — 0046) ----
+
+function normalizeMealPreset(row: MealPreset): MealPreset {
+  return { ...row, ...normalizeMealShape(row) };
+}
+
+/** Newest first: the spec's "newly created shortcuts go before older ones". */
+export async function getMealPresets(client: SupabaseClient = supabase): Promise<MealPreset[]> {
+  const { data } = await client
+    .from('meal_presets')
+    .select('*')
+    .order('created_at', { ascending: false });
+  return ((data as MealPreset[]) ?? []).map(normalizeMealPreset);
+}
+
+/** `duplicate` is the unique (owner, lower(trim(name))) index refusing the row. */
+export type MealPresetWrite =
+  | { ok: true; preset: MealPreset }
+  | { ok: false; error: 'duplicate' | 'failed' };
+
+const PG_UNIQUE_VIOLATION = '23505';
+
+export async function createMealPreset(input: MealPresetInput): Promise<MealPresetWrite> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'failed' };
+  const { data, error } = await supabase
+    .from('meal_presets')
+    .insert({ ...input, name: input.name.trim(), owner_user_id: user.id })
+    .select('*')
+    .single();
+  if (error) return { ok: false, error: error.code === PG_UNIQUE_VIOLATION ? 'duplicate' : 'failed' };
+  clearQueryCache();
+  return { ok: true, preset: normalizeMealPreset(data as MealPreset) };
+}
+
+export async function updateMealPreset(id: string, input: MealPresetInput): Promise<MealPresetWrite> {
+  const { data, error } = await supabase
+    .from('meal_presets')
+    .update({ ...input, name: input.name.trim(), updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error) return { ok: false, error: error.code === PG_UNIQUE_VIOLATION ? 'duplicate' : 'failed' };
+  clearQueryCache();
+  return { ok: true, preset: normalizeMealPreset(data as MealPreset) };
+}
+
+/** Logged meals keep their values; their preset_id is nulled by the FK. */
+export async function deleteMealPreset(id: string): Promise<boolean> {
+  const { error } = await supabase.from('meal_presets').delete().eq('id', id);
   if (!error) clearQueryCache();
   return !error;
 }

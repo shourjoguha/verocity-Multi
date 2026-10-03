@@ -113,7 +113,11 @@ export interface MealTextSummary {
   withCarbSource: number;
   /** Meals per carb family, descending by count. */
   carbCounts: { key: CarbSourceKey; label: string; count: number }[];
-  /** Meals where a vegetable was tagged OR named in the note. */
+  /**
+   * Meals with a fibrous carb: a recorded fibre share above zero, the pre-0046
+   * `veg` tag, or a vegetable named in the note. Kept under its old name
+   * because it is persisted in `observed` on coach rows.
+   */
   vegMeals: number;
   friedMeals: number;
 }
@@ -121,12 +125,13 @@ export interface MealTextSummary {
 /**
  * Aggregate the notes on a set of meals.
  *
- * `vegMeals` unions the `veg` TAG with a note mention, because the operator
- * treats the tag as authoritative for whole vegetables and the note is the
- * fallback for meals where the tag was not ticked.
+ * `vegMeals` unions three sources: the fibre share recorded on the meal
+ * (`carb_fibre_pct`, which counts veg, fruit, legumes and nuts), the legacy
+ * `veg` tag older rows carry, and a vegetable named in the note as the
+ * fallback when neither was set.
  */
 export function summarizeMealText(
-  meals: { note: string | null; tags: string[] }[],
+  meals: { note: string | null; tags: string[]; carb_fibre_pct?: number | null }[],
 ): MealTextSummary {
   const counts = new Map<CarbSourceKey, number>();
   let described = 0;
@@ -139,7 +144,7 @@ export function summarizeMealText(
     if (read.hasText) described += 1;
     if (read.carbs.length > 0) withCarbSource += 1;
     for (const k of read.carbs) counts.set(k, (counts.get(k) ?? 0) + 1);
-    if (meal.tags.includes('veg') || read.veg) vegMeals += 1;
+    if ((meal.carb_fibre_pct ?? 0) > 0 || meal.tags.includes('veg') || read.veg) vegMeals += 1;
     if (read.preparation.includes('fried')) friedMeals += 1;
   }
 

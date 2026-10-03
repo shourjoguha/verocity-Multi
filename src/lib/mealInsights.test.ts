@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDayInsights,
   fuelByHour,
+  layoutFuelBars,
+  macroMix,
   macroTags,
   mealsInHour,
   summarizeTiming,
@@ -20,6 +22,8 @@ function meal(overrides: Partial<MealLog>): MealLog {
     source: 'home',
     tags: [],
     tag_mix: null,
+    carb_fibre_pct: null,
+    preset_id: null,
     note: null,
     hunger_before: 4,
     hunger_after: 1,
@@ -118,5 +122,51 @@ describe('tagShare', () => {
     expect(rows.find((r) => r.tag === 'protein')).toMatchObject({ count: 2, share: 1 });
     expect(rows.find((r) => r.tag === 'carbs')).toMatchObject({ count: 1, share: 0.5 });
     expect(rows.find((r) => r.tag === 'fat')).toMatchObject({ count: 0, share: 0 });
+  });
+});
+
+describe('macroMix', () => {
+  it('is null with no macros, and 100 for a lone macro', () => {
+    expect(macroMix(['coffee'], null)).toBeNull();
+    expect(macroMix(['protein', 'sweet'], null)).toEqual({ protein: 100 });
+  });
+
+  it('is null — not an even guess — when 2+ macros have no split', () => {
+    expect(macroMix(['protein', 'carbs'], null)).toBeNull();
+  });
+
+  it('drops non-macro keys and renormalises to exactly 100', () => {
+    expect(macroMix(['protein', 'carbs', 'fat'], { protein: 33, carbs: 33, fat: 33, coffee: 1 })).toEqual({
+      protein: 34,
+      carbs: 33,
+      fat: 33,
+    });
+  });
+});
+
+describe('layoutFuelBars', () => {
+  const at = (h: number, m = 0) => h * 60 + m;
+
+  it('places well-spaced meals at their real time', () => {
+    expect(layoutFuelBars([at(12), at(18)], at(6), at(24), 4)).toEqual([(6 / 18) * 100, (12 / 18) * 100]);
+  });
+
+  it('nudges close meals apart, side by side, centred on where they were', () => {
+    const [a, b] = layoutFuelBars([at(12, 0), at(12, 10)], at(6), at(24), 4);
+    expect(b - a).toBeCloseTo(4);
+    expect((a + b) / 2).toBeCloseTo(((at(12, 5) - at(6)) / at(18)) * 100);
+  });
+
+  it('keeps input order and clamps a cluster inside the track', () => {
+    const xs = layoutFuelBars([at(23, 55), at(23, 50), at(23, 59)], at(6), at(24), 4);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(100);
+    expect(xs[1]).toBeLessThan(xs[0]);
+    expect(xs[0]).toBeLessThan(xs[2]);
+  });
+
+  it('merges a nudged cluster into a neighbour it now overlaps', () => {
+    const xs = layoutFuelBars([at(12), at(12, 5), at(12, 50)], at(6), at(24), 4).sort((a, b) => a - b);
+    expect(xs[1] - xs[0]).toBeGreaterThanOrEqual(4 - 1e-9);
+    expect(xs[2] - xs[1]).toBeGreaterThanOrEqual(4 - 1e-9);
   });
 });

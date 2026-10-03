@@ -1,5 +1,7 @@
 import { MEAL_MACRO_TAGS } from '@/app.config';
-import type { MealLog } from '@/lib/types';
+import type { MealLog, MealTagMix } from '@/lib/types';
+
+export type MacroKey = (typeof MEAL_MACRO_TAGS)[number];
 
 // Meal analytics, ported from the reference design's utils/meals.ts and typed to
 // MealLog (Verocity's lowercase size keys, 'HH:MM' eaten_time, 'YYYY-MM-DD'
@@ -46,6 +48,89 @@ export function fuelByHour(meals: MealLog[]): number[] {
 // The macro tags a meal carries, in canonical macro order (P → C → F).
 export function macroTags(meal: MealLog): string[] {
   return MEAL_MACRO_TAGS.filter((tag) => meal.tags.includes(tag));
+}
+
+/**
+ * The macro split to DRAW for a meal: integer percents over the P/C/F keys it
+ * carries, summing to 100, or null when there is nothing honest to draw.
+ *
+ *   - no macro tags          -> null
+ *   - one macro              -> that macro at 100 (true by definition)
+ *   - 2+ macros, no tag_mix  -> null ("split not set"), never an even guess
+ *   - 2+ macros with a mix   -> the P/C/F values renormalised to 100. Older
+ *     rows carry sweet/coffee keys in the same object; they are dropped here
+ *     rather than in every reader.
+ *
+ * Largest-remainder rounding, so the parts still sum to exactly 100.
+ */
+export function macroMix(tags: string[], tagMix: MealTagMix | null): Partial<Record<MacroKey, number>> | null {
+  const macros = MEAL_MACRO_TAGS.filter((k) => tags.includes(k));
+  if (macros.length === 0) return null;
+  if (macros.length === 1) return { [macros[0]]: 100 };
+  if (!tagMix) return null;
+  const raw = macros.map((k) => Math.max(0, Number(tagMix[k]) || 0));
+  const total = raw.reduce((a, b) => a + b, 0);
+  if (total <= 0) return null;
+  const exact = raw.map((v) => (v * 100) / total);
+  const floored = exact.map(Math.floor);
+  let rest = 100 - floored.reduce((a, b) => a + b, 0);
+  const byRemainder = exact.map((v, i) => [v - floored[i], i] as const).sort((a, b) => b[0] - a[0]);
+  for (const [, i] of byRemainder) {
+    if (rest <= 0) break;
+    floored[i] += 1;
+    rest -= 1;
+  }
+  const out: Partial<Record<MacroKey, number>> = {};
+  macros.forEach((k, i) => {
+    out[k] = floored[i];
+  });
+  return out;
+}
+
+/**
+ * Horizontal positions (0-100) for the Home fuel chart's bars. Each bar sits
+ * at the minute it was eaten, except that bars closer than `minGap` are nudged
+ * apart and laid side by side, centred on where the group really was — so two
+ * meals ten minutes apart read as two bars, and their adjacency still says
+ * "closer than the scale can show".
+ *
+ * Classic 1-D de-overlap: merge neighbours into clusters, centre each cluster
+ * on its members' mean, clamp to the track, repeat until nothing overlaps.
+ * Returns positions in the INPUT order.
+ */
+export function layoutFuelBars(minutes: number[], startMin: number, endMin: number, minGap: number): number[] {
+  const span = endMin - startMin;
+  const want = minutes.map((m) => Math.min(100, Math.max(0, ((m - startMin) / span) * 100)));
+  const order = want.map((x, i) => [x, i] as const).sort((a, b) => a[0] - b[0]).map(([, i]) => i);
+  if (order.length === 0) return [];
+  const gap = Math.min(minGap, 100 / Math.max(1, order.length - 1));
+
+  // Each cluster: indices (into `order`) it spans, and its left edge.
+  let clusters = order.map((idx) => ({ members: [idx], left: want[idx] }));
+  for (;;) {
+    for (const c of clusters) {
+      const width = (c.members.length - 1) * gap;
+      const centre = c.members.reduce((sum, i) => sum + want[i], 0) / c.members.length;
+      c.left = Math.min(100 - width, Math.max(0, centre - width / 2));
+    }
+    const merged: typeof clusters = [];
+    let changed = false;
+    for (const c of clusters) {
+      const prev = merged[merged.length - 1];
+      if (prev && prev.left + (prev.members.length - 1) * gap + gap > c.left + 1e-9) {
+        prev.members.push(...c.members);
+        changed = true;
+      } else {
+        merged.push({ members: [...c.members], left: c.left });
+      }
+    }
+    clusters = merged;
+    if (!changed) break;
+  }
+
+  const out = new Array<number>(minutes.length);
+  for (const c of clusters) c.members.forEach((idx, k) => (out[idx] = c.left + k * gap));
+  return out;
 }
 
 // Newest day first; meals within a day newest-first. Self-contained (does not

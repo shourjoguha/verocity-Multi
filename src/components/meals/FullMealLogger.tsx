@@ -3,15 +3,15 @@ import { toast } from '@/lib/toast';
 import { track } from '@/lib/analytics';
 import { createMealLog } from '@/lib/queries';
 import { uploadMealPhoto } from '@/lib/mealPhoto';
-import { defaultTagMix, draftFor, setMixValue, toInput, type MealDraft } from '@/lib/mealDraft';
+import { draftFor, toggleTag, toInput, type MealDraft } from '@/lib/mealDraft';
 import {
+  CompositionFields,
+  ExtrasRow,
   FieldRow,
   HungerSection,
-  MacroMixSection,
   NotesRow,
   PhotoRow,
   SegmentedChoice,
-  TagsSection,
   TimeRow,
 } from '@/components/meals/MealFields';
 
@@ -20,30 +20,12 @@ import {
 // field components as MealDrawer; zero duplicated field code. Every field is
 // shown flat except Hunger, which stays its own collapsible.
 export default function FullMealLogger() {
-  const [draft, setDraft] = useState<MealDraft>(() => draftFor({ kind: 'custom' }));
+  const [draft, setDraft] = useState<MealDraft>(() => draftFor({ kind: 'meal' }));
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   const patch = (p: Partial<MealDraft>) => setDraft((d) => ({ ...d, ...p }));
 
-  // Toggling any tag re-seeds the composition for the new selection.
-  const toggleTag = (key: string, isSuggested: boolean) => {
-    if (isSuggested) {
-      const tags = draft.tags.includes(key) ? draft.tags.filter((t) => t !== key) : [...draft.tags, key];
-      patch({ tags, tagMix: defaultTagMix([...tags, ...draft.customTags]) });
-    } else {
-      const customTags = draft.customTags.includes(key)
-        ? draft.customTags.filter((t) => t !== key)
-        : [...draft.customTags, key];
-      patch({ customTags, tagMix: defaultTagMix([...draft.tags, ...customTags]) });
-    }
-  };
-  const addCustomTag = (tag: string) => {
-    if (draft.customTags.includes(tag)) return;
-    const customTags = [...draft.customTags, tag];
-    patch({ customTags, tagMix: defaultTagMix([...draft.tags, ...customTags]) });
-  };
-  const setMix = (key: string, value: number) => patch({ tagMix: setMixValue(draft.tagMix, key, value) });
 
   async function save() {
     setSaving(true);
@@ -64,7 +46,7 @@ export default function FullMealLogger() {
       kind: draft.kind,
       source: draft.source,
       has_photo: !!photoPath,
-      tag_count: draft.tags.length + draft.customTags.length,
+      tag_count: draft.tags.length,
     });
     toast(photoFailed ? 'Meal saved — photo did not upload' : 'Meal saved', photoFailed ? 'error' : 'success');
     window.location.href = '/app';
@@ -123,14 +105,10 @@ export default function FullMealLogger() {
           onChangeAfter={(hungerAfter) => patch({ hungerAfter })}
         />
 
-        <TagsSection
-          selected={[...draft.tags, ...draft.customTags]}
-          customTags={draft.customTags}
-          onToggle={toggleTag}
-          onAddCustom={addCustomTag}
-        />
-
-        <MacroMixSection mix={draft.tagMix} onChange={setMix} />
+        <CompositionFields draft={draft} onChange={setDraft} />
+        <FieldRow label="Also">
+          <ExtrasRow tags={draft.tags} onToggle={(key) => setDraft(toggleTag(draft, key))} />
+        </FieldRow>
 
         <div>
           <div className="t-label mb-2 text-muted">Notes</div>

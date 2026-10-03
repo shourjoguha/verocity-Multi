@@ -1,5 +1,6 @@
-import { repeatShortcuts, type MealPreset } from '@/lib/mealDraft';
-import type { MealLog } from '@/lib/types';
+import { MEAL_PRESET_RAIL_LIMIT } from '@/app.config';
+import type { MealOpener } from '@/lib/mealDraft';
+import type { MealPreset } from '@/lib/types';
 
 // Lives inside the active-plan card, directly beneath the Start row, in BOTH
 // of its branches (docs/MEAL_LOGGING.md §10.3, §11.1). A 40px hairline strip:
@@ -11,15 +12,19 @@ import type { MealLog } from '@/lib/types';
 // alternative was 35px visible with 44px boxes overlapping the Start bar, and
 // a mis-tap there starts a meal instead of a workout. Do not "fix" it with a
 // negative-margin hit box for that reason.
+//
+// Order: saved meals first (newest first, capped), then the generic Meal and
+// Snack, then "•••" pinned at the right edge to manage saved meals. There is
+// no "Custom" chip: it opened a blank draft, which is what Meal does.
 export function MealChipRail({
-  meals,
+  presets,
   onOpen,
+  onManage,
 }: {
-  meals: MealLog[];
-  onOpen: (preset: MealPreset) => void;
+  presets: MealPreset[];
+  onOpen: (opener: MealOpener) => void;
+  onManage: () => void;
 }) {
-  const shortcuts = repeatShortcuts(meals);
-
   return (
     <div className="flex min-h-10 gap-px border-t border-border-soft bg-border-soft">
       {/* Fixed left: never scrolls. The icon is the label. */}
@@ -47,18 +52,26 @@ export function MealChipRail({
       <div
         className="scrollbar-none flex min-w-0 flex-1 gap-px overflow-x-auto overscroll-x-contain"
       >
-        <Segment label="Custom" icon="+" onClick={() => onOpen({ kind: 'custom' })} />
-        {shortcuts.map((tag) => (
-          <Segment key={tag} label={tag} onClick={() => onOpen({ kind: 'repeat', tag })} />
+        {presets.slice(0, MEAL_PRESET_RAIL_LIMIT).map((p) => (
+          <Segment key={p.id} label={p.name} strong onClick={() => onOpen({ kind: 'preset', preset: p })} />
         ))}
         <Segment label="Meal" onClick={() => onOpen({ kind: 'meal' })} />
         <Segment label="Snack" onClick={() => onOpen({ kind: 'snack' })} />
       </div>
+      {/* Fixed right, like the bowl on the left: managing never scrolls away. */}
+      <button
+        type="button"
+        onClick={onManage}
+        aria-label="Manage saved meals"
+        className="flex min-h-10 w-10 shrink-0 items-center justify-center bg-surface tracking-[0.1em] text-muted transition-colors hover:bg-elevated hover:text-fg"
+      >
+        <span aria-hidden>•••</span>
+      </button>
     </div>
   );
 }
 
-function Segment({ label, icon, onClick }: { label: string; icon?: string; onClick: () => void }) {
+function Segment({ label, strong = false, onClick }: { label: string; strong?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -66,10 +79,11 @@ function Segment({ label, icon, onClick }: { label: string; icon?: string; onCli
       // "Add meal: …" names the action for AT, and is the prefix the mobile
       // audit's ALLOW list keys this strip's deliberate 40px height on.
       aria-label={`Add meal: ${label}`}
-      className="flex min-h-10 shrink-0 grow items-center justify-center gap-1 bg-surface px-3.5 t-control text-fg transition-colors hover:bg-elevated"
+      className={`flex min-h-10 shrink-0 grow items-center justify-center gap-1 bg-surface px-3.5 t-control transition-colors hover:bg-elevated ${
+        strong ? 'text-fg' : 'text-muted hover:text-fg'
+      }`}
     >
-      {icon ? <span aria-hidden>{icon}</span> : null}
-      <span className="truncate capitalize">{label}</span>
+      <span className="max-w-[10rem] truncate">{label}</span>
     </button>
   );
 }

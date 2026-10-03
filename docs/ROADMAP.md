@@ -308,8 +308,13 @@ here derives a judgment from that data.
 `meal-photos` Storage bucket (migration 0033, bucket only — see `docs/SPEC.md`
 §8 for why the four object policies had to be created by hand instead). A
 `MealChipRail` inside the active-plan card, directly below Start workout:
-Custom → repeat-meal shortcuts (derived, newest-first) → Meal → Snack, each
-opening a bottom drawer (`MealDrawer`) prefilled per preset. `Today's meals`
+saved meals (newest-first) → Meal → Snack, each opening a bottom drawer
+(`MealDrawer`) prefilled per opener, plus a pinned "•••" that opens
+`SavedMealsSheet` to edit or delete saved meals (migration 0046 replaced the
+original free-text custom-tag shortcuts). **Migration 0046 is authored but not
+applied** — the session that wrote it had no Supabase MCP connection. The
+client writes `carb_fibre_pct` and `preset_id`, so meal logging fails until it
+is applied: apply it before this build deploys. `Today's meals`
 sits on Home below the activity chart. A dedicated `/app/meals/log` page
 (`FullMealLogger`) is the drawer's "expand" target and shows every field flat;
 `/app/meals` (`MealsView`) is the day-grouped history, tap to edit, delete
@@ -327,8 +332,7 @@ preview` — the dev server does not reproduce the probe's timing).
 **Deliberately not done:** no calorie targets, macros, meal scores,
 nutritional judgment or AI recommendations of any kind — this is capture and
 retrieval only. No calendar integration, no Coach input, one photo per meal
-(no multiple photos, cropping or analysis), no offline queue. Repeat-meal
-shortcuts are derived from tags rather than stored in a second table.
+(no multiple photos, cropping or analysis), no offline queue.
 
 **Blocked at ship time:** the four `storage.objects` policies on the
 `meal-photos` bucket could not be created from a migration — `postgres` is not
