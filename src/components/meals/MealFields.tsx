@@ -11,7 +11,6 @@ import {
   MEAL_SOURCES,
   MEAL_TAGS,
 } from '@/app.config';
-import { Disclosure } from '@/components/ui/Disclosure';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { MACRO_FILL } from '@/components/meals/MacroStack';
 import { macrosIn, moveDivider, placeholderMix, toggleTag, type MealDraft } from '@/lib/mealDraft';
@@ -21,7 +20,7 @@ import type { MealPreset, MealTagMix } from '@/lib/types';
 // Shared field components for meal capture, used IDENTICALLY by the quick
 // drawer (MealDrawer.tsx) and the full logger (FullMealLogger.tsx) — see
 // docs/MEAL_LOGGING.md §10.1. Zero field code is duplicated between the two
-// surfaces; only how they're arranged (MoreDetails collapsing vs. flat) differs.
+// surfaces; only how they're arranged differs.
 
 const SIZE_TABS = Object.entries(MEAL_SIZES).map(([key, v]) => ({ key, label: v.label }));
 const KIND_TABS = Object.entries(MEAL_KINDS).map(([key, v]) => ({ key, label: v.label }));
@@ -60,21 +59,6 @@ export function SegmentedChoice({
       as="radiogroup"
       size="compact"
       ariaLabel={label}
-    />
-  );
-}
-
-// Native time input — on iOS Safari this IS the scrollable wheel, drawn by
-// the OS. Do not build a custom one (docs/MEAL_LOGGING.md explicitly rules
-// this out).
-export function TimeRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <input
-      type="time"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label="Time eaten"
-      className="min-h-11 w-full rounded-control border border-border bg-surface px-3 tabular-nums text-fg outline-none focus:border-subtle"
     />
   );
 }
@@ -142,10 +126,15 @@ export function PhotoRow({
   );
 }
 
-// Nested collapsible (its own Disclosure, inside MoreDetails). Two 1-5
-// sliders, defaults 4/1. Range inputs are natively keyboard-accessible —
-// arrow keys must not be intercepted.
-export function HungerSection({
+const HUNGER_TABS = Array.from({ length: MEAL_SCALE.max - MEAL_SCALE.min + 1 }, (_, i) => {
+  const v = String(MEAL_SCALE.min + i);
+  return { key: v, label: v };
+});
+
+// Hunger before and after, as two slim 1-5 pickers. Flat, not a collapsible:
+// it lives in the drawer's optional zone (OptionalDivider), which is what
+// says "you can skip this" — a disclosure inside a disclosure only hid it.
+export function HungerRows({
   before,
   after,
   onChangeBefore,
@@ -157,45 +146,92 @@ export function HungerSection({
   onChangeAfter: (v: number) => void;
 }) {
   return (
-    <Disclosure title="Hunger" headerRight={`Before ${before} · After ${after}`}>
-      <div className="flex flex-col gap-4">
-        <HungerSlider label="Hunger before eating" value={before} onChange={onChangeBefore} />
-        <HungerSlider label="Hunger after eating" value={after} onChange={onChangeAfter} />
-      </div>
-    </Disclosure>
+    <>
+      <FieldRow label="Hunger before">
+        <SegmentedTabs
+          tabs={HUNGER_TABS}
+          active={String(before)}
+          onChange={(k) => onChangeBefore(Number(k))}
+          as="radiogroup"
+          size="compact"
+          ariaLabel="Hunger before eating, 1 to 5"
+        />
+      </FieldRow>
+      <FieldRow label="Hunger after">
+        <SegmentedTabs
+          tabs={HUNGER_TABS}
+          active={String(after)}
+          onChange={(k) => onChangeAfter(Number(k))}
+          as="radiogroup"
+          size="compact"
+          ariaLabel="Hunger after eating, 1 to 5"
+        />
+      </FieldRow>
+    </>
   );
 }
 
-function HungerSlider({
-  label,
-  value,
-  onChange,
+// When: the time and the date on one row. The date used to sit behind "More
+// details", but it is the same question as the time.
+export function WhenRow({
+  time,
+  date,
+  onTime,
+  onDate,
 }: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
+  time: string;
+  date: string;
+  onTime: (v: string) => void;
+  onDate: (v: string) => void;
 }) {
-  const listId = `hunger-marks-${label.replace(/\s+/g, '-').toLowerCase()}`;
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex gap-2">
+      {/* Native inputs — on iOS Safari these ARE the scrollable wheels, drawn
+          by the OS. Do not build a custom one (docs/MEAL_LOGGING.md rules it
+          out). Tight padding so both fit side by side at 375px. */}
       <input
-        type="range"
-        min={MEAL_SCALE.min}
-        max={MEAL_SCALE.max}
-        step={1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        list={listId}
-        aria-label={label}
-        className="min-h-11 flex-1"
+        type="time"
+        value={time}
+        onChange={(e) => onTime(e.target.value)}
+        aria-label="Time eaten"
+        className="min-h-11 min-w-0 flex-1 rounded-control border border-border bg-surface px-2 text-sm tabular-nums text-fg outline-none focus:border-subtle"
       />
-      <datalist id={listId}>
-        {Array.from({ length: MEAL_SCALE.max - MEAL_SCALE.min + 1 }, (_, i) => (
-          <option key={i} value={MEAL_SCALE.min + i} />
-        ))}
-      </datalist>
-      <span className="w-4 shrink-0 text-right tabular-nums text-fg">{value}</span>
+      <input
+        type="date"
+        value={date}
+        onChange={(e) => onDate(e.target.value)}
+        aria-label="Date eaten"
+        className="min-h-11 min-w-0 flex-1 rounded-control border border-border bg-surface px-2 text-sm tabular-nums text-fg outline-none focus:border-subtle"
+      />
     </div>
+  );
+}
+
+// The boundary between what a meal needs and what it can skip: a dotted
+// hairline with a quiet label. Replaces the "More details" disclosure — the
+// fields below it are always visible, the line just says they are optional.
+export function OptionalDivider() {
+  return (
+    <div className="flex items-center gap-3 pt-1" role="separator" aria-label="Optional">
+      <span className="t-label shrink-0 uppercase text-faint">Optional</span>
+      <span className="h-0 flex-1 border-t border-dashed border-border" />
+    </div>
+  );
+}
+
+// A switch's visual track. The caller owns the button (role="switch").
+export function SwitchTrack({ on }: { on: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`relative h-[18px] w-8 shrink-0 rounded-full border transition-colors ${
+        on ? 'border-fg bg-fg' : 'border-border bg-elevated'
+      }`}
+    >
+      <span
+        className={`absolute top-[2px] h-3 w-3 rounded-full transition-[left] ${on ? 'left-[16px] bg-bg' : 'left-[2px] bg-muted'}`}
+      />
+    </span>
   );
 }
 
@@ -442,16 +478,7 @@ export function SaveAsPresetRow({
         className="flex min-h-11 w-full items-center justify-between gap-3 text-left"
       >
         <span className="t-label uppercase text-muted">Save as a saved meal</span>
-        <span
-          aria-hidden
-          className={`relative h-[18px] w-8 shrink-0 rounded-full border transition-colors ${
-            on ? 'border-fg bg-fg' : 'border-border bg-elevated'
-          }`}
-        >
-          <span
-            className={`absolute top-[2px] h-3 w-3 rounded-full transition-[left] ${on ? 'left-[16px] bg-bg' : 'left-[2px] bg-muted'}`}
-          />
-        </span>
+        <SwitchTrack on={on} />
       </button>
       {on ? <PresetNameInput value={name} onChange={onName} placeholder="Name, e.g. Chicken rice bowl" /> : null}
     </div>
@@ -524,12 +551,4 @@ export function NotesRow({ value, onChange }: { value: string; onChange: (v: str
       className="w-full resize-none rounded-control border border-border bg-surface p-3 text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
     />
   );
-}
-
-// Full-width utility row, collapsed on EVERY open. No defaultOpen, no hoisted
-// state, no key that could keep it open across drawer re-opens — Modal
-// unmounts its children on close, so this resets for free as long as nothing
-// here fights that.
-export function MoreDetails({ children }: { children: ReactNode }) {
-  return <Disclosure title="More details">{children}</Disclosure>;
 }

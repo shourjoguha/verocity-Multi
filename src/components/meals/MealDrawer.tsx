@@ -18,14 +18,15 @@ import {
   CompositionFields,
   ExtrasRow,
   FieldRow,
-  HungerSection,
-  MoreDetails,
+  HungerRows,
+  OptionalDivider,
   NotesRow,
   PhotoRow,
   SaveAsPresetRow,
   SegmentedChoice,
   StartFromRow,
-  TimeRow,
+  SwitchTrack,
+  WhenRow,
 } from '@/components/meals/MealFields';
 
 // The quick-capture bottom drawer, per docs/MEAL_LOGGING.md §10.2. Draft state
@@ -33,8 +34,7 @@ import {
 // rail and Today's meals share one drawer instance — one dialog, one focus
 // trap, one scroll lock. `open` is derived from `draft !== null`, and Modal
 // unmounts its children when closed, which is what resets PhotoRow's local
-// file state and every <Disclosure> (including the nested Hunger one) back to
-// collapsed on the NEXT open, per acceptance criterion 8. The same unmount
+// file state on the NEXT open, per acceptance criterion 8. The same unmount
 // resets the drawer's local save-as / update-or-log-once state.
 export function MealDrawer({
   draft,
@@ -100,6 +100,11 @@ function MealDrawerBody({
   // Set when Save found the draft changed from the saved meal it started from:
   // the footer then asks "update it, or log this once?".
   const [asking, setAsking] = useState(false);
+  // Whether a changed saved meal still carries its name onto this log. Off by
+  // default: once you have changed "Oats", the meal you ate may not be Oats,
+  // and an untagged log is a plain meal/snack. Asked only in that case — an
+  // unchanged saved meal is exactly that meal and always keeps its tag.
+  const [keepTag, setKeepTag] = useState(false);
 
   const isNew = !editingId;
   const fromPreset = draft.presetId ? presets.find((p) => p.id === draft.presetId) : undefined;
@@ -121,7 +126,7 @@ function MealDrawerBody({
     }
 
     setSaving(true);
-    let presetId = draft.presetId;
+    let presetId = mode === 'check' ? draft.presetId : keepTag ? draft.presetId : null;
     if (saveAs) {
       const res = await createMealPreset(presetInputFromDraft(draft, name));
       if (!res.ok) {
@@ -209,8 +214,13 @@ function MealDrawerBody({
               <StartFromRow presets={presets} activeId={draft.presetId} onPick={pickPreset} />
             </FieldRow>
           ) : null}
-          <FieldRow label="Time">
-            <TimeRow value={draft.time} onChange={(time) => change({ time })} />
+          <FieldRow label="When">
+            <WhenRow
+              time={draft.time}
+              date={draft.date}
+              onTime={(time) => change({ time })}
+              onDate={(date) => onDraftChange({ date })}
+            />
           </FieldRow>
           <FieldRow label="Size">
             <SegmentedChoice
@@ -249,44 +259,40 @@ function MealDrawerBody({
             />
           ) : null}
 
-          <MoreDetails>
-            <div className="flex flex-col gap-4">
-              <FieldRow label="Date">
-                <input
-                  type="date"
-                  value={draft.date}
-                  onChange={(e) => onDraftChange({ date: e.target.value })}
-                  aria-label="Date eaten"
-                  className="min-h-11 w-full rounded-control border border-border bg-surface px-3 tabular-nums text-fg outline-none focus:border-subtle"
-                />
-              </FieldRow>
-              <FieldRow label="Also">
-                <ExtrasRow tags={draft.tags} onToggle={(key) => change(toggleTag(draft, key))} />
-              </FieldRow>
-              <HungerSection
-                before={draft.hungerBefore}
-                after={draft.hungerAfter}
-                onChangeBefore={(hungerBefore) => onDraftChange({ hungerBefore })}
-                onChangeAfter={(hungerAfter) => onDraftChange({ hungerAfter })}
-              />
-              <div>
-                <div className="t-label mb-2 text-muted">Notes</div>
-                <NotesRow value={draft.notes} onChange={(notes) => onDraftChange({ notes })} />
-              </div>
-            </div>
-          </MoreDetails>
+          <OptionalDivider />
+          <FieldRow label="Also">
+            <ExtrasRow tags={draft.tags} onToggle={(key) => change(toggleTag(draft, key))} />
+          </FieldRow>
+          <HungerRows
+            before={draft.hungerBefore}
+            after={draft.hungerAfter}
+            onChangeBefore={(hungerBefore) => onDraftChange({ hungerBefore })}
+            onChangeAfter={(hungerAfter) => onDraftChange({ hungerAfter })}
+          />
+          <NotesRow value={draft.notes} onChange={(notes) => onDraftChange({ notes })} />
         </div>
       </div>
 
       {asking && fromPreset ? (
         <div className="flex shrink-0 flex-col gap-2 border-t border-border bg-elevated px-4 py-3 text-sm text-fg">
           <span>You changed “{fromPreset.name}”.</span>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={keepTag}
+              aria-label={`Tag this log as ${fromPreset.name}`}
+              onClick={() => setKeepTag((v) => !v)}
+              className="mr-auto flex min-h-11 items-center gap-2 t-label uppercase text-muted"
+            >
+              <SwitchTrack on={keepTag} />
+              Meal tag
+            </button>
             <button
               type="button"
               disabled={saving}
               onClick={() => save('once')}
-              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg disabled:opacity-40"
+              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg disabled:opacity-40"
             >
               Log once
             </button>
@@ -294,7 +300,7 @@ function MealDrawerBody({
               type="button"
               disabled={saving}
               onClick={() => save('update')}
-              className="hill-btn flex min-h-11 items-center bg-fg px-4 t-control text-bg transition-colors hover:bg-fg/85 disabled:opacity-40"
+              className="hill-btn flex min-h-11 items-center bg-fg px-3 t-control text-bg transition-colors hover:bg-fg/85 disabled:opacity-40"
             >
               Update and log
             </button>
