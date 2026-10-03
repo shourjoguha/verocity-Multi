@@ -676,23 +676,46 @@ export default function Logger() {
 
   // A movement typed into the picker's "Add …" row exists only inside this
   // workout unless it is written to the library — which is why a custom swap
-  // could not be searched for in the next session. Fire-and-forget: the pick
-  // has already been applied to the document, so a failed insert costs the
-  // library entry, not the set.
-  function persistCustomMovement(name: string, metric: MetricKey) {
-    if (resolveMovement(name, movements)) return;
-    createMovement({
+  // could not be searched for in the next session. Not awaited: the pick has
+  // already been applied to the document, so a failed insert costs the library
+  // entry, not the set — and `finish` sweeps the document and retries it.
+  async function persistCustomMovement(
+    name: string,
+    metric: MetricKey,
+    library?: Movement[],
+  ): Promise<boolean> {
+    if (resolveMovement(name, library ?? movements)) return true;
+    const created = await createMovement({
       name,
       category: null,
       primary_metric: metric,
       default_rest_seconds: TIMERS.defaultRestSeconds,
-    }).then((created) => {
-      if (!created) return;
-      setMovements((prev) =>
-        [...prev, created].sort((a, b) => a.name.localeCompare(b.name)),
-      );
-      track('movement_created', { category: null, primary_metric: metric, source: 'logger' });
     });
+    if (!created) return false;
+    // The sweep's working copy, so a name repeated in one document inserts once.
+    library?.push(created);
+    setMovements((prev) =>
+      [...prev, created].sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    track('movement_created', { category: null, primary_metric: metric, source: 'logger' });
+    return true;
+  }
+
+  // Every movement in the finished document gets a library row, so it is
+  // searchable next time. Covers a pick whose insert failed mid-workout (a
+  // phone in a gym loses signal; the error used to vanish), plan-prefilled
+  // names, and anything else that reached the document without the picker.
+  async function persistDocumentMovements(d: LogDocument) {
+    const library = movements.slice();
+    for (const section of d.sections) {
+      for (const group of section.groups) {
+        for (const item of group.items) {
+          const name = item.movement?.trim();
+          if (!name || isSubroutine(item)) continue;
+          await persistCustomMovement(name, item.primaryMetric ?? DEFAULT_PRIMARY_METRIC, library);
+        }
+      }
+    }
   }
 
   function handlePick(picked: Movement | { name: string }) {
@@ -700,7 +723,11 @@ export default function Logger() {
     const known = movements.find((m) => m.name.toLowerCase() === name.toLowerCase());
     const metric: MetricKey =
       'primary_metric' in picked ? (picked as Movement).primary_metric : known?.primary_metric ?? DEFAULT_PRIMARY_METRIC;
-    if (!('id' in picked)) persistCustomMovement(name, metric);
+    if (!('id' in picked)) {
+      persistCustomMovement(name, metric).then((ok) => {
+        if (!ok) toast(`Couldn't add “${name}” to your library — will retry when you finish`, 'error');
+      });
+    }
 
     if (picker?.mode === 'add') {
       if ('kind' in picked && isSubroutine(picked)) {
@@ -740,6 +767,7 @@ export default function Logger() {
         toast('Save failed — check your connection and try again', 'error');
         return;
       }
+      await persistDocumentMovements(docRef.current);
     }
     track('workout_completed', { duration_seconds: secondsRef.current, tags: tagsRef.current });
     window.location.href = idRef.current ? `/app/session?id=${idRef.current}` : '/app';
@@ -813,6 +841,7 @@ export default function Logger() {
         toast('Save failed — check your connection and try again', 'error');
         return;
       }
+      await persistDocumentMovements(docRef.current);
     }
     window.location.href = idRef.current ? `/app/session?id=${idRef.current}` : '/app';
   }

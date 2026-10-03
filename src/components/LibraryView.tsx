@@ -181,9 +181,10 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
     [movements],
   );
 
+  const needle = q.trim().toLowerCase();
   const filtered = movements.filter((m) => {
     if (category && m.category !== category) return false;
-    if (q && !m.name.toLowerCase().includes(q.toLowerCase())) return false;
+    if (needle && !m.name.toLowerCase().includes(needle)) return false;
     return true;
   });
 
