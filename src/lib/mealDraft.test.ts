@@ -60,12 +60,25 @@ describe('draftFor', () => {
     const d = draftFor({ kind: 'snack' }, NOW);
     expect(d.kind).toBe('snack');
     expect(d.size).toBe('light');
+    expect(d.tags).toEqual(['protein', 'carbs', 'fat']);
   });
 
-  it('meal is all defaults, no tags, split and fibre not set', () => {
+  it('meal is all defaults, every macro ticked, split and fibre not set', () => {
     const d = draftFor({ kind: 'meal' }, NOW);
-    expect(d).toMatchObject({ kind: 'meal', size: 'medium', tags: [], tagMix: null, carbFibrePct: null, presetId: null });
+    expect(d).toMatchObject({
+      kind: 'meal',
+      size: 'medium',
+      tags: ['protein', 'carbs', 'fat'],
+      tagMix: null,
+      carbFibrePct: null,
+      presetId: null,
+    });
     expect(d.time).toBe('12:05');
+  });
+
+  it('preset keeps its own tags rather than the all-macro default', () => {
+    const d = draftFor({ kind: 'preset', preset: preset({ tags: ['protein'], tag_mix: null, carb_fibre_pct: null }) }, NOW);
+    expect(d.tags).toEqual(['protein']);
   });
 
   it('preset prefills every meal field and records where it started', () => {
@@ -91,7 +104,7 @@ describe('applyPreset / clearPreset', () => {
 
   it('clearing returns to a plain draft with the same time and no preset', () => {
     const d = clearPreset({ ...applyPreset(draftFor({ kind: 'meal' }, NOW), preset()), time: '07:30' }, NOW);
-    expect(d).toMatchObject({ time: '07:30', tags: [], tagMix: null, presetId: null });
+    expect(d).toMatchObject({ time: '07:30', tags: ['protein', 'carbs', 'fat'], tagMix: null, presetId: null });
   });
 });
 

@@ -431,6 +431,10 @@ export const MEAL_DEFAULTS = {
   source: 'home',
   hungerBefore: 4,
   hungerAfter: 1,
+  // A draft not started from a saved meal arrives with every macro ticked:
+  // most meals carry all three, so unticking the absent one is one tap where
+  // ticking the present ones was three. A saved meal keeps its own tags.
+  tags: ['protein', 'carbs', 'fat'],
 } as const;
 
 // Photo handling. maxEdgePx/quality put a 4000px phone photo at roughly 150KB.
