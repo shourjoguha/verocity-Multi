@@ -8,6 +8,7 @@ import { formatDuration } from '@/lib/format';
 import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { LogList } from '@/components/LogList';
+import { SessionShapeLegend } from '@/components/SessionShape';
 import { Item, PageStagger } from '@/components/anim';
 import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
@@ -229,6 +230,7 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
         <Item>
           <section className="mt-8">
             <SectionHeader>This month</SectionHeader>
+            <SessionShapeLegend />
             <LogList logs={monthSessions} onSelect={showcase ? undefined : setQuickLog} />
           </section>
         </Item>

@@ -424,6 +424,28 @@ p {
     background-color 0.18s var(--ease-editorial),
     border-color 0.18s var(--ease-editorial);
 }
+/* Session-shape blocks (components/SessionShape.tsx). Greyscale by role so
+   the bar survives without colour; the patterns tell conditioning and
+   heart-rate effort apart from lifting at a glance. */
+.shape-warmup,
+.shape-cooldown {
+  background: var(--color-faint);
+}
+.shape-main {
+  background: var(--color-fg);
+}
+.shape-accessory {
+  background: var(--color-muted);
+}
+.shape-conditioning {
+  background: repeating-linear-gradient(135deg, var(--color-fg) 0 1.5px, transparent 1.5px 4px);
+}
+.shape-hr {
+  background: repeating-linear-gradient(90deg, var(--color-fg) 0 2px, transparent 2px 3px);
+}
+.shape-no-hr {
+  border: 1px dashed var(--color-muted);
+}
 /* ---- Screen-entrance stagger (PageStagger / Item in components/anim.tsx).
    CSS rather than Motion because the content is server-rendered: a JS entrance
    cannot start until hydration, which meant painting the page and then snapping
