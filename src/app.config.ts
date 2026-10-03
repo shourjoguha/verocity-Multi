@@ -131,6 +131,27 @@ export const JUMP_MARK = {
   step: { height: 1, distance: 5 },
 } as const;
 
+// The movement library's category vocabulary — the only values
+// movements.category accepts (CHECK in migration 0046; null = uncategorised,
+// which is what a name typed mid-workout gets). Free text let "conditioning"
+// and "Conditioning" and a meaningless "custom" accumulate. Adding one here
+// needs a migration that widens the constraint, in the same change.
+export const MOVEMENT_CATEGORIES = [
+  'squat',
+  'hinge',
+  'push',
+  'pull',
+  'olympic',
+  'core',
+  'plyo',
+  'conditioning',
+  'accessory',
+  'mobility',
+  'warmup',
+  'skill',
+  'sport',
+] as const;
+
 // Timer tunables (seconds).
 export const TIMERS = {
   defaultRestSeconds: 120,
