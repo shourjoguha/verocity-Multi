@@ -1,18 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { MEAL_REPEAT_LIMIT, MEAL_REPEAT_SEED } from '@/app.config';
 import {
-  defaultTagMix,
+  applyPreset,
+  clearPreset,
+  differsFromPreset,
   draftFor,
-  mixKeysOrdered,
-  normalizeTag,
-  recomputeMix,
-  repeatShortcuts,
-  setMixValue,
-  splitTags,
+  moveDivider,
+  placeholderMix,
+  presetInputFromDraft,
   toDraft,
+  toggleTag,
   toInput,
 } from '@/lib/mealDraft';
-import type { MealLog } from '@/lib/types';
+import type { MealLog, MealPreset } from '@/lib/types';
 
 function meal(overrides: Partial<MealLog>): MealLog {
   return {
@@ -25,6 +24,8 @@ function meal(overrides: Partial<MealLog>): MealLog {
     source: 'home',
     tags: [],
     tag_mix: null,
+    carb_fibre_pct: null,
+    preset_id: null,
     note: null,
     hunger_before: 4,
     hunger_after: 1,
@@ -35,227 +36,162 @@ function meal(overrides: Partial<MealLog>): MealLog {
   };
 }
 
+function preset(overrides: Partial<MealPreset> = {}): MealPreset {
+  return {
+    id: 'p1',
+    owner_user_id: 'u',
+    name: 'Oats',
+    size: 'medium',
+    kind: 'meal',
+    source: 'home',
+    tags: ['protein', 'carbs', 'fat'],
+    tag_mix: { protein: 25, carbs: 60, fat: 15 },
+    carb_fibre_pct: 25,
+    created_at: '',
+    updated_at: '',
+    ...overrides,
+  };
+}
+
+const NOW = new Date(2026, 9, 3, 12, 7);
+
 describe('draftFor', () => {
-  it('snack preset sets kind=snack, size=light', () => {
-    const draft = draftFor({ kind: 'snack' });
-    expect(draft.kind).toBe('snack');
-    expect(draft.size).toBe('light');
+  it('snack sets kind=snack, size=light', () => {
+    const d = draftFor({ kind: 'snack' }, NOW);
+    expect(d.kind).toBe('snack');
+    expect(d.size).toBe('light');
   });
 
-  it('meal preset sets kind=meal, size=medium (the default)', () => {
-    const draft = draftFor({ kind: 'meal' });
-    expect(draft.kind).toBe('meal');
-    expect(draft.size).toBe('medium');
+  it('meal is all defaults, no tags, split and fibre not set', () => {
+    const d = draftFor({ kind: 'meal' }, NOW);
+    expect(d).toMatchObject({ kind: 'meal', size: 'medium', tags: [], tagMix: null, carbFibrePct: null, presetId: null });
+    expect(d.time).toBe('12:05');
   });
 
-  it('custom preset is all defaults with no tags', () => {
-    const draft = draftFor({ kind: 'custom' });
-    expect(draft.kind).toBe('meal');
-    expect(draft.size).toBe('medium');
-    expect(draft.source).toBe('home');
-    expect(draft.tags).toEqual([]);
-    expect(draft.customTags).toEqual([]);
+  it('preset prefills every meal field and records where it started', () => {
+    const d = draftFor({ kind: 'preset', preset: preset() }, NOW);
+    expect(d).toMatchObject({
+      size: 'medium',
+      tags: ['protein', 'carbs', 'fat'],
+      tagMix: { protein: 25, carbs: 60, fat: 15 },
+      carbFibrePct: 25,
+      presetId: 'p1',
+    });
+    expect(d.time).toBe('12:05');
+  });
+});
+
+describe('applyPreset / clearPreset', () => {
+  it('keeps the time and notes of the draft it is applied to', () => {
+    const base = { ...draftFor({ kind: 'meal' }, NOW), time: '07:30', notes: 'after run' };
+    const d = applyPreset(base, preset());
+    expect(d.time).toBe('07:30');
+    expect(d.notes).toBe('after run');
   });
 
-  it('repeat preset preselects the tag as a custom tag on a meal draft', () => {
-    const draft = draftFor({ kind: 'repeat', tag: 'post-workout' });
-    expect(draft.kind).toBe('meal');
-    expect(draft.customTags).toContain('post-workout');
+  it('clearing returns to a plain draft with the same time and no preset', () => {
+    const d = clearPreset({ ...applyPreset(draftFor({ kind: 'meal' }, NOW), preset()), time: '07:30' }, NOW);
+    expect(d).toMatchObject({ time: '07:30', tags: [], tagMix: null, presetId: null });
+  });
+});
+
+describe('toggleTag', () => {
+  it('resets the split when the set of macros changes', () => {
+    const d = { ...draftFor({ kind: 'meal' }, NOW), tags: ['protein', 'carbs'], tagMix: { protein: 60, carbs: 40 } };
+    expect(toggleTag(d, 'fat').tagMix).toBeNull();
+  });
+
+  it('keeps the split when only an extra (sweet/coffee) changes', () => {
+    const d = { ...draftFor({ kind: 'meal' }, NOW), tags: ['protein', 'carbs'], tagMix: { protein: 60, carbs: 40 } };
+    expect(toggleTag(d, 'coffee').tagMix).toEqual({ protein: 60, carbs: 40 });
+  });
+
+  it('drops the fibre share with the carbs — it is a share of nothing otherwise', () => {
+    const d = { ...draftFor({ kind: 'meal' }, NOW), tags: ['protein', 'carbs'], carbFibrePct: 50 };
+    expect(toggleTag(d, 'carbs').carbFibrePct).toBeNull();
+    expect(toggleTag(d, 'fat').carbFibrePct).toBe(50);
+  });
+});
+
+describe('split bar', () => {
+  it('placeholder is an even split in whole steps, summing to 100', () => {
+    expect(placeholderMix(['protein', 'carbs'])).toEqual({ protein: 50, carbs: 50 });
+    expect(placeholderMix(['protein', 'carbs', 'fat'])).toEqual({ protein: 30, carbs: 30, fat: 40 });
+  });
+
+  it('moving a divider changes only its two neighbours and snaps to the step', () => {
+    const mix = { protein: 30, carbs: 30, fat: 40 };
+    expect(moveDivider(mix, ['protein', 'carbs', 'fat'], 0, 41)).toEqual({ protein: 40, carbs: 20, fat: 40 });
+    expect(moveDivider(mix, ['protein', 'carbs', 'fat'], 1, 80)).toEqual({ protein: 30, carbs: 50, fat: 20 });
+  });
+
+  it('never squeezes a neighbour below one step', () => {
+    const mix = { protein: 50, carbs: 50 };
+    expect(moveDivider(mix, ['protein', 'carbs'], 0, 100)).toEqual({ protein: 95, carbs: 5 });
+    expect(moveDivider(mix, ['protein', 'carbs'], 0, -20)).toEqual({ protein: 5, carbs: 95 });
   });
 });
 
 describe('toInput', () => {
-  it('merges tags + customTags into one array and drops photoUrl', () => {
-    const draft = draftFor({ kind: 'custom' });
-    draft.tags = ['protein'];
-    draft.customTags = ['post-workout'];
-    draft.photoUrl = 'blob:whatever';
-    const input = toInput(draft, 'u/abc.jpg');
-    expect(input.tags).toEqual(['protein', 'post-workout']);
-    expect('photoUrl' in input).toBe(false);
-    expect(input.photo_path).toBe('u/abc.jpg');
+  it('writes no split for a single macro and no fibre without carbs', () => {
+    const d = { ...draftFor({ kind: 'meal' }, NOW), tags: ['protein'], tagMix: { protein: 100 }, carbFibrePct: 50 };
+    const input = toInput(d, null);
+    expect(input.tag_mix).toBeNull();
+    expect(input.carb_fibre_pct).toBeNull();
   });
 
-  it('trims an empty note to null', () => {
-    const draft = draftFor({ kind: 'custom' });
-    draft.notes = '   ';
-    const input = toInput(draft, null);
-    expect(input.note).toBeNull();
+  it('writes an unset split as null, never as a placeholder', () => {
+    const d = { ...draftFor({ kind: 'meal' }, NOW), tags: ['protein', 'carbs'] };
+    expect(toInput(d, null).tag_mix).toBeNull();
   });
 
-  it('keeps a non-empty note trimmed', () => {
-    const draft = draftFor({ kind: 'custom' });
-    draft.notes = '  worth remembering  ';
-    const input = toInput(draft, null);
-    expect(input.note).toBe('worth remembering');
-  });
-});
-
-describe('splitTags', () => {
-  it('separates suggested tags from custom tags by set difference', () => {
-    const { suggested, custom } = splitTags(['protein', 'post-workout']);
-    expect(suggested).toEqual(['protein']);
-    expect(custom).toEqual(['post-workout']);
-  });
-});
-
-describe('normalizeTag', () => {
-  it('trims, collapses inner whitespace, and lowercases', () => {
-    expect(normalizeTag('  Post   Workout ')).toBe('post workout');
-  });
-
-  it('returns null for a tag that is empty after trimming', () => {
-    expect(normalizeTag('   ')).toBeNull();
-  });
-});
-
-describe('repeatShortcuts', () => {
-  it('orders distinct custom tags newest meal first', () => {
-    const meals = [
-      meal({ tags: ['post-workout', 'meal-prep'] }), // newest
-      meal({ tags: ['travel'] }),
-    ];
-    const shortcuts = repeatShortcuts(meals);
-    expect(shortcuts.slice(0, 3)).toEqual(['post-workout', 'meal-prep', 'travel']);
-  });
-
-  it('dedupes a custom tag repeated across meals, keeping the newest position', () => {
-    const meals = [meal({ tags: ['post-workout'] }), meal({ tags: ['post-workout', 'travel'] })];
-    const shortcuts = repeatShortcuts(meals);
-    expect(shortcuts.filter((t) => t === 'post-workout')).toHaveLength(1);
-    expect(shortcuts.indexOf('post-workout')).toBeLessThan(shortcuts.indexOf('travel'));
-  });
-
-  it('unions MEAL_REPEAT_SEED rather than duplicating it', () => {
-    const meals = [meal({ tags: ['post-workout'] })];
-    const shortcuts = repeatShortcuts(meals);
-    expect(shortcuts.filter((t) => t === MEAL_REPEAT_SEED[0])).toHaveLength(1);
-  });
-
-  it('includes the seed when no meals have custom tags yet', () => {
-    expect(repeatShortcuts([])).toEqual([...MEAL_REPEAT_SEED]);
-  });
-
-  it('caps at MEAL_REPEAT_LIMIT', () => {
-    const meals = Array.from({ length: MEAL_REPEAT_LIMIT + 5 }, (_, i) => meal({ tags: [`tag-${i}`] }));
-    expect(repeatShortcuts(meals)).toHaveLength(MEAL_REPEAT_LIMIT);
-  });
-});
-
-const sum = (m: Record<string, number>) => Object.values(m).reduce((a, b) => a + b, 0);
-
-describe('defaultTagMix', () => {
-  it('is empty for no tags', () => {
-    expect(defaultTagMix([])).toEqual({});
-  });
-
-  it('splits protein-only across protein and fat 80/20', () => {
-    expect(defaultTagMix(['protein'])).toEqual({ protein: 80, fat: 20 });
-  });
-
-  it('splits protein + carbs 60/40', () => {
-    expect(defaultTagMix(['protein', 'carbs'])).toEqual({ protein: 60, carbs: 40 });
-  });
-
-  it('splits protein + carbs + veg 40/40/20', () => {
-    expect(defaultTagMix(['protein', 'carbs', 'veg'])).toEqual({ protein: 40, carbs: 40, veg: 20 });
-  });
-
-  it('gives coffee/sweet a flat 5 each and splits the rest by ratio', () => {
-    const mix = defaultTagMix(['protein', 'carbs', 'coffee']);
-    expect(mix.coffee).toBe(5);
-    // 95 split 60/40 -> 57 / 38
-    expect(mix.protein).toBe(57);
-    expect(mix.carbs).toBe(38);
-    expect(sum(mix)).toBe(100);
-  });
-
-  it('splits an unlisted combo (incl. custom tags) evenly', () => {
-    expect(defaultTagMix(['protein', 'fat'])).toEqual({ protein: 50, fat: 50 });
-    const custom = defaultTagMix(['ramen', 'protein']);
-    expect(sum(custom)).toBe(100);
-    expect(custom.ramen).toBe(50);
-  });
-
-  it('splits a coffee-only meal to 100', () => {
-    expect(defaultTagMix(['coffee'])).toEqual({ coffee: 100 });
-  });
-
-  it('always sums to 100 for a range of combos', () => {
-    for (const combo of [
-      ['protein'],
-      ['carbs'],
-      ['protein', 'carbs'],
-      ['protein', 'carbs', 'veg'],
-      ['protein', 'carbs', 'veg', 'sweet'],
-      ['sweet', 'coffee'],
-      ['protein', 'coffee', 'sweet'],
-      ['a', 'b', 'c'],
-    ]) {
-      expect(sum(defaultTagMix(combo)), combo.join('+')).toBe(100);
-    }
-  });
-});
-
-describe('setMixValue (n-1 auto-balance)', () => {
-  it('drags one tag and the last tag absorbs the difference', () => {
-    const mix = { protein: 60, carbs: 40 };
-    const next = setMixValue(mix, 'protein', 70);
-    expect(next).toEqual({ protein: 70, carbs: 30 });
-    expect(sum(next)).toBe(100);
-  });
-
-  it('clamps so the balancer never goes negative', () => {
-    const mix = { protein: 40, carbs: 40, veg: 20 };
-    // protein pushed past what leaves veg (the balancer) >= 0: carbs stays 40,
-    // so protein maxes at 60 and veg lands at 0.
-    const next = setMixValue(mix, 'protein', 95);
-    expect(next.protein).toBe(60);
-    expect(next.veg).toBe(0);
-    expect(sum(next)).toBe(100);
-  });
-
-  it('ignores a drag on the balancer (last) tag', () => {
-    const mix = { protein: 60, carbs: 40 };
-    expect(setMixValue(mix, 'carbs', 10)).toEqual(mix);
-  });
-
-  it('is a no-op for a single-tag mix', () => {
-    expect(setMixValue({ coffee: 100 }, 'coffee', 40)).toEqual({ coffee: 100 });
-  });
-});
-
-describe('mixKeysOrdered', () => {
-  it('orders known tags by MEAL_TAGS then custom alphabetically, balancer last', () => {
-    expect(mixKeysOrdered({ carbs: 40, protein: 60 })).toEqual(['protein', 'carbs']);
-    expect(mixKeysOrdered({ zeta: 10, protein: 90 })).toEqual(['protein', 'zeta']);
-  });
-});
-
-describe('mix persistence', () => {
-  it('recomputeMix seeds from the current selection', () => {
-    const draft = recomputeMix({ ...draftFor({ kind: 'meal' }), tags: ['protein', 'carbs'] });
-    expect(draft.tagMix).toEqual({ protein: 60, carbs: 40 });
-  });
-
-  it('toInput writes the mix, or null when empty', () => {
-    const base = draftFor({ kind: 'meal' });
-    expect(toInput({ ...base, tagMix: {} }, null).tag_mix).toBeNull();
-    expect(toInput({ ...base, tagMix: { protein: 60, carbs: 40 } }, null).tag_mix).toEqual({
-      protein: 60,
-      carbs: 40,
+  it('carries the split, fibre and preset link', () => {
+    const d = draftFor({ kind: 'preset', preset: preset() }, NOW);
+    expect(toInput(d, 'u/x.jpg')).toMatchObject({
+      tag_mix: { protein: 25, carbs: 60, fat: 15 },
+      carb_fibre_pct: 25,
+      preset_id: 'p1',
+      photo_path: 'u/x.jpg',
     });
   });
 
-  it('toDraft restores a saved mix and falls back to the default when absent', () => {
-    expect(toDraft(meal({ tags: ['protein', 'carbs'], tag_mix: { protein: 70, carbs: 30 } })).tagMix).toEqual({
-      protein: 70,
-      carbs: 30,
-    });
-    // Older meal: tags but no saved mix -> seeded default.
-    expect(toDraft(meal({ tags: ['protein', 'carbs'], tag_mix: null })).tagMix).toEqual({
-      protein: 60,
-      carbs: 40,
-    });
+  it('trims an empty note to null and keeps a real one trimmed', () => {
+    expect(toInput({ ...draftFor({ kind: 'meal' }, NOW), notes: '   ' }, null).note).toBeNull();
+    expect(toInput({ ...draftFor({ kind: 'meal' }, NOW), notes: '  rice  ' }, null).note).toBe('rice');
+  });
+});
+
+describe('toDraft', () => {
+  it('keeps a legacy tag on edit so saving does not drop it', () => {
+    const d = toDraft(meal({ tags: ['protein', 'veg'] }));
+    expect(toInput(d, null).tags).toEqual(['protein', 'veg']);
+  });
+
+  it('reads only the P/C/F keys of an older mix, renormalised', () => {
+    const d = toDraft(meal({ tags: ['protein', 'carbs', 'sweet'], tag_mix: { protein: 45, carbs: 45, sweet: 10 } }));
+    expect(d.tagMix).toEqual({ protein: 50, carbs: 50 });
+  });
+});
+
+describe('saved meals', () => {
+  it('saves only vocabulary tags', () => {
+    const d = { ...draftFor({ kind: 'meal' }, NOW), tags: ['protein', 'veg'] };
+    expect(presetInputFromDraft(d, '  Eggs ').tags).toEqual(['protein']);
+    expect(presetInputFromDraft(d, '  Eggs ').name).toBe('Eggs');
+  });
+
+  it('an untouched draft does not differ from its saved meal', () => {
+    const p = preset();
+    const d = { ...draftFor({ kind: 'preset', preset: p }, NOW), time: '06:00', notes: 'x', hungerBefore: 1 };
+    expect(differsFromPreset(d, p)).toBe(false);
+  });
+
+  it('changing size, a macro, the split or the fibre share counts as a change', () => {
+    const p = preset();
+    const d = draftFor({ kind: 'preset', preset: p }, NOW);
+    expect(differsFromPreset({ ...d, size: 'heavy' }, p)).toBe(true);
+    expect(differsFromPreset(toggleTag(d, 'fat'), p)).toBe(true);
+    expect(differsFromPreset({ ...d, tagMix: { protein: 30, carbs: 55, fat: 15 } }, p)).toBe(true);
+    expect(differsFromPreset({ ...d, carbFibrePct: 50 }, p)).toBe(true);
   });
 });

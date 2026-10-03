@@ -5,15 +5,17 @@ import {
   getAllLogs,
   getCurrentProfile,
   getMealLogsInRange,
+  getMealPresets,
   getRecentLogs,
 } from '@/lib/queries';
 import { getCached, setCached } from '@/lib/queryCache';
 import { todayLocal } from '@/lib/mealPhoto';
-import { draftFor, type MealDraft, type MealPreset } from '@/lib/mealDraft';
-import type { MealLog } from '@/lib/types';
+import { draftFor, type MealDraft, type MealOpener } from '@/lib/mealDraft';
+import type { MealLog, MealPreset } from '@/lib/types';
 import { MealChipRail } from '@/components/meals/MealChipRail';
 import { TodaysMeals } from '@/components/meals/TodaysMeals';
 import { MealDrawer } from '@/components/meals/MealDrawer';
+import { SavedMealsSheet } from '@/components/meals/SavedMealsSheet';
 import { activeSessionOf } from '@/lib/activeSession';
 import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
@@ -496,6 +498,10 @@ export default function ProfileView({ mode }: { mode: Surface }) {
   // Hoisted so the chip rail and Today's meals share ONE drawer instance —
   // one dialog, one focus trap, one scroll lock (docs/MEAL_LOGGING.md §11.3).
   const [mealDraft, setMealDraft] = useState<MealDraft | null>(null);
+  const [mealPresets, setMealPresets] = useState<MealPreset[]>(
+    mode === 'app' ? (getCached<MealPreset[]>('meals:presets') ?? []) : [],
+  );
+  const [savedMealsOpen, setSavedMealsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   // Pre-filled date when Add is opened from a specific calendar cell.
   const [addDate, setAddDate] = useState<string | null>(null);
@@ -525,7 +531,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           }
         }
         const today = todayLocal();
-        const [p, pl, lg, all, meals] = await Promise.all([
+        const [p, pl, lg, all, meals, presets] = await Promise.all([
           getCurrentProfile(client),
           getActivePlan(client),
           getRecentLogs(30, client),
@@ -535,6 +541,8 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           // 0032_meal_logs.sql). Skip the read there rather than surface a
           // permanently-empty widget.
           mode === 'app' ? getMealLogsInRange(today, today, client) : Promise.resolve([]),
+          // Same reason: meal_presets is owner-only with no anon policy (0046).
+          mode === 'app' ? getMealPresets(client) : Promise.resolve([]),
         ]);
         if (!active) return;
         if (mode === 'app') {
@@ -543,12 +551,14 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           setCached('logs:recent30', lg);
           setCached('logs:all', all);
           setCached('meals:today', meals);
+          setCached('meals:presets', presets);
         }
         setProfile(p);
         setPlan(pl);
         setLogs(lg);
         setAllLogs(all);
         setMealsToday(meals);
+        setMealPresets(presets);
         setFailed(false);
       } catch {
         // Without this the rejection escaped the async IIFE unhandled and none
@@ -654,7 +664,20 @@ export default function ProfileView({ mode }: { mode: Surface }) {
     setCached('logs:all', nextAll);
   };
 
-  const openMealPreset = (preset: MealPreset) => setMealDraft(draftFor(preset));
+  const openMeal = (opener: MealOpener) => setMealDraft(draftFor(opener));
+  // Newest first, matching getMealPresets: a created preset goes to the front,
+  // an edited one keeps its place.
+  const onPresetSaved = (preset: MealPreset) => {
+    const exists = mealPresets.some((x) => x.id === preset.id);
+    const next = exists ? mealPresets.map((x) => (x.id === preset.id ? preset : x)) : [preset, ...mealPresets];
+    setMealPresets(next);
+    setCached('meals:presets', next);
+  };
+  const onPresetDeleted = (id: string) => {
+    const next = mealPresets.filter((x) => x.id !== id);
+    setMealPresets(next);
+    setCached('meals:presets', next);
+  };
   const onMealSaved = (meal: MealLog | null) => {
     if (!meal) return;
     const next = [meal, ...mealsToday];
@@ -904,7 +927,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                       rather than a design one: meal_logs has no anon policy
                       (0032) and the coach is deliberately private, so both
                       would render permanently empty on the showcase. */}
-                  {!readOnly ? <MealChipRail meals={mealsToday} onOpen={openMealPreset} /> : null}
+                  {!readOnly ? <MealChipRail presets={mealPresets} onOpen={openMeal} onManage={() => setSavedMealsOpen(true)} /> : null}
                 </div>
                 {!readOnly ? (
                   <div className="flex justify-end">
@@ -951,7 +974,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                 </div>
                 {!readOnly ? (
                   <div className="mt-3 overflow-hidden rounded-card border border-border">
-                    <MealChipRail meals={mealsToday} onOpen={openMealPreset} />
+                    <MealChipRail presets={mealPresets} onOpen={openMeal} onManage={() => setSavedMealsOpen(true)} />
                   </div>
                 ) : null}
               </>
@@ -995,7 +1018,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
       {mode === 'app' ? (
         <Item>
           <section className="mb-6">
-            <TodaysMeals meals={mealsToday} />
+            <TodaysMeals meals={mealsToday} presets={mealPresets} />
           </section>
         </Item>
       ) : null}
@@ -1122,6 +1145,15 @@ export default function ProfileView({ mode }: { mode: Surface }) {
             onDraftChange={(patch) => setMealDraft((d) => (d ? { ...d, ...patch } : d))}
             onClose={() => setMealDraft(null)}
             onSaved={onMealSaved}
+            presets={mealPresets}
+            onPresetSaved={onPresetSaved}
+          />
+          <SavedMealsSheet
+            open={savedMealsOpen}
+            presets={mealPresets}
+            onClose={() => setSavedMealsOpen(false)}
+            onSaved={onPresetSaved}
+            onDeleted={onPresetDeleted}
           />
         </>
       ) : null}

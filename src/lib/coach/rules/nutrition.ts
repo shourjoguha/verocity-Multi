@@ -289,7 +289,7 @@ export function carbSourceConcentration(
     periodKey,
     tldr: `${pct(share)} of your carbs are ${top.label}`,
     action: `Rotate one ${top.label} meal a week to a different source — variety costs nothing here.`,
-    body: `Across the ${t.described} meals you described in words, ${t.withCarbSource} named a carbohydrate and ${top.count} of those were ${top.label}: ${named}. A vegetable was tagged or named in ${t.vegMeals} of ${t.total} intakes (${pct(vegShare)})${t.friedMeals > 0 ? `, and ${t.friedMeals} meal${t.friedMeals === 1 ? ' was' : 's were'} described as fried` : ''}. This is a mirror, not a verdict — nothing in the coach's evidence base ranks one carbohydrate source above another, so there is no target here to miss. Notes are optional, so treat this as a read of what you wrote down.`,
+    body: `Across the ${t.described} meals you described in words, ${t.withCarbSource} named a carbohydrate and ${top.count} of those were ${top.label}: ${named}. A fibrous carb (veg, fruit, legumes, nuts) was recorded or named in ${t.vegMeals} of ${t.total} intakes (${pct(vegShare)})${t.friedMeals > 0 ? `, and ${t.friedMeals} meal${t.friedMeals === 1 ? ' was' : 's were'} described as fried` : ''}. This is a mirror, not a verdict — nothing in the coach's evidence base ranks one carbohydrate source above another, so there is no target here to miss. Notes are optional, so treat this as a read of what you wrote down.`,
     drift: excess(share, 0.5, 0.5),
     confidence: 0.4,
     sufficiency: t.described >= 20 ? 'ok' : 'partial',

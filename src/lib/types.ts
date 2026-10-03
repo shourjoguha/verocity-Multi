@@ -708,12 +708,19 @@ export interface RxDeepResult {
  * silently renders BLANK for anything longer. getMealLogs trims it at the read
  * boundary so no component has to know that.
  *
- * `tags` holds suggested and custom tags together; splitTags() in
- * lib/mealDraft.ts separates them for display.
+ * `tags` is the fixed MEAL_TAGS vocabulary. Rows written before 0046 may
+ * still carry `veg`; 0046 moved free-text "custom" tags into meal_presets.
  *
- * `tag_mix` is the optional composition: integer percents per tag that sum to
- * 100 (e.g. { protein: 60, carbs: 40 }). NULL when no mix was recorded. Kept
- * separate from `tags` so the two can never disagree.
+ * `tag_mix` is the optional macro split: integer percents per macro that sum
+ * to 100 (e.g. { protein: 60, carbs: 40 }). NULL when no split was recorded.
+ * Older rows may also carry sweet/coffee keys, so readers take the P/C/F keys
+ * and renormalise — macroMix() in lib/mealInsights.ts.
+ *
+ * `carb_fibre_pct` is the share OF THE CARBS from fibrous sources, in
+ * MEAL_CARB_FIBRE_STEPS. NULL = not recorded; always NULL without carbs.
+ *
+ * `preset_id` is the saved meal the row started from — provenance only, the
+ * values were copied at log time (0046).
  */
 export type MealTagMix = Record<string, number>;
 
@@ -727,6 +734,8 @@ export interface MealLog {
   source: MealSourceKey;
   tags: string[];
   tag_mix: MealTagMix | null;
+  carb_fibre_pct: number | null;
+  preset_id: string | null;
   note: string | null;
   hunger_before: number;
   hunger_after: number;
@@ -739,3 +748,23 @@ export interface MealLog {
 export type MealLogInput = Partial<
   Omit<MealLog, 'id' | 'owner_user_id' | 'created_at' | 'updated_at'>
 > & { log_date: string; eaten_time: string };
+
+/**
+ * meal_presets (0046). A saved meal: the fields a meal draft is prefilled
+ * from. Copied on log, so editing or deleting one never touches history.
+ */
+export interface MealPreset {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  size: MealSizeKey;
+  kind: MealKindKey;
+  source: MealSourceKey;
+  tags: string[];
+  tag_mix: MealTagMix | null;
+  carb_fibre_pct: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type MealPresetInput = Omit<MealPreset, 'id' | 'owner_user_id' | 'created_at' | 'updated_at'>;

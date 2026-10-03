@@ -63,6 +63,16 @@
   --meal-tag-sat: 62%;
   --meal-tag-light: 42%;
 
+  /* Macro ramp — the Home fuel chart and the meal split bar. Three steps of
+     ink, darkest to lightest P → C → F, because one colour family reads as
+     one quantity split three ways where three hues read as three things. DATA
+     colour, not chrome. The fibrous share of carbs is a hatch of the carbs
+     step (.macro-hatch), so it survives without colour too. Dark inverts the
+     ramp: protein is always the step furthest from the surface. */
+  --color-macro-p: hsl(0 0% 10%);
+  --color-macro-c: hsl(0 0% 46%);
+  --color-macro-f: hsl(0 0% 74%);
+
   /* Bright accent — kept as a single semantic role ("the highlight") but now
      THEME-AWARE. Dark mode keeps the teal `#49F2E1` that seeded the "Depth"
      backdrop; light mode flips to a mango / burnt-orange `#C2570A`
@@ -203,6 +213,10 @@ html[data-theme='dark'] {
   /* Brighter than the light block so a generated hue reads on carbon. */
   --meal-tag-sat: 70%;
   --meal-tag-light: 58%;
+  /* Macro ramp, inverted for carbon — see the light block. */
+  --color-macro-p: hsl(0 0% 94%);
+  --color-macro-c: hsl(0 0% 58%);
+  --color-macro-f: hsl(0 0% 32%);
   --color-echo-1: hsl(0 0% 20%);
   --color-echo-2: hsl(0 0% 17%);
   --color-echo-3: hsl(0 0% 14%);
@@ -1190,4 +1204,10 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   [data-reveal] {
     animation-timeline: auto;
   }
+}
+
+/* The fibrous share of a meal's carbs: the carbs step, hatched. Used on the
+   Home fuel chart and in the meal split bar (FuelBars.tsx, MealFields.tsx). */
+.macro-hatch {
+  background: repeating-linear-gradient(-45deg, var(--color-macro-c) 0 2px, transparent 2px 4px);
 }

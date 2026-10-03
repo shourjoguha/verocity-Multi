@@ -361,36 +361,62 @@ export const MEAL_SOURCES = {
   takeaway: { label: 'Takeaway' },
 } as const;
 
-// Suggested tags. Ordered because the chip row's reading order is the point —
-// macros (protein/carbs/fat) lead, then the qualitative tags. Each tag carries a
-// generated hue (mealTagColor in lib/tags.ts) so the tag-mix chart and macro
-// chips read at a glance; the colour is derived from the key, not stored here,
-// so a NEW tag — suggested or custom — is auto-coloured with no edit. The macro
-// chips also render a letter, so the hue is never the only signal.
+// The fixed tag vocabulary. There are no free-text tags: a meal you repeat is a
+// saved meal (meal_presets, 0046), not a tag. Macros (protein/carbs/fat) lead;
+// sweet/coffee are yes/no extras that never enter the split. Each tag carries a
+// generated hue (mealTagColor in lib/tags.ts) for the Meals page's tag-mix
+// chart; the colour is derived from the key, not stored here.
+//
+// `veg` is gone from this list on purpose. It could be ticked with no carbs at
+// all, and nuts or fruit had nowhere to go. Fibre is now a share OF the carbs —
+// MEAL_CARB_FIBRE_STEPS below. Old rows still carry the `veg` tag; the coach
+// reads it as history (lib/coach/mealText.ts).
 export const MEAL_TAGS = [
   { key: 'protein', label: 'Protein' },
   { key: 'carbs', label: 'Carbs' },
   { key: 'fat', label: 'Fat' },
-  { key: 'veg', label: 'Veg' },
   { key: 'sweet', label: 'Sweet' },
   { key: 'coffee', label: 'Coffee' },
 ] as const;
 
-// The three tags shown as single-letter macro chips (P/C/F) on meal rows. A
-// subset of MEAL_TAGS — the qualitative tags (veg/sweet/coffee) appear only in
-// the tag-mix chart, not as inline chips.
+// The macros: the only tags that enter the split (`tag_mix`), in canonical
+// P → C → F order. A subset of MEAL_TAGS.
 export const MEAL_MACRO_TAGS = ['protein', 'carbs', 'fat'] as const;
 
-// Repeat-meal shortcuts are DERIVED from the distinct custom tags of recent
-// meals (newest first) — no second table. This seed is what a brand-new user
-// sees before they have saved anything, and it disappears from the front of the
-// rail naturally once real custom tags exist. Union, not replacement: if the
-// user has also used 'post-workout', it appears once.
-export const MEAL_REPEAT_SEED = ['post-workout'] as const;
+// Share of a meal's carbs that came from fibrous sources (veg, fruit, legumes,
+// nuts) rather than starchy ones (rice, pasta, bread, potato). Quarter steps
+// because nobody can read 37% off a plate. Must stay in step with the check
+// constraints on meal_logs/meal_presets.carb_fibre_pct (0046).
+export const MEAL_CARB_FIBRE_STEPS = [0, 25, 50, 75, 100] as const;
+export const MEAL_CARB_FIBRE_LABELS: Record<(typeof MEAL_CARB_FIBRE_STEPS)[number], string> = {
+  0: 'None',
+  25: '¼',
+  50: '½',
+  75: '¾',
+  100: 'All',
+};
 
-// How many repeat shortcuts the chip rail shows before it stops. The rail
-// scrolls, so this is about signal, not width.
-export const MEAL_REPEAT_LIMIT = 6;
+// The Home fuel chart (FuelBars.tsx). The track runs 06:00 → 24:00; a meal
+// outside it is pinned to the nearer edge. Bar height is the portion
+// (sizeWeight × barMaxPx). Bars closer than minGapPct of the track are nudged
+// apart to sit side by side — ~13px at 320px wide, one bar plus a hairline gap.
+export const MEAL_FUEL_CHART = {
+  startHour: 6,
+  endHour: 24,
+  ticks: [6, 12, 18, 24],
+  barMaxPx: 40,
+  minGapPct: 4,
+} as const;
+
+// Split-bar divider step, in percent. Coarse on purpose, like the fibre steps.
+export const MEAL_MIX_STEP = 5;
+
+// How many saved meals the Home rail shows before it stops; the rest are one
+// tap away in the manage sheet. The rail scrolls, so this is about signal.
+export const MEAL_PRESET_RAIL_LIMIT = 6;
+
+// Saved-meal name length; must match the check on meal_presets.name (0046).
+export const MEAL_PRESET_NAME_MAX = 60;
 
 // Hunger before / after. Must stay in step with the check constraints in
 // 0032_meal_logs.sql — widening this without a migration writes rejected rows.
@@ -405,23 +431,6 @@ export const MEAL_DEFAULTS = {
   source: 'home',
   hungerBefore: 4,
   hungerAfter: 1,
-} as const;
-
-// Meal composition defaults — the seed percentages when the mix is first shown
-// for a set of selected tags (defaultTagMix in lib/mealDraft.ts). The user then
-// drags the sliders; these only decide the starting split.
-//
-//   - flatTags each take a fixed `flatShare`; the remainder is split among the
-//     rest by the ratio rules.
-//   - protein alone splits across protein AND fat (fat joins the mix).
-//   - {protein,carbs} and {protein,carbs,veg} have named ratios; any other set
-//     starts as an even split.
-export const MEAL_MIX = {
-  flatTags: ['coffee', 'sweet'],
-  flatShare: 5,
-  proteinOnly: { protein: 80, fat: 20 },
-  proteinCarbs: { protein: 60, carbs: 40 },
-  proteinCarbsVeg: { protein: 40, carbs: 40, veg: 20 },
 } as const;
 
 // Photo handling. maxEdgePx/quality put a 4000px phone photo at roughly 150KB.
@@ -1093,7 +1102,6 @@ export const appConfig = {
   mealKinds: MEAL_KINDS,
   mealSources: MEAL_SOURCES,
   mealTags: MEAL_TAGS,
-  mealRepeatSeed: MEAL_REPEAT_SEED,
   mealScale: MEAL_SCALE,
   mealDefaults: MEAL_DEFAULTS,
   mealPhoto: MEAL_PHOTO,

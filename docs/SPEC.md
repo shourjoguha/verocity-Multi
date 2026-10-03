@@ -271,8 +271,15 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   `MEAL_SIZES`/`MEAL_KINDS`/`MEAL_SOURCES` in `app.config.ts` rather than a
   check constraint, so adding an option is a config edit; `getMealLogs`
   normalises an unknown stored value back to `MEAL_DEFAULTS` at the read
-  boundary. Repeat-meal shortcuts on the chip rail are **derived** from the
-  distinct custom tags of recent meals — no second table. Owner-only, all four
+  boundary. `tags` is the fixed `MEAL_TAGS` vocabulary only; `tag_mix` is the
+  optional protein/carbs/fat split (NULL until the athlete sets it — a seeded
+  split is never saved); `carb_fibre_pct` (0046) is the share **of the carbs**
+  from fibrous sources in quarter steps, NULL without carbs. Repeat meals are
+  **saved meals** in `meal_presets` (0046, owner-only, same no-anon rule): a
+  named bundle a draft is prefilled from, copied on log, so editing or deleting
+  one never rewrites history (`meal_logs.preset_id` is provenance, `on delete
+  set null`). They replaced shortcuts derived from free-text "custom" tags,
+  which shared `tags` with the macros and could not be edited. Owner-only, all four
   RLS verbs, **no anon `_select` policy** — `profiles_select_showcase` grants
   `anon` a whole-row read of the showcase profile and what someone eats must
   never travel that route (same reasoning as `user_stats` above). Never add

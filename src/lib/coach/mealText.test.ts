@@ -65,4 +65,12 @@ describe('summarizeMealText', () => {
     const s = summarizeMealText([meal('Chicken and broccoli', ['veg'])]);
     expect(s.vegMeals).toBe(1);
   });
+
+  it('counts a recorded fibre share as a fibrous meal, and a zero share as not', () => {
+    const s = summarizeMealText([
+      { note: null, tags: ['carbs'], carb_fibre_pct: 50 },
+      { note: null, tags: ['carbs'], carb_fibre_pct: 0 },
+    ]);
+    expect(s.vegMeals).toBe(1);
+  });
 });
