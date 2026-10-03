@@ -362,7 +362,7 @@ export const MEAL_SOURCES = {
 } as const;
 
 // The fixed tag vocabulary. There are no free-text tags: a meal you repeat is a
-// saved meal (meal_presets, 0046), not a tag. Macros (protein/carbs/fat) lead;
+// saved meal (meal_presets, 0047), not a tag. Macros (protein/carbs/fat) lead;
 // sweet/coffee are yes/no extras that never enter the split. Each tag carries a
 // generated hue (mealTagColor in lib/tags.ts) for the Meals page's tag-mix
 // chart; the colour is derived from the key, not stored here.
@@ -386,7 +386,7 @@ export const MEAL_MACRO_TAGS = ['protein', 'carbs', 'fat'] as const;
 // Share of a meal's carbs that came from fibrous sources (veg, fruit, legumes,
 // nuts) rather than starchy ones (rice, pasta, bread, potato). Quarter steps
 // because nobody can read 37% off a plate. Must stay in step with the check
-// constraints on meal_logs/meal_presets.carb_fibre_pct (0046).
+// constraints on meal_logs/meal_presets.carb_fibre_pct (0047).
 export const MEAL_CARB_FIBRE_STEPS = [0, 25, 50, 75, 100] as const;
 export const MEAL_CARB_FIBRE_LABELS: Record<(typeof MEAL_CARB_FIBRE_STEPS)[number], string> = {
   0: 'None',
@@ -415,7 +415,7 @@ export const MEAL_MIX_STEP = 5;
 // tap away in the manage sheet. The rail scrolls, so this is about signal.
 export const MEAL_PRESET_RAIL_LIMIT = 6;
 
-// Saved-meal name length; must match the check on meal_presets.name (0046).
+// Saved-meal name length; must match the check on meal_presets.name (0047).
 export const MEAL_PRESET_NAME_MAX = 60;
 
 // Hunger before / after. Must stay in step with the check constraints in

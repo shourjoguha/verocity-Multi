@@ -19,7 +19,7 @@ import {
 // switches between the list and the editor, so going list → edit → list never
 // unmounts the sheet (one dialog, one focus trap, one scroll lock — the same
 // reason MealDrawer is hoisted). Logged meals copied their values at log time,
-// so editing or deleting here never changes history (0046).
+// so editing or deleting here never changes history (0047).
 type View =
   | { mode: 'list'; confirmId: string | null }
   | { mode: 'edit'; preset: MealPreset | null; draft: MealDraft; name: string; confirmDelete: boolean };

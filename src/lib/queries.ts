@@ -848,7 +848,7 @@ function normalizeMealShape(row: {
       row.tag_mix && typeof row.tag_mix === 'object' && !Array.isArray(row.tag_mix)
         ? (row.tag_mix as MealTagMix)
         : null,
-    // Pre-0046 rows have no column at all; anything off the step list is noise.
+    // Pre-0047 rows have no column at all; anything off the step list is noise.
     carb_fibre_pct: (MEAL_CARB_FIBRE_STEPS as readonly unknown[]).includes(row.carb_fibre_pct)
       ? (row.carb_fibre_pct as number)
       : null,
@@ -913,7 +913,7 @@ export async function deleteMealLog(id: string): Promise<boolean> {
   return !error;
 }
 
-// ---- meal_presets (saved meals; owner-only by RLS, no anon read — 0046) ----
+// ---- meal_presets (saved meals; owner-only by RLS, no anon read — 0047) ----
 
 function normalizeMealPreset(row: MealPreset): MealPreset {
   return { ...row, ...normalizeMealShape(row) };
