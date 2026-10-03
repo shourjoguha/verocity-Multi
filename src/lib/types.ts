@@ -552,6 +552,10 @@ export interface SetActual {
   /** Jump mark in cm — box height or jump distance, per the item's markKind.
    *  Never priced as work: it records the outcome of a jump, not its load. */
   mark?: number;
+  /** Rest taken BEFORE this set, in seconds, when it differs from the item's
+   *  `restSeconds` tag ("vary by set" in movement options). Absent ⇒ the item's
+   *  tag applies. Stated, not timed — see lib/coach/intent.ts. */
+  rest?: number;
   completed: boolean;
   prefilled: boolean;
 }

@@ -135,7 +135,7 @@ export const JUMP_MARK = {
 export const TIMERS = {
   defaultRestSeconds: 120,
   autosaveSeconds: 15,
-  restPresets: [0, 30, 60, 90, 120, 180, 300],
+  restPresets: [0, 30, 45, 60, 75, 90, 120, 180, 300],
   // Wall-clock cap on a live session. A workout left running is auto-ended
   // here so a stale session never racks up a 9-hour duration, and Home stops
   // offering to resume one past it. The user can edit the time later.

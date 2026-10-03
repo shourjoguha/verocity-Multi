@@ -30,6 +30,7 @@ import {
 import {
   addItem,
   addSet,
+  copyForward,
   addSubroutine,
   groupWithAcrossSections,
   mergeWithNext,
@@ -45,6 +46,7 @@ import {
   setItemRest,
   setItemMark,
   setItemMarkKind,
+  setSetRest,
   setSubroutine,
   swapItemMovement,
   toggleItemNotation,
@@ -66,6 +68,7 @@ import { weekFromDate } from '@/lib/week';
 import { blockForWeek, nextWeekForDay, planWeekByLog, planWeekCount } from '@/lib/progression';
 import {
   ACTIVITY_TAGS,
+  METRICS,
   NOTATIONS,
   PRIMARY_METRICS,
   SECTIONS,
@@ -99,17 +102,11 @@ import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import {
-  CalGlyph,
-  DistanceGlyph,
   LinkGlyph,
   MoreGlyph,
   PlusGlyph,
-  RepsGlyph,
-  RpeGlyph,
-  TimeGlyph,
   TrashGlyph,
   VoiceGlyph,
-  WeightGlyph,
 } from '@/components/ui/icons';
 import { toast } from '@/lib/toast';
 
@@ -118,17 +115,6 @@ import { toast } from '@/lib/toast';
 // more: weight is an always-on field on reps/time/distance, and rpe was never a
 // primary that rendered anything. See PRIMARY_METRICS in app.config.ts.
 const METRIC_CYCLE: MetricKey[] = [...PRIMARY_METRICS];
-
-// One glyph per MetricKey. Exhaustive by construction — a new metric in
-// app.config.ts fails the build here rather than rendering a blank button.
-const METRIC_GLYPH: Record<MetricKey, (p: { className?: string }) => ReactNode> = {
-  weight: WeightGlyph,
-  reps: RepsGlyph,
-  time: TimeGlyph,
-  distance: DistanceGlyph,
-  cal: CalGlyph,
-  rpe: RpeGlyph,
-};
 
 // Shared by every icon-only control in a movement card's bands: a real 44px
 // target (TOUCH.minTargetPx) holding a ~18px glyph, with no gap between
@@ -192,6 +178,10 @@ export default function Logger() {
   const [picker, setPicker] = useState<Picker | null>(null);
   const [subEditor, setSubEditor] = useState<SubEditor | null>(null);
   const [optionsFor, setOptionsFor] = useState<{ si: number; gi: number; ii: number } | null>(null);
+  // "Vary by set" under the rest tags: collapsed per opening of the sheet, and
+  // forced open whenever a set already carries its own rest.
+  const [varyRest, setVaryRest] = useState(false);
+  useEffect(() => setVaryRest(false), [optionsFor]);
   // Which set the entry sheet is editing. Set rows are read-only summaries;
   // all numeric entry happens in SetEntrySheet.
   const [entryFor, setEntryFor] = useState<{ si: number; gi: number; ii: number; ki: number } | null>(
@@ -968,21 +958,13 @@ export default function Logger() {
   }
 
   function cloneForward(si: number, gi: number, ii: number, ki: number) {
-    setDoc((d) => {
-      const it = d.sections[si].groups[gi].items[ii];
-      const src = it.sets[ki].actual;
-      let next = d;
-      if (ki + 1 >= it.sets.length) next = addSet(next, si, gi, ii);
-      const patch: Partial<SetActual> = { prefilled: true };
-      if (src.weight != null) patch.weight = src.weight;
-      if (src.reps != null) patch.reps = src.reps;
-      if (src.time != null) patch.time = src.time;
-      if (src.distance != null) patch.distance = src.distance;
-      if (src.calories != null) patch.calories = src.calories;
-      if (src.mark != null) patch.mark = src.mark;
-      if (src.rpe != null) patch.rpe = src.rpe;
-      return patchSetActual(next, si, gi, ii, ki + 1, patch);
-    });
+    // Decided on the current doc so the toast and the edit agree; see
+    // copyForward in lib/logEdits.ts for when it may add a set.
+    if (copyForward(doc, si, gi, ii, ki).outcome === 'last-open') {
+      toast('Last set — log it first, or tap + to add one');
+      return;
+    }
+    setDoc((d) => copyForward(d, si, gi, ii, ki).doc);
   }
 
   // `footerTrailing` rides in the SAME row as Add set rather than a band of its
@@ -994,7 +976,7 @@ export default function Logger() {
     gi: number,
     ii: number,
     grouped: boolean,
-    footerTrailing?: ReactNode,
+    footer?: { link?: ReactNode; remove?: ReactNode },
   ) {
     const group = doc.sections[si].groups[gi];
     const groupId = group.id;
@@ -1032,40 +1014,31 @@ export default function Logger() {
     const anyPlanned = item.sets.some((s) => !!s.planned);
     return (
       <div key={item.id} className={grouped ? 'border-t border-border first:border-0' : ''}>
-        {/* BAND 1 — identity. The metric/voice/rest/options cluster used to
-            share this row and wrap onto a second line at 375px; the comment
-            that stood here described fighting that wrap with a min-width on
-            the name. The design bands the controls below a hairline instead,
-            so the name row is a single line at every width and the controls
-            get a full row of their own. `min-w-0` is now correct precisely
-            because nothing competes for the space any more. */}
-        <div className="flex items-center gap-2 px-4">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                activate(groupId);
-                toggleItemComplete(si, gi, ii);
-              }}
-              // Same box as a set row's ✓ — they are the same control at two
-              // scopes and have to read as one. Text-height chrome inside a
-              // real 44px target; see the SetRow note for why the target
-              // cannot shrink with it.
-              className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center"
-              aria-label="Complete movement"
-              aria-pressed={allDone}
-            >
-              <span
-                aria-hidden
-                className={`hill-btn flex h-6 w-6 items-center justify-center border text-xs transition-colors ${
-                  allDone
-                    ? 'border-accent bg-accent text-accent-fg'
-                    : 'border-border bg-surface text-muted'
-                }`}
-              >
-                ✓
-              </span>
-            </button>
+        {/* BAND 1 — identity. The ✓ is a full-height cell flush with the
+            card's edge, divided from the name by a hairline: the whole cell is
+            the 44px target, so the visible box and the hit box are the same
+            thing. There is no chevron — the name itself is the collapse
+            control (aria-expanded carries the state), which bought back the
+            width that options (⋯) now takes on the right. */}
+        <div className="flex items-stretch">
+          <button
+            type="button"
+            onClick={() => {
+              activate(groupId);
+              toggleItemComplete(si, gi, ii);
+            }}
+            // No `hill-btn`: its unlayered aria-pressed background beats the
+            // `bg-accent` utility (see the SetRow note). The rounded corners
+            // keep the filled cell inside a standalone card's radius.
+            className={`flex w-11 shrink-0 items-center justify-center border-r text-sm transition-colors ${
+              grouped ? '' : `rounded-tl-card ${isCollapsed ? 'rounded-bl-card' : ''}`
+            } ${allDone ? 'border-r-accent bg-accent text-accent-fg' : 'border-r-border text-muted'}`}
+            aria-label="Complete movement"
+            aria-pressed={allDone}
+          >
+            <span aria-hidden>✓</span>
+          </button>
+          <div className="flex min-w-0 flex-1 items-center gap-2 pl-2.5">
             {collapsible ? (
               <button
                 type="button"
@@ -1073,31 +1046,37 @@ export default function Logger() {
                   activate(groupId);
                   toggleCollapse(groupId);
                 }}
-                className="flex min-h-11 min-w-0 items-center gap-2 text-left text-fg"
-                aria-label={isCollapsed ? 'Expand movement' : 'Collapse movement'}
+                className="flex min-h-11 min-w-0 items-center text-left text-fg"
                 aria-expanded={!isCollapsed}
               >
-                <span className={`inline-block shrink-0 text-[0.7rem] transition-transform ${isCollapsed ? '' : 'rotate-90'}`}>
-                  ▸
-                </span>
                 <span className="truncate capitalize">{item.movement}</span>
               </button>
             ) : (
-              <span className="min-w-0 truncate capitalize text-fg">{item.movement}</span>
+              <span className="flex min-h-11 min-w-0 items-center text-fg">
+                <span className="truncate capitalize">{item.movement}</span>
+              </span>
             )}
             {/* Video icon sits inline right after the name, same row, no vertical
                 offset. Renders nothing when the movement has no demo. Opens the
                 popup; tapping the scrim (or Escape) closes it. */}
             <DemoIconButton name={item.movement} onOpen={() => setDemoFor(item.movement)} />
           </div>
+          <button
+            onClick={() => setOptionsFor({ si, gi, ii })}
+            className={`${ICON_BTN} self-center text-muted hover:text-fg`}
+            aria-label="Movement options"
+            title="Movement options"
+          >
+            <MoreGlyph className={GLYPH} />
+          </button>
           {isCollapsed ? (
-            <span className="t-control shrink-0 text-muted">
+            <span className="flex shrink-0 items-center pr-4 t-control text-muted">
               {item.sets.length} {item.sets.length === 1 ? 'set' : 'sets'}
               {allDone ? ' · done' : ''}
             </span>
           ) : (
-            /* Per-movement done/total, right-aligned in the identity band. */
-            <span className="shrink-0 t-label text-faint tabular-nums">
+            /* Per-movement done/total, hard right in the identity band. */
+            <span className="flex shrink-0 items-center pr-4 t-label text-faint tabular-nums">
               {doneCount}/{item.sets.length}
             </span>
           )}
@@ -1105,66 +1084,6 @@ export default function Logger() {
 
         {isCollapsed ? null : (
           <>
-            {/* BAND 2 — controls. Icon-only and gapless: four 44px targets
-                sitting flush, so the cluster reads as one toolbar. Each button
-                carries an aria-label (the glyphs are aria-hidden) AND a title,
-                because an icon that cycles through six metrics is not
-                self-evident and the label is the only place the current one is
-                written down. */}
-            <div className="flex items-center border-t border-border-soft px-2 text-muted">
-            {(() => {
-              const MetricGlyph = METRIC_GLYPH[item.primaryMetric];
-              return (
-                <button
-                  onClick={() => {
-                    activate(groupId);
-                    // indexOf is -1 for a legacy `weight`/`rpe` row, which would otherwise
-                    // jump to index 1 and skip the first option. Treat "not in the
-                    // cycle" as "before the start" so the first tap lands on reps.
-                    const at = METRIC_CYCLE.indexOf(item.primaryMetric);
-                    const nextMetric = METRIC_CYCLE[at < 0 ? 0 : (at + 1) % METRIC_CYCLE.length];
-                    setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric));
-                  }}
-                  className={`${ICON_BTN} hover:text-fg`}
-                  aria-label={`Metric: ${item.primaryMetric}. Change metric`}
-                  title={`Metric: ${item.primaryMetric}`}
-                >
-                  <MetricGlyph className={GLYPH} />
-                </button>
-              );
-            })()}
-            {/* Voice stays visible at every width — the mockup hides it below
-                sm:, and hiding a control on the primary target platform is
-                removing a feature, not compacting a layout. Listening state is
-                the teal signal token plus aria-pressed, not a text swap. */}
-            {voice.supported && !editing ? (
-              <button
-                onClick={() => {
-                  activate(groupId);
-                  listen(item.id, si, gi, ii);
-                }}
-                aria-pressed={voiceTarget === item.id}
-                aria-label={voiceTarget === item.id ? 'Listening — stop voice input' : 'Log this movement by voice'}
-                title={voiceTarget === item.id ? 'Listening…' : 'Voice'}
-                className={`${ICON_BTN} ${
-                  voiceTarget === item.id ? 'text-teal' : 'hover:text-fg'
-                }`}
-              >
-                <VoiceGlyph className={GLYPH} />
-              </button>
-            ) : null}
-            {/* Options sits hard right, opposite the act-on-this-set controls
-                — the design's split toolbar. */}
-            <span className="flex-1" />
-            <button
-              onClick={() => setOptionsFor({ si, gi, ii })}
-              className={`${ICON_BTN} hover:text-fg`}
-              aria-label="Movement options"
-              title="Movement options"
-            >
-              <MoreGlyph className={GLYPH} />
-            </button>
-            </div>
 
         {item.notes ? (
           // BAND 3 — coach's note. Tap-to-expand, one-line clamp;
@@ -1219,6 +1138,9 @@ export default function Logger() {
                   index={ki}
                   showPlanned={anyPlanned}
                   isPr={isPrSet(set.actual, bestByMovement.get(trackName(item.movement, set.notations)) ?? null)}
+                  restOverride={
+                    set.actual.rest != null && set.actual.rest !== item.restSeconds ? set.actual.rest : null
+                  }
                   onOpen={() => {
                     activate(groupId);
                     setEntryFor({ si, gi, ii, ki });
@@ -1237,10 +1159,11 @@ export default function Logger() {
             );
           })}
         </div>
-        {/* BAND 5 — actions, one line. Add set leads; the group-level
-            superset/remove ride the same row via `footerTrailing`, with remove
-            pushed hard right so the destructive control is not flush against
-            the one tapped between every set. */}
+        {/* BAND 5 — every control, one line: add set, superset, voice and
+            metric, with remove pushed hard right so the destructive control
+            is not flush against the one tapped between every set. The
+            group-level superset/remove arrive via `footer` because only a
+            standalone movement has them. */}
         <div className="flex items-center border-t border-border-soft px-2 text-muted">
           <button
             onClick={() => {
@@ -1253,7 +1176,49 @@ export default function Logger() {
           >
             <PlusGlyph className={GLYPH} />
           </button>
-          {footerTrailing}
+          {footer?.link}
+          {/* Voice stays visible at every width — hiding a control on the
+              primary target platform is removing a feature, not compacting a
+              layout. Listening state is the teal signal token plus
+              aria-pressed, not a text swap. */}
+          {voice.supported && !editing ? (
+            <button
+              onClick={() => {
+                activate(groupId);
+                listen(item.id, si, gi, ii);
+              }}
+              aria-pressed={voiceTarget === item.id}
+              aria-label={voiceTarget === item.id ? 'Listening — stop voice input' : 'Log this movement by voice'}
+              title={voiceTarget === item.id ? 'Listening…' : 'Voice'}
+              className={`${ICON_BTN} ${voiceTarget === item.id ? 'text-teal' : 'hover:text-fg'}`}
+            >
+              <VoiceGlyph className={GLYPH} />
+            </button>
+          ) : null}
+          {/* The metric is written out, not drawn: its glyph was the only
+              place the current metric showed, and the Distance arrow read as
+              "swap". Tapping still cycles it; ↻ says so. */}
+          <button
+            onClick={() => {
+              activate(groupId);
+              // indexOf is -1 for a legacy `weight`/`rpe` row, which would otherwise
+              // jump to index 1 and skip the first option. Treat "not in the
+              // cycle" as "before the start" so the first tap lands on reps.
+              const at = METRIC_CYCLE.indexOf(item.primaryMetric);
+              const nextMetric = METRIC_CYCLE[at < 0 ? 0 : (at + 1) % METRIC_CYCLE.length];
+              setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric));
+            }}
+            className="hill-btn flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 px-2 t-control text-fg transition-colors"
+            aria-label={`Metric: ${METRICS[item.primaryMetric].label}. Change metric`}
+            title={`Metric: ${METRICS[item.primaryMetric].label}`}
+          >
+            {METRICS[item.primaryMetric].label}
+            <span aria-hidden className="text-faint">
+              ↻
+            </span>
+          </button>
+          <span className="flex-1" />
+          {footer?.remove}
         </div>
         </>
         )}
@@ -1336,21 +1301,16 @@ export default function Logger() {
         </div>
       );
     }
-    const singleCollapsed = collapsed.has(group.id);
     return (
       // Flat card, hairline outline, surface fill — the bands inside supply
       // their own padding so every row runs the full width of the card.
       <div
         key={group.id}
-        className={`lift border border-border bg-surface ${singleCollapsed ? 'py-1' : ''}`}
+        className="lift border border-border bg-surface"
       >
-        {renderItem(
-          si,
-          gi,
-          0,
-          false,
-          <>
-            {gi < groups.length - 1 ? (
+        {renderItem(si, gi, 0, false, {
+          link:
+            gi < groups.length - 1 ? (
               <button
                 onClick={() => setDoc((d) => mergeWithNext(d, si, gi, 'superset'))}
                 className={`${ICON_BTN} hover:text-fg`}
@@ -1359,18 +1319,20 @@ export default function Logger() {
               >
                 <LinkGlyph className={GLYPH} />
               </button>
-            ) : null}
-            <span className="flex-1" />
+            ) : null,
+          // --color-danger: the one colour legal on chrome, because severity
+          // is the information. The accessible name still says "remove".
+          remove: (
             <button
               onClick={() => setDoc((d) => removeGroup(d, si, gi))}
-              className={`${ICON_BTN} hover:text-fg`}
+              className={`${ICON_BTN} text-danger`}
               aria-label="Remove movement"
               title="Remove movement"
             >
               <TrashGlyph className={GLYPH} />
             </button>
-          </>,
-        )}
+          ),
+        })}
       </div>
     );
   }
@@ -2016,6 +1978,60 @@ export default function Logger() {
                         </button>
                       ))}
                     </div>
+                    {/* Vary by set. Rest often climbs through a movement (60s for
+                        the early sets, 180s before the last), so a set can carry its
+                        own rest BEFORE it. Collapsed by default to keep the sheet
+                        short; native selects keep each row one line on a phone.
+                        Set 1 has no rest before it, so rows start at set 2. */}
+                    {item.sets.length > 1 ? (
+                      (() => {
+                        const varied = item.sets.some((st) => st.actual.rest != null);
+                        const open = varyRest || varied;
+                        return (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => setVaryRest((v) => !v)}
+                              aria-expanded={open}
+                              disabled={varied}
+                              className="flex min-h-11 items-center gap-1 t-control text-muted transition-colors hover:text-fg disabled:hover:text-muted"
+                            >
+                              <span aria-hidden>{open ? '▾' : '▸'}</span>
+                              Vary by set{varied ? ' · on' : ''}
+                            </button>
+                            {open ? (
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                                {item.sets.slice(1).map((st, j) => {
+                                  const ki = j + 1;
+                                  const base = item.restSeconds;
+                                  return (
+                                    <label key={ki} className="flex min-w-0 items-center gap-2 t-control text-muted">
+                                      <span className="shrink-0 tabular-nums">Set {ki + 1}</span>
+                                      <select
+                                        value={st.actual.rest ?? ''}
+                                        onChange={(e) => {
+                                          const v = e.target.value;
+                                          setDoc((d) => setSetRest(d, si, gi, ii, ki, v === '' ? null : Number(v)));
+                                        }}
+                                        aria-label={`Rest before set ${ki + 1}`}
+                                        className="min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-xs tabular-nums text-fg"
+                                      >
+                                        <option value="">{base != null ? `Same (${base}s)` : 'Same'}</option>
+                                        {TIMERS.restPresets.map((sec) => (
+                                          <option key={sec} value={sec}>
+                                            {sec}s
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })()
+                    ) : null}
                   </div>
 
                   {/* Jump mark. Defaults from the name (lib/jumpMark.ts) and can be
