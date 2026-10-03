@@ -9,6 +9,7 @@ export interface FlatSet {
   time?: number;
   distance?: number;
   calories?: number;
+  mark?: number;
   completed: boolean;
   notations: string[];
 }
@@ -24,6 +25,7 @@ export function flattenSets(log: WorkoutLog): FlatSet[] {
           rpe: set.actual.rpe,
           time: set.actual.time,
           distance: set.actual.distance,
+          mark: set.actual.mark,
           calories: set.actual.calories,
           completed: set.actual.completed,
           notations: set.notations ?? [],

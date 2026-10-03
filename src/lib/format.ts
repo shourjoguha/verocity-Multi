@@ -9,6 +9,8 @@ export function formatSetActual(a: SetActual): string {
   if (a.time != null) parts.push(`${a.time}s`);
   if (a.distance != null) parts.push(`${a.distance}m`);
   if (a.calories != null) parts.push(`${a.calories} cal`);
+  // A jump mark (box height or distance) — cm, see lib/jumpMark.ts.
+  if (a.mark != null) parts.push(`${a.mark}cm`);
   if (a.rpe != null) parts.push(`@${a.rpe}`);
   return parts.length ? parts.join(' ') : '—';
 }

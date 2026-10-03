@@ -47,6 +47,7 @@ export function lastPerformance(
     time: base.time,
     distance: base.distance,
     calories: base.calories,
+    mark: base.mark,
     completed: false,
     prefilled: true,
   };

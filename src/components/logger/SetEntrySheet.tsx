@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { METRICS, RPE, type MetricKey } from '@/app.config';
+import { JUMP_MARK, METRICS, RPE, type MetricKey } from '@/app.config';
 import { showsWeightField } from '@/lib/metrics';
-import type { LogSet, SetActual } from '@/lib/types';
+import type { JumpMarkKind, LogSet, SetActual } from '@/lib/types';
+import { cmToIn } from '@/lib/jumpMark';
 import { StepperField } from '@/components/logger/StepperField';
 import { haptic } from '@/lib/haptics';
 import { useScrollLock } from '@/lib/scrollLock';
@@ -106,6 +107,7 @@ function EntryOverlay({
 export function SetEntrySheet({
   open,
   metric,
+  markKind = null,
   movement,
   setIndex,
   setCount,
@@ -118,6 +120,8 @@ export function SetEntrySheet({
 }: {
   open: boolean;
   metric: MetricKey;
+  /** Jump mark this movement records (lib/jumpMark.ts), or null for none. */
+  markKind?: JumpMarkKind | null;
   movement: string;
   setIndex: number;
   setCount: number;
@@ -234,6 +238,22 @@ export function SetEntrySheet({
                   />
                 ) : null}
                 {fields()}
+                {/* Jump mark, per set: a distance changes every jump, and a box
+                    height usually does not but may (set once for all sets in
+                    movement options). Centimetres; a box also shows inches,
+                    because that is how boxes are sold. */}
+                {markKind ? (
+                  <StepperField
+                    inline
+                    value={a.mark ?? 0}
+                    onChange={(v) => onPatch({ mark: v })}
+                    step={JUMP_MARK.step[markKind]}
+                    clamp={whole}
+                    display={(v) => (markKind === 'height' && v ? `${v} (${cmToIn(v)}in)` : v || 0)}
+                    label={markKind === 'height' ? 'cm box' : 'cm jump'}
+                    ariaLabel={markKind === 'height' ? 'box height in centimetres' : 'jump distance in centimetres'}
+                  />
+                ) : null}
                 <StepperField
                   inline
                   value={a.rpe ?? RPE.default}
