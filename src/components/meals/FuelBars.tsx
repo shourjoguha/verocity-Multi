@@ -17,8 +17,9 @@ const xOf = (minutes: number) => Math.min(100, Math.max(0, ((minutes - START) / 
 //
 // The chart is ONE focusable slider rather than a button per bar: bars can sit
 // 13px apart, and a 44px hit box each would overlap its neighbours. A tap picks
-// the nearest bar; arrow keys step through them. The readout under the chart
-// (TodaysMeals) is the text equivalent, announced via aria-valuetext.
+// the nearest bar; arrow keys step through them. Every bar draws at full
+// strength — there is no visible readout to point at — and the selected meal
+// is announced in words via aria-valuetext.
 export function FuelBars({
   meals,
   selectedId,
@@ -76,14 +77,13 @@ export function FuelBars({
         ) : null}
         {meals.map((m, i) => {
           const mix = macroMix(m.tags, m.tag_mix);
-          const on = i === selectedIndex;
           return (
             <span
               key={m.id}
               aria-hidden
-              className={`absolute bottom-0 -ml-[5px] flex w-2.5 flex-col-reverse overflow-hidden rounded-t-[1px] transition-opacity ${
+              className={`absolute bottom-0 -ml-[5px] flex w-2.5 flex-col-reverse overflow-hidden rounded-t-[1px] ${
                 mix ? '' : 'border border-b-0 border-dashed border-muted'
-              } ${on ? '' : 'opacity-40'}`}
+              }`}
               style={{ left: `${xs[i]}%`, height: Math.round(sizeWeight(m.size) * MEAL_FUEL_CHART.barMaxPx) }}
             >
               {mix ? <MacroStack mix={mix} fibrePct={m.carb_fibre_pct} direction="up" /> : null}
