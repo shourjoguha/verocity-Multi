@@ -2,7 +2,6 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import type { WorkoutLog } from '@/lib/types';
 import { sessionTagColors, stripeBackground } from '@/lib/tags';
 import { formatDuration } from '@/lib/format';
-import { SectionHeader } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 
 // Presentation-only month grid extracted from the retired CalendarView.
@@ -102,6 +101,9 @@ export function MonthCalendar({
   const navBtn =
     'hill-btn min-h-11 min-w-11 border border-border bg-surface px-3 text-fg transition-colors hover:border-fg';
 
+  const arrowBtn =
+    '-my-3 inline-flex h-11 w-11 items-center justify-center text-fg transition-colors hover:text-muted';
+
   return (
     <div className={className}>
       {headerVariant === 'full' ? (
@@ -124,19 +126,23 @@ export function MonthCalendar({
           </div>
         </header>
       ) : (
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-baseline gap-3">
-            <SectionHeader>Calendar</SectionHeader>
-            <span className="t-eyebrow -mt-1 text-muted">{monthLabel}</span>
-          </div>
-          <div className="flex shrink-0 gap-1">
-            <button onClick={() => shift(-1)} className={navBtn} aria-label="Previous month">
-              ←
-            </button>
-            <button onClick={() => shift(1)} className={navBtn} aria-label="Next month">
-              →
-            </button>
-          </div>
+        // One row: ← MONTH YEAR →, centred over the grid. The label sits in a
+        // fixed-width slot so the arrows don't slide sideways as the month name
+        // changes length under a thumb that is paging. 9.5rem clears the widest
+        // label ("SEPTEMBER 2026", 138px in Space Grotesk, 144px in the fallback); it is
+        // a min-width so a wider fallback font shifts rather than clips. The
+        // arrows are text-height glyphs in 44px hit boxes (TOUCH.minTargetPx),
+        // pulled back with -my-3 so the row stays text-height.
+        <div className="mb-3 flex items-center justify-center">
+          <button onClick={() => shift(-1)} className={arrowBtn} aria-label="Previous month">
+            <MonthArrow dir="prev" />
+          </button>
+          <span className="t-eyebrow min-w-[9.5rem] pl-[0.28em] text-center text-muted" aria-live="polite">
+            {monthLabel}
+          </span>
+          <button onClick={() => shift(1)} className={arrowBtn} aria-label="Next month">
+            <MonthArrow dir="next" />
+          </button>
         </div>
       )}
 
@@ -253,5 +259,22 @@ export function MonthCalendar({
         })}
       </div>
     </div>
+  );
+}
+
+// Long, text-height arrow (26×10) — the compact header's only chrome.
+function MonthArrow({ dir }: { dir: 'prev' | 'next' }) {
+  return (
+    <svg
+      width="26"
+      height="10"
+      viewBox="0 0 26 10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      aria-hidden="true"
+    >
+      <path d={dir === 'prev' ? 'M26 5H1M5 1 1 5l4 4' : 'M0 5h25M21 1l4 4-4 4'} />
+    </svg>
   );
 }
