@@ -141,15 +141,15 @@ export default function MealsView() {
           <section>
             <SectionHeader className="mb-1!">Last {days.length} days</SectionHeader>
             <Card flat className="px-3 pb-2 pt-3">
-              <p className="mb-2 text-sm tabular-nums text-muted">
-                <span className="font-display text-base text-fg">
-                  {summary.averageFirstMeal}–{summary.averageLastMeal}
-                </span>{' '}
-                · {summary.averageGap} · {summary.mealsPerDay}/d ·{' '}
-                <span aria-label={`hunger ${summary.hungerBefore.toFixed(1)} before, ${summary.hungerAfter.toFixed(1)} after`}>
-                  H {summary.hungerBefore.toFixed(1)}→{summary.hungerAfter.toFixed(1)}
-                </span>
-              </p>
+              {/* Headline: the average window, then its length and pace. */}
+              <div className="mb-2.5">
+                <div className="font-display text-lg leading-tight tabular-nums text-fg">
+                  {summary.averageFirstMeal} – {summary.averageLastMeal} on average
+                </div>
+                <div className="text-xs tabular-nums text-muted">
+                  {summary.averageGap} window · {summary.mealsPerDay} meals/day
+                </div>
+              </div>
               <WeekChart days={days} />
               {shares.length > 0 ? (
                 <p className="mt-2 border-t border-border-soft pt-2 text-xs tabular-nums text-muted">
@@ -162,6 +162,15 @@ export default function MealsView() {
                   <span className="text-faint"> of meals</span>
                 </p>
               ) : null}
+              <p className="mt-1 text-xs tabular-nums text-muted">
+                <span className="text-fg">
+                  {summary.lateNights}/{days.length}
+                </span>{' '}
+                days ended after 21:00 · Hunger{' '}
+                <span className="text-fg">
+                  {summary.hungerBefore.toFixed(1)}→{summary.hungerAfter.toFixed(1)}
+                </span>
+              </p>
             </Card>
           </section>
 
