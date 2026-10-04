@@ -50,25 +50,34 @@ export function SessionShapeBar({ shape }: { shape: SessionShape | null }) {
   );
 }
 
-const LEGEND: { cls: string; label: string }[] = [
-  { cls: 'shape-warmup', label: 'Warm-up' },
-  { cls: 'shape-main', label: 'Main' },
-  { cls: 'shape-accessory', label: 'Accessory' },
-  { cls: 'shape-conditioning', label: 'Conditioning' },
-  { cls: 'shape-cooldown', label: 'Cool-down' },
-  { cls: 'shape-hr', label: 'Heart rate' },
+// Abbreviated so the legend holds one line at 375px; the popover spells each
+// one out and <abbr title> carries the full name. Warm-up and cool-down share
+// a fill, so they share an entry.
+const LEGEND: { cls: string; label: string; full: string }[] = [
+  { cls: 'shape-warmup', label: 'Warm/Cool', full: 'Warm-up and cool-down' },
+  { cls: 'shape-main', label: 'Main', full: 'Main' },
+  { cls: 'shape-accessory', label: 'Acc', full: 'Accessory' },
+  { cls: 'shape-conditioning', label: 'Cond', full: 'Conditioning' },
+  { cls: 'shape-hr', label: 'HR', full: 'Heart rate' },
 ];
 
 export function SessionShapeLegend() {
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.65rem] text-muted">
+    <div className="mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.6rem] text-muted">
       {LEGEND.map((l) => (
-        <span key={l.cls} className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className={`inline-block h-2.5 w-4 ${l.cls}`} />
-          {l.label}
+        <span key={l.cls} className="inline-flex items-center gap-1">
+          <span aria-hidden="true" className={`inline-block h-2 w-3 ${l.cls}`} />
+          {l.label === l.full ? (
+            l.label
+          ) : (
+            <abbr title={l.full} className="no-underline">
+              {l.label}
+            </abbr>
+          )}
         </span>
       ))}
       <InfoPopover label="How the bars are drawn">
+        Warm/Cool: warm-up and cool-down. Acc: accessory. Cond: conditioning. HR: heart rate.
         Width: share of the session's sets. Height: that block vs. your {SESSION_SHAPE.referencePercentile}th percentile for it in
         sessions with the same tag. Sport and endurance: height is heart rate (mostly average, a
         little max). Dashed outline: no heart rate logged.
