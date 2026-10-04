@@ -1,8 +1,11 @@
-// Home's way into /app/coach: a folder tab growing out of the Active plan
-// card's top hairline, carrying the live-finding count and a 16×16 pixel
-// runner. The runner stands 2s and rolls 1s, on loop, ONLY while a finding is
-// unseen (lib/coachSignal.ts) — once you open Coach it stands still, and the
-// count stays until the findings stop being true.
+// Home's way into /app/coach: a 16×16 pixel runner standing on the Active plan
+// card's top hairline, with the live-finding count as a superscript. No box and
+// no word — the card's own edge is the frame. (It was a 150×36 labelled folder
+// tab; that read as clunky next to a 10px section label.)
+//
+// The runner stands 2s and rolls 1s, on loop, ONLY while a finding is unseen
+// (lib/coachSignal.ts) — once you open Coach it stands still, and the count
+// stays until the findings stop being true.
 //
 // Motion is CSS: one SVG strip of unique frames, and the `coach-run` keyframes
 // in global.css pick one per 100ms. currentColor throughout, so both themes
@@ -91,32 +94,33 @@ const STRIP_PATH = FRAMES.flatMap((rows, f) =>
   rows.flatMap((row, y) => [...row].map((c, x) => (c === 'X' ? `M${f * 16 + x} ${y}h1v1h-1z` : ''))),
 ).join('');
 
-export function CoachTab({ live, unseen }: { live: number; unseen: number }) {
+export function CoachRunner({ live, unseen }: { live: number; unseen: number }) {
   const label =
     live === 0 ? 'Coach' : `Coach, ${live} open finding${live === 1 ? '' : 's'}${unseen > 0 ? `, ${unseen} new` : ''}`;
   return (
-    // The anchor is the 44px hit box (TOUCH.minTargetPx); the bordered span is
-    // the 36px tab you see. Its extra 8px sits above the tab, over empty page.
-    // -mb-px lays the tab's surface over the card's top hairline so the two
-    // read as one outline.
-    <a href="/app/coach" aria-label={label} className="group relative z-[1] -mb-px mr-3 inline-flex h-11 items-end">
-      <span className="t-eyebrow flex h-9 items-center gap-2 rounded-t-card border border-b-0 border-border bg-surface pl-2 pr-2.5 text-fg transition-colors group-hover:bg-elevated">
-        <svg
-          viewBox="0 0 16 16"
-          aria-hidden
-          shapeRendering="crispEdges"
-          className={`h-[22px] w-[22px] shrink-0 overflow-hidden ${live === 0 ? 'text-muted' : ''}`}
-        >
-          <path d={STRIP_PATH} fill="currentColor" className={unseen > 0 ? 'coach-run' : undefined} />
-        </svg>
-        Coach
-        {live > 0 ? (
-          <span className="inline-grid h-[18px] min-w-[18px] place-items-center rounded-control bg-fg px-1 font-display text-[10px] leading-none tracking-normal text-bg tabular-nums">
-            {live}
-          </span>
-        ) : null}
-        <span aria-hidden className="text-muted">→</span>
-      </span>
+    // Positioned by the caller's `relative` wrapper around the card: the anchor
+    // sits on top of the card (bottom-full), right-aligned. It is the 44px hit
+    // box (TOUCH.minTargetPx) and grows UPWARD only, so it never covers the
+    // card's own View → link below it. No box, no word, no transform.
+    <a
+      href="/app/coach"
+      aria-label={label}
+      className={`absolute bottom-full right-2 flex h-11 min-w-11 items-end justify-center transition-colors hover:text-fg ${
+        live === 0 ? 'text-muted' : 'text-fg'
+      }`}
+    >
+      {/* -mb-px: the 16px frame's bottom row is empty, so this puts the feet
+          on the hairline rather than a pixel above it. */}
+      <svg viewBox="0 0 16 16" aria-hidden shapeRendering="crispEdges" className="-mb-px h-[18px] w-[18px] shrink-0 overflow-hidden">
+        <path d={STRIP_PATH} fill="currentColor" className={unseen > 0 ? 'coach-run' : undefined} />
+      </svg>
+      {/* A superscript, footnote-style: raised to the runner's head. 9px is the
+          floor the type scale allows (.t-nano); Archivo Black holds up there. */}
+      {live > 0 ? (
+        <span aria-hidden className="mb-[11px] ml-px font-display text-[9px] leading-none text-fg tabular-nums">
+          {live}
+        </span>
+      ) : null}
     </a>
   );
 }

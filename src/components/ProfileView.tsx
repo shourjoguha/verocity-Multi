@@ -46,7 +46,7 @@ import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { displayNameFor, hrefFor, isReadOnly, type Surface } from '@/lib/surface';
 import { READ_ONLY_NOTICE, readOnlyProps } from '@/components/ui/ReadOnly';
 import { toast } from '@/lib/toast';
-import { CoachTab } from '@/components/CoachTab';
+import { CoachRunner } from '@/components/CoachRunner';
 import { coachSignal, getCoachSeenAt } from '@/lib/coachSignal';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
@@ -814,16 +814,14 @@ export default function ProfileView({ mode }: { mode: Surface }) {
       <Item>
           {/* mb-6, like the sections below it. This was mb-3 while a "Coach →"
               link sat under the card supplying ~44px of its own whitespace;
-              that link is now the tab above. */}
+              that link is now the runner standing on the card's top edge. */}
           <section className="mb-6">
-            {/* With a plan, the label shares a row with the Coach tab and is
-                centred on the tab's 36px face (h-9, the bottom of the 44px
-                row), not on the row — so the two read as one line of type. */}
-            {plan && !readOnly ? (
-              <div className="flex items-end justify-between gap-2">
-                <h2 className="t-label flex h-9 items-center text-muted">Active plan</h2>
-                <CoachTab live={coach.live} unseen={coach.unseen} />
-              </div>
+            {/* 28px, not SectionHeader's baseline row: the runner stands on the
+                card's edge to the right of this label and needs the room above
+                the hairline. Its 44px hit box reaches 16px further up, into the
+                header's mb-6 gap, which holds nothing tappable. */}
+            {plan ? (
+              <h2 className="t-label flex h-7 items-center text-muted">Active plan</h2>
             ) : (
               <SectionHeader>Active plan</SectionHeader>
             )}
@@ -834,6 +832,11 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                     rows INSIDE it. Full weight on both made every row read as
                     its own card, which is the same thing the stat tiles below
                     were doing. */}
+                {/* The wrapper exists for the runner: the card clips with
+                    overflow-hidden, so anything standing ON its edge has to be
+                    positioned from outside it. */}
+                <div className="relative">
+                {!readOnly ? <CoachRunner live={coach.live} unseen={coach.unseen} /> : null}
                 <div className="lift flex flex-col gap-px overflow-hidden border border-border bg-border-soft">
                   {/* Row one: which block, how far into it, and the way out to
                       the full plan. The week now says "of N" and carries the
@@ -956,8 +959,9 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                       rather than a design one: meal_logs has no anon policy
                       (0032) and the coach is deliberately private, so both
                       would render permanently empty on the showcase. (Coach's
-                      way in is the tab above the card.) */}
+                      way in is the runner on the card's top edge.) */}
                   {!readOnly ? <MealChipRail presets={mealPresets} onOpen={openMeal} onManage={() => setSavedMealsOpen(true)} /> : null}
+                </div>
                 </div>
               </>
             ) : (

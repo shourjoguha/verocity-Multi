@@ -892,12 +892,12 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   }
 }
 
-/* Home's Coach tab runner (CoachTab.tsx). One SVG strip of 11 unique 16px
+/* Home's Coach runner (CoachRunner.tsx). One SVG strip of 11 unique 16px
    frames; each 100ms slot of a 3s cycle shows one — 2s standing (one blink),
    1s curl-and-roll. steps(1) holds each keyframe, so frames cut rather than
    slide. Only mounted with the class while a finding is unseen
    (lib/coachSignal.ts), so it never loops on a quiet day. The frame indices
-   here are FRAMES' order in CoachTab.tsx — move them together. Off by name
+   here are FRAMES' order in CoachRunner.tsx — move them together. Off by name
    under reduced motion: the count carries the same message. */
 .coach-run {
   animation: coach-run 3s steps(1, end) infinite;
