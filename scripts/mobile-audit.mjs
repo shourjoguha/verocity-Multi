@@ -332,7 +332,7 @@ const ALLOW = [
   /^Add meal: /, // Home meal strip segments: 40px tall by the owner's decision
   // (MealChipRail.tsx header). The alternative was 44px hit boxes overlapping
   // the Start bar above, where a mis-tap starts a meal instead of a workout.
-  /^Manage saved meals$/, // the same strip's pinned right cell, same reason.
+  /^Manage saved meals$/, // the same strip's bowl cell (opens saved meals), same reason.
 ];
 
 const results = [];

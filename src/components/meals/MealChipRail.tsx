@@ -14,8 +14,10 @@ import type { MealPreset } from '@/lib/types';
 // negative-margin hit box for that reason.
 //
 // Order: saved meals first (newest first, capped), then the generic Meal and
-// Snack, then "•••" pinned at the right edge to manage saved meals. There is
-// no "Custom" chip: it opened a blank draft, which is what Meal does.
+// Snack. There is no "Custom" chip: it opened a blank draft, which is what
+// Meal does. Managing saved meals is the bowl itself — a pencil badge on its
+// corner says it edits rather than adds. It replaced a pinned "•••" cell on the
+// right, which sat 8px off the Start row's ⋮ and read as a second menu.
 export function MealChipRail({
   presets,
   onOpen,
@@ -27,26 +29,41 @@ export function MealChipRail({
 }) {
   return (
     <div className="flex min-h-10 gap-px border-t border-border-soft bg-border-soft">
-      {/* Fixed left: never scrolls. The icon is the label. */}
-      <span
-        role="img"
-        aria-label="Add meal"
-        className="flex w-10 shrink-0 items-center justify-center bg-surface text-muted"
+      {/* Fixed left: never scrolls. Opens saved-meal management; the 6px
+          pencil is the only cue that it edits rather than adds, so it stays.
+          Its surface-filled backing cuts it out of the bowl's rim. */}
+      <button
+        type="button"
+        onClick={onManage}
+        aria-label="Manage saved meals"
+        className="group flex w-10 shrink-0 items-center justify-center bg-surface text-muted transition-colors hover:bg-elevated hover:text-fg"
       >
-        <svg
-          aria-hidden
-          viewBox="0 0 24 24"
-          className="h-4 w-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.6}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M3 11h18a9 9 0 0 1-18 0Z" />
-          <path d="M9 7c0-1.5 1-2 1-3.5M13 7c0-1.5 1-2 1-3.5" />
-        </svg>
-      </span>
+        <span aria-hidden className="relative block h-4 w-4">
+          <svg
+            viewBox="0 0 24 24"
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.6}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 11h18a9 9 0 0 1-18 0Z" />
+            <path d="M9 7c0-1.5 1-2 1-3.5M13 7c0-1.5 1-2 1-3.5" />
+          </svg>
+          <svg
+            viewBox="0 0 8 8"
+            className="absolute -bottom-px -right-px h-1.5 w-1.5 rounded-[1px] bg-surface transition-colors group-hover:bg-elevated"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.1}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M1.2 6.8 1.5 5.3 5.4 1.4a.85.85 0 0 1 1.2 1.2L2.7 6.5Z" />
+          </svg>
+        </span>
+      </button>
       {/* Only this region scrolls — overscroll-behavior-x: contain (via
           overscroll-x-contain) stops it chaining to the page underneath. */}
       <div
@@ -58,15 +75,6 @@ export function MealChipRail({
         <Segment label="Meal" onClick={() => onOpen({ kind: 'meal' })} />
         <Segment label="Snack" onClick={() => onOpen({ kind: 'snack' })} />
       </div>
-      {/* Fixed right, like the bowl on the left: managing never scrolls away. */}
-      <button
-        type="button"
-        onClick={onManage}
-        aria-label="Manage saved meals"
-        className="flex min-h-10 w-10 shrink-0 items-center justify-center bg-surface tracking-[0.1em] text-muted transition-colors hover:bg-elevated hover:text-fg"
-      >
-        <span aria-hidden>•••</span>
-      </button>
     </div>
   );
 }

@@ -309,7 +309,7 @@ here derives a judgment from that data.
 §8 for why the four object policies had to be created by hand instead). A
 `MealChipRail` inside the active-plan card, directly below Start workout:
 saved meals (newest-first) → Meal → Snack, each opening a bottom drawer
-(`MealDrawer`) prefilled per opener, plus a pinned "•••" that opens
+(`MealDrawer`) prefilled per opener, plus the rail's bowl (pencil-badged) that opens
 `SavedMealsSheet` to edit or delete saved meals (migration 0047 replaced the
 original free-text custom-tag shortcuts; applied 2026-10-03, with the pre-backfill
 rows kept in `backup.meal_logs_pre_0047`). `Today's meals`

@@ -15,7 +15,7 @@ import {
   SegmentedChoice,
 } from '@/components/meals/MealFields';
 
-// Manage saved meals, opened from the rail's "•••". One Modal whose body
+// Manage saved meals, opened from the rail's bowl. One Modal whose body
 // switches between the list and the editor, so going list → edit → list never
 // unmounts the sheet (one dialog, one focus trap, one scroll lock — the same
 // reason MealDrawer is hoisted). Logged meals copied their values at log time,
