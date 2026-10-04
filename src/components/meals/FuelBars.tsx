@@ -33,7 +33,7 @@ export function FuelBars({
   nowMinutes: number | null;
   valueText: string;
 }) {
-  const xs = layoutFuelBars(meals.map((m) => minutesOf(m.eaten_time)), START, END, MEAL_FUEL_CHART.minGapPct);
+  const xs = fuelBarPositions(meals);
   const selectedIndex = Math.max(0, meals.findIndex((m) => m.id === selectedId));
 
   const pick = (e: PointerEvent<HTMLDivElement>) => {
@@ -67,41 +67,75 @@ export function FuelBars({
         onKeyDown={step}
         className="relative h-[46px] cursor-pointer touch-manipulation rounded-[2px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus)]"
       >
-        <span aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-border" />
-        {nowMinutes !== null && nowMinutes >= START && nowMinutes <= END ? (
+        <FuelTrack meals={meals} xs={xs} barMaxPx={MEAL_FUEL_CHART.barMaxPx} nowMinutes={nowMinutes} />
+      </div>
+      <FuelTicks />
+    </div>
+  );
+}
+
+export const fuelBarPositions = (meals: MealLog[]) =>
+  layoutFuelBars(meals.map((m) => minutesOf(m.eaten_time)), START, END, MEAL_FUEL_CHART.minGapPct);
+
+// The marks of a fuel chart — baseline, optional "now" line and one bar per
+// meal — absolutely positioned inside a `relative` box the caller sizes. Shared
+// by Home's chart and the Meals page's one-row-per-day week view, so the two
+// read as the same chart at two sizes.
+export function FuelTrack({
+  meals,
+  xs,
+  barMaxPx,
+  nowMinutes = null,
+  thin = false,
+}: {
+  meals: MealLog[];
+  xs: number[];
+  barMaxPx: number;
+  nowMinutes?: number | null;
+  thin?: boolean;
+}) {
+  return (
+    <>
+      <span aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-border" />
+      {nowMinutes !== null && nowMinutes >= START && nowMinutes <= END ? (
+        <span
+          aria-hidden
+          className="absolute bottom-0 top-1 w-0 border-l border-dashed border-faint"
+          style={{ left: `${xOf(nowMinutes)}%` }}
+        />
+      ) : null}
+      {meals.map((m, i) => {
+        const mix = macroMix(m.tags, m.tag_mix);
+        return (
           <span
+            key={m.id}
             aria-hidden
-            className="absolute bottom-0 top-1 w-0 border-l border-dashed border-faint"
-            style={{ left: `${xOf(nowMinutes)}%` }}
-          />
-        ) : null}
-        {meals.map((m, i) => {
-          const mix = macroMix(m.tags, m.tag_mix);
-          return (
-            <span
-              key={m.id}
-              aria-hidden
-              className={`absolute bottom-0 -ml-[5px] flex w-2.5 flex-col-reverse overflow-hidden rounded-t-[1px] ${
-                mix ? '' : 'border border-b-0 border-dashed border-muted'
-              }`}
-              style={{ left: `${xs[i]}%`, height: Math.round(sizeWeight(m.size) * MEAL_FUEL_CHART.barMaxPx) }}
-            >
-              {mix ? <MacroStack mix={mix} fibrePct={m.carb_fibre_pct} direction="up" /> : null}
-            </span>
-          );
-        })}
-      </div>
-      <div aria-hidden className="relative mt-1 h-3 text-[9px] tracking-[0.12em] tabular-nums text-faint">
-        {MEAL_FUEL_CHART.ticks.map((h, i, all) => (
-          <span
-            key={h}
-            className={`absolute ${i === 0 ? '' : i === all.length - 1 ? '-translate-x-full' : '-translate-x-1/2'}`}
-            style={{ left: `${xOf(h * 60)}%` }}
+            className={`absolute bottom-0 flex flex-col-reverse overflow-hidden rounded-t-[1px] ${
+              thin ? '-ml-[3px] w-1.5' : '-ml-[5px] w-2.5'
+            } ${mix ? '' : 'border border-b-0 border-dashed border-muted'}`}
+            style={{ left: `${xs[i]}%`, height: Math.round(sizeWeight(m.size) * barMaxPx) }}
           >
-            {String(h).padStart(2, '0')}
+            {mix ? <MacroStack mix={mix} fibrePct={m.carb_fibre_pct} direction="up" /> : null}
           </span>
-        ))}
-      </div>
+        );
+      })}
+    </>
+  );
+}
+
+// The 06 · 12 · 18 · 24 axis, once per chart.
+export function FuelTicks() {
+  return (
+    <div aria-hidden className="relative mt-1 h-3 text-[9px] tracking-[0.12em] tabular-nums text-faint">
+      {MEAL_FUEL_CHART.ticks.map((h, i, all) => (
+        <span
+          key={h}
+          className={`absolute ${i === 0 ? '' : i === all.length - 1 ? '-translate-x-full' : '-translate-x-1/2'}`}
+          style={{ left: `${xOf(h * 60)}%` }}
+        >
+          {String(h).padStart(2, '0')}
+        </span>
+      ))}
     </div>
   );
 }

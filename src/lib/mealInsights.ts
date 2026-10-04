@@ -8,9 +8,6 @@ export type MacroKey = (typeof MEAL_MACRO_TAGS)[number];
 // log_date). Pure functions — the screens compute these from the list they
 // already fetched, so no new query.
 
-// Hours rendered across every fuel/timing band: 06:00 → 23:00.
-export const DAY_HOURS: number[] = Array.from({ length: 18 }, (_, i) => i + 6);
-
 const SIZE_WEIGHT: Record<string, number> = {
   light: 0.4,
   medium: 0.7,
@@ -24,30 +21,6 @@ export function sizeWeight(size: string): number {
 export function toHours(time: string): number {
   const [h, m] = time.split(':').map(Number);
   return h + m / 60;
-}
-
-export function formatHour(hour: number): string {
-  return String(hour).padStart(2, '0');
-}
-
-export function mealsInHour(meals: MealLog[], hour: number): MealLog[] {
-  return meals.filter((meal) => Math.floor(toHours(meal.eaten_time)) === hour);
-}
-
-/**
- * Literal meal-timing heatmap: position is the hour eaten and intensity is the
- * logged portion category (capped at 1). It does not estimate calories.
- */
-export function fuelByHour(meals: MealLog[]): number[] {
-  return DAY_HOURS.map((hour) => {
-    const portions = mealsInHour(meals, hour).reduce((sum, m) => sum + sizeWeight(m.size), 0);
-    return Math.min(1, portions);
-  });
-}
-
-// The macro tags a meal carries, in canonical macro order (P → C → F).
-export function macroTags(meal: MealLog): string[] {
-  return MEAL_MACRO_TAGS.filter((tag) => meal.tags.includes(tag));
 }
 
 /**
@@ -152,7 +125,6 @@ export interface DayInsight {
   date: string;
   weekday: string;
   meals: MealLog[];
-  fuel: number[];
   firstMeal: string | null;
   lastMeal: string | null;
   hungerBefore: number;
@@ -173,7 +145,6 @@ export function buildDayInsights(meals: MealLog[], days: number): DayInsight[] {
         date,
         weekday: WEEKDAYS[new Date(`${date}T12:00:00`).getDay()],
         meals: ordered,
-        fuel: fuelByHour(ordered),
         firstMeal: ordered[0]?.eaten_time ?? null,
         lastMeal: ordered[ordered.length - 1]?.eaten_time ?? null,
         hungerBefore: avg((m) => m.hunger_before),
