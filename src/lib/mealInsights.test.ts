@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDayInsights,
-  fuelByHour,
   layoutFuelBars,
   macroMix,
-  macroTags,
-  mealsInHour,
   summarizeTiming,
   tagShare,
 } from '@/lib/mealInsights';
@@ -33,37 +30,6 @@ function meal(overrides: Partial<MealLog>): MealLog {
     ...overrides,
   };
 }
-
-describe('fuelByHour', () => {
-  it('places intensity at the hour the meal was eaten', () => {
-    const fuel = fuelByHour([meal({ eaten_time: '08:30', size: 'heavy' })]);
-    // DAY_HOURS starts at 06:00, so 08:00 is index 2.
-    expect(fuel[2]).toBe(1);
-    expect(fuel[0]).toBe(0);
-  });
-
-  it('caps a busy hour at 1', () => {
-    const fuel = fuelByHour([
-      meal({ eaten_time: '12:00', size: 'heavy' }),
-      meal({ eaten_time: '12:40', size: 'heavy' }),
-    ]);
-    expect(fuel[6]).toBe(1);
-  });
-});
-
-describe('mealsInHour', () => {
-  it('returns only meals whose hour matches', () => {
-    const a = meal({ eaten_time: '14:10' });
-    const b = meal({ eaten_time: '15:55' });
-    expect(mealsInHour([a, b], 14)).toEqual([a]);
-  });
-});
-
-describe('macroTags', () => {
-  it('returns present macros in canonical P→C→F order', () => {
-    expect(macroTags(meal({ tags: ['fat', 'protein', 'veg'] }))).toEqual(['protein', 'fat']);
-  });
-});
 
 describe('buildDayInsights', () => {
   it('orders a day chronologically and derives first/last', () => {

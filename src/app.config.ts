@@ -363,9 +363,9 @@ export const MEAL_SOURCES = {
 
 // The fixed tag vocabulary. There are no free-text tags: a meal you repeat is a
 // saved meal (meal_presets, 0047), not a tag. Macros (protein/carbs/fat) lead;
-// sweet/coffee are yes/no extras that never enter the split. Each tag carries a
-// generated hue (mealTagColor in lib/tags.ts) for the Meals page's tag-mix
-// chart; the colour is derived from the key, not stored here.
+// sweet/coffee are yes/no extras that never enter the split. Tags carry no
+// colour: the macros are drawn in the --color-macro-* ink ramp, and the Meals
+// page states tag shares as text.
 //
 // `veg` is gone from this list on purpose. It could be ticked with no carbs at
 // all, and nuts or fruit had nowhere to go. Fibre is now a share OF the carbs —
@@ -406,6 +406,8 @@ export const MEAL_FUEL_CHART = {
   ticks: [6, 12, 18, 24],
   barMaxPx: 40,
   minGapPct: 4,
+  // The Meals page draws the same chart once per day, thinner and shorter.
+  dayRowBarMaxPx: 18,
 } as const;
 
 // Split-bar divider step, in percent. Coarse on purpose, like the fibre steps.
