@@ -54,6 +54,7 @@ const PLATFORM = new Set([
 const ALLOW = [
   // Named in the Superseded record so what was tried survives. Dead on purpose.
   { id: 'SHEET_EXIT_MS', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'the sheet exit constant, removed with the JS animation' },
+  { id: 'scrollLeft', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'the home activity strip no longer scrolls' },
   { id: 'AnimatePresence', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'sheets no longer defer unmount' },
   { id: 'motion/react', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'sheets are CSS-driven now' },
   { id: 'MotionConfig', doc: 'docs/LESSONS.md', section: 'Superseded', why: 'removed with Motion' },

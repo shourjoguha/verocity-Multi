@@ -184,19 +184,6 @@ direction (24px) and only touch the DOM when the state actually changes.
 Measure it: `MutationObserver` on the element, count flips per gesture.
 → `src/layouts/App.astro` (`setupNav`)
 
-The home activity strip is the pattern to copy when a scroll must drive a visual
-change: the listener is `{ passive: true }` and does **one** thing — reset a
-120ms timer. All the work happens after the gesture, the visible range is
-arithmetic off `scrollLeft` against a precomputed offset table (days are no
-longer a uniform pitch — a multi-session day is a widened cluster — so a bounded
-scan of that in-memory table replaced the `scrollLeft / pitch` division; still
-no `IntersectionObserver` and no DOM reads mid-gesture), and the result lands as
-a single inherited custom property on the row rather than a write per bar. A 3%
-gate stops a one-bar nudge re-rendering. Measured at **0 style writes
-mid-gesture and 1 for the whole gesture**, with the `MutationObserver` count
-above as the assertion.
-→ `ActivityStrip` in `src/components/ProfileView.tsx`
-
 ### A modal's effect re-runs on every parent render
 `[measured in Chromium]`
 Every caller passes `onClose` as an inline arrow, so an effect depending on it
@@ -949,7 +936,8 @@ matching**, not merely unique as a string.
 ### A chart normalised to what is on screen still renders flat
 `[measured in Chromium]`
 The home activity strip scales bar heights so the tallest session **in view**
-fills the strip. It was built, measured as working — scale went 1 → 2.75 on
+fills the strip. (In view meant the scrolled window then; it is the chosen
+window now — 2 weeks to all time — and the rule below holds either way.) It was built, measured as working — scale went 1 → 2.75 on
 scroll — and still drew a row of identical bars, because a *second* clamp
 upstream had already flattened the data: heights were computed as
 `min(1, seconds / 7200)`, so every session over two hours became the same bar
@@ -960,7 +948,7 @@ scale can go below 1 and shrink everything to fit, which is the honest reading.
 The absolute ceiling only made sense while the scale was fixed at 1.
 Worth noting how it was caught: the numeric assertion passed. It took *looking
 at a screenshot* of two different scroll positions to see that both were flat.
-→ `barHeight` / `BAR_NOMINAL_SECONDS` in `src/components/ProfileView.tsx`
+→ `heightOf` in `ActivityStrip`, `src/components/ProfileView.tsx`
 
 ### An animation assertion that a snap also satisfies
 `[measured in Chromium]` — third instance of the trap above, worth its own grep.
@@ -1723,6 +1711,27 @@ The fitness radar:
   before a real baseline existed, which is the only reason the invented anchors
   had a job in the first place.
 
+- **The home activity strip as the pattern for a scroll-driven visual change.** It
+  no longer scrolls: Home now shows a chosen window (2–12 weeks, 6 months, all
+  time) drawn to fit the width, so there is no gesture to debounce. The pattern
+  itself still holds and the paragraph is kept for it — a passive listener that
+  only resets a 120ms timer, all work after the gesture, one inherited custom
+  property instead of a write per bar, a 3% gate. The strip just stopped being
+  its live example. What it said:
+
+  The home activity strip is the pattern to copy when a scroll must drive a visual
+  change: the listener is `{ passive: true }` and does **one** thing — reset a
+  120ms timer. All the work happens after the gesture, the visible range is
+  arithmetic off `scrollLeft` against a precomputed offset table (days are no
+  longer a uniform pitch — a multi-session day is a widened cluster — so a bounded
+  scan of that in-memory table replaced the `scrollLeft / pitch` division; still
+  no `IntersectionObserver` and no DOM reads mid-gesture), and the result lands as
+  a single inherited custom property on the row rather than a write per bar. A 3%
+  gate stops a one-bar nudge re-rendering. Measured at **0 style writes
+  mid-gesture and 1 for the whole gesture**, with the `MutationObserver` count
+  above as the assertion.
+  → `ActivityStrip` in `src/components/ProfileView.tsx`
+
 ## Decisions
 
 - **Bottom tab bar, not a drawer.** Seven destinations behind a top-left burger
@@ -1778,4 +1787,3 @@ stated rather than timed. Coach copy says "tagged", never "prescribed" or
 "timed". Do not infer rest from timestamps: `completedAt` gaps include setup,
 plate changes and walking, and say nothing reliable about rest.
 -> `src/components/Logger.tsx`, `src/lib/coach/intent.ts`, `src/lib/coach/signals.ts`
-
