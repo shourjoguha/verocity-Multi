@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import {
   getActivePlan,
@@ -20,18 +20,17 @@ import { SavedMealsSheet } from '@/components/meals/SavedMealsSheet';
 import { activeSessionOf } from '@/lib/activeSession';
 import { currentStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
-import type { TimelinePoint } from '@/lib/timeline';
 import { bestE1rm } from '@/lib/e1rm';
 import { currentProgramWeek, planWeekCount } from '@/lib/progression';
 import { completedLogs } from '@/lib/stats';
 import { formatDuration, formatRound } from '@/lib/format';
-import { buildTimeline, DAY_NAMES, dayNameFromLabel, typeFromLabel } from '@/lib/timeline';
+import { buildTimeline, DAY_NAMES, dayNameFromLabel, typeFromLabel, ymd } from '@/lib/timeline';
+import { toWeeks, windowPoints } from '@/lib/activityWindow';
 import {
   Card,
   EmptyState,
   LoadingScreen,
   SectionHeader,
-  StatStrip,
   TickProgress,
 } from '@/components/ui/primitives';
 import { LogList } from '@/components/LogList';
@@ -67,202 +66,153 @@ function dayBadge(i: number): string {
   return i < 26 ? String.fromCharCode(65 + i) : String(i + 1);
 }
 
-// Edge-fade mask for the horizontal scroller, so the strip dissolves into the
-// page instead of ending on a hard cut mid-history.
-const edgeFade: CSSProperties = {
-  WebkitMaskImage:
-    'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
-  maskImage:
-    'linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%)',
-};
-
-// Activity strip: the whole logged history, scrollable, opening on today.
+// Activity: a chosen window of history, the hours trained in it, and a strip
+// of bars drawn to fit the width — one headline, one visual.
 //
-// Rest is a hairline baseline and a trained day's height is its duration. A day
-// with one session is a single column; a day with MORE than one is a widened
-// cluster of adjacent 75%-width bars — one per session, EACH at its own
-// duration-height (so the cluster is as tall as its longest session and a
-// shorter one sits low with space above it), marked as one day by a PEDESTAL:
-// a solid `--color-fg` foot in a reserved lane below the baseline, spanning the
-// cluster. The cluster is the only thing that changes the strip's pitch, so the
-// scroll math reads a precomputed offset table rather than a uniform pitch —
-// see `layout` below.
+// The window is picked from a hidden native <select> laid over the range label
+// ("Last 4 weeks"): no chevron, no underline, and on iOS the platform's own
+// scroll-wheel picker. The headline and the session count are summed from the
+// SAME window the bars show, so the number always describes the chart under it.
+// (The strip used to scroll through the whole history beside all-time totals,
+// and the totals read as a caption for whatever happened to be on screen.)
+// All-time totals and the top e1RM are one muted line under the strip.
 //
-// Grouping is carried by TWO cues, and it needs both. A thick hairline FRAME
-// around the cluster was tried first and did not read: the "today" column is
-// already an inset 1.5px box, so a group was a second box distinguished only by
-// tone, and — being sized to the tallest constituent bar — no two groups shared
-// a shape for the eye to learn. What replaced it:
-//   1. PROXIMITY. `BAR_GAP` (between days) is 3× `SUB_GAP` (inside a cluster).
-//      The old 1px:1px made two unrelated days look exactly as grouped as two
-//      sessions of one day, which is the actual reason the frame had to work so
-//      hard. Fix the spacing and most of the ambiguity goes without any ink.
-//   2. The PEDESTAL. Constant height and constant position, unlike the frame,
-//      so it is one repeated token rather than a per-instance outline. It lives
-//      in its own lane so it never steals height from the bars, and it is
-//      heavier and darker than the rest-day hairline it sits under so the two
-//      never trade places.
+// Up to DAILY_MAX_DAYS the strip is one column per day; past that a day column
+// would be under ~2px, so it switches to one column per 7-day bucket, coloured
+// by that week's dominant tag. Columns share the width equally, so the strip
+// never scrolls, and heights are relative to the tallest column IN THE WINDOW
+// (linear, no upstream ceiling — see docs/LESSONS.md § "A chart normalised to
+// what is on screen still renders flat").
 //
-// Heights are relative to WHAT IS IN VIEW, not to an absolute ceiling. Against a
-// fixed 2h maximum a stretch of 40-minute sessions renders as a row of identical
-// stubs; re-normalising so the tallest bar on screen fills the strip means each
-// screenful of history uses the full height and stays readable.
+// Within a day column: rest is a hairline, a session's height is its duration,
+// and a day with MORE than one session splits the column into adjacent bars,
+// each at its own height, marked as one day by a PEDESTAL — a solid
+// `--color-fg` foot in a reserved lane below the baseline. A frame around the
+// cluster was tried first and did not read (the today column is already a
+// framed box), and the gap between days is wider than the seam inside a day so
+// proximity carries most of the grouping.
+const ACTIVITY_WINDOWS = [
+  { key: '2w', label: 'Last 2 weeks', days: 14 },
+  { key: '4w', label: 'Last 4 weeks', days: 28 },
+  { key: '8w', label: 'Last 8 weeks', days: 56 },
+  { key: '12w', label: 'Last 12 weeks', days: 84 },
+  { key: '6m', label: 'Last 6 months', days: 182 },
+  { key: 'all', label: 'All time', days: null },
+] as const;
+type ActivityWindowKey = (typeof ACTIVITY_WINDOWS)[number]['key'];
+const DEFAULT_WINDOW: ActivityWindowKey = '4w';
+const WINDOW_STORAGE_KEY = 'verocity:activity-window';
+// Widest window drawn a column per day: 84 columns are ~3px at 375px.
+const DAILY_MAX_DAYS = 84;
 const STRIP_HEIGHT = 44;
+// Undated logs (total_seconds null → 0) still deserve a mark.
 const BAR_MIN = 8;
-// Nominal reference only — a 2h session is full height at scale 1. Heights are
-// deliberately NOT clamped to it: the view scale is what keeps bars inside the
-// strip, so clamping here as well would flatten every session above two hours to
-// an identical bar and hide exactly the differences this strip exists to show.
-const BAR_NOMINAL_SECONDS = 7200;
-const BAR_W = 12;
-// Between DAYS. Three times SUB_GAP, which is the whole of cue 1 above: at 1px
-// each, an unrelated neighbour and a same-day session were the same distance
-// apart. Kept at 3 rather than 4+ because every extra pixel is a day off the
-// screen, and 3:1 is already past the ratio proximity needs.
-const BAR_GAP = 3;
-// A day with more than one logged session is NOT stacked into the single column
-// — that read as one session with many tags. Each session gets its own bar at
-// 75% of the normal width and the bars sit adjacent, separated only by a 1px
-// seam of the card behind them.
-const SUB_W = Math.round(BAR_W * 0.75);
-// Inside a cluster. This is the seam, not a gap: it exists to keep two bars of
-// the same tone from merging into one block, and must stay well under BAR_GAP.
+// Inside a multi-session day. This is a seam, not a gap: it keeps two bars of
+// the same tone from merging, and must stay under the gap between days.
 const SUB_GAP = 1;
 // The pedestal lane, reserved below the baseline on EVERY column so a group
 // never shifts its neighbours' bars. Only multi-session days paint into it.
 const FOOT_H = 2.5;
 const FOOT_LANE = 4;
-// Quiet time before the strip re-normalises. Nothing runs during the gesture.
-const SETTLE_MS = 120;
-// Growth cap, so a screenful of 5-minute sessions doesn't read as a set of PRs.
-// There is no floor: when a long session is on screen the scale goes below 1 and
-// everything shrinks to fit, which is the honest reading.
-const MAX_SCALE = 4;
 
-// A single session's bar height from its own duration. Undated logs
-// (total_seconds null → 0) still deserve a mark, so they fall back to BAR_MIN.
-function barHeightFromSeconds(seconds: number): number {
-  return Math.max(
-    BAR_MIN,
-    Math.round(BAR_MIN + (seconds / BAR_NOMINAL_SECONDS) * (STRIP_HEIGHT - BAR_MIN)),
-  );
+// Gap between columns: 3px while columns are wide, tightening as the window
+// grows so the bars, not the gaps, keep the width.
+function columnGap(n: number): number {
+  return n <= 28 ? 3 : n <= 56 ? 2 : 1;
 }
 
-// A day's height for scaling. A multi-session cluster is as tall as its TALLEST
-// constituent session (each bar keeps its own height, so a 90-min sport day and
-// a 60-min mobility day sit at their own heights with empty space above the
-// shorter one) — NOT the sum, which read as one long session. A single-session
-// day is just that session's height.
-function barHeight(p: TimelinePoint): number {
-  if (p.state !== 'done') return 2;
-  return Math.max(...p.sessionSeconds.map(barHeightFromSeconds), BAR_MIN);
+// Reading localStorage throws where site data is blocked — see
+// getStoredBackground in lib/background.ts for the island that went blank.
+function readStoredWindow(): ActivityWindowKey {
+  try {
+    const raw = window.localStorage.getItem(WINDOW_STORAGE_KEY);
+    return ACTIVITY_WINDOWS.some((w) => w.key === raw) ? (raw as ActivityWindowKey) : DEFAULT_WINDOW;
+  } catch {
+    return DEFAULT_WINDOW;
+  }
 }
 
-// A day is a multi-session cluster only above one session; below that the
-// original single-column path (one bar, tags stacked) is unchanged.
-function isMultiSession(p: TimelinePoint): boolean {
-  return p.state === 'done' && p.sessions.length > 1;
-}
-
-// Layout width of a day's column. A cluster is n adjacent 75%-bars and their
-// seams — no wrapper chrome, since the pedestal is an overlay in the reserved
-// lane rather than a box the bars sit inside. Everything else keeps the
-// single-bar pitch.
-function pointWidth(p: TimelinePoint): number {
-  if (!isMultiSession(p)) return BAR_W;
-  const n = p.sessions.length;
-  return n * SUB_W + (n - 1) * SUB_GAP;
-}
-
-function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }) {
+function ActivityStrip({
+  plan,
+  logs,
+  done,
+  top,
+}: {
+  plan: Plan | null;
+  logs: WorkoutLog[];
+  done: WorkoutLog[];
+  top: number | null;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const [windowKey, setWindowKey] = useState<ActivityWindowKey>(DEFAULT_WINDOW);
+  const [width, setWidth] = useState(0);
   const [peekIndex, setPeekIndex] = useState<number | null>(null);
-  const [scale, setScale] = useState(1);
 
-  // buildTimeline always runs through today + 14 days of runway. Those future
-  // days are blank by definition and add nothing here, so the strip ends on
-  // today rather than changing what buildTimeline promises its other caller.
+  // Restored after mount, not in the initialiser: the island's first render
+  // must match the server's.
+  useEffect(() => setWindowKey(readStoredWindow()), []);
+
+  // Columns divide the measured width, so the strip needs it before it can
+  // draw. A ResizeObserver fires on mount and on resize only — never on scroll.
+  useLayoutEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const win = ACTIVITY_WINDOWS.find((w) => w.key === windowKey) ?? ACTIVITY_WINDOWS[1];
+
+  // buildTimeline runs from the first logged day through today + 14 days of
+  // runway; the strip ends on today. "All time" over a short history is padded
+  // to the narrowest window, so three days of logs are not three huge bars.
   const points = useMemo(() => {
     const all = buildTimeline(plan, logs);
     const todayIndex = all.findIndex((p) => p.isToday);
-    return todayIndex >= 0 ? all.slice(0, todayIndex + 4) : all;
-  }, [plan, logs]);
+    const history = todayIndex >= 0 ? all.slice(0, todayIndex + 1) : all;
+    return windowPoints(history, win.days ?? Math.max(ACTIVITY_WINDOWS[0].days, history.length));
+  }, [plan, logs, win.days]);
+  // By what is actually drawn, not by the window's name: "All time" over two
+  // months of history is still a column per day.
+  const daily = points.length <= DAILY_MAX_DAYS;
+  const weeks = useMemo(() => (daily ? [] : toWeeks(points)), [daily, points]);
 
-  // Days are no longer a uniform pitch — a multi-session cluster is wider — so
-  // the scroll math reads from a precomputed offset table instead of `i * pitch`.
-  // This is still pure arithmetic off an in-memory array (no IntersectionObserver,
-  // no DOM reads mid-gesture), so the "one style write per gesture" invariant in
-  // docs/LESSONS.md § "Something repaints constantly while scrolling" holds.
-  const layout = useMemo(() => {
-    let x = 0;
-    const items = points.map((p) => {
-      const width = pointWidth(p);
-      const offset = x;
-      x += width + BAR_GAP;
-      return { width, offset };
-    });
-    return items;
-  }, [points]);
-
-  // Open pinned to today. Layout effect so it is never painted at the left edge
-  // — a visible jump from the oldest day to the newest on every mount.
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const todayIdx = points.findIndex((p) => p.isToday);
-    if (todayIdx < 0) {
-      el.scrollLeft = el.scrollWidth;
-      return;
+  // Summed from the completed logs, not from the bars, so "All time" here and
+  // the all-time line below are the same numbers by construction.
+  const sum = useMemo(() => {
+    let inWindow = done;
+    if (win.days != null) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - (win.days - 1));
+      const from = ymd(cutoff);
+      inWindow = done.filter((l) => l.log_date >= from);
     }
-    const it = layout[todayIdx];
-    el.scrollLeft = it.offset + it.width - el.clientWidth;
-  }, [layout]);
-
-  // Re-normalise AFTER the scroll settles, never during it.
-  //
-  // docs/LESSONS.md § "Something repaints constantly while scrolling": a
-  // per-frame scroll comparison produced 18 class flips in a one-second scroll.
-  // So the listener is passive and does exactly one thing — reset a timer. The
-  // visible range is arithmetic off scrollLeft (the pitch is uniform, so an
-  // IntersectionObserver over hundreds of bars would be strictly more work), and
-  // the 3% gate is the hysteresis that stops a one-bar nudge re-rendering.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    let timer: number | undefined;
-
-    const settle = () => {
-      const viewL = el.scrollLeft;
-      const viewR = viewL + el.clientWidth;
-      let tallest = 0;
-      for (let i = 0; i < points.length; i++) {
-        const it = layout[i];
-        // Off screen either side — skip. The table is short (a rolling window),
-        // so this bounded scan is the variable-pitch equivalent of the old
-        // `scrollLeft / pitch` division, with no per-bar DOM work.
-        if (it.offset + it.width <= viewL || it.offset >= viewR) continue;
-        const p = points[i];
-        if (p?.state === 'done') tallest = Math.max(tallest, barHeight(p));
-      }
-      const next = tallest > 0 ? Math.min(MAX_SCALE, STRIP_HEIGHT / tallest) : 1;
-      setScale((cur) => (Math.abs(next - cur) / cur > 0.03 ? next : cur));
+    return {
+      count: inWindow.length,
+      seconds: inWindow.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0),
     };
+  }, [done, win.days]);
+  const allTime = useMemo(
+    () => ({ count: done.length, seconds: done.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0) }),
+    [done],
+  );
 
-    const onScroll = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(settle, SETTLE_MS);
-    };
+  const n = daily ? points.length : weeks.length;
+  const gap = columnGap(n);
+  const colW = n > 0 ? Math.max(1, (width - gap * (n - 1)) / n) : 0;
+  const tallest = daily
+    ? Math.max(0, ...points.flatMap((p) => p.sessionSeconds))
+    : Math.max(0, ...weeks.map((w) => w.seconds));
+  const heightOf = (seconds: number) =>
+    tallest > 0 ? Math.max(BAR_MIN, Math.round((seconds / tallest) * STRIP_HEIGHT)) : BAR_MIN;
+  // The today frame is a 1.5px inset; on a ~3px column that would paint the
+  // whole column, so narrow columns get a hairline instead.
+  const frameClass =
+    colW >= 8 ? 'shadow-[inset_0_0_0_1.5px_var(--color-fg)]' : 'shadow-[inset_0_0_0_1px_var(--color-fg)]';
 
-    settle();
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.clearTimeout(timer);
-      el.removeEventListener('scroll', onScroll);
-    };
-  }, [points, layout]);
-
-  // Outside-tap dismiss for the peeked day.
+  // Outside-tap dismiss for the peeked column.
   useEffect(() => {
     if (peekIndex === null) return;
     function onPointerDown(e: PointerEvent) {
@@ -273,128 +223,164 @@ function ActivityStrip({ plan, logs }: { plan: Plan | null; logs: WorkoutLog[] }
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [peekIndex]);
 
-  const peeked = peekIndex === null ? null : points[peekIndex];
+  const peekLabel =
+    peekIndex === null
+      ? null
+      : daily
+        ? points[peekIndex] && `${points[peekIndex].fullLabel} · ${points[peekIndex].date}`
+        : weeks[peekIndex] &&
+          `Week of ${weeks[peekIndex].start} · ${weeks[peekIndex].sessions} session${weeks[peekIndex].sessions === 1 ? '' : 's'}`;
+
+  const peekProps = (i: number) => ({
+    onClick: (e: MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      setPeekIndex((cur) => (cur === i ? null : i));
+    },
+    onMouseEnter: () => setPeekIndex(i),
+    onMouseLeave: () => setPeekIndex((cur) => (cur === i ? null : cur)),
+  });
+
+  const todayFrame = (
+    // On the COLUMN, not the bar, and stopping at the baseline: wrapping the
+    // pedestal lane merged its bottom stroke with the pedestal on a day that is
+    // both today and multi-session.
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute inset-x-0 top-0 ${frameClass}`}
+      style={{ bottom: FOOT_LANE }}
+    />
+  );
 
   return (
     <div ref={containerRef} className="relative">
-      {/* The caption lives OUTSIDE the scroller. `overflow-x: auto` computes
-          overflow-y to auto as well, so a popover anchored above a bar would be
-          clipped by its own scroll container. */}
-      <div className="t-label mb-2 flex justify-between gap-3 text-muted">
-        <span>Activity</span>
-        {peeked ? (
-          <span className="truncate text-fg">
-            {peeked.fullLabel} · {peeked.date}
+      <div className="flex items-center justify-between gap-3">
+        {/* The range IS the section label, and tapping it opens the picker. The
+            select is transparent and laid over the text, so the affordance stays
+            hidden; 16px keeps iOS from zooming on focus, and -my-3 gives the 44px
+            target back to the layout. Keyboard focus still shows a ring. */}
+        <label className="relative -my-3 inline-flex min-h-11 shrink-0 cursor-pointer items-center">
+          <select
+            value={windowKey}
+            aria-label="Activity window"
+            onChange={(e) => {
+              const key = e.target.value as ActivityWindowKey;
+              setWindowKey(key);
+              setPeekIndex(null);
+              try {
+                window.localStorage.setItem(WINDOW_STORAGE_KEY, key);
+              } catch {
+                /* blocked — the choice still applies for this visit. */
+              }
+            }}
+            className="peer absolute inset-0 cursor-pointer appearance-none text-base opacity-0"
+          >
+            {ACTIVITY_WINDOWS.map((w) => (
+              <option key={w.key} value={w.key}>
+                {w.label}
+              </option>
+            ))}
+          </select>
+          <span className="t-label text-muted peer-focus-visible:rounded-sm peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-fg">
+            {win.label}
           </span>
-        ) : null}
+        </label>
+        {peekLabel ? <span className="t-label truncate text-fg">{peekLabel}</span> : null}
       </div>
+
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="font-display text-[28px] leading-none text-fg tabular-nums">
+          {formatDuration(sum.seconds)}
+        </span>
+        <span className="text-xs leading-none text-muted tabular-nums">
+          <span className="font-semibold text-fg">{sum.count}</span> session{sum.count === 1 ? '' : 's'}
+        </span>
+      </div>
+
       <div
-        ref={scrollRef}
-        className="-mx-4 overflow-x-auto overscroll-x-contain px-4 sm:-mx-6 sm:px-6"
-        style={edgeFade}
+        ref={stripRef}
+        className="mt-2.5 flex items-end"
+        style={{ height: STRIP_HEIGHT + FOOT_LANE, gap }}
+        aria-label={daily ? 'One bar per day' : 'One bar per week'}
       >
-        <div
-          className="strip-row flex items-end"
-          style={
-            {
-              // The bar area is STRIP_HEIGHT; the lane is extra, so reserving it
-              // never costs a bar any height and `scale` keeps its meaning.
-              height: STRIP_HEIGHT + FOOT_LANE,
-              gap: BAR_GAP,
-              '--strip-scale': scale,
-            } as CSSProperties
-          }
-        >
-          {points.map((p, i) => {
-            const multi = isMultiSession(p);
-            return (
+        {width > 0 && daily
+          ? points.map((p, i) => {
+              const multi = p.state === 'done' && p.sessions.length > 1;
+              const subW = multi ? (colW - SUB_GAP * (p.sessions.length - 1)) / p.sessions.length : colW;
+              return (
+                <button
+                  key={p.date}
+                  type="button"
+                  {...peekProps(i)}
+                  className="relative flex h-full shrink-0 cursor-pointer flex-col justify-end"
+                  // paddingBottom is the pedestal lane: every column reserves it
+                  // so the baseline stays one straight line.
+                  style={{ width: colW, paddingBottom: FOOT_LANE }}
+                  aria-label={`${p.date} ${p.fullLabel}`}
+                  title={`${p.fullLabel} · ${p.date}`}
+                >
+                  {p.state !== 'done' ? (
+                    <span className="h-0.5 w-full bg-border" aria-hidden />
+                  ) : (
+                    <span className="flex items-end" style={{ gap: SUB_GAP }} aria-hidden>
+                      {p.sessions.map((colors, si) => (
+                        // A session's tags stack inside its own bar.
+                        <span
+                          key={si}
+                          className="flex flex-col"
+                          style={{ width: subW, height: heightOf(p.sessionSeconds[si]) }}
+                        >
+                          {colors.map((c, ci) => (
+                            <span key={ci} style={{ flex: 1, backgroundColor: c }} />
+                          ))}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                  {p.isToday ? todayFrame : null}
+                  {multi ? (
+                    // The pedestal: `--color-fg` at 2.5px against the rest
+                    // hairline's `--color-border` at 2px — they share a band and
+                    // are told apart by weight and tone, so keep the contrast.
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-x-0 bottom-0 bg-fg"
+                      style={{ height: FOOT_H }}
+                    />
+                  ) : null}
+                </button>
+              );
+            })
+          : null}
+        {width > 0 && !daily
+          ? weeks.map((w, i) => (
               <button
-                key={p.date}
+                key={w.start}
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPeekIndex((cur) => (cur === i ? null : i));
-                }}
-                onMouseEnter={() => setPeekIndex(i)}
-                onMouseLeave={() => setPeekIndex((cur) => (cur === i ? null : cur))}
-                className={`relative flex h-full shrink-0 cursor-pointer flex-col justify-end ${
-                  multi ? 'items-center' : ''
-                }`}
-                // paddingBottom is the pedestal lane. Every column reserves it,
-                // trained or not, so the baseline stays one straight line.
-                style={{ width: layout[i].width, paddingBottom: FOOT_LANE }}
-                aria-label={`${p.date} ${p.fullLabel}`}
-                title={`${p.fullLabel} · ${p.date}`}
+                {...peekProps(i)}
+                className="relative flex h-full shrink-0 cursor-pointer flex-col justify-end"
+                style={{ width: colW, paddingBottom: FOOT_LANE }}
+                aria-label={`${w.start} to ${w.end}: ${w.sessions} sessions`}
+                title={`Week of ${w.start}`}
               >
-                {p.state !== 'done' ? (
-                  // Rest days are a hairline rule, NOT a bar — deliberately
-                  // outside the scaled element so they never grow into blocks.
-                  <span className="h-0.5 w-full bg-border" aria-hidden />
-                ) : multi ? (
-                  // More than one session: adjacent 75%-width bars, EACH AT ITS
-                  // OWN height (so a 90-min and a 60-min day sit at their real
-                  // heights, the shorter one with empty space above it — the
-                  // cluster just looks like two ordinary logs). Each bar is an
-                  // ordinary `.strip-bar`, so a constituent session scales and
-                  // tweens exactly as it would standing alone — there is no
-                  // longer a frame stroke that would scale with it.
-                  <span className="flex items-end" style={{ gap: SUB_GAP }} aria-hidden>
-                    {p.sessions.map((colors, si) => (
-                      <span
-                        key={si}
-                        className="strip-bar flex flex-col"
-                        style={{
-                          width: SUB_W,
-                          height: barHeightFromSeconds(p.sessionSeconds[si]),
-                        }}
-                      >
-                        {colors.map((c, ci) => (
-                          <span key={ci} style={{ flex: 1, backgroundColor: c }} />
-                        ))}
-                      </span>
-                    ))}
-                  </span>
+                {w.color ? (
+                  <span aria-hidden style={{ height: heightOf(w.seconds), backgroundColor: w.color }} />
                 ) : (
-                  // One session: the original single column, tags stacked.
-                  <span className="strip-bar flex w-full flex-col" style={{ height: barHeight(p) }} aria-hidden>
-                    {p.sessions[0].map((c, ci) => (
-                      <span key={ci} style={{ flex: 1, backgroundColor: c }} />
-                    ))}
-                  </span>
+                  <span className="h-0.5 w-full bg-border" aria-hidden />
                 )}
-                {p.isToday ? (
-                  // Today reads as a framed column whether or not it was
-                  // trained. The outline lives on the COLUMN, not the bar, so
-                  // scaling the bar never thickens the stroke — and it stops at
-                  // the baseline rather than wrapping the pedestal lane. As an
-                  // inset shadow on the button it enclosed the lane, and on a
-                  // day that is BOTH today and multi-session its bottom stroke
-                  // and the pedestal merged into one thick line: the grouping
-                  // cue vanished on the one column the user looks at first.
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-x-0 top-0 shadow-[inset_0_0_0_1.5px_var(--color-fg)]"
-                    style={{ bottom: FOOT_LANE }}
-                  />
-                ) : null}
-                {multi ? (
-                  // The pedestal. Absolutely positioned in the reserved lane, so
-                  // it takes no height from the bars and cannot move a
-                  // neighbouring column. `--color-fg` and 2.5px against the
-                  // rest-day rule's `--color-border` and 2px: the two share a
-                  // band and are told apart by weight and tone, so keep the
-                  // contrast if either ever changes.
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-x-0 bottom-0 bg-fg"
-                    style={{ height: FOOT_H }}
-                  />
-                ) : null}
+                {w.isCurrent ? todayFrame : null}
               </button>
-            );
-          })}
-        </div>
+            ))
+          : null}
       </div>
+
+      {win.days != null ? (
+        <p className="mt-2 text-[11px] leading-none text-muted tabular-nums">
+          All time · {allTime.count} session{allTime.count === 1 ? '' : 's'} · {formatDuration(allTime.seconds)}
+          {top != null ? ` · e1RM ${formatRound(top)} kg` : ''}
+        </p>
+      ) : top != null ? (
+        <p className="mt-2 text-[11px] leading-none text-muted tabular-nums">Top e1RM {formatRound(top)} kg</p>
+      ) : null}
     </div>
   );
 }
@@ -705,8 +691,6 @@ export default function ProfileView({ mode }: { mode: Surface }) {
     setCached('meals:today', next);
   };
 
-  const sessionCount = done.length;
-  const totalSeconds = done.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0);
   const top = topE1rm(done);
   const streak = currentStreak(allLogs);
   const totalWeeks = plan ? planWeekCount(plan.parsed) : 0;
@@ -1006,35 +990,16 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           </section>
       </Item>
 
-      {/* Activity first, then the totals it sums. The strip is the shape of the
-          history; the three numbers are its summary, and a summary reads better
-          under the thing it summarises than above it. */}
+      {/* Activity: the hours in a chosen window, the strip for that window, and
+          the all-time totals in one muted line under it. These used to be the
+          strip plus a separate three-tile StatStrip. */}
       <Item>
         <section className="mb-6">
-          <ActivityStrip plan={plan} logs={allLogs} />
+          <ActivityStrip plan={plan} logs={allLogs} done={done} top={top} />
         </section>
       </Item>
 
-      {/* One bordered strip with hairline dividers, not three separately
-          rounded tiles in a gap-px grid — at 4px+ radius the old arrangement
-          read as three floating boxes rather than one unit. */}
-      <Item>
-        <section className="mb-6">
-          <StatStrip
-            stats={[
-              { label: 'Sessions', value: sessionCount },
-              { label: 'Total time', value: formatDuration(totalSeconds) },
-              {
-                label: 'Top e1RM',
-                value: top != null ? formatRound(top) : '—',
-                unit: top != null ? 'kg' : undefined,
-              },
-            ]}
-          />
-        </section>
-      </Item>
-
-      {/* The Fuel card sits UNDER the stats strip. mode === 'app' is mandatory,
+      {/* The Fuel card sits UNDER the activity block. mode === 'app' is mandatory,
           not cosmetic: this component also renders /showcase through the anon
           client, which has no read access to meal_logs by RLS design (no anon
           policy — see 0032_meal_logs.sql). Rendering this there would show a
