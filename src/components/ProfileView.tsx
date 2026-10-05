@@ -18,7 +18,7 @@ import { TodaysMeals } from '@/components/meals/TodaysMeals';
 import { MealDrawer } from '@/components/meals/MealDrawer';
 import { SavedMealsSheet } from '@/components/meals/SavedMealsSheet';
 import { activeSessionOf } from '@/lib/activeSession';
-import { currentStreak } from '@/lib/streak';
+import { currentWeekStreak } from '@/lib/streak';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
 import { bestE1rm } from '@/lib/e1rm';
 import { currentProgramWeek, planWeekCount } from '@/lib/progression';
@@ -692,7 +692,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
   };
 
   const top = topE1rm(done);
-  const streak = currentStreak(allLogs);
+  const streak = currentWeekStreak(allLogs);
   const totalWeeks = plan ? planWeekCount(plan.parsed) : 0;
   const week = plan ? currentProgramWeek(plan.id, allLogs, totalWeeks) : null;
   const todayDayName = DAY_NAMES[new Date().getDay()];
@@ -749,7 +749,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                 <span aria-hidden>·</span>
                 <span className="flex items-center gap-1.5 text-teal">
                   <span aria-hidden className="inline-block h-1.5 w-1.5 bg-teal" />
-                  {streak}-day streak
+                  {streak}-week streak
                 </span>
               </>
             ) : null}

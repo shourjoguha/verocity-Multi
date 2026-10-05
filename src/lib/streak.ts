@@ -1,5 +1,7 @@
-// Current logging streak — consecutive calendar days (ending today, or
-// yesterday if today isn't logged yet) with at least one completed session.
+// Current logging streak — consecutive Monday-start calendar weeks (ending this
+// week, or last week if this one isn't logged yet) with at least one completed
+// session. Weeks, not days: a lifter on a 3–4 day split breaks a day streak by
+// design every rest day, so the day count only ever read 1 or 2.
 // Pure + timezone-injectable for tests. Powers the Home streak chip.
 interface DatedLog {
   log_date: string;
@@ -15,25 +17,33 @@ export function ymdLocal(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-export function currentStreak(logs: DatedLog[], today: Date = new Date()): number {
-  const days = new Set<string>();
-  for (const l of logs) {
-    if (l.status === 'done' && l.log_date) days.add(l.log_date.slice(0, 10));
-  }
-  if (days.size === 0) return 0;
+// Local Monday of the week containing `d`, as a ymdLocal key.
+function mondayKey(d: Date): string {
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+  return ymdLocal(m);
+}
 
-  // Anchor at today; if nothing logged today, the streak may still be alive
-  // through yesterday. Anything older means the streak is broken.
-  const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  if (!days.has(ymdLocal(cursor))) {
-    cursor.setDate(cursor.getDate() - 1);
-    if (!days.has(ymdLocal(cursor))) return 0;
+export function currentWeekStreak(logs: DatedLog[], today: Date = new Date()): number {
+  const weeks = new Set<string>();
+  for (const l of logs) {
+    if (l.status !== 'done' || !l.log_date) continue;
+    const [y, m, d] = l.log_date.slice(0, 10).split('-').map(Number);
+    weeks.add(mondayKey(new Date(y, m - 1, d)));
+  }
+  if (weeks.size === 0) return 0;
+
+  // Anchor at this week; if nothing logged yet this week, the streak is still
+  // alive through last week. Anything older means it is broken.
+  const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
+  if (!weeks.has(ymdLocal(cursor))) {
+    cursor.setDate(cursor.getDate() - 7);
+    if (!weeks.has(ymdLocal(cursor))) return 0;
   }
 
   let streak = 0;
-  while (days.has(ymdLocal(cursor))) {
+  while (weeks.has(ymdLocal(cursor))) {
     streak++;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor.setDate(cursor.getDate() - 7);
   }
   return streak;
 }
