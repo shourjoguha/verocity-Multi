@@ -1,13 +1,13 @@
 // The Home coach icon's characters. Each pose is a handful of vector shapes in
 // a 0..1 box, rasterised to an N×N pixel grid on demand, so the art is not
-// tied to one resolution: SPRITE_GRID picks it, and nothing else changes.
+// tied to one resolution: the grid is a setting (SPRITE_GRIDS).
 //
-// Pure — no DOM. CoachRunner renders the grid as SVG paths in currentColor, so
-// both themes come free and the icon stays monochrome chrome (CLAUDE.md). The
-// palette's colour tokens exist only for the design mockups; the app reads
-// `tone` alone: 1 = ink, 2 = ink at reduced opacity.
+// Pure — no DOM. CoachSprite renders the grid as SVG paths: in Mono, by
+// `tone` (1 = ink, 2 = ink at reduced opacity) in currentColor; in Colour, one
+// path per palette char filled from its `--spr-*` token in global.css.
 
-export const SPRITE_GRID = 32;
+export const SPRITE_GRIDS = [24, 32, 48] as const;
+export type SpriteGrid = (typeof SPRITE_GRIDS)[number];
 
 type Pt = [number, number];
 export type Op =
@@ -324,7 +324,7 @@ export const SPRITE_KEYS = Object.keys(SPRITES) as SpriteKey[];
 const cache = new Map<string, string[]>();
 
 // The pose as rows of palette chars, shifted by `dx` with wrap-around.
-export function spriteFrame(key: SpriteKey, beat: Beat, n: number = SPRITE_GRID): string[] {
+export function spriteFrame(key: SpriteKey, beat: Beat, n: number): string[] {
   const id = `${key}:${beat.pose}:${beat.dx ?? 0}:${n}`;
   const hitCache = cache.get(id);
   if (hitCache) return hitCache;
@@ -337,14 +337,13 @@ export function spriteFrame(key: SpriteKey, beat: Beat, n: number = SPRITE_GRID)
   return rows;
 }
 
-// SVG path data for one tone, horizontal runs merged — a rect per pixel at
-// 32×32 would be ~1000 subpaths a frame.
-export function tonePath(rows: string[], tone: 1 | 2): string {
+// SVG path data for the cells `on` selects, horizontal runs merged — a rect
+// per pixel at 48×48 would be ~2000 subpaths a frame.
+function runPath(rows: string[], on: (c: string) => boolean): string {
   let d = '';
   rows.forEach((row, y) => {
     let x = 0;
     while (x < row.length) {
-      const on = (c: string) => c !== '.' && PALETTE[c]?.[1] === tone;
       if (!on(row[x])) {
         x++;
         continue;
@@ -355,4 +354,14 @@ export function tonePath(rows: string[], tone: 1 | 2): string {
     }
   });
   return d;
+}
+
+export function tonePath(rows: string[], tone: 1 | 2): string {
+  return runPath(rows, (c) => c !== '.' && PALETTE[c]?.[1] === tone);
+}
+
+// One path per palette char present in the frame, for Colour.
+export function colourPaths(rows: string[]): { token: string; d: string }[] {
+  const chars = new Set(rows.join('').replace(/\./g, ''));
+  return [...chars].map((ch) => ({ token: PALETTE[ch][0], d: runPath(rows, (c) => c === ch) }));
 }

@@ -131,6 +131,10 @@ UI audit have both run.
   segments, the consistency grid, and `--color-up` / `--color-down` on a delta.
   Anything colour-coded must also survive without colour — `Delta` renders an
   arrow and a signed number, not just a hue.
+  **One exception, by the owner's decision:** the Home coach icon may render in
+  colour (Settings → Coach icon → Ink: Colour, the default). Its colours are the
+  `--spr-*` tokens in `global.css`, defined in both themes — never raw values in
+  `CoachSprite.tsx`. Mono stays available. Do not "fix" this back to greyscale.
 - **Default to 3–4 things; collapse the rest.** A data-heavy screen leads with
   one headline and one primary visual. Everything else goes behind
   `ui/Disclosure` (native `<details>`, no JS state, no animation to get wrong)

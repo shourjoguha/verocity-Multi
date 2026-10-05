@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SPRITES, SPRITE_KEYS, rasterize, spriteFrame, tonePath, PALETTE } from '@/lib/coachSprites';
+import { SPRITES, SPRITE_KEYS, colourPaths, rasterize, spriteFrame, tonePath, PALETTE } from '@/lib/coachSprites';
 
 describe('coach sprites', () => {
   it('every beat names a pose that exists, and every frame is N×N in the palette', () => {
@@ -34,5 +34,24 @@ describe('coach sprites', () => {
   it('merges a horizontal run into one subpath per tone', () => {
     expect(tonePath(['.KK.', '.FF.'], 1)).toBe('M1 0h2v1h-2z');
     expect(tonePath(['.KK.', '.FF.'], 2)).toBe('M1 1h2v1h-2z');
+  });
+});
+
+describe('colourPaths', () => {
+  it('emits one path per palette char, filled from its token', () => {
+    const paths = colourPaths(['.BB.', 'RR..']);
+    expect(paths).toEqual([
+      { token: '--spr-blue', d: 'M1 0h2v1h-2z' },
+      { token: '--spr-red', d: 'M0 1h2v1h-2z' },
+    ]);
+  });
+
+  it('names a token global.css defines for every palette char', async () => {
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('src/styles/global.css', 'utf8');
+    for (const [token] of Object.values(PALETTE)) {
+      // defined in BOTH theme blocks
+      expect(css.split(`${token}:`).length - 1).toBeGreaterThanOrEqual(2);
+    }
   });
 });

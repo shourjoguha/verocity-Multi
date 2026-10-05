@@ -238,6 +238,45 @@ html[data-theme='dark'] {
   color-scheme: light;
 }
 
+/* Coach icon colours (CoachSprite.tsx, Ink: Colour in Settings). The one
+   colour on chrome, by the owner's decision — see CLAUDE.md "Monochrome
+   chrome". Names match PALETTE in lib/coachSprites.ts. Both themes define every
+   token; dark lifts only what would vanish on carbon. */
+:root {
+  --spr-line: hsl(0 0% 8%);
+  --spr-fur: hsl(240 4% 20%);
+  --spr-face: hsl(20 8% 55%);
+  --spr-ink: hsl(0 0% 8%);
+  --spr-spark: hsl(45 95% 52%);
+  --spr-blue: hsl(220 85% 48%);
+  --spr-peach: hsl(28 80% 74%);
+  --spr-white: hsl(0 0% 100%);
+  --spr-red: hsl(0 80% 48%);
+  --spr-band: hsl(0 80% 48%);
+  --spr-tan: hsl(25 55% 62%);
+  --spr-hair: hsl(25 40% 20%);
+  --spr-pants: hsl(215 55% 38%);
+  --spr-gun: hsl(0 0% 40%);
+  --spr-flash: hsl(48 100% 55%);
+}
+html[data-theme='dark'] {
+  --spr-line: hsl(0 0% 8%);
+  --spr-fur: hsl(240 4% 30%);
+  --spr-face: hsl(20 8% 55%);
+  --spr-ink: hsl(0 0% 8%);
+  --spr-spark: hsl(45 95% 52%);
+  --spr-blue: hsl(220 85% 55%);
+  --spr-peach: hsl(28 80% 74%);
+  --spr-white: hsl(0 0% 100%);
+  --spr-red: hsl(0 80% 52%);
+  --spr-band: hsl(0 80% 52%);
+  --spr-tan: hsl(25 55% 62%);
+  --spr-hair: hsl(25 40% 32%);
+  --spr-pants: hsl(215 55% 45%);
+  --spr-gun: hsl(0 0% 50%);
+  --spr-flash: hsl(48 100% 55%);
+}
+
 html,
 body {
   color: var(--color-fg);

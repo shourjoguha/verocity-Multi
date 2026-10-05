@@ -1,62 +1,71 @@
-import { useEffect, useState } from 'react';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { CoachSprite } from '@/components/CoachSprite';
-import { SPRITES, SPRITE_KEYS } from '@/lib/coachSprites';
+import { SPRITES, SPRITE_GRIDS, SPRITE_KEYS } from '@/lib/coachSprites';
 import {
-  COACH_SPRITE_DEFAULTS,
+  COACH_SPRITE_INKS,
+  COACH_SPRITE_MOTIONS,
   COACH_SPRITE_SIZES,
   COACH_SPRITE_SPEEDS,
-  getCoachSpritePrefs,
   setCoachSpritePrefs,
+  useCoachSpritePrefs,
   type CoachSpritePrefs,
 } from '@/lib/coachSpritePrefs';
 
+const INK_LABEL = { mono: 'Mono', colour: 'Colour' } as const;
+const MOTION_LABEL = { always: 'Always', new: 'New', off: 'Off' } as const;
 const speedLabel = (s: number) => (s === 0.5 ? '½×' : `${s}×`);
 
-// Settings → Appearance → Coach icon. The preview always moves; on Home the
-// character moves only while a coach finding is unseen.
+// Settings → Appearance → Coach icon. The preview moves unless Motion is Off;
+// on Home, "New" moves only while a coach finding is unseen.
 export function CoachSpritePicker() {
-  const [prefs, setPrefs] = useState<CoachSpritePrefs>(COACH_SPRITE_DEFAULTS);
-  useEffect(() => setPrefs(getCoachSpritePrefs()), []);
+  const prefs = useCoachSpritePrefs();
+  const update = (patch: Partial<CoachSpritePrefs>) => setCoachSpritePrefs({ ...prefs, ...patch });
 
-  const update = (patch: Partial<CoachSpritePrefs>) => {
-    const next = { ...prefs, ...patch };
-    setPrefs(next);
-    setCoachSpritePrefs(next);
-  };
+  // One labelled single-select per setting; every option list comes from
+  // lib/coachSpritePrefs.ts so the stored value and the control cannot drift.
+  const field = <K extends keyof CoachSpritePrefs>(
+    key: K,
+    label: string,
+    options: readonly CoachSpritePrefs[K][],
+    show: (v: CoachSpritePrefs[K]) => string,
+  ) => (
+    <div className="grid min-w-0 gap-1">
+      <span className="t-label text-muted">{label}</span>
+      <SegmentedTabs
+        as="radiogroup"
+        size="sm"
+        ariaLabel={`Coach icon ${label.toLowerCase()}`}
+        tabs={options.map((o) => ({ key: String(o), label: show(o) }))}
+        active={String(prefs[key])}
+        onChange={(k) => update({ [key]: options.find((o) => String(o) === k) } as Partial<CoachSpritePrefs>)}
+      />
+    </div>
+  );
 
   return (
-    <div className="flex items-end gap-4">
-      <div className="grid min-w-0 flex-1 gap-2">
-        <SegmentedTabs
-          as="radiogroup"
-          size="sm"
-          ariaLabel="Coach character"
-          tabs={SPRITE_KEYS.map((k) => ({ key: k, label: SPRITES[k].label }))}
-          active={prefs.sprite}
-          onChange={(k) => update({ sprite: k as CoachSpritePrefs['sprite'] })}
-        />
-        <div className="grid grid-cols-2 gap-2">
-          <SegmentedTabs
-            as="radiogroup"
-            size="sm"
-            ariaLabel="Coach icon size"
-            tabs={COACH_SPRITE_SIZES.map((s) => ({ key: String(s), label: `${s}px` }))}
-            active={String(prefs.size)}
-            onChange={(k) => update({ size: Number(k) as CoachSpritePrefs['size'] })}
-          />
-          <SegmentedTabs
-            as="radiogroup"
-            size="sm"
-            ariaLabel="Coach icon speed"
-            tabs={COACH_SPRITE_SPEEDS.map((s) => ({ key: String(s), label: speedLabel(s) }))}
-            active={String(prefs.speed)}
-            onChange={(k) => update({ speed: Number(k) as CoachSpritePrefs['speed'] })}
+    <div className="grid gap-3">
+      <div className="flex items-end gap-4">
+        <div className="min-w-0 flex-1">
+          {field('sprite', 'Character', SPRITE_KEYS, (k) => SPRITES[k].label)}
+        </div>
+        <div className="flex h-16 w-16 shrink-0 items-end justify-center border-b border-border text-fg">
+          <CoachSprite
+            sprite={prefs.sprite}
+            grid={prefs.grid}
+            ink={prefs.ink}
+            size={prefs.size}
+            speed={prefs.speed}
+            animate={prefs.motion !== 'off'}
+            className="-mb-px"
           />
         </div>
       </div>
-      <div className="flex h-16 w-16 shrink-0 items-end justify-center border-b border-border text-fg">
-        <CoachSprite sprite={prefs.sprite} size={prefs.size} speed={prefs.speed} animate className="-mb-px" />
+      <div className="grid grid-cols-2 gap-3">
+        {field('ink', 'Ink', COACH_SPRITE_INKS, (v) => INK_LABEL[v])}
+        {field('motion', 'Motion', COACH_SPRITE_MOTIONS, (v) => MOTION_LABEL[v])}
+        {field('grid', 'Resolution', SPRITE_GRIDS, String)}
+        {field('size', 'Slot', COACH_SPRITE_SIZES, (v) => `${v}px`)}
+        {field('speed', 'Speed', COACH_SPRITE_SPEEDS, speedLabel)}
       </div>
     </div>
   );

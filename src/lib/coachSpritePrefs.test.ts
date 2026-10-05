@@ -15,14 +15,26 @@ function stubStorage(value: string | null, throws = false) {
 describe('getCoachSpritePrefs', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('defaults to the gorilla at 32px and half speed', () => {
+  it('defaults to a colour hedgehog on a 48 grid in a 32px slot, always moving at half speed', () => {
     stubStorage(null);
-    expect(getCoachSpritePrefs()).toEqual({ sprite: 'gorilla', size: 32, speed: 0.5 });
+    expect(getCoachSpritePrefs()).toEqual({
+      sprite: 'hedgehog',
+      ink: 'colour',
+      motion: 'always',
+      grid: 48,
+      size: 32,
+      speed: 0.5,
+    });
   });
 
   it('keeps valid fields and replaces invalid ones field by field', () => {
-    stubStorage(JSON.stringify({ sprite: 'commando', size: 99, speed: 2 }));
-    expect(getCoachSpritePrefs()).toEqual({ sprite: 'commando', size: 32, speed: 2 });
+    stubStorage(JSON.stringify({ sprite: 'commando', ink: 'neon', motion: 'off', grid: 64, size: 99, speed: 2 }));
+    expect(getCoachSpritePrefs()).toEqual({ ...COACH_SPRITE_DEFAULTS, sprite: 'commando', motion: 'off', speed: 2 });
+  });
+
+  it('reads a value stored before the newer fields existed', () => {
+    stubStorage(JSON.stringify({ sprite: 'gorilla', size: 24, speed: 1 }));
+    expect(getCoachSpritePrefs()).toEqual({ ...COACH_SPRITE_DEFAULTS, sprite: 'gorilla', size: 24, speed: 1 });
   });
 
   it('survives a throwing or corrupt store', () => {

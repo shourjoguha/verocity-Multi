@@ -1,28 +1,15 @@
-// Home's way into /app/coach: the chosen character (Settings → Appearance)
-// standing on the Active plan card's top hairline, with the live-finding count
-// as a superscript. No box and no word — the card's own edge is the frame.
-//
-// It animates ONLY while a finding is unseen (lib/coachSignal.ts) — once you
-// open Coach it holds its first pose, and the count stays until the findings
-// stop being true. The count says everything the motion says, so reduced-motion
-// users lose nothing.
-import { useEffect, useState } from 'react';
+// Home's way into /app/coach: the chosen character (Settings → Appearance →
+// Coach icon) standing on the Active plan card's top hairline, with the
+// live-finding count as a superscript. No box and no word — the card's own
+// edge is the frame. Motion follows the setting: always, only while a finding
+// is unseen (lib/coachSignal.ts), or never. The count carries the message
+// either way.
 import { CoachSprite } from '@/components/CoachSprite';
-import {
-  COACH_SPRITE_DEFAULTS,
-  COACH_SPRITE_EVENT,
-  getCoachSpritePrefs,
-  type CoachSpritePrefs,
-} from '@/lib/coachSpritePrefs';
+import { useCoachSpritePrefs } from '@/lib/coachSpritePrefs';
 
 export function CoachRunner({ live, unseen }: { live: number; unseen: number }) {
-  const [prefs, setPrefs] = useState<CoachSpritePrefs>(COACH_SPRITE_DEFAULTS);
-  useEffect(() => {
-    setPrefs(getCoachSpritePrefs());
-    const on = () => setPrefs(getCoachSpritePrefs());
-    window.addEventListener(COACH_SPRITE_EVENT, on);
-    return () => window.removeEventListener(COACH_SPRITE_EVENT, on);
-  }, []);
+  const prefs = useCoachSpritePrefs();
+  const animate = prefs.motion === 'always' || (prefs.motion === 'new' && unseen > 0);
 
   const label =
     live === 0 ? 'Coach' : `Coach, ${live} open finding${live === 1 ? '' : 's'}${unseen > 0 ? `, ${unseen} new` : ''}`;
@@ -40,7 +27,15 @@ export function CoachRunner({ live, unseen }: { live: number; unseen: number }) 
     >
       {/* -mb-px: every frame's bottom row is outline or empty, so this puts
           the feet on the hairline rather than a pixel above it. */}
-      <CoachSprite sprite={prefs.sprite} size={prefs.size} speed={prefs.speed} animate={unseen > 0} className="-mb-px" />
+      <CoachSprite
+        sprite={prefs.sprite}
+        grid={prefs.grid}
+        ink={prefs.ink}
+        size={prefs.size}
+        speed={prefs.speed}
+        animate={animate}
+        className="-mb-px"
+      />
       {/* A superscript, footnote-style: raised to the character's head. 9px is
           the floor the type scale allows (.t-nano); Archivo Black holds up there. */}
       {live > 0 ? (
