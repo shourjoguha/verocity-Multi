@@ -38,6 +38,7 @@ import { Disclosure } from '@/components/ui/Disclosure';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { BackgroundPicker } from '@/components/BackgroundPicker';
+import { CoachSpritePicker } from '@/components/CoachSpritePicker';
 import { GarminPanel } from '@/components/GarminPanel';
 import { UserStatsPanel } from '@/components/UserStatsPanel';
 import { GoalsEditor } from '@/components/GoalsEditor';
@@ -71,8 +72,8 @@ const labelOf = <T extends string>(list: readonly { key: T; label: string }[], k
 
 // Wrapped, and this page in particular needs it. `<details>` renders its
 // children whether or not it is open, so /app/you MOUNTS all seven of its
-// sections on arrival — UserStatsPanel, GoalsEditor, ThemeToggle,
-// BackgroundPicker, GarminPanel, ShareManager and the export block — each with
+// sections on arrival — GoalsEditor, ThemeToggle, BackgroundPicker,
+// CoachSpritePicker, GarminPanel, ShareManager and the export block — each with
 // its own fetch and its own render. It is the widest crash surface in the app,
 // and it was the one heavy island with no boundary above it, so a single throw
 // anywhere in that set left a blank page with nothing on screen to act on.
@@ -94,6 +95,10 @@ function YouSurface() {
   // state up here, and `statsVersion` is what re-syncs the card after a save
   // without either component owning the other's data.
   const [statsVersion, setStatsVersion] = useState(0);
+  // The card IS the profile: Edit opens the form inside it. A separate
+  // collapsible Profile row below used to hold the form, and read as a second
+  // copy of the card.
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -149,17 +154,6 @@ function YouSurface() {
       }`
     : undefined;
 
-  // Opening the Profile section by id rather than lifting `open` into state:
-  // <details> is browser-driven and works before hydration, and a controlled
-  // version would buy nothing here. scrollIntoView because on a phone the
-  // section is below the fold once the summary card is above it.
-  function openProfile() {
-    const el = document.getElementById('you-profile') as HTMLDetailsElement | null;
-    if (!el) return;
-    el.open = true;
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
   async function handleExport(format: 'json' | 'csv') {
     if (exporting) return;
     setExporting(format);
@@ -202,10 +196,8 @@ function YouSurface() {
         />
       </Item>
 
-      {/* Read before you write. The page used to open on a fully expanded form;
-          it now opens on what the form CONTAINS, with one Edit button. Every
-          field is still one tap away in the Profile section below — this is a
-          summary of it, not a replacement for it. */}
+      {/* Read before you write. The page opens on what the form CONTAINS, with
+          one Edit button that opens the form in this card. */}
       <Item>
         <section className="lift mb-3 rounded-card border border-border bg-surface p-4">
           <div className="flex items-start justify-between gap-3">
@@ -217,10 +209,12 @@ function YouSurface() {
             </div>
             <button
               type="button"
-              onClick={openProfile}
+              onClick={() => setEditing((v) => !v)}
+              aria-expanded={editing}
+              aria-controls="you-profile-form"
               className="hill-btn flex min-h-11 shrink-0 items-center rounded-control border border-border bg-surface px-3 t-control text-fg"
             >
-              Edit
+              {editing ? 'Done' : 'Edit'}
             </button>
           </div>
 
@@ -306,23 +300,20 @@ function YouSurface() {
               </p>
             </div>
           ) : null}
-        </section>
-      </Item>
 
-      <Item>
-        <div className="mb-3">
-          <Disclosure
-            id="you-profile"
-            title={sectionTitle(
-              'Profile',
-              'Private to you. These never appear on your public showcase or in a share link.',
-            )}
-            headerRight={readiness.pct < 100 ? `${readiness.pct}% complete` : undefined}
-          >
-            {/* onSaved re-reads the one row the summary card above renders. */}
-            <UserStatsPanel onSaved={() => setStatsVersion((v) => v + 1)} />
-          </Disclosure>
-        </div>
+          {/* onSaved re-reads the one row this card renders, then folds the
+              form away so the saved values are what you see. */}
+          {editing ? (
+            <div id="you-profile-form" className="mt-4 border-t border-border-soft pt-4">
+              <UserStatsPanel
+                onSaved={() => {
+                  setStatsVersion((v) => v + 1);
+                  setEditing(false);
+                }}
+              />
+            </div>
+          ) : null}
+        </section>
       </Item>
 
       <Item>
@@ -365,6 +356,15 @@ function YouSurface() {
                   </InfoPopover>
                 </div>
                 <BackgroundPicker />
+              </div>
+              <div>
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="t-label text-muted">Coach icon</span>
+                  <InfoPopover>
+                    The character on Home's Active plan card. Tap it to open Coach.
+                  </InfoPopover>
+                </div>
+                <CoachSpritePicker />
               </div>
             </div>
           </Disclosure>
