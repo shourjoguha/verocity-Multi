@@ -21,6 +21,7 @@ import { Item, PageStagger } from '@/components/anim';
 import { SectionHeader } from '@/components/ui/primitives';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { BackgroundPicker } from '@/components/BackgroundPicker';
+import { CoachSpritePicker } from '@/components/CoachSpritePicker';
 import { GarminPanel } from '@/components/GarminPanel';
 import { UserStatsPanel } from '@/components/UserStatsPanel';
 
@@ -96,6 +97,8 @@ export default function SettingsView() {
           <ThemeToggle />
           <div className="mt-6 mb-2 t-label text-muted">Backdrop</div>
           <BackgroundPicker />
+          <div className="mt-6 mb-2 t-label text-muted">Coach icon</div>
+          <CoachSpritePicker />
         </section>
       </Item>
 
