@@ -13,7 +13,7 @@
 // sled push is `modality: 'resistance'` but is logged in distance, and distance
 // is what determines which formula can even run.
 
-import { VOLUME, WORK, type MovementProfile } from '@/app.config';
+import { CONSISTENCY, VOLUME, WORK, type MovementProfile } from '@/app.config';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import { isHeld } from '@/lib/notations';
 import { workingSections } from '@/lib/stats';
@@ -141,73 +141,107 @@ export function sessionWork(
   return totals;
 }
 
-/** The largest work seen in each lane across a window. */
-export type WorkMaxima = WorkTotals;
-
-export function workMaxima(days: Iterable<WorkTotals>): WorkMaxima {
-  const max: WorkMaxima = { resistance: 0, cardio: 0 };
-  for (const d of days) {
-    if (d.resistance > max.resistance) max.resistance = d.resistance;
-    if (d.cardio > max.cardio) max.cardio = d.cardio;
-  }
-  return max;
-}
-
 /**
- * How big a day was FOR ITS KIND, as 0..1 — the max of each lane's ratio to
- * that lane's own maximum.
- *
- * NEVER sum the lanes for this. Both are kg.m, so `resistance + cardio` is
- * dimensionally legal and was shipped on that reasoning; it is still wrong,
- * because the lanes have never been calibrated against each other and cannot
- * be. The counts differ by three orders of magnitude — tens of reps against
- * tens of thousands of metres — while the per-unit prices differ by one, so a
- * hard full lifting session (~8,600) lands at a sixth of a 30km ride (~51,600).
- * On a shared rail every lifting day reads as empty, and no constant fixes
- * that: cycling would have to be distorted to a twentieth of its real cost to
- * make the two look alike. The lanes were split precisely so this comparison
- * would never have to be made.
- *
- * A day that mixes lanes takes the HIGHER ratio: it was a big day if it was big
- * at either thing. Averaging would let an easy run dilute a hard lift.
- *
- * A lane whose maximum is zero contributes nothing rather than dividing by it —
- * an athlete who only lifts still gets a full rail from the lifting lane.
- */
-export function workIntensity(work: WorkTotals, max: WorkMaxima): number {
-  const res = max.resistance > 0 ? work.resistance / max.resistance : 0;
-  const cardio = max.cardio > 0 ? work.cardio / max.cardio : 0;
-  return Math.min(1, Math.max(res, cardio));
-}
-
-/**
- * What a session is compared WITHIN for the consistency bar: its first tag,
+ * What a session is compared WITHIN for the consistency capsule: its first tag,
  * else its activity type. Across plans and across time — a strength session is
  * measured against strength sessions, a Hyrox one against Hyrox ones — so the
- * bar answers "how big was this for what it was", not "how big against a ride".
- * Same key the grid's label already shows, so the caption and the bar agree.
+ * capsule answers "how big was this for what it was", not "how big against a
+ * ride". Same key the grid's label already shows.
  */
 export function sessionKind(log: Pick<WorkoutLog, 'tags' | 'activity_type'>): string {
   return (log.tags?.[0] ?? log.activity_type ?? 'session').toLowerCase();
 }
 
+/** One lane's reference within a kind: the CONSISTENCY percentile, over `n` sessions. */
+export interface LaneReference {
+  ref: number;
+  n: number;
+}
+export type KindReference = Record<keyof WorkTotals, LaneReference>;
+
+/** Linear-interpolated percentile of an ascending array; 0 for an empty one. */
+export function percentile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
 /**
- * Per-lane maxima for each `sessionKind`, over individual SESSIONS. Lanes stay
- * separate inside a kind for the reason `workIntensity` gives: a Hyrox sled
- * would otherwise swamp the Hyrox lifts.
+ * Per-kind, per-lane references for the consistency capsule, over every
+ * finished session passed in (Stats passes all of them — all time).
+ *
+ * A lane's sample is only the sessions that DID that lane: a strength session
+ * without a sled says nothing about how big a strength session's cardio is.
+ *
+ * The reference is a high percentile, not the maximum. Against the maximum, one
+ * outlier sets the scale forever, a new best always reads exactly full, and a
+ * plan that repeats the same conditioning every week ties AT the maximum every
+ * week — which is how every recent Hyrox and strength day read as full.
+ *
+ * NEVER sum the lanes. Both are kg.m, so `resistance + cardio` is dimensionally
+ * legal and was shipped on that reasoning; it is still wrong, because the lanes
+ * have never been calibrated against each other: a 10 x 20m sled push is
+ * ~18,000 against ~4,000 for the lifting around it, so a summed score is just a
+ * sled meter. The capsule shows the two lanes side by side instead.
  */
-export function workMaximaByKind(
+export function workReferencesByKind(
   logs: WorkoutLog[],
   bodyWeightKg: number,
-): Map<string, WorkMaxima> {
-  const byKind = new Map<string, WorkTotals[]>();
+): Map<string, KindReference> {
+  const byKind = new Map<string, { resistance: number[]; cardio: number[] }>();
   for (const log of logs) {
+    if (log.status !== 'done') continue;
     const k = sessionKind(log);
-    const list = byKind.get(k) ?? [];
-    list.push(sessionWork(log, bodyWeightKg));
-    byKind.set(k, list);
+    const lanes = byKind.get(k) ?? { resistance: [], cardio: [] };
+    const w = sessionWork(log, bodyWeightKg);
+    if (w.resistance > 0) lanes.resistance.push(w.resistance);
+    if (w.cardio > 0) lanes.cardio.push(w.cardio);
+    byKind.set(k, lanes);
   }
-  return new Map([...byKind].map(([k, works]) => [k, workMaxima(works)]));
+  const ref = (values: number[]): LaneReference => ({
+    ref: percentile([...values].sort((a, b) => a - b), CONSISTENCY.referencePercentile),
+    n: values.length,
+  });
+  return new Map(
+    [...byKind].map(([k, l]) => [k, { resistance: ref(l.resistance), cardio: ref(l.cardio) }]),
+  );
+}
+
+/**
+ * One lane of one session, for the capsule:
+ *   none      the session did none of it — that half is not drawn at all;
+ *   baseline  it did, but the kind has fewer than CONSISTENCY.minSessions
+ *             sessions of that lane to compare against (`n` so far);
+ *   score     its work against the kind's reference, capped at 1, with `over`
+ *             set when it beat the reference so the tap can say so.
+ */
+export type LaneScore =
+  | { kind: 'none' }
+  | { kind: 'baseline'; n: number }
+  | { kind: 'score'; value: number; over: boolean };
+
+export function laneScore(value: number, ref: LaneReference | undefined): LaneScore {
+  if (value <= 0) return { kind: 'none' };
+  if (!ref || ref.n < CONSISTENCY.minSessions || ref.ref <= 0) {
+    return { kind: 'baseline', n: ref?.n ?? 0 };
+  }
+  const r = value / ref.ref;
+  return { kind: 'score', value: Math.min(1, r), over: r > 1 };
+}
+
+/**
+ * Merge two sessions' reads of the same lane on one day: a score beats a
+ * baseline beats nothing, and two scores take the larger — it was a big day at
+ * that lane if either session was.
+ */
+export function mergeLane(a: LaneScore, b: LaneScore): LaneScore {
+  if (a.kind === 'score' && b.kind === 'score') return a.value >= b.value ? a : b;
+  if (a.kind === 'score') return a;
+  if (b.kind === 'score') return b;
+  if (a.kind === 'baseline' && b.kind === 'baseline') return a.n >= b.n ? a : b;
+  return a.kind === 'baseline' ? a : b;
 }
 
 export const addWork = (a: WorkTotals, b: WorkTotals): WorkTotals => ({

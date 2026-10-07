@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { supabase, supabasePublic } from '@/lib/supabase';
-import { getLogsInRange, getUserStats } from '@/lib/queries';
+import { getAllLogs, getLogsInRange, getUserStats } from '@/lib/queries';
 import { bodyweightMultiple } from '@/lib/userStats';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { useAspectProfile } from '@/lib/useAspectProfile';
@@ -12,13 +12,15 @@ import { trackName } from '@/lib/notations';
 import {
   addWork,
   formatWork,
+  laneScore,
+  mergeLane,
+  sessionKind,
   sessionWork,
   workBodyWeight,
-  sessionKind,
-  workIntensity,
-  workMaximaByKind,
+  workReferencesByKind,
   WORK_UNIT,
   ZERO_WORK,
+  type LaneScore,
   type WorkTotals,
 } from '@/lib/work';
 import { sessionClockSeconds, sessionLens } from '@/lib/bodyLoad';
@@ -30,6 +32,7 @@ import {
   ASPECT_WINDOW_DAYS,
   BODY_LENSES,
   BODY_LENS_KEYS,
+  CONSISTENCY,
   FITNESS_ASPECTS,
   TOOLTIP,
 } from '@/app.config';
@@ -56,6 +59,57 @@ function workLabel(work: WorkTotals): string {
   if (work.resistance > 0) parts.push(`${formatWork(work.resistance)} lifting`);
   if (work.cardio > 0) parts.push(`${formatWork(work.cardio)} cardio`);
   return parts.length > 0 ? `${parts.join(' · ')} ${WORK_UNIT}` : 'no work logged';
+}
+
+// The capsule's two halves, in the tap detail. A lane the day did not do is
+// left out, like the half that is not drawn.
+function laneLabel(lift: LaneScore, cardio: LaneScore): string | null {
+  // Both halves still building: one phrase, not the same caveat twice.
+  if (lift.kind === 'baseline' && cardio.kind !== 'score') {
+    if (cardio.kind === 'none' || cardio.n === lift.n) {
+      return `Building baseline: ${lift.n} of ${CONSISTENCY.minSessions} sessions`;
+    }
+  }
+  if (cardio.kind === 'baseline' && lift.kind === 'none') {
+    return `Building baseline: ${cardio.n} of ${CONSISTENCY.minSessions} sessions`;
+  }
+  const part = (name: string, s: LaneScore): string | null =>
+    s.kind === 'none'
+      ? null
+      : s.kind === 'baseline'
+        ? `${name} building baseline (${s.n}/${CONSISTENCY.minSessions})`
+        : `${name} ${s.over ? 'above' : `${Math.round(s.value * 100)}%`}`;
+  const parts = [part('lifting', lift), part('cardio', cardio)].filter(Boolean);
+  return parts.length > 0 ? `vs usual best: ${parts.join(' · ')}` : null;
+}
+
+// Lifting and cardio side by side in one inset capsule. A lane the day did not
+// do takes no slot, so a pure lifting day gets the full width rather than half
+// a capsule that reads as "you skipped something". Dotted = building baseline.
+function Capsule({ lift, cardio }: { lift: LaneScore; cardio: LaneScore }) {
+  const halves = (
+    [
+      ['lift', lift, 'bg-fg/80'],
+      ['cardio', cardio, 'bg-fg/40'],
+    ] as const
+  ).filter(([, s]) => s.kind !== 'none');
+  if (halves.length === 0) return null;
+  return (
+    <span aria-hidden className="absolute inset-x-[5px] bottom-[5px] flex h-1 gap-px">
+      {halves.map(([key, s, fill], i) => (
+        <span
+          key={key}
+          className={`flex-1 overflow-hidden ${i === 0 ? 'rounded-l-[2px]' : ''} ${
+            i === halves.length - 1 ? 'rounded-r-[2px]' : ''
+          } ${s.kind === 'baseline' ? 'capsule-baseline' : 'bg-bg/40'}`}
+        >
+          {s.kind === 'score' ? (
+            <span className={`block h-full ${fill}`} style={{ width: `${Math.round(s.value * 100)}%` }} />
+          ) : null}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 const RPE_BUCKETS = [6, 7, 8, 9, 10];
@@ -189,6 +243,7 @@ function sessionTimeMix(
 
 function deriveStats(
   fetched: WorkoutLog[],
+  history: WorkoutLog[],
   today: Date,
   groupBy: 'movement' | 'family',
   bodyWeightKg: number,
@@ -236,36 +291,52 @@ function deriveStats(
   // band; a session tagged with several activities is still striped within its
   // own band.
   //
-  // The bottom bar is each session's work against the biggest session with the
-  // same tag (`sessionKind`) anywhere in the fetched window — wider than the
-  // 8 weeks on screen, and across plans. It used to be the day's work against
-  // the biggest day of the same LANE of any kind, so a strength day carrying a
-  // sled push was measured against a bike ride. A day with two sessions shows
-  // the larger of their two ratios: it was a big day if either was big.
+  // The capsule along the bottom scores lifting and cardio SEPARATELY, each
+  // against your 90th-percentile session of that lane with the same tag
+  // (`sessionKind`), over ALL your history (`history`, not the 120-day fetch).
+  // It replaced one bar taking the higher of the two ratios against the tag's
+  // maximum, which read every recent day as full: a plan repeating the same
+  // sled every week ties at the maximum every week, and 2 crossfit sessions
+  // make both of them "big". A lane the session did not do is not drawn; one
+  // with too few sessions to compare draws dotted (lib/work.ts `laneScore`).
+  // A day with two sessions merges them per lane (`mergeLane`).
   //
   // `loads` is the per-movement load change for the tap detail (lib/loadChange).
-  type DaySession = { colors: string[]; seconds: number; work: WorkTotals; kind: string };
-  type DayCell = { work: WorkTotals; labels: string[]; sessions: DaySession[]; loads: LoadChange[] };
-  const kindMax = workMaximaByKind(fetched, bodyWeightKg);
-  const loadIndex = buildLoadIndex(fetched);
+  type DaySession = { colors: string[]; seconds: number };
+  type DayCell = {
+    work: WorkTotals;
+    labels: string[];
+    sessions: DaySession[];
+    loads: LoadChange[];
+    lift: LaneScore;
+    cardio: LaneScore;
+  };
+  const refs = workReferencesByKind(history, bodyWeightKg);
+  const loadIndex = buildLoadIndex(history);
   const dayMap = new Map<string, DayCell>();
   for (const log of all) {
     const key = log.log_date.slice(0, 10);
-    const cur = dayMap.get(key) ?? { work: ZERO_WORK, labels: [], sessions: [], loads: [] };
+    const cur: DayCell = dayMap.get(key) ?? {
+      work: ZERO_WORK,
+      labels: [],
+      sessions: [],
+      loads: [],
+      lift: { kind: 'none' },
+      cardio: { kind: 'none' },
+    };
     const work = sessionWork(log, bodyWeightKg);
+    const ref = refs.get(sessionKind(log));
     cur.work = addWork(cur.work, work);
     cur.labels.push(log.tags[0] ?? log.activity_type ?? 'Session');
     cur.sessions.push({
       colors: sessionTagColors(log.tags, log.activity_type),
       seconds: log.total_seconds ?? 0,
-      work,
-      kind: sessionKind(log),
     });
+    cur.lift = mergeLane(cur.lift, laneScore(work.resistance, ref?.resistance));
+    cur.cardio = mergeLane(cur.cardio, laneScore(work.cardio, ref?.cardio));
     cur.loads.push(...loadChanges(log, loadIndex));
     dayMap.set(key, cur);
   }
-  const dayIntensity = (cell: DayCell): number =>
-    Math.max(0, ...cell.sessions.map((x) => workIntensity(x.work, kindMax.get(x.kind) ?? x.work)));
 
   // RPE fingerprint: distribution across RPE buckets, per movement family.
   const fam = new Map<string, { dist: number[]; sum: number; n: number }>();
@@ -359,7 +430,6 @@ function deriveStats(
     weekStarts,
     weekRows,
     dayMap,
-    dayIntensity,
     rpeRows,
     topMoves,
     cards,
@@ -396,6 +466,14 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // Bodyweight, for the ×BW multiples on the e1RM cards. Null in showcase mode
   // (no anon policy on user_stats) and null for anyone who has not filled it in,
   // in which case the multiple simply is not rendered.
+  // Every finished session, for the capsule's per-tag reference and the load
+  // change "vs last time". All time on purpose: the 120-day fetch above held 27
+  // of 42 strength sessions, and a reference should not drift as old ones age out.
+  const { data: history, loading: historyLoading } = useAuthedQuery(() => getAllLogs(client), {
+    auth: mode === 'app',
+    key: mode === 'app' ? 'stats:logs:all' : undefined,
+  });
+
   const { data: stats, loading: statsLoading } = useAuthedQuery(
     () => (mode === 'app' ? getUserStats() : Promise.resolve(null)),
     { auth: mode === 'app', key: mode === 'app' ? 'userStats' : undefined },
@@ -417,8 +495,8 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const bodyWeightKg = workBodyWeight(stats ?? null);
   const derived = useMemo(
-    () => deriveStats(logs ?? [], today, groupBy, bodyWeightKg),
-    [logs, groupBy, bodyWeightKg],
+    () => deriveStats(logs ?? [], history ?? logs ?? [], today, groupBy, bodyWeightKg),
+    [logs, history, groupBy, bodyWeightKg],
   );
 
   // Kept before the loading guard: hooks must not sit behind an early return.
@@ -457,14 +535,13 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // Wait on stats too, or every work figure paints at the fallback bodyweight
   // and then jumps once the real one lands (docs/LESSONS.md, and the same trap
   // BodyView's Volume currency hit).
-  if (loading || statsLoading) return <LoadingScreen />;
+  if (loading || statsLoading || historyLoading) return <LoadingScreen />;
 
   const {
     all,
     weekStarts,
     weekRows,
     dayMap,
-    dayIntensity,
     rpeRows,
     topMoves,
     cards,
@@ -602,9 +679,10 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     const loads = formatLoadChanges(
                       [...cell.loads].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
                     );
+                    const vsBest = laneLabel(cell.lift, cell.cardio);
                     const label = `${dateLabel} · ${cell.labels.join(', ')} · ${workLabel(cell.work)}${
-                      loads ? `\nLoad vs last: ${loads}` : ''
-                    }`;
+                      vsBest ? `\n${vsBest}` : ''
+                    }${loads ? `\nLoad vs last: ${loads}` : ''}`;
                     // One horizontal band PER LOG, stacked and split by a hairline
                     // (the container bg shows through a 1px gap), each band's share
                     // proportional to that log's duration. A single-log day is one
@@ -619,11 +697,10 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     // The old `opacity: 0.3 + volume/dayMax * 0.7` folded amount
                     // into the hue's lightness, which is exactly what made two
                     // different activities hard to tell apart at low volume.
-                    // Volume moves to its own channel: a hairline meter along the
-                    // bottom edge, a monochrome LENGTH that cannot distort the
-                    // colour above it. (Border-glow was the other candidate, but
+                    // Volume moves to its own channel: the capsule along the
+                    // bottom edge, monochrome LENGTHS that cannot distort the
+                    // colour above them. (Border-glow was the other candidate, but
                     // an inset box-shadow is a CLAUDE.md "never" in a component.)
-                    const volPct = Math.round(dayIntensity(cell) * 100);
                     return (
                       <div
                         key={row}
@@ -649,15 +726,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                             );
                           })}
                         </span>
-                        <span
-                          aria-hidden
-                          className="absolute inset-x-0 bottom-0 h-[3px] bg-bg/40"
-                        >
-                          <span
-                            className="block h-full bg-fg/70"
-                            style={{ width: `${volPct}%` }}
-                          />
-                        </span>
+                        <Capsule lift={cell.lift} cardio={cell.cardio} />
                       </div>
                     );
                   })}
@@ -665,8 +734,10 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               ))}
             </div>
             <p className="mt-2 text-[0.65rem] text-muted">
-              Colored by activity · bottom bar is work vs your biggest session with the same
-              tag · striped days had multiple activities. Tap a day for load changes.
+              Colored by activity · striped = several activities. Capsule: lifting (solid) and
+              cardio (faint) vs your usual best for that tag, your{' '}
+              {Math.round(CONSISTENCY.referencePercentile * 100)}th percentile all time; dotted
+              until there are {CONSISTENCY.minSessions} to compare. Tap a day for detail.
             </p>
           </section>
         </Item>
