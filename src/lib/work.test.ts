@@ -4,9 +4,10 @@ import {
   sessionKind,
   sessionWork,
   workBodyWeight,
-  workIntensity,
-  workMaxima,
-  workMaximaByKind,
+  laneScore,
+  mergeLane,
+  percentile,
+  workReferencesByKind,
   type WorkTotals,
 } from '@/lib/work';
 import { classifyMovement } from '@/lib/movementTaxonomy';
@@ -244,45 +245,6 @@ describe('sessionWork', () => {
   });
 });
 
-describe('workIntensity', () => {
-  const w = (resistance: number, cardio: number): WorkTotals => ({ resistance, cardio });
-
-  it('normalises each lane against its own maximum', () => {
-    // The defect this replaces: on a shared rail with the lanes SUMMED, a hard
-    // full lifting session (~8,600) sat at a sixth of a 30km ride (~51,600), so
-    // every lifting day read as empty however the constants were tuned.
-    const days = [w(8_600, 0), w(0, 51_600), w(4_300, 0)];
-    const max = workMaxima(days);
-    expect(max).toEqual({ resistance: 8_600, cardio: 51_600 });
-    expect(workIntensity(days[0], max)).toBe(1);
-    expect(workIntensity(days[1], max)).toBe(1);
-    expect(workIntensity(days[2], max)).toBeCloseTo(0.5, 6);
-  });
-
-  it('takes the higher ratio on a day that mixed lanes', () => {
-    // Big at either thing is a big day. Averaging would let an easy run dilute
-    // a hard lift.
-    const max = w(10_000, 50_000);
-    expect(workIntensity(w(9_000, 5_000), max)).toBeCloseTo(0.9, 6);
-    expect(workIntensity(w(1_000, 40_000), max)).toBeCloseTo(0.8, 6);
-  });
-
-  it('gives a lifting-only athlete a full rail', () => {
-    // A lane with no maximum contributes nothing rather than dividing by zero.
-    const max = workMaxima([w(5_000, 0), w(2_500, 0)]);
-    expect(workIntensity(w(5_000, 0), max)).toBe(1);
-    expect(workIntensity(w(2_500, 0), max)).toBeCloseTo(0.5, 6);
-  });
-
-  it('is zero when nothing was logged', () => {
-    expect(workIntensity(w(0, 0), workMaxima([]))).toBe(0);
-    expect(workIntensity(w(0, 0), w(10, 10))).toBe(0);
-  });
-});
-
-// Warm-up and cooldown are not training load (PREP_SECTIONS). A 500m easy row
-// and a weighted stretch used to land in the same total as the main lifts, so a
-// longer warm-up read as a bigger session.
 describe('sessionWork leaves warm-up and cooldown out', () => {
   const squat = item('Back Squat', 'reps', [set({ weight: 100, reps: 5 })]);
   const row = item('Zone 2 (row/bike/walk)', 'distance', [set({ distance: 500 })]);
@@ -308,33 +270,87 @@ describe('sessionWork leaves warm-up and cooldown out', () => {
   });
 });
 
-describe('per-tag maxima for the consistency bar', () => {
-  const tagged = (id: string, tags: string[], kg: number, activity_type: string | null = null) =>
+describe('consistency capsule scoring', () => {
+  const tagged = (id: string, tags: string[], kg: number, extra: Partial<WorkoutLog> = {}) =>
     ({
       ...log([{ key: 'primary', items: [item('Back Squat', 'reps', [set({ weight: kg, reps: 5 })])] }]),
       id,
       tags,
-      activity_type,
+      activity_type: null,
+      ...extra,
+    }) as WorkoutLog;
+  const withSled = (id: string, tags: string[], metres: number) =>
+    ({
+      ...log([
+        { key: 'primary', items: [item('Back Squat', 'reps', [set({ weight: 100, reps: 5 })])] },
+        { key: 'conditioning', items: [item('Sled push', 'distance', [set({ weight: 100, distance: metres })])] },
+      ]),
+      id,
+      tags,
+      activity_type: null,
     }) as WorkoutLog;
 
   it('keys a session by its first tag, else its activity type', () => {
     expect(sessionKind(tagged('a', ['Strength', 'endurance'], 1))).toBe('strength');
-    expect(sessionKind(tagged('b', [], 1, 'Run'))).toBe('run');
-    expect(sessionKind(tagged('c', [], 1))).toBe('session');
+    expect(sessionKind({ tags: [], activity_type: 'Run' })).toBe('run');
+    expect(sessionKind({ tags: [], activity_type: null })).toBe('session');
   });
 
-  // The bug: a strength session was measured against the biggest day of the
-  // same LANE of any kind, so a heavy hyrox day shrank every strength bar.
-  it('measures a session only against sessions with the same tag', () => {
-    const small = tagged('s1', ['strength'], 60);
-    const big = tagged('s2', ['strength'], 100);
-    const huge = tagged('h', ['hyrox'], 300);
-    const max = workMaximaByKind([small, big, huge], BW);
-    const ratio = (l: WorkoutLog) =>
-      workIntensity(sessionWork(l, BW), max.get(sessionKind(l)) as WorkTotals);
-    expect(ratio(big)).toBe(1);
-    expect(ratio(huge)).toBe(1);
-    expect(ratio(small)).toBeLessThan(1);
-    expect(ratio(small)).toBeGreaterThan(0.5);
+  it('interpolates percentiles', () => {
+    expect(percentile([10, 20, 30, 40, 50], 0.9)).toBeCloseTo(46, 6);
+    expect(percentile([7], 0.9)).toBe(7);
+    expect(percentile([], 0.9)).toBe(0);
+  });
+
+  it('builds each lane only from sessions that did that lane, per tag', () => {
+    const logs = [
+      ...[60, 70, 80, 90, 100].map((kg, i) => tagged(`s${i}`, ['strength'], kg)),
+      withSled('s5', ['strength'], 20),
+      tagged('h0', ['hyrox'], 300),
+    ];
+    const refs = workReferencesByKind(logs, BW);
+    expect(refs.get('strength')?.resistance.n).toBe(6);
+    expect(refs.get('strength')?.cardio.n).toBe(1);
+    expect(refs.get('hyrox')?.resistance.n).toBe(1);
+  });
+
+  it('ignores sessions that are not finished', () => {
+    const open = tagged('o', ['strength'], 500, { status: 'in_progress' } as Partial<WorkoutLog>);
+    expect(workReferencesByKind([open], BW).get('strength')).toBeUndefined();
+  });
+
+  // The bug: against the tag MAXIMUM, a plan repeating the same sled every week
+  // ties at the top every week and every day read as full.
+  it('scores against the 90th percentile and caps above it', () => {
+    const logs = [50, 60, 70, 80, 90, 100, 110, 120, 130, 140].map((kg, i) =>
+      tagged(`s${i}`, ['strength'], kg),
+    );
+    const ref = workReferencesByKind(logs, BW).get('strength')!.resistance;
+    const top = laneScore(sessionWork(logs[9], BW).resistance, ref);
+    const mid = laneScore(sessionWork(logs[4], BW).resistance, ref);
+    expect(top).toEqual({ kind: 'score', value: 1, over: true });
+    expect(mid.kind === 'score' && mid.value).toBeGreaterThan(0.6);
+    expect(mid.kind === 'score' && mid.value).toBeLessThan(0.9);
+  });
+
+  it('draws nothing for a lane the session did not do', () => {
+    expect(laneScore(0, { ref: 100, n: 10 })).toEqual({ kind: 'none' });
+  });
+
+  it('builds a baseline until the lane has 5 sessions with that tag', () => {
+    expect(laneScore(50, { ref: 100, n: 2 })).toEqual({ kind: 'baseline', n: 2 });
+    expect(laneScore(50, undefined)).toEqual({ kind: 'baseline', n: 0 });
+    expect(laneScore(50, { ref: 100, n: 5 })).toEqual({ kind: 'score', value: 0.5, over: false });
+  });
+
+  it('merges two sessions on one day per lane: score over baseline over nothing', () => {
+    const none = { kind: 'none' } as const;
+    const base = { kind: 'baseline', n: 2 } as const;
+    const lo = { kind: 'score', value: 0.4, over: false } as const;
+    const hi = { kind: 'score', value: 0.8, over: false } as const;
+    expect(mergeLane(none, base)).toBe(base);
+    expect(mergeLane(base, lo)).toBe(lo);
+    expect(mergeLane(lo, hi)).toBe(hi);
+    expect(mergeLane(none, none)).toEqual(none);
   });
 });
