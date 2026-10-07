@@ -180,6 +180,36 @@ export function workIntensity(work: WorkTotals, max: WorkMaxima): number {
   return Math.min(1, Math.max(res, cardio));
 }
 
+/**
+ * What a session is compared WITHIN for the consistency bar: its first tag,
+ * else its activity type. Across plans and across time — a strength session is
+ * measured against strength sessions, a Hyrox one against Hyrox ones — so the
+ * bar answers "how big was this for what it was", not "how big against a ride".
+ * Same key the grid's label already shows, so the caption and the bar agree.
+ */
+export function sessionKind(log: Pick<WorkoutLog, 'tags' | 'activity_type'>): string {
+  return (log.tags?.[0] ?? log.activity_type ?? 'session').toLowerCase();
+}
+
+/**
+ * Per-lane maxima for each `sessionKind`, over individual SESSIONS. Lanes stay
+ * separate inside a kind for the reason `workIntensity` gives: a Hyrox sled
+ * would otherwise swamp the Hyrox lifts.
+ */
+export function workMaximaByKind(
+  logs: WorkoutLog[],
+  bodyWeightKg: number,
+): Map<string, WorkMaxima> {
+  const byKind = new Map<string, WorkTotals[]>();
+  for (const log of logs) {
+    const k = sessionKind(log);
+    const list = byKind.get(k) ?? [];
+    list.push(sessionWork(log, bodyWeightKg));
+    byKind.set(k, list);
+  }
+  return new Map([...byKind].map(([k, works]) => [k, workMaxima(works)]));
+}
+
 export const addWork = (a: WorkTotals, b: WorkTotals): WorkTotals => ({
   resistance: a.resistance + b.resistance,
   cardio: a.cardio + b.cardio,

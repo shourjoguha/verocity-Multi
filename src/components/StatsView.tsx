@@ -14,17 +14,25 @@ import {
   formatWork,
   sessionWork,
   workBodyWeight,
+  sessionKind,
   workIntensity,
-  workMaxima,
+  workMaximaByKind,
   WORK_UNIT,
   ZERO_WORK,
   type WorkTotals,
 } from '@/lib/work';
 import { sessionClockSeconds, sessionLens } from '@/lib/bodyLoad';
+import { buildLoadIndex, formatLoadChanges, loadChanges, type LoadChange } from '@/lib/loadChange';
 import { aspectWindows, logsInWindow } from '@/lib/aspects';
 import { formatDuration, formatRound } from '@/lib/format';
 import { sessionTagColors, stripeBackground } from '@/lib/tags';
-import { ASPECT_WINDOW_DAYS, BODY_LENSES, BODY_LENS_KEYS, FITNESS_ASPECTS } from '@/app.config';
+import {
+  ASPECT_WINDOW_DAYS,
+  BODY_LENSES,
+  BODY_LENS_KEYS,
+  FITNESS_ASPECTS,
+  TOOLTIP,
+} from '@/app.config';
 import {
   EmptyState,
   LoadingScreen,
@@ -227,24 +235,37 @@ function deriveStats(
   // (which read as a single mixed session). A single-tag session is a solid
   // band; a session tagged with several activities is still striped within its
   // own band.
-  type DaySession = { colors: string[]; seconds: number };
-  type DayCell = { work: WorkTotals; labels: string[]; sessions: DaySession[] };
+  //
+  // The bottom bar is each session's work against the biggest session with the
+  // same tag (`sessionKind`) anywhere in the fetched window — wider than the
+  // 8 weeks on screen, and across plans. It used to be the day's work against
+  // the biggest day of the same LANE of any kind, so a strength day carrying a
+  // sled push was measured against a bike ride. A day with two sessions shows
+  // the larger of their two ratios: it was a big day if either was big.
+  //
+  // `loads` is the per-movement load change for the tap detail (lib/loadChange).
+  type DaySession = { colors: string[]; seconds: number; work: WorkTotals; kind: string };
+  type DayCell = { work: WorkTotals; labels: string[]; sessions: DaySession[]; loads: LoadChange[] };
+  const kindMax = workMaximaByKind(fetched, bodyWeightKg);
+  const loadIndex = buildLoadIndex(fetched);
   const dayMap = new Map<string, DayCell>();
   for (const log of all) {
     const key = log.log_date.slice(0, 10);
-    const cur = dayMap.get(key) ?? { work: ZERO_WORK, labels: [], sessions: [] };
-    cur.work = addWork(cur.work, sessionWork(log, bodyWeightKg));
+    const cur = dayMap.get(key) ?? { work: ZERO_WORK, labels: [], sessions: [], loads: [] };
+    const work = sessionWork(log, bodyWeightKg);
+    cur.work = addWork(cur.work, work);
     cur.labels.push(log.tags[0] ?? log.activity_type ?? 'Session');
     cur.sessions.push({
       colors: sessionTagColors(log.tags, log.activity_type),
       seconds: log.total_seconds ?? 0,
+      work,
+      kind: sessionKind(log),
     });
+    cur.loads.push(...loadChanges(log, loadIndex));
     dayMap.set(key, cur);
   }
-  // Each lane is normalised against ITS OWN maximum, so the rail answers "how
-  // big was this day for its kind" rather than "how big against a bike ride".
-  // See `workIntensity` for why summing the two was wrong.
-  const dayMax = workMaxima([...dayMap.values()].map((d) => d.work));
+  const dayIntensity = (cell: DayCell): number =>
+    Math.max(0, ...cell.sessions.map((x) => workIntensity(x.work, kindMax.get(x.kind) ?? x.work)));
 
   // RPE fingerprint: distribution across RPE buckets, per movement family.
   const fam = new Map<string, { dist: number[]; sum: number; n: number }>();
@@ -338,7 +359,7 @@ function deriveStats(
     weekStarts,
     weekRows,
     dayMap,
-    dayMax,
+    dayIntensity,
     rpeRows,
     topMoves,
     cards,
@@ -386,7 +407,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   function showTip(e: { clientX: number; clientY: number }, label: string) {
     setTip({ x: e.clientX, y: e.clientY, label });
     clearTimeout(tipTimer.current);
-    tipTimer.current = setTimeout(() => setTip(null), 2000);
+    tipTimer.current = setTimeout(() => setTip(null), TOOLTIP.holdMs);
   }
   useEffect(() => () => clearTimeout(tipTimer.current), []);
 
@@ -443,7 +464,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     weekStarts,
     weekRows,
     dayMap,
-    dayMax,
+    dayIntensity,
     rpeRows,
     topMoves,
     cards,
@@ -578,7 +599,12 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     if (!cell) {
                       return <div key={row} className="hill aspect-square bg-fg/[0.05]" />;
                     }
-                    const label = `${dateLabel} · ${cell.labels.join(', ')} · ${workLabel(cell.work)}`;
+                    const loads = formatLoadChanges(
+                      [...cell.loads].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
+                    );
+                    const label = `${dateLabel} · ${cell.labels.join(', ')} · ${workLabel(cell.work)}${
+                      loads ? `\nLoad vs last: ${loads}` : ''
+                    }`;
                     // One horizontal band PER LOG, stacked and split by a hairline
                     // (the container bg shows through a 1px gap), each band's share
                     // proportional to that log's duration. A single-log day is one
@@ -597,7 +623,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     // bottom edge, a monochrome LENGTH that cannot distort the
                     // colour above it. (Border-glow was the other candidate, but
                     // an inset box-shadow is a CLAUDE.md "never" in a component.)
-                    const volPct = Math.round(workIntensity(cell.work, dayMax) * 100);
+                    const volPct = Math.round(dayIntensity(cell) * 100);
                     return (
                       <div
                         key={row}
@@ -639,8 +665,8 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               ))}
             </div>
             <p className="mt-2 text-[0.65rem] text-muted">
-              Colored by activity · bottom bar is work done, against your biggest day of that
-              kind · striped days had multiple activities.
+              Colored by activity · bottom bar is work vs your biggest session with the same
+              tag · striped days had multiple activities. Tap a day for load changes.
             </p>
           </section>
         </Item>
@@ -787,8 +813,19 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap bg-fg px-2 py-1 text-[0.7rem] tabular-nums text-bg"
-            style={{ left: tip.x, top: tip.y - 8 }}
+            // Wraps, and the centre is clamped so the whole box stays on screen.
+            // A nowrap line centred on the finger ran off the right edge on the
+            // grid's last column. `pre-line` honours the label's line break.
+            className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-pre-line bg-fg px-2 py-1 text-[0.7rem] leading-snug tabular-nums text-bg"
+            style={{
+              left: Math.min(
+                Math.max(tip.x, TOOLTIP.maxWidthPx / 2 + TOOLTIP.edgePx),
+                window.innerWidth - TOOLTIP.maxWidthPx / 2 - TOOLTIP.edgePx,
+              ),
+              top: tip.y - 8,
+              width: 'max-content',
+              maxWidth: TOOLTIP.maxWidthPx,
+            }}
           >
             {tip.label}
           </motion.div>

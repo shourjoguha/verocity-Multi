@@ -861,6 +861,15 @@ export const ENDURANCE = {
 } as const;
 
 // Mobile-PWA touch model tunables (SPEC §9 cross-cutting).
+// The tap/hover detail on Stats. It wraps rather than running off-screen: a
+// single nowrap line centred on the finger clipped on the grid's last column.
+// `holdMs` is how long it stays after a tap — long enough to read two lines.
+export const TOOLTIP = {
+  maxWidthPx: 240,
+  edgePx: 8,
+  holdMs: 4000,
+} as const;
+
 export const TOUCH = {
   longPressMs: 450,
   minTargetPx: 44,

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   addSetWork,
+  sessionKind,
   sessionWork,
   workBodyWeight,
   workIntensity,
   workMaxima,
+  workMaximaByKind,
   type WorkTotals,
 } from '@/lib/work';
 import { classifyMovement } from '@/lib/movementTaxonomy';
@@ -303,5 +305,36 @@ describe('sessionWork leaves warm-up and cooldown out', () => {
   it('counts a session that is nothing but prep in full', () => {
     const w = sessionWork(log([{ key: 'warmup', items: [row] }]), BW);
     expect(w.cardio).toBeGreaterThan(0);
+  });
+});
+
+describe('per-tag maxima for the consistency bar', () => {
+  const tagged = (id: string, tags: string[], kg: number, activity_type: string | null = null) =>
+    ({
+      ...log([{ key: 'primary', items: [item('Back Squat', 'reps', [set({ weight: kg, reps: 5 })])] }]),
+      id,
+      tags,
+      activity_type,
+    }) as WorkoutLog;
+
+  it('keys a session by its first tag, else its activity type', () => {
+    expect(sessionKind(tagged('a', ['Strength', 'endurance'], 1))).toBe('strength');
+    expect(sessionKind(tagged('b', [], 1, 'Run'))).toBe('run');
+    expect(sessionKind(tagged('c', [], 1))).toBe('session');
+  });
+
+  // The bug: a strength session was measured against the biggest day of the
+  // same LANE of any kind, so a heavy hyrox day shrank every strength bar.
+  it('measures a session only against sessions with the same tag', () => {
+    const small = tagged('s1', ['strength'], 60);
+    const big = tagged('s2', ['strength'], 100);
+    const huge = tagged('h', ['hyrox'], 300);
+    const max = workMaximaByKind([small, big, huge], BW);
+    const ratio = (l: WorkoutLog) =>
+      workIntensity(sessionWork(l, BW), max.get(sessionKind(l)) as WorkTotals);
+    expect(ratio(big)).toBe(1);
+    expect(ratio(huge)).toBe(1);
+    expect(ratio(small)).toBeLessThan(1);
+    expect(ratio(small)).toBeGreaterThan(0.5);
   });
 });
