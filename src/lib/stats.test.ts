@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completedLogs, familyOf, flattenSets } from '@/lib/stats';
+import { completedLogs, familyOf, flattenSets, workingSections } from '@/lib/stats';
 import type { WorkoutLog } from '@/lib/types';
 
 function log(sets: { weight?: number; reps?: number; rpe?: number; completed?: boolean }[]): WorkoutLog {
@@ -79,5 +79,30 @@ describe('familyOf', () => {
 
   it('returns null for unknown movements', () => {
     expect(familyOf('Bicep Curl')).toBeNull();
+  });
+});
+
+describe('workingSections', () => {
+  const it1 = { id: 'a', movement: 'Back Squat', primaryMetric: 'reps', sets: [] };
+  const mk = (keys: string[]) =>
+    ({
+      data: { sections: keys.map((key) => ({ key, groups: [{ id: key, kind: 'single', items: [it1] }] })) },
+    }) as unknown as WorkoutLog;
+
+  it('drops warm-up and cooldown when there is main work', () => {
+    expect(workingSections(mk(['warmup', 'primary', 'conditioning', 'cooldown'])).map((s) => s.key)).toEqual([
+      'primary',
+      'conditioning',
+    ]);
+  });
+
+  it('keeps everything when the session is only prep', () => {
+    expect(workingSections(mk(['cooldown'])).map((s) => s.key)).toEqual(['cooldown']);
+  });
+
+  it('does not let an empty main section hide the prep work', () => {
+    const l = mk(['warmup']);
+    l.data.sections.push({ key: 'primary', groups: [] });
+    expect(workingSections(l).map((s) => s.key)).toEqual(['warmup', 'primary']);
   });
 });

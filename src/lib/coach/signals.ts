@@ -28,7 +28,7 @@ import {
 } from '@/app.config';
 import { summarizeBodyLoad } from '@/lib/bodyLoad';
 import { bestE1rmByMovement } from '@/lib/prs';
-import { completedLogs } from '@/lib/stats';
+import { completedLogs, workingSections } from '@/lib/stats';
 import { explainSoreness, type AreaExplanation } from '@/lib/soreness';
 import { buildDayInsights, summarizeTiming, toHours } from '@/lib/mealInsights';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
@@ -59,7 +59,7 @@ export const MAX_BOUT_SECONDS = 300;
  */
 export function rpeWasRated(log: WorkoutLog): boolean {
   const values: number[] = [];
-  for (const section of log.data?.sections ?? []) {
+  for (const section of workingSections(log)) {
     for (const group of section.groups ?? []) {
       for (const item of group.items ?? []) {
         for (const set of item.sets ?? []) {

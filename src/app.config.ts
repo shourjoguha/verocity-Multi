@@ -24,6 +24,15 @@ export const SECTIONS = [
   'cooldown',
 ] as const;
 
+// Sections that prepare for or wind down from the work rather than being it.
+// They are logged, count toward plan adherence and show in session summaries,
+// but are left out of every volume, work, set-count, e1RM and RPE measure — a
+// 500m easy row or a band pull-apart is not training load, and counting it let
+// a longer warm-up read as a bigger session. A session with NOTHING outside
+// these sections (a yoga class logged as one cooldown block) still counts in
+// full: it is the work. See `workingSections` in lib/stats.ts.
+export const PREP_SECTIONS: readonly (typeof SECTIONS)[number][] = ['warmup', 'cooldown'];
+
 // Section name aliases → canonical section (parser normalization).
 export const SECTION_ALIASES: Record<string, (typeof SECTIONS)[number]> = {
   'warm up': 'warmup',

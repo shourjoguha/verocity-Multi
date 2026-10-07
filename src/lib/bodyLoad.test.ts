@@ -767,3 +767,45 @@ describe('body lenses', () => {
     expect(Math.max(...Object.values(strength))).toBeCloseTo(1, 5);
   });
 });
+
+// PREP_SECTIONS: warm-up and cooldown keep their minutes (time spent is time
+// spent) but carry no volume, sets or tonnage.
+describe('warm-up and cooldown carry no load', () => {
+  const squats = item('Back Squat', 'weight', [set({ weight: 100, reps: 5 }), set({ weight: 100, reps: 5 })]);
+  const goblet = item('Goblet Squat', 'weight', [set({ weight: 16, reps: 10 })]);
+  const main = log([{ key: 'primary', items: [squats] }], { total_seconds: 1800 });
+  const withPrep = log(
+    [
+      { key: 'warmup', items: [goblet] },
+      { key: 'primary', items: [squats] },
+      { key: 'cooldown', items: [goblet] },
+    ],
+    { total_seconds: 1800 },
+  );
+
+  it('leaves volume, hard sets and tonnage unchanged by a warm-up', () => {
+    const a = summarizeBodyLoad([main]);
+    const b = summarizeBodyLoad([withPrep]);
+    expect(b.regionVolume).toEqual(a.regionVolume);
+    expect(b.hardSetsByRegion).toEqual(a.hardSetsByRegion);
+    expect(b.resistanceSets).toEqual(a.resistanceSets);
+    expect(b.resistanceTonnage).toEqual(a.resistanceTonnage);
+  });
+
+  it('still spends the clock on the warm-up', () => {
+    const b = summarizeBodyLoad([withPrep]);
+    expect(b.totalMinutes).toBeCloseTo(30, 5);
+  });
+
+  it('leaves training volume unchanged by a warm-up', () => {
+    expect(summarizeTrainingVolume([withPrep]).modalityVolume).toEqual(
+      summarizeTrainingVolume([main]).modalityVolume,
+    );
+  });
+
+  it('counts a cooldown-only session in full', () => {
+    const yoga = log([{ key: 'cooldown', items: [goblet] }], { total_seconds: 1800 });
+    const s = summarizeBodyLoad([yoga]);
+    expect(Object.values(s.regionVolume).some((v) => v > 0)).toBe(true);
+  });
+});

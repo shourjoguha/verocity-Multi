@@ -4,6 +4,7 @@
 // data the Logger already loads (getAllLogs).
 import { e1rm } from '@/lib/e1rm';
 import { trackName } from '@/lib/notations';
+import { workingSections } from '@/lib/stats';
 import type { SetActual, WorkoutLog } from '@/lib/types';
 
 export function e1rmOf(a: Pick<SetActual, 'weight' | 'reps'>): number | null {
@@ -15,7 +16,7 @@ export function e1rmOf(a: Pick<SetActual, 'weight' | 'reps'>): number | null {
 export function bestE1rmByMovement(logs: WorkoutLog[]): Map<string, number> {
   const best = new Map<string, number>();
   for (const log of logs) {
-    for (const section of log.data?.sections ?? []) {
+    for (const section of workingSections(log)) {
       for (const group of section.groups ?? []) {
         for (const item of group.items ?? []) {
           for (const set of item.sets ?? []) {
@@ -45,7 +46,7 @@ export function bestE1rmByMovement(logs: WorkoutLog[]): Map<string, number> {
 export function bestE1rmByTrack(logs: WorkoutLog[]): Map<string, number> {
   const best = new Map<string, number>();
   for (const log of logs) {
-    for (const section of log.data?.sections ?? []) {
+    for (const section of workingSections(log)) {
       for (const group of section.groups ?? []) {
         for (const item of group.items ?? []) {
           for (const set of item.sets ?? []) {

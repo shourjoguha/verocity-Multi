@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getActivePlan, getAllLogs } from '@/lib/queries';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
-import { flattenSets } from '@/lib/stats';
+import { flattenWorkingSets } from '@/lib/stats';
 import { e1rm } from '@/lib/e1rm';
 import { formatRound } from '@/lib/format';
 import { BLOCKS, type BlockKey } from '@/app.config';
@@ -104,7 +104,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const actualBest = new Map<string, { e1rm: number; label: string }>();
   for (const log of doneLogs) {
     const wk = weekByLog.get(log.id) as number;
-    for (const s of flattenSets(log)) {
+    for (const s of flattenWorkingSets(log)) {
       if (s.weight == null || s.reps == null) continue;
       const est = e1rm(s.weight, s.reps);
       if (est == null) continue;

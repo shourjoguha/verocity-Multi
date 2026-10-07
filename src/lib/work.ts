@@ -16,6 +16,7 @@
 import { VOLUME, WORK, type MovementProfile } from '@/app.config';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import { isHeld } from '@/lib/notations';
+import { workingSections } from '@/lib/stats';
 import { isSubroutine } from '@/lib/subroutine';
 import type { LogSet, UserStats, WorkoutLog } from '@/lib/types';
 
@@ -124,7 +125,7 @@ export function sessionWork(
   overrides: OverrideMap = {},
 ): WorkTotals {
   const totals: WorkTotals = { resistance: 0, cardio: 0 };
-  for (const section of log.data?.sections ?? []) {
+  for (const section of workingSections(log)) {
     for (const group of section.groups ?? []) {
       for (const item of group.items ?? []) {
         if (isSubroutine(item)) continue;

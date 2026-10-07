@@ -1,5 +1,5 @@
-import { MOVEMENT_FAMILIES } from '@/app.config';
-import type { WorkoutLog } from '@/lib/types';
+import { MOVEMENT_FAMILIES, PREP_SECTIONS } from '@/app.config';
+import type { LogSection, WorkoutLog } from '@/lib/types';
 
 export interface FlatSet {
   movement: string;
@@ -14,8 +14,36 @@ export interface FlatSet {
   notations: string[];
 }
 
+const isPrep = (s: LogSection) => (PREP_SECTIONS as readonly string[]).includes(s.key);
+
+/**
+ * The sections that count as training load: everything but warm-up and
+ * cooldown, UNLESS the session has nothing else — then all of it, because a
+ * mobility or yoga session logged as one cooldown block is the work, and
+ * dropping it would delete real training. See PREP_SECTIONS.
+ *
+ * Every volume, work, set-count, e1RM and RPE reader goes through this. Plan
+ * adherence, session summaries, export and the logger read the full document.
+ */
+export function workingSections(log: WorkoutLog): LogSection[] {
+  const all = log.data?.sections ?? [];
+  const main = all.filter(
+    (s) => !isPrep(s) && (s.groups ?? []).some((g) => (g.items ?? []).some((i) => i.kind !== 'subroutine')),
+  );
+  return main.length > 0 ? all.filter((s) => !isPrep(s)) : all;
+}
+
+/** `flattenSets` over `workingSections` — warm-up and cooldown left out. */
+export function flattenWorkingSets(log: WorkoutLog): FlatSet[] {
+  return flattenSections(workingSections(log));
+}
+
 export function flattenSets(log: WorkoutLog): FlatSet[] {
-  return (log.data?.sections ?? []).flatMap((section) =>
+  return flattenSections(log.data?.sections ?? []);
+}
+
+function flattenSections(sections: LogSection[]): FlatSet[] {
+  return sections.flatMap((section) =>
     section.groups.flatMap((group) =>
       group.items.flatMap((item) =>
         item.sets.map((set) => ({

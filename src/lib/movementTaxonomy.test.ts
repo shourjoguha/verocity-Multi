@@ -788,6 +788,15 @@ describe('bodyweight load (bwLoad)', () => {
     expect(bw('Leg Curl')).toBe(0);
   });
 
+  // Every push-up variant bears the athlete. "Med-Ball Push-up" used to fall to
+  // the bench/machine rule and score zero work on Stats.
+  it('prices a push-up variant like the push-up, not like the bench', () => {
+    expect(bw('Med-Ball Push-up')).toBe(bw('Push-up'));
+    expect(bw('Deficit Push-up')).toBe(bw('Push-up'));
+    expect(bw('Incline Bench Press')).toBe(0);
+    expect(bw('Chest Press')).toBe(0);
+  });
+
   it('does not let the push-up entry swallow the handstand push-up', () => {
     expect(bw('Handstand Push-up')).toBe(0.9);
   });

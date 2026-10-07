@@ -37,6 +37,7 @@ import {
 } from '@/app.config';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import { isHeld } from '@/lib/notations';
+import { workingSections } from '@/lib/stats';
 import { isSubroutine } from '@/lib/subroutine';
 import type { LogItem, LogSet, WorkoutLog } from '@/lib/types';
 
@@ -363,7 +364,8 @@ export function summarizeTrainingVolume(
     let logResistanceMinutes = 0;
     let logDenseMinutes = 0;
 
-    for (const section of log.data?.sections ?? []) {
+    // Warm-up and cooldown are not load: see PREP_SECTIONS.
+    for (const section of workingSections(log)) {
       for (const group of section.groups ?? []) {
         for (const item of group.items ?? []) {
           if (isSubroutine(item)) continue;
@@ -768,8 +770,14 @@ export function summarizeBodyLoad(
     // PASS 2 — spend the session clock across them.
     allocateSession(log, walk);
 
+    // Warm-up and cooldown keep their MINUTES — time spent is time spent, and
+    // the clock was already allocated with them in it — but carry no volume,
+    // sets or tonnage. A band pull-apart is not a set for the shoulders. See
+    // PREP_SECTIONS.
+    const loadSections = new Set(workingSections(log).map((s) => s.key));
+
     // PASS 3 — attribute the allocated minutes.
-    for (const { item, profile, hasRegions, modality, minutes } of walk) {
+    for (const { item, section, profile, hasRegions, modality, minutes } of walk) {
       if (minutes <= 0) continue;
 
       if (!hasRegions) {
@@ -790,7 +798,10 @@ export function summarizeBodyLoad(
       // One cutoff per movement, not per region: it is a property of the
       // movement's own profile shape.
       const regionCutoff = meaningfulRegionShare(profile.regions);
-      const itemVolume = item.sets.reduce((acc, s) => acc + setVolume(s, unweightedKg, rom, bw), 0);
+      const isLoad = loadSections.has(section);
+      const itemVolume = isLoad
+        ? item.sets.reduce((acc, s) => acc + setVolume(s, unweightedKg, rom, bw), 0)
+        : 0;
 
       const lens = lensFor(modality);
 
@@ -803,7 +814,7 @@ export function summarizeBodyLoad(
           byLens[lens].volume[region] += itemVolume * weight;
         }
 
-        if (modality === 'resistance') {
+        if (isLoad && modality === 'resistance') {
           for (const s of item.sets) {
             if (!s.actual.completed) continue;
             resistanceSets[region] += weight;
@@ -815,7 +826,7 @@ export function summarizeBodyLoad(
         // region taking a meaningful share. Outside the `resistance` branch on
         // purpose: a loaded carry is endurance by modality and still trains the
         // muscles holding the weight.
-        if (weight >= regionCutoff) {
+        if (isLoad && weight >= regionCutoff) {
           for (const s of item.sets) {
             if (isLoadedSet(s, profile)) hardSetsByRegion[region] += 1;
           }
