@@ -270,6 +270,14 @@ UI audit have both run.
   (`isLoadedSet`). A region's cutoff is **relative to that movement's own
   primary region**, because a flat one drops Back Squat's glutes (0.18) and a
   carry's whole profile (top region 0.35).
+- **Warm-up and cooldown are logged, not loaded.** `PREP_SECTIONS` in
+  `app.config.ts`. Every volume, work (kg·m), set-count, tonnage, e1RM and RPE
+  reader goes through `workingSections` / `flattenWorkingSets` in
+  `src/lib/stats.ts`. Plan adherence, session summaries, export and the logger
+  read the full document, and the body map keeps prep **minutes** (time spent is
+  time spent). A session with nothing outside prep — a yoga class logged as one
+  cooldown block — counts in full; real data has two. A new metric that walks
+  `log.data.sections` directly is the bug this rule exists to stop.
 - **What loaded work was FOR is a rest-and-structure question, not a rep one.**
   Reps barely move across the range; prescribed rest and superset relatedness
   separate strength from hypertrophy from loaded conditioning

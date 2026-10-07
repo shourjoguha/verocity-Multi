@@ -21,6 +21,7 @@
 import { RPE_LADDER } from '@/app.config';
 import { parsePlanned } from '@/lib/logBuilder';
 import { normalizeMovementName } from '@/lib/movementTaxonomy';
+import { workingSections } from '@/lib/stats';
 import { blockForWeek, planWeekByLog, planWeekCount } from '@/lib/progression';
 import type { Measured } from '@/lib/coach/types';
 import type { LogItem, Plan, PlanExercise, WorkoutLog } from '@/lib/types';
@@ -114,7 +115,7 @@ function stepOf(ex: PlanExercise): string | null {
 }
 
 function findItem(log: WorkoutLog, name: string): LogItem | null {
-  for (const section of log.data?.sections ?? []) {
+  for (const section of workingSections(log)) {
     for (const group of section.groups) {
       for (const item of group.items) {
         if (normalizeMovementName(item.movement) === name) return item;

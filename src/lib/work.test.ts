@@ -277,3 +277,31 @@ describe('workIntensity', () => {
     expect(workIntensity(w(0, 0), w(10, 10))).toBe(0);
   });
 });
+
+// Warm-up and cooldown are not training load (PREP_SECTIONS). A 500m easy row
+// and a weighted stretch used to land in the same total as the main lifts, so a
+// longer warm-up read as a bigger session.
+describe('sessionWork leaves warm-up and cooldown out', () => {
+  const squat = item('Back Squat', 'reps', [set({ weight: 100, reps: 5 })]);
+  const row = item('Zone 2 (row/bike/walk)', 'distance', [set({ distance: 500 })]);
+  const pushup = item('Push-up', 'reps', [set({ reps: 10 })]);
+
+  it('does not count prep sections when the session has main work', () => {
+    const main = sessionWork(log([{ key: 'primary', items: [squat] }]), BW);
+    const withPrep = sessionWork(
+      log([
+        { key: 'warmup', items: [row, pushup] },
+        { key: 'primary', items: [squat] },
+        { key: 'cooldown', items: [pushup] },
+      ]),
+      BW,
+    );
+    expect(withPrep).toEqual(main);
+  });
+
+  // A yoga or mobility session logged as one cooldown block IS the work.
+  it('counts a session that is nothing but prep in full', () => {
+    const w = sessionWork(log([{ key: 'warmup', items: [row] }]), BW);
+    expect(w.cardio).toBeGreaterThan(0);
+  });
+});

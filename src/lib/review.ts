@@ -16,7 +16,7 @@ import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import { computePlanAdherence, type PlanAdherence } from '@/lib/planAdherence';
 import { e1rm } from '@/lib/e1rm';
 import { hasNotation } from '@/lib/notations';
-import { completedLogs, flattenSets } from '@/lib/stats';
+import { completedLogs, flattenWorkingSets, workingSections } from '@/lib/stats';
 import { isSubroutine } from '@/lib/subroutine';
 import { sessionTagColors } from '@/lib/tags';
 import type { Plan, UserStats, WorkoutLog } from '@/lib/types';
@@ -300,7 +300,7 @@ function measureEffort(logs: WorkoutLog[], dayLabel: (log: WorkoutLog) => string
   let ratedSessions = 0;
   let unratedSessions = 0;
   for (const log of logs) {
-    const sets = flattenSets(log).filter((s) => s.completed && s.rpe != null);
+    const sets = flattenWorkingSets(log).filter((s) => s.completed && s.rpe != null);
     if (sets.length === 0) continue;
     if (!rpeWasRated(log)) {
       unratedSessions += 1;
@@ -343,7 +343,7 @@ function findStaples(logs: WorkoutLog[], overrides: OverrideMap = {}): Staple[] 
   for (const log of ordered) {
     const rated = rpeWasRated(log);
     const best = new Map<string, StapleSet>();
-    for (const section of log.data?.sections ?? []) {
+    for (const section of workingSections(log)) {
       for (const group of section.groups ?? []) {
         for (const item of group.items ?? []) {
           if (isSubroutine(item)) continue;

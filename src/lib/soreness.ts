@@ -14,6 +14,7 @@
 import { SORE_AREAS, SORENESS, type RegionKey, type SoreAreaKey } from '@/app.config';
 import { bwLoadFactor, romFactor, setVolume } from '@/lib/bodyLoad';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
+import { workingSections } from '@/lib/stats';
 import { isSubroutine } from '@/lib/subroutine';
 import type { VibeCheck, WorkoutLog } from '@/lib/types';
 
@@ -62,7 +63,7 @@ export function movementLoads(
   overrides: OverrideMap = {},
 ): MovementLoad[] {
   const byName = new Map<string, number>();
-  for (const section of log.data?.sections ?? []) {
+  for (const section of workingSections(log)) {
     for (const group of section.groups ?? []) {
       for (const item of group.items ?? []) {
         if (isSubroutine(item)) continue;

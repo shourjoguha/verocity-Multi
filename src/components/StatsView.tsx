@@ -7,7 +7,7 @@ import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { useAspectProfile } from '@/lib/useAspectProfile';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
-import { completedLogs, flattenSets, familyOf } from '@/lib/stats';
+import { completedLogs, flattenWorkingSets, familyOf } from '@/lib/stats';
 import { trackName } from '@/lib/notations';
 import {
   addWork,
@@ -249,7 +249,7 @@ function deriveStats(
   // RPE fingerprint: distribution across RPE buckets, per movement family.
   const fam = new Map<string, { dist: number[]; sum: number; n: number }>();
   for (const log of all) {
-    for (const s of flattenSets(log)) {
+    for (const s of flattenWorkingSets(log)) {
       if (s.rpe == null) continue;
       const f = familyOf(s.movement);
       if (!f) continue;
@@ -271,7 +271,7 @@ function deriveStats(
   const sorted = [...all].sort((a, b) => a.log_date.localeCompare(b.log_date));
   for (const log of sorted) {
     const bestThis = new Map<string, number>();
-    for (const s of flattenSets(log)) {
+    for (const s of flattenWorkingSets(log)) {
       if (s.weight == null || s.reps == null) continue;
       const est = e1rm(s.weight, s.reps);
       if (est == null) continue;
@@ -324,7 +324,7 @@ function deriveStats(
   // the plan's whole life, needs `plans.parsed`, and lives on /app/plan where
   // both are loaded. See lib/planAdherence.ts.
   const doneSets = finished.reduce(
-    (a, l) => a + flattenSets(l).filter((s) => s.completed).length,
+    (a, l) => a + flattenWorkingSets(l).filter((s) => s.completed).length,
     0,
   );
 

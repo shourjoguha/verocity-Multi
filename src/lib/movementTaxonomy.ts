@@ -699,7 +699,17 @@ const RAW_RULES: MovementRule[] = [
   },
   {
     id: 'horizontal-push',
-    match: ['bench', 'chest press', 'push up', 'machine press', 'fly'],
+    match: ['bench', 'chest press', 'machine press', 'fly'],
+    profile: p(PUSH_HORIZONTAL, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
+  },
+  // Every push-up VARIANT (med-ball, deficit, decline, banded...) bears the
+  // athlete, exactly like the EXACT 'push up'. It used to be a fragment of
+  // horizontal-push above, which prices bench/machine at bwLoad 0 -- so only the
+  // literal name "Push-up" carried bodyweight and "Med-Ball Push-up" scored zero
+  // work. Same anatomy, so the split is the bwLoad, not the regions.
+  {
+    id: 'push-up',
+    match: ['push up'],
     profile: p(PUSH_HORIZONTAL, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
   },
   {
@@ -940,6 +950,7 @@ const BW_LOAD: Record<string, number> = {
   'nordic leg curl'                   : 0.65,
   'nordic curl'                       : 0.65,
   'push up'                           : 0.65,
+  'rule:push-up'                      : 0.65,
   'run'                               : 0.65,
   'single under'                      : 0.65,
   'zone'                              : 0.65,
