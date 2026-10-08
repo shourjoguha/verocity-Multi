@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addSet, addSubroutine, isGroupComplete, patchSetActual, setSubroutine } from '@/lib/logEdits';
+import { addSet, addSubroutine, copyForward, isGroupComplete, patchSetActual, setSubroutine } from '@/lib/logEdits';
 import { isSubroutine, safeHref } from '@/lib/subroutine';
 import type { LogDocument, LogGroup } from '@/lib/types';
 
@@ -113,6 +113,23 @@ describe('completedAt stamping', () => {
     // A later edit that keeps the group complete must preserve the first stamp.
     doc = patchSetActual(doc, 0, 0, 0, 1, { weight: 100 });
     expect(doc.sections[0].groups[0].completedAt).toBe(stamp);
+  });
+});
+
+describe('addSet', () => {
+  it('marks the appended set as added and leaves prescribed sets unmarked', () => {
+    let doc = docWith(2);
+    doc = addSet(doc, 0, 0, 0);
+    const sets = doc.sections[0].groups[0].items[0].sets;
+    expect(sets.map((s) => s.added)).toEqual([undefined, undefined, true]);
+  });
+
+  it('marks a set grown by Copy to next off the end', () => {
+    let doc = docWith(1);
+    doc = patchSetActual(doc, 0, 0, 0, 0, { completed: true, distance: 20 });
+    const { doc: next, outcome } = copyForward(doc, 0, 0, 0, 0);
+    expect(outcome).toBe('added');
+    expect(next.sections[0].groups[0].items[0].sets[1].added).toBe(true);
   });
 });
 
