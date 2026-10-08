@@ -38,6 +38,7 @@ import {
 } from '@/app.config';
 import {
   EmptyState,
+  Delta,
   LoadingScreen,
   SectionHeader,
   StatStrip,
@@ -47,7 +48,7 @@ import { Disclosure } from '@/components/ui/Disclosure';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { FitnessProfile } from '@/components/FitnessProfile';
 import { GarminHealthSection } from '@/components/GarminHealthSection';
-import { EASE, Item, PageStagger } from '@/components/anim';
+import { Item, PageStagger } from '@/components/anim';
 
 const WEEKS = 8;
 
@@ -136,67 +137,45 @@ function mondayOf(d: Date): Date {
 
 type Point = { date: string; value: number };
 
-// e1RM sparkline: area fill + line draw-in, with per-point hover hit-areas
-// rendered as HTML overlay (so they don't distort with the stretched SVG).
-function Sparkline({
-  points,
-  onHover,
-}: {
-  points: Point[];
-  onHover: (e: { clientX: number; clientY: number }, label: string) => void;
-}) {
-  if (points.length === 0) return null;
-  const H = 44;
+// e1RM sparkline, inline in a Top lifts row. Static: it mounts inside a
+// closed <details>, where a `whileInView` start state left it invisible.
+// Decorative — the row already carries the number, and per-point hover targets
+// a few pixels wide inside a 64px chart could never meet the 44px tap rule.
+function Sparkline({ points }: { points: Point[] }) {
+  if (points.length === 0) return <span aria-hidden className="w-16 shrink-0" />;
+  const H = 20;
   const vals = points.map((p) => p.value);
   const min = Math.min(...vals);
   const max = Math.max(...vals);
   const span = max - min || 1;
   const n = points.length;
   const x = (i: number) => (n === 1 ? 50 : (i / (n - 1)) * 100);
-  const y = (v: number) => H - 4 - ((v - min) / span) * (H - 8);
+  const y = (v: number) => H - 2 - ((v - min) / span) * (H - 4);
   const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(2)},${y(p.value).toFixed(2)}`).join(' ');
   const area = `${line} L100,${H} L0,${H} Z`;
 
   return (
-    <div className="relative">
-      <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none" className="block h-11 w-full">
-        <motion.path
-          d={area}
-          fill="var(--color-fg)"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 0.07 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, ease: EASE }}
-        />
-        <motion.path
-          d={line}
-          fill="none"
-          stroke="var(--color-fg)"
-          strokeWidth={1.5}
-          vectorEffect="non-scaling-stroke"
-          initial={{ pathLength: 0 }}
-          whileInView={{ pathLength: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.9, ease: EASE }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex">
-        {points.map((p, i) => (
-          <button
-            key={i}
-            type="button"
-            aria-label={`${p.date}: ${formatRound(p.value)} kg`}
-            className="h-full flex-1 cursor-pointer"
-            onMouseMove={(e) => onHover(e, `${p.date} · ${formatRound(p.value)} kg`)}
-            onFocus={(e) => {
-              const r = e.currentTarget.getBoundingClientRect();
-              onHover({ clientX: r.left + r.width / 2, clientY: r.top }, `${p.date} · ${formatRound(p.value)} kg`);
-            }}
-          />
-        ))}
-      </div>
-    </div>
+    <svg
+      viewBox={`0 0 100 ${H}`}
+      preserveAspectRatio="none"
+      className="block h-5 w-16 shrink-0"
+      aria-hidden
+    >
+      <path d={area} fill="var(--color-fg)" fillOpacity={0.07} />
+      <path
+        d={line}
+        fill="none"
+        stroke="var(--color-fg)"
+        strokeWidth={1.5}
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
   );
+}
+
+// A week's time in a ~40px grid column: "45m", or hours to one decimal.
+function formatWeekTime(seconds: number): string {
+  return seconds < 3600 ? `${Math.round(seconds / 60)}m` : `${formatRound(seconds / 3600, 1)}h`;
 }
 
 // Everything on this page except the radar reads the 8-week window it always
@@ -273,18 +252,21 @@ function deriveStats(
     return d;
   });
 
-  const weekRows = weekStarts.map((start) => {
+  // The footer under each grid column: that week's time and its highest
+  // logged max HR. Finished sessions on the same clock as the TIME tile, so
+  // the eight figures sum to it. The session count is not repeated here — the
+  // column above already shows it.
+  const weekFoot = weekStarts.map((start) => {
     const end = new Date(start);
     end.setUTCDate(start.getUTCDate() + 6);
-    const inWeek = all.filter((l) => {
+    const inWeek = completedLogs(all).filter((l) => {
       const d = l.log_date.slice(0, 10);
       return d >= ymd(start) && d <= ymd(end);
     });
+    const hrs = inWeek.map((l) => l.hr_max).filter((v): v is number => v != null);
     return {
-      label: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
-      count: inWeek.length,
-      seconds: inWeek.reduce((a, l) => a + (l.total_seconds ?? 0), 0),
-      work: inWeek.reduce((a, l) => addWork(a, sessionWork(l, bodyWeightKg)), ZERO_WORK),
+      seconds: inWeek.reduce((a, l) => a + sessionClockSeconds(l), 0),
+      hrMax: hrs.length > 0 ? Math.max(...hrs) : null,
     };
   });
 
@@ -437,7 +419,7 @@ function deriveStats(
   return {
     all,
     weekStarts,
-    weekRows,
+    weekFoot,
     dayMap,
     rpeRows,
     topMoves,
@@ -551,7 +533,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   const {
     all,
     weekStarts,
-    weekRows,
+    weekFoot,
     dayMap,
     rpeRows,
     topMoves,
@@ -561,6 +543,25 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     doneSets,
     totalSeconds,
   } = derived;
+
+  // The closed rows' headlines. Top lift: the first row of the list it opens,
+  // with its change across the window (first logged e1RM to latest).
+  const topLift = (() => {
+    const first = cards[0];
+    if (!first) return null;
+    const pts = seriesFor.get(first[0]) ?? [];
+    const delta = pts.length > 1 ? Math.round(pts[pts.length - 1].value - pts[0].value) : null;
+    return { name: first[0], value: first[1], delta };
+  })();
+  // Effort: every RPE-tagged working set pooled. "8+" is buckets 8–10, the
+  // same rounding the bars use.
+  const rpeSummary = (() => {
+    const n = rpeRows.reduce((a, r) => a + r.total, 0);
+    if (n === 0) return null;
+    const sum = rpeRows.reduce((a, r) => a + r.avg * r.total, 0);
+    const hard = rpeRows.reduce((a, r) => a + r.dist[2] + r.dist[3] + r.dist[4], 0);
+    return { avg: sum / n, hardPct: Math.round((hard / n) * 100) };
+  })();
 
 
   if (all.length === 0) {
@@ -717,7 +718,18 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                 </div>
               ))}
             </div>
+            {/* Same flex-1 / gap-1 columns as the grid, so each figure sits
+                under its own week. */}
+            <div className="mt-1.5 flex gap-1 text-center text-[0.6rem] leading-tight tabular-nums">
+              {weekFoot.map((w, i) => (
+                <div key={i} className="flex-1">
+                  <div className="text-fg">{w.seconds > 0 ? formatWeekTime(w.seconds) : '—'}</div>
+                  <div className="text-muted">{w.hrMax ?? ' '}</div>
+                </div>
+              ))}
+            </div>
             <p className="mt-2 text-[0.65rem] text-muted">
+              Under each week: time, then the highest max HR logged (bpm).
               Colored by activity · striped = several activities. Bars: lifting blocks on top,
               conditioning blocks below, vs your usual best for that kind of session, your{' '}
               {Math.round(CONSISTENCY.referencePercentile * 100)}th percentile all time; dotted
@@ -726,138 +738,104 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
           </section>
         </Item>
 
-        {/* Everything below is real analysis that most visits do not need on
-            arrival. It is COLLAPSED, not removed: the weekly table, the RPE
-            fingerprint, the per-movement e1RM sparklines with their
-            Movement/Family toggle, and the Garmin recovery block all keep their
-            current implementations and open in one tap. Native <details>, so
-            no JS state and nothing to animate. */}
+        {/* Real analysis most visits do not need on arrival, as one card of
+            rows that each state their answer while closed — the single "More
+            detail" fold said nothing until tapped. The weekly table it held is
+            gone: the grid's columns are the same eight weeks, and their time
+            and max HR now sit under them. Native <details>, so no JS state. */}
         <Item>
-          <Disclosure title="More detail">
-        <section className="mb-6">
-            <SectionHeader>Weekly</SectionHeader>
-            <table className="w-full border border-border bg-surface text-sm">
-              <thead>
-                <tr className="t-label text-muted">
-                  <th className="border-b border-border px-3 py-2 text-left font-medium">Week</th>
-                  <th className="border-b border-border px-3 py-2 text-right font-medium">Sessions</th>
-                  <th className="border-b border-border px-3 py-2 text-right font-medium">Time</th>
-                  <th className="border-b border-border px-3 py-2 text-right font-medium">Lifting</th>
-                  <th className="border-b border-border px-3 py-2 text-right font-medium">Cardio</th>
-                </tr>
-              </thead>
-              <tbody className="tabular-nums">
-                {weekRows.map((w) => (
-                  <tr key={w.label} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2 text-subtle">{w.label}</td>
-                    <td className="px-3 py-2 text-right text-fg">{w.count}</td>
-                    <td className="px-3 py-2 text-right text-fg">{formatDuration(w.seconds)}</td>
-                    <td className="px-3 py-2 text-right text-fg">{formatWork(w.work.resistance)}</td>
-                    <td className="px-3 py-2 text-right text-fg">{formatWork(w.work.cardio)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="mt-2 text-[0.65rem] text-muted">
-              Work in {WORK_UNIT} — weight moved × how far. Lifting and cardio are not summed:
-              they are the same unit, but a long run would swamp a lifting week.
-            </p>
-          </section>
-
-        {rpeRows.length > 0 ? (
-            <section className="mb-6">
-              <SectionHeader>RPE fingerprint</SectionHeader>
-              <div className="flex flex-col gap-3">
-                {rpeRows.map((r) => (
-                  <div key={r.family} className="flex items-center gap-3 text-sm">
-                    <div className="w-20 shrink-0 capitalize text-subtle">{r.family}</div>
-                    <motion.div
-                      className="flex h-3 flex-1 overflow-hidden bg-elevated"
-                      initial={{ scaleX: 0 }}
-                      whileInView={{ scaleX: 1 }}
-                      viewport={{ once: true, margin: '-5% 0px' }}
-                      transition={{ duration: 0.7, ease: EASE }}
-                      style={{ transformOrigin: 'left' }}
-                    >
-                      {r.dist.map((count, i) =>
-                        count > 0 ? (
-                          <div
-                            key={i}
-                            className="h-full cursor-pointer"
-                            style={{
-                              width: `${(count / r.total) * 100}%`,
-                              backgroundColor: 'var(--color-fg)',
-                              opacity: 0.25 + (i / 4) * 0.75,
-                            }}
-                            onMouseMove={(e) =>
-                              showTip(
-                                e,
-                                `RPE ${RPE_BUCKETS[i]} · ${count} ${count === 1 ? 'set' : 'sets'} (${Math.round((count / r.total) * 100)}%)`,
-                              )
-                            }
-                          />
-                        ) : null,
-                      )}
-                    </motion.div>
-                    <div className="w-8 shrink-0 text-right tabular-nums text-muted">
-                      {formatRound(r.avg, 1)}
+            {/* `empty:hidden`: with no lifts, no RPE and no Garmin rows every
+                child renders null, and the card would be a bare 2px outline. */}
+            <div className="lift overflow-hidden border border-border bg-surface empty:hidden [&>details:first-child]:border-t-0">
+              {topLift ? (
+                <Disclosure
+                  variant="row"
+                  title="Top lifts"
+                  headerRight={
+                    <span>
+                      <span className="capitalize">{topLift.name}</span> {formatRound(topLift.value)} kg{' '}
+                      {topLift.delta ? <Delta value={topLift.delta} /> : null}
+                    </span>
+                  }
+                >
+                  <div className="mb-2 flex justify-end">
+                    <div className="w-48">
+                      <SegmentedTabs
+                        tabs={[
+                          { key: 'movement', label: 'Movement' },
+                          { key: 'family', label: 'Family' },
+                        ]}
+                        active={groupBy}
+                        onChange={(k) => setGroupBy(k as 'movement' | 'family')}
+                        ariaLabel="Group top lifts by"
+                        size="sm"
+                      />
                     </div>
                   </div>
-                ))}
-              </div>
-            </section>
-        ) : null}
+                  <ul className="-mx-3 -mb-3 flex flex-col gap-px bg-border-soft">
+                    {cards.map(([name, value]) => {
+                      const bw = bodyweightMultiple(value, stats);
+                      return (
+                        <li key={name} className="flex min-h-11 items-center gap-3 bg-surface px-3 py-2">
+                          <span className="min-w-0 flex-1 truncate text-sm capitalize text-fg">{name}</span>
+                          <Sparkline points={seriesFor.get(name) ?? []} />
+                          <span className="w-12 shrink-0 text-right font-display text-sm tabular-nums text-fg">
+                            {formatRound(value)}
+                          </span>
+                          {/* Only once bodyweight is on file — an absent stat
+                              shows nothing rather than a placeholder. */}
+                          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted">
+                            {bw == null ? '' : `${formatRound(bw, 2)}×`}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Disclosure>
+              ) : null}
 
-        {topMoves.length > 0 ? (
-            <section>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="t-label text-muted">
-                  Top {groupBy === 'family' ? 'families' : 'movements'} (e1RM)
-                </h2>
-                <div className="w-48 shrink-0">
-                  <SegmentedTabs
-                    tabs={[
-                      { key: 'movement', label: 'Movement' },
-                      { key: 'family', label: 'Family' },
-                    ]}
-                    active={groupBy}
-                    onChange={(k) => setGroupBy(k as 'movement' | 'family')}
-                    ariaLabel="Group top lifts by"
-                    size="sm"
-                  />
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {cards.map(([name, value]) => (
-                  <div key={name} className="lift border border-border bg-surface p-4">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate capitalize text-fg">{name}</span>
-                      <span className="shrink-0 font-display text-lg tabular-nums tracking-tight text-fg">
-                        {formatRound(value)}
-                        <span className="ml-1 text-xs font-medium text-muted">kg</span>
-                        {(() => {
-                          // Only rendered once bodyweight is on file — an absent
-                          // stat shows nothing rather than a placeholder.
-                          const bw = bodyweightMultiple(value, stats);
-                          return bw == null ? null : (
-                            <span className="ml-2 text-xs font-medium text-muted">
-                              {formatRound(bw, 2)}×BW
-                            </span>
-                          );
-                        })()}
-                      </span>
-                    </div>
-                    <div className="mt-3">
-                      <Sparkline points={seriesFor.get(name) ?? []} onHover={showTip} />
-                    </div>
+              {rpeSummary ? (
+                <Disclosure
+                  variant="row"
+                  title="Effort"
+                  headerRight={`avg RPE ${formatRound(rpeSummary.avg, 1)} · ${rpeSummary.hardPct}% at 8+`}
+                >
+                  <div className="flex flex-col gap-3 pt-1">
+                    {rpeRows.map((r) => (
+                      <div key={r.family} className="flex items-center gap-3 text-sm">
+                        <div className="w-20 shrink-0 capitalize text-subtle">{r.family}</div>
+                        <div className="flex h-3 flex-1 overflow-hidden bg-elevated">
+                          {r.dist.map((count, i) =>
+                            count > 0 ? (
+                              <div
+                                key={i}
+                                className="h-full cursor-pointer"
+                                style={{
+                                  width: `${(count / r.total) * 100}%`,
+                                  backgroundColor: 'var(--color-fg)',
+                                  opacity: 0.25 + (i / 4) * 0.75,
+                                }}
+                                onMouseMove={(e) =>
+                                  showTip(
+                                    e,
+                                    `RPE ${RPE_BUCKETS[i]} · ${count} ${count === 1 ? 'set' : 'sets'} (${Math.round((count / r.total) * 100)}%)`,
+                                  )
+                                }
+                              />
+                            ) : null,
+                          )}
+                        </div>
+                        <div className="w-8 shrink-0 text-right tabular-nums text-muted">
+                          {formatRound(r.avg, 1)}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </section>
-        ) : null}
+                </Disclosure>
+              ) : null}
 
-            {mode === 'app' ? <GarminHealthSection /> : null}
-          </Disclosure>
+              {mode === 'app' ? <GarminHealthSection /> : null}
+            </div>
         </Item>
       </PageStagger>
 

@@ -15,8 +15,8 @@ import {
 } from '@/lib/garmin/health';
 import type { GarminHealthDaily } from '@/lib/types';
 import { formatDuration } from '@/lib/format';
-import { SectionHeader, StatCard } from '@/components/ui/primitives';
-import { Item } from '@/components/anim';
+import { StatCard } from '@/components/ui/primitives';
+import { Disclosure } from '@/components/ui/Disclosure';
 
 const DAYS = 30;
 
@@ -81,56 +81,62 @@ export function GarminHealthSection() {
   const restingHrSeries = metricSeries(rows, 'resting_hr');
   const hrvSeries = metricSeries(rows, 'hrv_ms');
 
+  // A row in StatsView's detail card, headlined by the two numbers that
+  // move with training load. Self-hiding as before, so no empty fold.
+  const headline = [
+    restingHr ? `RHR ${restingHr.value}` : null,
+    hrv ? `HRV ${hrv.value}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
-    <Item>
-      <section className="mb-10">
-        <SectionHeader>Recovery</SectionHeader>
-        <div className="grid grid-cols-3 gap-px bg-border">
-          <StatCard label="Resting HR" value={restingHr ? restingHr.value : '—'} unit={restingHr ? 'bpm' : undefined} />
-          <StatCard label="HRV" value={hrv ? hrv.value : '—'} unit={hrv ? 'ms' : undefined} />
-          <StatCard label="Sleep" value={sleep ? formatDuration(sleep.value) : '—'} />
-          <StatCard label="Body Battery" value={bodyBattery ? bodyBattery.value : '—'} />
-          <StatCard label="VO₂ Max" value={vo2max ? vo2max.value : '—'} />
-          <StatCard label="Steps" value={steps ? steps.value.toLocaleString() : '—'} />
+    <Disclosure variant="row" title="Recovery" headerRight={headline || undefined}>
+      <div className="-mx-3 grid grid-cols-3 gap-px bg-border">
+        <StatCard label="Resting HR" value={restingHr ? restingHr.value : '—'} unit={restingHr ? 'bpm' : undefined} />
+        <StatCard label="HRV" value={hrv ? hrv.value : '—'} unit={hrv ? 'ms' : undefined} />
+        <StatCard label="Sleep" value={sleep ? formatDuration(sleep.value) : '—'} />
+        <StatCard label="Body Battery" value={bodyBattery ? bodyBattery.value : '—'} />
+        <StatCard label="VO₂ Max" value={vo2max ? vo2max.value : '—'} />
+        <StatCard label="Steps" value={steps ? steps.value.toLocaleString() : '—'} />
+      </div>
+
+      {stages ? (
+        <div className="-mx-3 mt-px bg-surface px-4 py-4">
+          <div className="mb-2 t-label text-muted">Last sleep</div>
+          <div className="flex h-2.5 w-full overflow-hidden">
+            <span style={{ flexGrow: stages.deep }} className="bg-fg" />
+            <span style={{ flexGrow: stages.rem }} className="bg-fg/60" />
+            <span style={{ flexGrow: stages.light }} className="bg-fg/30" />
+          </div>
+          <div className="mt-2 flex gap-4 text-[0.6rem] uppercase tracking-wider text-muted">
+            <span>Deep {formatDuration(stages.deep)}</span>
+            <span>REM {formatDuration(stages.rem)}</span>
+            <span>Light {formatDuration(stages.light)}</span>
+          </div>
         </div>
+      ) : null}
 
-        {stages ? (
-          <div className="mt-px bg-surface px-4 py-4">
-            <div className="mb-2 t-label text-muted">Last sleep</div>
-            <div className="flex h-2.5 w-full overflow-hidden">
-              <span style={{ flexGrow: stages.deep }} className="bg-fg" />
-              <span style={{ flexGrow: stages.rem }} className="bg-fg/60" />
-              <span style={{ flexGrow: stages.light }} className="bg-fg/30" />
-            </div>
-            <div className="mt-2 flex gap-4 text-[0.6rem] uppercase tracking-wider text-muted">
-              <span>Deep {formatDuration(stages.deep)}</span>
-              <span>REM {formatDuration(stages.rem)}</span>
-              <span>Light {formatDuration(stages.light)}</span>
-            </div>
-          </div>
-        ) : null}
-
-        {restingHrSeries.length > 1 || hrvSeries.length > 1 ? (
-          <div className="mt-px grid grid-cols-2 gap-px bg-border">
-            {restingHrSeries.length > 1 ? (
-              <div className="bg-surface px-4 py-4">
-                <div className="mb-2 t-label text-muted">
-                  Resting HR · {DAYS}d
-                </div>
-                <Spark points={restingHrSeries} />
+      {restingHrSeries.length > 1 || hrvSeries.length > 1 ? (
+        <div className="-mx-3 -mb-3 mt-px grid grid-cols-2 gap-px bg-border">
+          {restingHrSeries.length > 1 ? (
+            <div className="bg-surface px-4 py-4">
+              <div className="mb-2 t-label text-muted">
+                Resting HR · {DAYS}d
               </div>
-            ) : null}
-            {hrvSeries.length > 1 ? (
-              <div className="bg-surface px-4 py-4">
-                <div className="mb-2 t-label text-muted">
-                  HRV · {DAYS}d
-                </div>
-                <Spark points={hrvSeries} />
+              <Spark points={restingHrSeries} />
+            </div>
+          ) : null}
+          {hrvSeries.length > 1 ? (
+            <div className="bg-surface px-4 py-4">
+              <div className="mb-2 t-label text-muted">
+                HRV · {DAYS}d
               </div>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-    </Item>
+              <Spark points={hrvSeries} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </Disclosure>
   );
 }
