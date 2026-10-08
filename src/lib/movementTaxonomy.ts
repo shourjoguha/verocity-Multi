@@ -1082,8 +1082,12 @@ const CAL_METRES: Record<string, number> = {
   'row erg interval'                  : 15,
   'rower interval'                    : 15,
   'row'                               : 15,
-  // Smaller working muscle mass per stroke, so a calorie buys less distance.
-  'ski erg interval'                  : 12,
+  // A calorie is a calorie. The erg's calorie count is the machine's own energy
+  // estimate, so the smaller working mass is already in it; the old 12 priced
+  // a ski calorie at about half a rowed one (31 vs 57 kg.m) and discounted it
+  // twice. 22.5 makes forceFactor x calMetres match the rower (0.3 x 22.5 =
+  // 0.45 x 15), so the two price a calorie the same at any bodyweight.
+  'ski erg interval'                  : 22.5,
   // A calorie is a calorie: this is set so a cycled calorie prices near a rowed
   // one, which the lower horizFactor would otherwise undercut. A bike simply
   // covers more ground per calorie.

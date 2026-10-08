@@ -26,7 +26,7 @@
 "rule:air-bike","calMetres","15","medium","The unit air bikes are actually scored in. 43kg x 15m x 0.1 = 64.5 kg.m per calorie against the rower's 58.1 — equal to a rower or slightly higher.",""
 "row erg interval","calMetres","15","medium","Your figure. The ballpark the other machines are calibrated against.",""
 "rower interval","calMetres","15","medium","As row erg.",""
-"ski erg interval","calMetres","12","low","Smaller working muscle mass per stroke, so a calorie buys less distance.",""
+"ski erg interval","calMetres","22.5","medium","A calorie is a calorie: the erg's calorie is its own energy estimate, so smaller working mass is already counted. Set so forceFactor x calMetres matches the rower (0.3 x 22.5 = 0.45 x 15). Was 12, which priced a ski calorie at about half a rowed one.",""
 "cycle","calMetres","35","low","A calorie is a calorie: set so a cycled calorie prices near a rowed one. A bike simply covers more ground per calorie.",""
 "stairmaster","calMetres","10","low","Climbing is expensive per metre, so a calorie buys few of them.",""
 "rule:erg-endurance","calMetres","15","low","Default for unnamed machines; the rowing ballpark.",""

@@ -9,9 +9,12 @@
 // same 50m sled push score 4.5x differently depending on which box the logger
 // filled. Nothing here reads RPE, and nothing here converts through time.
 //
-// The lane follows THE METRIC ACTUALLY LOGGED, not the movement's modality: a
-// sled push is `modality: 'resistance'` but is logged in distance, and distance
-// is what determines which formula can even run.
+// The FORMULA follows the metric actually logged (reps or distance/calories):
+// that is what decides which one can run at all. The LANE follows the block the
+// set sits in (WORK.liftingSections / cardioSections): a snatch in a
+// conditioning block is conditioning work, a farmer carry in an accessory block
+// is lifting work. Only a prep-only session (nothing but warm-up or cooldown)
+// falls back to the metric for its lane.
 
 import { CONSISTENCY, VOLUME, WORK, type MovementProfile } from '@/app.config';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
@@ -89,6 +92,9 @@ export function addSetWork(
   profile: MovementProfile | null,
   bodyWeightKg: number,
   into: WorkTotals,
+  // Where the result is booked. Defaults to the metric's own lane; sessionWork
+  // passes the block's lane. The formula is chosen by the metric either way.
+  bookTo?: keyof WorkTotals,
 ): void {
   const a = set.actual;
   const lane = laneOf(a);
@@ -103,7 +109,7 @@ export function addSetWork(
     // a touch-and-go one — so both earn the same scaling.
     const tempo = isHeld(set.notations) ? VOLUME.pauseFactor : 1;
     const side = set.notations.includes('/side') ? 2 : 1;
-    into.resistance += force * metres * (a.reps ?? 0) * side * tempo;
+    into[bookTo ?? lane] += force * metres * (a.reps ?? 0) * side * tempo;
     return;
   }
 
@@ -111,7 +117,14 @@ export function addSetWork(
   // the distance, which was measured rather than converted.
   const metres =
     a.distance != null ? a.distance : (a.calories ?? 0) * (profile?.calMetres ?? WORK.defaultCalMetres);
-  into.cardio += force * metres * (profile?.horizFactor ?? WORK.defaultHorizFactor);
+  into[bookTo ?? lane] += force * metres * (profile?.horizFactor ?? WORK.defaultHorizFactor);
+}
+
+/** The lane a block books its work to, or undefined to let the metric decide. */
+function sectionLane(key: string): keyof WorkTotals | undefined {
+  if ((WORK.cardioSections as readonly string[]).includes(key)) return 'cardio';
+  if ((WORK.liftingSections as readonly string[]).includes(key)) return 'resistance';
+  return undefined;
 }
 
 /**
@@ -126,6 +139,7 @@ export function sessionWork(
 ): WorkTotals {
   const totals: WorkTotals = { resistance: 0, cardio: 0 };
   for (const section of workingSections(log)) {
+    const bookTo = sectionLane(section.key);
     for (const group of section.groups ?? []) {
       for (const item of group.items ?? []) {
         if (isSubroutine(item)) continue;
@@ -134,7 +148,7 @@ export function sessionWork(
         // of the taxonomy follows. Absence is never a penalty.
         const c = classifyMovement(item.movement, { overrides });
         const profile = c.source === 'unknown' ? null : c.profile;
-        for (const set of item.sets) addSetWork(set, profile, bodyWeightKg, totals);
+        for (const set of item.sets) addSetWork(set, profile, bodyWeightKg, totals, bookTo);
       }
     }
   }
@@ -170,7 +184,8 @@ export function percentile(sorted: number[], q: number): number {
 
 /**
  * Per-kind, per-lane references for the consistency bars, over every
- * finished session passed in (Stats passes all of them — all time).
+ * finished session passed in (Stats passes all of them — all time). A kind's
+ * lane is compared with its CONSISTENCY group, which for most tags is itself.
  *
  * A lane's sample is only the sessions that DID that lane: a strength session
  * without a sled says nothing about how big a strength session's cardio is.
@@ -190,23 +205,39 @@ export function workReferencesByKind(
   logs: WorkoutLog[],
   bodyWeightKg: number,
 ): Map<string, KindReference> {
-  const byKind = new Map<string, { resistance: number[]; cardio: number[] }>();
+  // Samples are pooled per (lane, comparison group), so Hyrox lifting is read
+  // against Hyrox + Crossfit lifting while its conditioning is read against all
+  // three gym tags' conditioning (CONSISTENCY.groups).
+  const pools = new Map<string, number[]>();
+  const kinds = new Set<string>();
   for (const log of logs) {
     if (log.status !== 'done') continue;
     const k = sessionKind(log);
-    const lanes = byKind.get(k) ?? { resistance: [], cardio: [] };
+    kinds.add(k);
     const w = sessionWork(log, bodyWeightKg);
-    if (w.resistance > 0) lanes.resistance.push(w.resistance);
-    if (w.cardio > 0) lanes.cardio.push(w.cardio);
-    byKind.set(k, lanes);
+    for (const lane of LANES) {
+      if (w[lane] <= 0) continue;
+      const key = `${lane}:${comparisonGroup(k, lane)}`;
+      const list = pools.get(key) ?? [];
+      list.push(w[lane]);
+      pools.set(key, list);
+    }
   }
-  const ref = (values: number[]): LaneReference => ({
-    ref: percentile([...values].sort((a, b) => a - b), CONSISTENCY.referencePercentile),
-    n: values.length,
-  });
-  return new Map(
-    [...byKind].map(([k, l]) => [k, { resistance: ref(l.resistance), cardio: ref(l.cardio) }]),
-  );
+  const ref = (lane: keyof WorkTotals, k: string): LaneReference => {
+    const values = pools.get(`${lane}:${comparisonGroup(k, lane)}`) ?? [];
+    return {
+      ref: percentile([...values].sort((a, b) => a - b), CONSISTENCY.referencePercentile),
+      n: values.length,
+    };
+  };
+  return new Map([...kinds].map((k) => [k, { resistance: ref('resistance', k), cardio: ref('cardio', k) }]));
+}
+
+const LANES = ['resistance', 'cardio'] as const;
+
+/** Which sessions a kind's lane is compared with: its CONSISTENCY group, else itself. */
+export function comparisonGroup(kind: string, lane: keyof WorkTotals): string {
+  return CONSISTENCY.groups[lane][kind] ?? kind;
 }
 
 /**

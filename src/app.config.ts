@@ -839,6 +839,14 @@ export const WORK = {
   // constants `unweightedRepKg` falls back through, so the two models disagree
   // about nothing when the row is missing.
   fallbackBodyWeightKg: VOLUME.unweightedRepKg / VOLUME.bodyweightFraction,
+  // Which LANE a set's work lands in follows the BLOCK it was logged in, not
+  // its metric: a snatch in a conditioning block is conditioning, a farmer
+  // carry in an accessory block is lifting. The metric still picks the FORMULA
+  // (reps or distance). Warm-up and cooldown are not in either list: they only
+  // count at all for a session that is nothing but prep, and then the metric
+  // decides, as it always did.
+  liftingSections: ['primary', 'secondary', 'accessory'],
+  cardioSections: ['conditioning'],
 } as const;
 
 // Endurance blends aerobic work, dense strength work and heart-rate spread
@@ -867,9 +875,22 @@ export const ENDURANCE = {
 // with fewer than `minSessions` sessions draws dotted ("building baseline")
 // instead of a fill that would mean nothing: against 2 sessions, everything is
 // big.
+//
+// `groups` widens the comparison where tags do the same kind of work, per lane.
+// Lifting: Hyrox and Crossfit lift alike (3-6.5k kg.m a session) and both well
+// below a strength day (median 5.4k, 90th 7.7k), so they share a group and
+// strength keeps its own — pooled with strength, every Hyrox day would read as
+// a light strength day. Conditioning: the three use the same tools (sled,
+// carries, ergs) and land in the same range, so they share one group, which
+// also means 13 sessions set the reference instead of 2-7. A tag not listed is
+// its own group; endurance stays out on purpose (rides and runs are 25-68k).
 export const CONSISTENCY = {
   referencePercentile: 0.9,
   minSessions: 5,
+  groups: {
+    resistance: { hyrox: 'hyrox+crossfit', crossfit: 'hyrox+crossfit' },
+    cardio: { strength: 'gym-conditioning', hyrox: 'gym-conditioning', crossfit: 'gym-conditioning' },
+  } as Record<'resistance' | 'cardio', Record<string, string>>,
 } as const;
 
 // The tap/hover detail on Stats. It wraps rather than running off-screen: a
