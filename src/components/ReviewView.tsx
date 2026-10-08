@@ -21,8 +21,9 @@ import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { PlanAdherenceSection } from '@/components/PlanAdherence';
+import { EyeGlyph, PlusGlyph } from '@/components/ui/icons';
 
-// /app/review — a look back over one period: all time, the last 13 weeks, or
+// /app/plan (the Training ribbon's Plan tab) and /app/review — a look back over one period: all time, the last 13 weeks, or
 // one plan's life. Everything on it is measured by lib/review.ts from the logs;
 // each section is one headline over one chart, and nothing here is prose that a
 // number does not back.
@@ -64,7 +65,7 @@ export default function ReviewView() {
     { key: 'review:data' },
   );
 
-  const [kind, setKind] = useState<ReviewPeriod['kind']>('all');
+  const [kind, setKind] = useState<ReviewPeriod['kind']>('plan');
   const [planId, setPlanId] = useState<string | null>(null);
 
   // Newest plan first; the picker defaults to the most recent one.
@@ -87,10 +88,13 @@ export default function ReviewView() {
   return (
     <PageStagger className="mx-auto max-w-3xl px-4 pb-10 pt-5 sm:px-6">
       <Item>
-        <a href="/app/plan" className="mb-1 flex min-h-11 w-fit items-center t-control text-muted hover:text-fg">
-          ← Plan
-        </a>
-        <EchoText text="REVIEW" as="h1" className={`mb-4 ${ECHO_APP_TITLE}`} />
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <EchoText text="REVIEW" as="h1" className={`min-w-0 ${ECHO_APP_TITLE}`} />
+          <div className="flex shrink-0 gap-1">
+            <HeroAction href="/app/plan/view" label="View plan" glyph={<EyeGlyph className="h-5 w-5" />} />
+            <HeroAction href="/app/plan/upload" label="Add plan" glyph={<PlusGlyph className="h-5 w-5" />} />
+          </div>
+        </div>
       </Item>
 
       <Item>
@@ -127,6 +131,18 @@ export default function ReviewView() {
         </Item>
       )}
     </PageStagger>
+  );
+}
+
+function HeroAction({ href, label, glyph }: { href: string; label: string; glyph: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      className="flex min-h-11 min-w-14 flex-col items-center justify-center gap-1 px-1 text-muted transition-colors hover:text-fg"
+    >
+      {glyph}
+      <span className="t-label">{label}</span>
+    </a>
   );
 }
 

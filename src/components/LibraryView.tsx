@@ -339,7 +339,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
     <>
     <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
       <Item>
-        <div className="mb-6 flex items-end justify-between gap-4">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
           <EchoText
             text="LIBRARY"
             as="h1"

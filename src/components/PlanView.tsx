@@ -67,7 +67,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
         {showcase ? null : (
           <div className="mt-4">
             <a
-                  href="/app/review"
+                  href="/app/plan"
                   className="hill-btn flex min-h-11 items-center justify-between border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg"
                 >
                   Review past training
@@ -493,7 +493,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
         <Item>
           {/* Every plan's history, not just this one — see ReviewView. */}
           <a
-                href="/app/review"
+                href="/app/plan"
                 className="hill-btn flex min-h-11 items-center justify-between border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg"
               >
                 Review past training
