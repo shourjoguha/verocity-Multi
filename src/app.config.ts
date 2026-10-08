@@ -861,7 +861,7 @@ export const ENDURANCE = {
 } as const;
 
 // Mobile-PWA touch model tunables (SPEC §9 cross-cutting).
-// The consistency grid's capsule (lib/work.ts). Each lane of a session is
+// The consistency grid's bars (lib/work.ts). Each lane of a session is
 // scored against that tag's `referencePercentile` session of the same lane, all
 // time — "full" means better than 90% of your own sessions with that tag. A lane
 // with fewer than `minSessions` sessions draws dotted ("building baseline")
