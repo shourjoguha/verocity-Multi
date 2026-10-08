@@ -579,13 +579,13 @@ p {
   box-shadow: var(--shadow-lift-rest); /* `none` */
 }
 
-/* Stats consistency capsule: a lane still "building baseline" (fewer than
+/* Stats consistency bars: a lane still "building baseline" (fewer than
    CONSISTENCY.minSessions to compare against) draws as a row of dots instead of
    a fill. Derived from --color-fg, so it follows both themes. */
 .capsule-baseline {
   background-image: radial-gradient(
     circle,
-    color-mix(in srgb, var(--color-fg) 55%, transparent) 0.75px,
+    color-mix(in srgb, var(--color-fg) 60%, transparent) 0.75px,
     transparent 1px
   );
   background-size: 3px 100%;

@@ -142,10 +142,10 @@ export function sessionWork(
 }
 
 /**
- * What a session is compared WITHIN for the consistency capsule: its first tag,
+ * What a session is compared WITHIN for the consistency bars: its first tag,
  * else its activity type. Across plans and across time — a strength session is
  * measured against strength sessions, a Hyrox one against Hyrox ones — so the
- * capsule answers "how big was this for what it was", not "how big against a
+ * bars answer "how big was this for what it was", not "how big against a
  * ride". Same key the grid's label already shows.
  */
 export function sessionKind(log: Pick<WorkoutLog, 'tags' | 'activity_type'>): string {
@@ -169,7 +169,7 @@ export function percentile(sorted: number[], q: number): number {
 }
 
 /**
- * Per-kind, per-lane references for the consistency capsule, over every
+ * Per-kind, per-lane references for the consistency bars, over every
  * finished session passed in (Stats passes all of them — all time).
  *
  * A lane's sample is only the sessions that DID that lane: a strength session
@@ -184,7 +184,7 @@ export function percentile(sorted: number[], q: number): number {
  * legal and was shipped on that reasoning; it is still wrong, because the lanes
  * have never been calibrated against each other: a 10 x 20m sled push is
  * ~18,000 against ~4,000 for the lifting around it, so a summed score is just a
- * sled meter. The capsule shows the two lanes side by side instead.
+ * sled meter. The grid shows the two lanes as two bars instead.
  */
 export function workReferencesByKind(
   logs: WorkoutLog[],
@@ -210,7 +210,7 @@ export function workReferencesByKind(
 }
 
 /**
- * One lane of one session, for the capsule:
+ * One lane of one session, for the consistency bars:
  *   none      the session did none of it — that half is not drawn at all;
  *   baseline  it did, but the kind has fewer than CONSISTENCY.minSessions
  *             sessions of that lane to compare against (`n` so far);

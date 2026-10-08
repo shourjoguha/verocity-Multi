@@ -61,7 +61,7 @@ function workLabel(work: WorkTotals): string {
   return parts.length > 0 ? `${parts.join(' · ')} ${WORK_UNIT}` : 'no work logged';
 }
 
-// The capsule's two halves, in the tap detail. A lane the day did not do is
+// The two bars, in the tap detail. A lane the day did not do is
 // left out, like the half that is not drawn.
 function laneLabel(lift: LaneScore, cardio: LaneScore): string | null {
   // Both halves still building: one phrase, not the same caveat twice.
@@ -83,28 +83,38 @@ function laneLabel(lift: LaneScore, cardio: LaneScore): string | null {
   return parts.length > 0 ? `vs usual best: ${parts.join(' · ')}` : null;
 }
 
-// Lifting and cardio side by side in one inset capsule. A lane the day did not
-// do takes no slot, so a pure lifting day gets the full width rather than half
-// a capsule that reads as "you skipped something". Dotted = building baseline.
-function Capsule({ lift, cardio }: { lift: LaneScore; cardio: LaneScore }) {
-  const halves = (
+// Lifting on top, cardio below, as two stacked bars on a small PLATE in the
+// page colour. The plate is the point: bars drawn straight onto the activity
+// colour (the capsule this replaced) had their contrast set by the hue, so on
+// dark green, purple and blue fill and track read alike, and side-by-side
+// halves looked like one bar. On the plate, ink fill and 20% ink track sit on
+// the same background for every activity and flip with the theme. A lane the
+// day did not do is not drawn; dotted = building baseline.
+function WorkBars({ lift, cardio }: { lift: LaneScore; cardio: LaneScore }) {
+  const bars = (
     [
-      ['lift', lift, 'bg-fg/80'],
-      ['cardio', cardio, 'bg-fg/40'],
+      ['lift', lift],
+      ['cardio', cardio],
     ] as const
   ).filter(([, s]) => s.kind !== 'none');
-  if (halves.length === 0) return null;
+  if (bars.length === 0) return null;
   return (
-    <span aria-hidden className="absolute inset-x-[5px] bottom-[5px] flex h-1 gap-px">
-      {halves.map(([key, s, fill], i) => (
+    <span
+      aria-hidden
+      className="absolute inset-x-1 bottom-1 flex flex-col gap-0.5 rounded-[3px] bg-bg/90 p-0.5"
+    >
+      {bars.map(([key, s]) => (
         <span
           key={key}
-          className={`flex-1 overflow-hidden ${i === 0 ? 'rounded-l-[2px]' : ''} ${
-            i === halves.length - 1 ? 'rounded-r-[2px]' : ''
-          } ${s.kind === 'baseline' ? 'capsule-baseline' : 'bg-bg/40'}`}
+          className={`block h-[3px] overflow-hidden rounded-full ${
+            s.kind === 'baseline' ? 'capsule-baseline' : 'bg-fg/20'
+          }`}
         >
           {s.kind === 'score' ? (
-            <span className={`block h-full ${fill}`} style={{ width: `${Math.round(s.value * 100)}%` }} />
+            <span
+              className="block h-full rounded-full bg-fg"
+              style={{ width: `${Math.round(s.value * 100)}%` }}
+            />
           ) : null}
         </span>
       ))}
@@ -291,7 +301,7 @@ function deriveStats(
   // band; a session tagged with several activities is still striped within its
   // own band.
   //
-  // The capsule along the bottom scores lifting and cardio SEPARATELY, each
+  // The bars along the bottom score lifting and cardio SEPARATELY, each
   // against your 90th-percentile session of that lane with the same tag
   // (`sessionKind`), over ALL your history (`history`, not the 120-day fetch).
   // It replaced one bar taking the higher of the two ratios against the tag's
@@ -466,7 +476,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // Bodyweight, for the ×BW multiples on the e1RM cards. Null in showcase mode
   // (no anon policy on user_stats) and null for anyone who has not filled it in,
   // in which case the multiple simply is not rendered.
-  // Every finished session, for the capsule's per-tag reference and the load
+  // Every finished session, for the bars' per-tag reference and the load
   // change "vs last time". All time on purpose: the 120-day fetch above held 27
   // of 42 strength sessions, and a reference should not drift as old ones age out.
   const { data: history, loading: historyLoading } = useAuthedQuery(() => getAllLogs(client), {
@@ -697,7 +707,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                     // The old `opacity: 0.3 + volume/dayMax * 0.7` folded amount
                     // into the hue's lightness, which is exactly what made two
                     // different activities hard to tell apart at low volume.
-                    // Volume moves to its own channel: the capsule along the
+                    // Volume moves to its own channel: the bars along the
                     // bottom edge, monochrome LENGTHS that cannot distort the
                     // colour above them. (Border-glow was the other candidate, but
                     // an inset box-shadow is a CLAUDE.md "never" in a component.)
@@ -726,7 +736,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                             );
                           })}
                         </span>
-                        <Capsule lift={cell.lift} cardio={cell.cardio} />
+                        <WorkBars lift={cell.lift} cardio={cell.cardio} />
                       </div>
                     );
                   })}
@@ -734,8 +744,8 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               ))}
             </div>
             <p className="mt-2 text-[0.65rem] text-muted">
-              Colored by activity · striped = several activities. Capsule: lifting (solid) and
-              cardio (faint) vs your usual best for that tag, your{' '}
+              Colored by activity · striped = several activities. Bars: lifting on top, cardio
+              below, vs your usual best for that tag, your{' '}
               {Math.round(CONSISTENCY.referencePercentile * 100)}th percentile all time; dotted
               until there are {CONSISTENCY.minSessions} to compare. Tap a day for detail.
             </p>
