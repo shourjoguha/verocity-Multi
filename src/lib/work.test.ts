@@ -8,6 +8,7 @@ import {
   mergeLane,
   percentile,
   workReferencesByKind,
+  comparisonGroup,
   type WorkTotals,
 } from '@/lib/work';
 import { classifyMovement } from '@/lib/movementTaxonomy';
@@ -160,10 +161,9 @@ describe('the cardio lane', () => {
     const cals = work('Row Erg Intervals', set({ calories: 20 })).cardio;
     const metres = work('Row Erg Intervals', set({ distance: 20 * 15 })).cardio;
     expect(cals).toBeCloseTo(metres, 4);
-    // Ski buys less distance per calorie than row.
-    expect(work('Ski Erg Intervals', set({ calories: 20 })).cardio).toBeLessThan(
-      work('Ski Erg Intervals', set({ distance: 20 * 15 })).cardio,
-    );
+    // A calorie is a calorie: the machine's calorie already accounts for the
+    // smaller working mass, so a ski calorie and a rowed one price the same.
+    expect(work('Ski Erg Intervals', set({ calories: 20 })).cardio).toBeCloseTo(cals, 4);
   });
 
   it('routes every bike name to cycling, not to the running profile', () => {
@@ -229,10 +229,15 @@ describe('sessionWork', () => {
     const w = sessionWork(
       log([
         {
-          key: 'conditioning',
+          key: 'primary',
           items: [
             item('Pull-up', 'reps', [set({ reps: 30 })]),
             item('Dips', 'reps', [set({ reps: 30 })]),
+          ],
+        },
+        {
+          key: 'conditioning',
+          items: [
             item('Ski Erg Intervals', 'cal', [set({ calories: 60 })]),
             item('Run', 'distance', [set({ distance: 4000 })]),
           ],
@@ -352,5 +357,63 @@ describe('consistency capsule scoring', () => {
     expect(mergeLane(base, lo)).toBe(lo);
     expect(mergeLane(lo, hi)).toBe(hi);
     expect(mergeLane(none, none)).toEqual(none);
+  });
+});
+
+// Lanes follow the BLOCK, formulas follow the METRIC (WORK.liftingSections /
+// cardioSections). A snatch in a conditioning block is conditioning; a farmer
+// carry in an accessory block is lifting.
+describe('sessionWork books work to the block it was logged in', () => {
+  const snatch = item('Dumbbell Snatch', 'reps', [set({ weight: 16, reps: 10 })]);
+  const carry = item('Farmer carry', 'distance', [set({ weight: 48, distance: 50 })]);
+
+  it('counts rep work in a conditioning block as cardio, priced as reps', () => {
+    const inCond = sessionWork(log([{ key: 'conditioning', items: [snatch] }]), BW);
+    const inMain = sessionWork(log([{ key: 'accessory', items: [snatch] }]), BW);
+    expect(inCond).toEqual({ resistance: 0, cardio: inMain.resistance });
+  });
+
+  it('counts distance work in a lifting block as lifting, priced as distance', () => {
+    const inMain = sessionWork(log([{ key: 'accessory', items: [carry] }]), BW);
+    const inCond = sessionWork(log([{ key: 'conditioning', items: [carry] }]), BW);
+    expect(inMain).toEqual({ resistance: inCond.cardio, cardio: 0 });
+  });
+
+  it('lets the metric decide for a session that is nothing but prep', () => {
+    const w = sessionWork(log([{ key: 'cooldown', items: [snatch, carry] }]), BW);
+    expect(w.resistance).toBeGreaterThan(0);
+    expect(w.cardio).toBeGreaterThan(0);
+  });
+});
+
+describe('comparison groups', () => {
+  const kinded = (id: string, tag: string, sections: { key: SectionKey; items: LogItem[] }[]) =>
+    ({ ...log(sections), id, tags: [tag], activity_type: null }) as WorkoutLog;
+  const lift = (kg: number) => [{ key: 'primary' as SectionKey, items: [item('Back Squat', 'reps', [set({ weight: kg, reps: 5 })])] }];
+  const cond = (m: number) => [{ key: 'conditioning' as SectionKey, items: [item('Sled push', 'distance', [set({ weight: 100, distance: m })])] }];
+
+  it('maps Hyrox and Crossfit lifting together, and gym conditioning together', () => {
+    expect(comparisonGroup('hyrox', 'resistance')).toBe(comparisonGroup('crossfit', 'resistance'));
+    expect(comparisonGroup('strength', 'resistance')).not.toBe(comparisonGroup('hyrox', 'resistance'));
+    expect(comparisonGroup('strength', 'cardio')).toBe(comparisonGroup('hyrox', 'cardio'));
+    expect(comparisonGroup('crossfit', 'cardio')).toBe(comparisonGroup('hyrox', 'cardio'));
+    expect(comparisonGroup('endurance', 'cardio')).toBe('endurance');
+  });
+
+  it('pools samples so a thin tag is scored by its group', () => {
+    const logs = [
+      ...[1, 2, 3].map((i) => kinded(`h${i}`, 'hyrox', [...lift(60 + i * 10), ...cond(20 * i)])),
+      ...[1, 2].map((i) => kinded(`c${i}`, 'crossfit', [...lift(70 + i * 10), ...cond(20)])),
+      ...[1, 2, 3, 4, 5, 6].map((i) => kinded(`s${i}`, 'strength', lift(100 + i * 10))),
+    ];
+    const refs = workReferencesByKind(logs, BW);
+    // Crossfit alone has 2 sessions; with Hyrox its lifting group has 5.
+    expect(refs.get('crossfit')?.resistance.n).toBe(5);
+    expect(refs.get('crossfit')?.resistance).toEqual(refs.get('hyrox')?.resistance);
+    // Strength lifting stays its own 6.
+    expect(refs.get('strength')?.resistance.n).toBe(6);
+    // Conditioning pools all three: 5 sessions did any.
+    expect(refs.get('strength')?.cardio).toEqual(refs.get('crossfit')?.cardio);
+    expect(refs.get('hyrox')?.cardio.n).toBe(5);
   });
 });

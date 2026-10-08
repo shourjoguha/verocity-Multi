@@ -744,8 +744,8 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               ))}
             </div>
             <p className="mt-2 text-[0.65rem] text-muted">
-              Colored by activity · striped = several activities. Bars: lifting on top, cardio
-              below, vs your usual best for that tag, your{' '}
+              Colored by activity · striped = several activities. Bars: lifting blocks on top,
+              conditioning blocks below, vs your usual best for that kind of session, your{' '}
               {Math.round(CONSISTENCY.referencePercentile * 100)}th percentile all time; dotted
               until there are {CONSISTENCY.minSessions} to compare. Tap a day for detail.
             </p>
