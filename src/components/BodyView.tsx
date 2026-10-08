@@ -20,6 +20,7 @@ import {
   MUSCLE_REGION_KEYS,
   PLANE_KEYS,
   ROTARY_ROLES,
+  type ModalityKey,
   type MovementProfile,
   type RegionKey,
   type BodyLensKey,
@@ -27,13 +28,7 @@ import {
 import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { TaxonomyEditor } from '@/components/TaxonomyEditor';
 import { formatRound } from '@/lib/format';
-import {
-  Card,
-  EmptyState,
-  LoadingScreen,
-  SectionHeader,
-  StackedBar,
-} from '@/components/ui/primitives';
+import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
@@ -41,9 +36,10 @@ import { BodyMap } from '@/components/BodyMap';
 import { EASE, Item, PageStagger } from '@/components/anim';
 
 const WINDOWS = [
-  { key: '4w', label: '4 weeks', days: 28 },
-  { key: '8w', label: '8 weeks', days: 56 },
-  { key: '26w', label: '6 months', days: 182 },
+  { key: '4w', label: '4W', days: 28 },
+  { key: '8w', label: '8W', days: 56 },
+  { key: '13w', label: '3M', days: 91 },
+  { key: '26w', label: '6M', days: 182 },
 ] as const;
 
 type WindowKey = (typeof WINDOWS)[number]['key'];
@@ -302,62 +298,56 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     })),
   );
 
-  // Modality as one stacked bar. Zero-minute modalities are dropped rather than
-  // rendered as slivers, and the opacity ramp is what distinguishes them —
-  // the identity is monochrome, so this is a tone ladder, not a palette.
+  // How you trained, grouped by LENS: the bar is the lens control. The lenses
+  // partition the modalities (BODY_LENSES), so the three shares are the old
+  // five-way split regrouped, and the sub-line under the bar keeps the
+  // within-lens split (plyometric and isometric inside Strength). Order is the
+  // tab order, not size order, so each segment sits over its own tab.
   const modalityTotal = MODALITY_KEYS.reduce((a, k) => a + summary.modalityMinutes[k], 0);
-  const modalitySegments = MODALITY_KEYS.filter((k) => summary.modalityMinutes[k] > 0)
-    .sort((a, b) => summary.modalityMinutes[b] - summary.modalityMinutes[a])
-    .map((k, i, arr) => ({
-      name: MOVEMENT_MODALITIES[k].label,
-      pct: Math.round((summary.modalityMinutes[k] / modalityTotal) * 100),
-      color: `color-mix(in srgb, var(--color-fg) ${Math.round(
-        100 - (i / Math.max(1, arr.length)) * 65,
+  const pctOf = (min: number) => (modalityTotal > 0 ? Math.round((min / modalityTotal) * 100) : 0);
+  const lensGroups = BODY_LENS_KEYS.map((k, i) => {
+    const mods = BODY_LENSES[k].modalities as readonly ModalityKey[];
+    return {
+      key: k,
+      label: BODY_LENSES[k].label,
+      minutes: mods.reduce((a, m) => a + summary.modalityMinutes[m], 0),
+      parts: mods
+        .filter((m) => summary.modalityMinutes[m] > 0)
+        .sort((a, b) => summary.modalityMinutes[b] - summary.modalityMinutes[a])
+        .map((m) => `${MOVEMENT_MODALITIES[m].label} ${pctOf(summary.modalityMinutes[m])}%`),
+      tone: `color-mix(in srgb, var(--color-fg) ${Math.round(
+        100 - (i / BODY_LENS_KEYS.length) * 65,
       )}%, var(--color-elevated))`,
-    }));
+    };
+  });
+  const activeGroup = lensGroups.find((g) => g.key === lens)!;
+
+  const planeTotal = PLANE_KEYS.reduce((a, k) => a + summary.planeMinutes[k], 0);
+  const topPlane = [...PLANE_KEYS].sort((a, b) => summary.planeMinutes[b] - summary.planeMinutes[a])[0];
 
   return (
     <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
+      {/* The window and the totals it produces share the title row: the
+          minutes and sessions change with 4W/8W/3M/6M and with nothing else on
+          the page, so they sit under the control that moves them. */}
       <Item>
-        <div className="mb-6 flex items-end justify-between gap-4">
-          <EchoText
-            text="BODY"
-            as="h1"
-            className={ECHO_APP_TITLE}
-          />
-        </div>
-      </Item>
-
-      <Item>
-        <div className="mb-6">
-          <SegmentedTabs
-            tabs={WINDOWS.map((w) => ({ key: w.key, label: w.label }))}
-            active={windowKey}
-            onChange={(k) => setWindowKey(k as WindowKey)}
-            ariaLabel="Time window"
-          />
-          {/* Second control, not a merged one: the window asks "when" and the
-              lens asks "which kind of work". Both are single-select, so both are
-              SegmentedTabs rather than a sixth hand-rolled variant. */}
-          {/* The window/lens totals sit BETWEEN the two controls, because that
-              is what they belong to: the "when" above and the "which kind of
-              work" below both change this number. It used to be repeated in a
-              StatStrip below the figure, which said nothing the header did not. */}
-          {summary.totalMinutes > 0 ? (
-            <p className="t-label mt-2 text-muted">
-              {Math.round(summary.totalMinutes)} min · {summary.sessions}{' '}
-              {summary.sessions === 1 ? 'session' : 'sessions'} ·{' '}
-              {Math.round(summary.coverage * 100)}% mapped
-            </p>
-          ) : null}
-          <div className="mt-2">
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <EchoText text="BODY" as="h1" className={ECHO_APP_TITLE} />
+          <div className="flex shrink-0 flex-col items-end gap-1.5 pt-1">
             <SegmentedTabs
-              tabs={BODY_LENS_KEYS.map((k) => ({ key: k, label: BODY_LENSES[k].label }))}
-              active={lens}
-              onChange={(k) => setLens(k as BodyLensKey)}
-              ariaLabel="Kind of work"
+              tabs={WINDOWS.map((w) => ({ key: w.key, label: w.label }))}
+              active={windowKey}
+              onChange={(k) => setWindowKey(k as WindowKey)}
+              ariaLabel="Time window"
               size="sm"
+              className="w-[13rem]"
             />
+            {summary.totalMinutes > 0 ? (
+              <p className="t-label text-muted opacity-75 tabular-nums">
+                {Math.round(summary.totalMinutes)} min · {summary.sessions}{' '}
+                {summary.sessions === 1 ? 'session' : 'sessions'}
+              </p>
+            ) : null}
           </div>
         </div>
       </Item>
@@ -366,163 +356,139 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
         <Item>
           <EmptyState>No completed sessions in this window.</EmptyState>
         </Item>
-      ) : lensTotal === 0 ? (
-        /* The window HAS work, this lens does not. Without its own message the
-           silhouette just renders cold and reads as broken rather than empty. */
-        <Item>
-          <EmptyState>
-            No {BODY_LENSES[lens].label.toLowerCase()} work logged in this window.
-          </EmptyState>
-        </Item>
       ) : (
         <>
-          {/* The figure IS the page. Its four busiest regions are annotated ON
-              it with their share, so the headline reading — where did the work
-              go — needs no list at all.
-
-              THE CALLOUTS ARE SIBLINGS OF <BodyMap>, NOT ANCESTORS OF THE
-              STAGE. BodyMap is a CSS-only 3D slab, and any grouping property
-              (overflow:hidden, opacity<1, filter, mask, clip-path,
-              contain:paint) on an element BETWEEN .bodymap-stage and the faces
-              flattens it silently. This wrapper sits above the stage and adds
-              only `position: relative`, which is not a grouping property. Do
-              not move these inside, and do not add overflow-hidden here. */}
+          {/* One card, read top to bottom: how the window split by kind of
+              work — which IS the lens control — then the figure for the chosen
+              lens, then the detail on request. The bar used to sit apart from
+              a second Strength/Cardio/Mobility tab row that grouped the same
+              modalities; two widgets for one split, only one of them live. */}
           <Item>
-            <section className="mb-6">
-              <SectionHeader>Where the work went</SectionHeader>
-              <div className="lift border border-border bg-surface p-4">
-                <div className="relative">
-                  <BodyMap
-                    intensity={intensity}
-                    systemic={systemicShare}
-                    face={face}
-                    onFaceChange={setFace}
-                    selected={selected}
-                  />
-                  {callouts.map((c) => (
-                    <div
-                      key={c.key}
-                      className={`pointer-events-none absolute max-w-[5.5rem] ${
-                        c.side === 'left' ? 'left-0 text-right' : 'right-0 text-left'
-                      }`}
-                      style={{ top: `${c.top}%` }}
-                    >
-                      <div className="t-label leading-tight text-muted">{c.label}</div>
-                      <div className="font-display text-sm leading-tight tabular-nums text-fg">
-                        {c.pct}%
-                      </div>
+            <section className="lift mb-6 border border-border bg-surface">
+              <div className="p-3">
+                <h2 className="t-label mb-2 text-muted">How you trained</h2>
+                <div
+                  className="mb-2 flex h-2.5 gap-[2px] overflow-hidden rounded-[2px]"
+                  role="img"
+                  aria-label={lensGroups.map((g) => `${g.label} ${pctOf(g.minutes)}%`).join(', ')}
+                >
+                  {lensGroups
+                    .filter((g) => g.minutes > 0)
+                    .map((g) => (
                       <div
-                        className={`mt-1 h-px w-6 bg-border ${c.side === 'left' ? 'ml-auto' : ''}`}
+                        key={g.key}
+                        className="min-w-[3px] transition-opacity"
+                        style={{
+                          flexGrow: g.minutes,
+                          backgroundColor: g.tone,
+                          opacity: g.key === lens ? 1 : 0.35,
+                        }}
                       />
-                    </div>
-                  ))}
+                    ))}
                 </div>
-                <p className="mt-3 text-center t-control text-muted">
-                  Drag to turn · {Math.round(systemicShare * 100)}% full-body
-                </p>
+                <SegmentedTabs
+                  tabs={lensGroups.map((g) => ({
+                    key: g.key,
+                    label: `${g.label} ${pctOf(g.minutes)}%`,
+                  }))}
+                  active={lens}
+                  onChange={(k) => setLens(k as BodyLensKey)}
+                  ariaLabel="Kind of work"
+                  size="sm"
+                />
+                {activeGroup.parts.length > 0 ? (
+                  <p className="mt-2 text-xs text-muted tabular-nums">
+                    {activeGroup.parts.join(' · ')}
+                  </p>
+                ) : null}
               </div>
-            </section>
-          </Item>
 
-          {/* Top three, then the rest on request. Region selection lives on
-              these ROWS, not on the SVG paths: a 12px calf path as a
-              role="button" would fail the 44px tap-target audit, and a row
-              gives screen readers real text. */}
-          <Item>
-            <section className="mb-6">
-              <SectionHeader>Most worked</SectionHeader>
-              <ul className="flex flex-col gap-px bg-border">
-                {worked.slice(0, 3).map((r) => (
-                  <RegionRow
-                    key={r.key}
-                    row={r}
-                    currency={currency}
-                    selected={selected === r.key}
-                    onSelect={() => setSelected(selected === r.key ? null : r.key)}
-                  />
-                ))}
-              </ul>
-              {worked.length > 3 ? (
-                <div className="mt-3">
-                  <Disclosure title={`All ${worked.length} regions`}>
-                    <div className="mb-3">
-                      <SegmentedTabs
-                        tabs={CURRENCIES.map((c) => ({ key: c.key, label: c.label }))}
-                        active={currency}
-                        onChange={(k) => setCurrency(k as BodyCurrency)}
-                        ariaLabel="Measure regions by"
-                        size="sm"
-                      />
-                    </div>
-                    <ul className="flex flex-col gap-px bg-border">
-                      {worked.map((r) => (
-                        <RegionRow
-                          key={r.key}
-                          row={r}
-                          currency={currency}
-                          selected={selected === r.key}
-                          onSelect={() => setSelected(selected === r.key ? null : r.key)}
+              {/* THE CALLOUTS ARE SIBLINGS OF <BodyMap>, NOT ANCESTORS OF THE
+                  STAGE. BodyMap is a CSS-only 3D slab, and any grouping
+                  property (overflow:hidden, opacity<1, filter, mask,
+                  clip-path, contain:paint) on an element BETWEEN
+                  .bodymap-stage and the faces flattens it silently. This
+                  wrapper adds only `position: relative`. Do not move these
+                  inside, and do not add overflow-hidden here or on the card. */}
+              <div className="border-t border-border-soft px-3 pb-2 pt-4">
+                {lensTotal === 0 ? (
+                  /* The window HAS work, this lens does not. Without its own
+                     message the silhouette just renders cold and reads as
+                     broken rather than empty. */
+                  <p className="py-8 text-center text-sm text-muted">
+                    No {BODY_LENSES[lens].label.toLowerCase()} work logged in this window.
+                  </p>
+                ) : (
+                  <div className="relative">
+                    <BodyMap
+                      intensity={intensity}
+                      systemic={systemicShare}
+                      face={face}
+                      onFaceChange={setFace}
+                      selected={selected}
+                    />
+                    {callouts.map((c) => (
+                      <div
+                        key={c.key}
+                        className={`pointer-events-none absolute max-w-[5.5rem] ${
+                          c.side === 'left' ? 'left-0 text-right' : 'right-0 text-left'
+                        }`}
+                        style={{ top: `${c.top}%` }}
+                      >
+                        <div className="t-label leading-tight text-muted">{c.label}</div>
+                        <div className="font-display text-sm leading-tight tabular-nums text-fg">
+                          {c.pct}%
+                        </div>
+                        <div
+                          className={`mt-1 h-px w-6 bg-border ${c.side === 'left' ? 'ml-auto' : ''}`}
                         />
-                      ))}
-                    </ul>
-                    <p className="mt-2 text-[0.7rem] text-muted">
-                      {currency === 'minutes'
-                        ? 'Working minutes — how long each region was under work.'
-                        : 'Scaled volume — load × reps × range of motion, with unloaded work priced against your bodyweight. A relative index, not kilograms.'}
-                    </p>
-                  </Disclosure>
-                </div>
-              ) : null}
-            </section>
-          </Item>
-
-          {/* Eleven separate meters became one bar. The comparison the numbers
-              existed to make is the proportion, and a stacked bar IS that
-              comparison. */}
-          <Item>
-            <section className="mb-6">
-              <SectionHeader>How you trained</SectionHeader>
-              <div className="lift border border-border bg-surface p-4">
-                <StackedBar segments={modalitySegments} />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </section>
-          </Item>
 
-          {/* Collapsed, not removed: plane of motion, the within-transverse
-              split and the unmapped list with its Map buttons all keep their
-              current behaviour one tap away. */}
-          <Item>
-            <Disclosure title="More detail">
-            <section className="mb-6">
-              <SectionHeader>Plane of motion</SectionHeader>
-              <ShareBar
-                rows={PLANE_KEYS.map((k) => ({
-                  key: k,
-                  label: MOVEMENT_PLANES[k].label,
-                  value: summary.planeMinutes[k],
-                }))}
-              />
-              {rotaryTotal > 0 ? (
-                <div className="mt-4">
-                  <div className="t-label mb-2 text-muted">Within transverse</div>
+              {planeTotal > 0 ? (
+                <Disclosure
+                  variant="row"
+                  title="Plane of motion"
+                  headerRight={`${MOVEMENT_PLANES[topPlane].label} ${Math.round(
+                    (summary.planeMinutes[topPlane] / planeTotal) * 100,
+                  )}%`}
+                >
                   <ShareBar
-                    rows={(['rotational', 'antiRotational'] as const).map((k) => ({
+                    rows={PLANE_KEYS.map((k) => ({
                       key: k,
-                      label: ROTARY_ROLES[k].label,
-                      value: summary.rotaryMinutes[k],
+                      label: MOVEMENT_PLANES[k].label,
+                      value: summary.planeMinutes[k],
                     }))}
                   />
-                </div>
+                  {rotaryTotal > 0 ? (
+                    <div className="mt-4">
+                      <div className="t-label mb-2 text-muted">Within transverse</div>
+                      <ShareBar
+                        rows={(['rotational', 'antiRotational'] as const).map((k) => ({
+                          key: k,
+                          label: ROTARY_ROLES[k].label,
+                          value: summary.rotaryMinutes[k],
+                        }))}
+                      />
+                    </div>
+                  ) : null}
+                </Disclosure>
               ) : null}
-            </section>
 
-          {summary.unmapped.length > 0 ? (
-              <section>
-                <SectionHeader>Unmapped ({summary.unmapped.length})</SectionHeader>
-                <Card>
-                  <ul className="divide-y divide-border">
+              {/* Only when there is something to map. Its header carries the
+                  coverage, which used to sit in the meta line for everyone. */}
+              {summary.unmapped.length > 0 ? (
+                <Disclosure
+                  variant="row"
+                  title={`Unmapped (${summary.unmapped.length})`}
+                  headerRight={`${Math.round(summary.coverage * 100)}% mapped`}
+                >
+                  <ul className="-mx-3 divide-y divide-border-soft">
                     {summary.unmapped.map((u) => (
-                      <li key={u.name} className="flex items-center gap-3 px-4 py-2 text-sm">
+                      <li key={u.name} className="flex items-center gap-3 px-3 py-1 text-sm">
                         <span className="min-w-0 flex-1 truncate text-fg">{u.name}</span>
                         <span className="shrink-0 tabular-nums text-muted">
                           {u.sessions} {u.sessions === 1 ? 'session' : 'sessions'}
@@ -540,15 +506,76 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                       </li>
                     ))}
                   </ul>
-                </Card>
-                <p className="mt-2 t-control text-muted">
-                  These names could not be classified — often a name that lost its tail on
-                  import. Mapping one adds it to your Library.
-                </p>
-              </section>
-          ) : null}
-            </Disclosure>
+                  <p className="mt-2 t-control text-muted">
+                    These names could not be classified — often a name that lost its tail on
+                    import. Mapping one adds it to your Library.
+                  </p>
+                </Disclosure>
+              ) : null}
+            </section>
           </Item>
+
+          {/* Top three, then the rest in the same card. Region selection lives
+              on these ROWS, not on the SVG paths: a 12px calf path as a
+              role="button" would fail the 44px tap-target audit, and a row
+              gives screen readers real text. The currency toggle sits in the
+              header because it changes the top three too, not only the list
+              it used to be hidden inside. */}
+          {worked.length > 0 && lensTotal > 0 ? (
+            <Item>
+              <section className="mb-6">
+                <SectionHeader
+                  action={
+                    <SegmentedTabs
+                      tabs={CURRENCIES.map((c) => ({ key: c.key, label: c.label }))}
+                      active={currency}
+                      onChange={(k) => setCurrency(k as BodyCurrency)}
+                      ariaLabel="Measure regions by"
+                      size="compact"
+                      as="radiogroup"
+                      className="w-40"
+                    />
+                  }
+                >
+                  Most worked
+                </SectionHeader>
+                <div className="lift overflow-hidden border border-border bg-surface">
+                  <ul className="flex flex-col gap-px bg-border-soft">
+                    {worked.slice(0, 3).map((r) => (
+                      <RegionRow
+                        key={r.key}
+                        row={r}
+                        currency={currency}
+                        selected={selected === r.key}
+                        onSelect={() => setSelected(selected === r.key ? null : r.key)}
+                      />
+                    ))}
+                  </ul>
+                  {worked.length > 3 ? (
+                    <Disclosure variant="row" title={`Show all ${worked.length}`}>
+                      <ul className="-mx-3 -mb-3 flex flex-col gap-px bg-border-soft">
+                        {worked.slice(3).map((r) => (
+                          <RegionRow
+                            key={r.key}
+                            row={r}
+                            currency={currency}
+                            selected={selected === r.key}
+                            onSelect={() => setSelected(selected === r.key ? null : r.key)}
+                          />
+                        ))}
+                      </ul>
+                    </Disclosure>
+                  ) : null}
+                </div>
+                {currency === 'volume' ? (
+                  <p className="mt-2 text-[0.7rem] text-muted">
+                    Scaled volume — load × reps × range of motion, with unloaded work priced
+                    against your bodyweight. A relative index, not kilograms.
+                  </p>
+                ) : null}
+              </section>
+            </Item>
+          ) : null}
         </>
       )}
 

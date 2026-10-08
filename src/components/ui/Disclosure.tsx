@@ -12,6 +12,7 @@ export function Disclosure({
   title,
   defaultOpen = false,
   headerRight,
+  variant = 'card',
   children,
 }: {
   // Set this to make the section addressable from elsewhere — You's summary
@@ -22,8 +23,34 @@ export function Disclosure({
   title: ReactNode;
   defaultOpen?: boolean;
   headerRight?: ReactNode;
+  // 'card' is a standalone section. 'row' is a "show more" line INSIDE a card
+  // that already has its own border: no box of its own, a soft divider above,
+  // label type rather than display type. A card-styled disclosure nested in a
+  // card read as a new section of the page, not as more of the one above it.
+  variant?: 'card' | 'row';
   children: ReactNode;
 }) {
+  if (variant === 'row') {
+    return (
+      <details id={id} className="disclosure group border-t border-border-soft" open={defaultOpen}>
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-3 text-muted outline-none hover:text-fg focus-visible:ring-1 focus-visible:ring-teal">
+          <span className="t-label flex-1">{title}</span>
+          {headerRight ? (
+            <span className="min-w-0 shrink truncate text-xs text-subtle tabular-nums">
+              {headerRight}
+            </span>
+          ) : null}
+          <span
+            aria-hidden
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center transition-transform duration-200 group-open:rotate-90"
+          >
+            ›
+          </span>
+        </summary>
+        <div className="px-3 pb-3">{children}</div>
+      </details>
+    );
+  }
   return (
     <details
       id={id}

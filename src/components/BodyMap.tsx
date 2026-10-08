@@ -9,7 +9,6 @@ import {
 } from '@/lib/bodyRegions';
 import { MUSCLE_REGIONS, MUSCLE_REGION_KEYS, type RegionKey } from '@/app.config';
 import { EASE } from '@/components/anim';
-import SegmentedTabs from '@/components/ui/SegmentedTabs';
 
 // Presentational only — no data loading, no query imports. See the CSS block
 // "Body map slab" in global.css for the 3D contract and the flattening trap.
@@ -261,19 +260,37 @@ export function BodyMap({
       </div>
 
       {/* The discrete control ships always: it is the keyboard path, the
-          screen-reader path, and the only path under reduced motion. */}
-      <div className="w-44">
-        <SegmentedTabs
-          tabs={[
-            { key: 'front', label: 'Front' },
-            { key: 'back', label: 'Back' },
-          ]}
-          active={face}
-          onChange={(k) => onFaceChange(k as BodyFace)}
-          ariaLabel="Body view"
-          size="sm"
-        />
-      </div>
+          screen-reader path, and the only path under reduced motion. Drawn as a
+          turntable — the floor shadow under the feet with an arrow riding its
+          rim — so it reads as part of the figure rather than a second control
+          row. The negative margin tucks it under the feet; the 44px hit box
+          stays whole. */}
+      <button
+        type="button"
+        onClick={() => onFaceChange(face === 'front' ? 'back' : 'front')}
+        aria-label={`Turn to the ${face === 'front' ? 'back' : 'front'}`}
+        className="-mt-7 flex min-h-11 w-36 flex-col items-center rounded-control text-muted outline-none transition-colors hover:text-fg focus-visible:ring-1 focus-visible:ring-teal"
+      >
+        <svg viewBox="0 0 132 30" className="h-[30px] w-[132px]" aria-hidden="true">
+          <ellipse cx="66" cy="12" rx="44" ry="8" fill="var(--color-fg)" fillOpacity={0.1} />
+          <path
+            d="M 26 14 A 40 10 0 0 0 100 19"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.4}
+            strokeLinecap="round"
+          />
+          <path
+            d="M 95 15.5 L 101 19 L 95 22.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="t-label leading-none">{face}</span>
+      </button>
     </div>
   );
 }
