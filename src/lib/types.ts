@@ -540,6 +540,12 @@ export interface LogSet {
   planned: string | null;
   actual: SetActual;
   notations: string[];
+  /** True on a set the athlete appended beyond the prescription (Add set, or
+   *  Copy to next off the end). `planned` is copied from the set before it, so
+   *  without this an extra set is indistinguishable from a prescribed one.
+   *  Absent on every set written before this field existed — absence does NOT
+   *  mean prescribed for those logs. */
+  added?: true;
 }
 
 export interface SetActual {

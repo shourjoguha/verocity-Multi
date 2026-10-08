@@ -82,6 +82,7 @@ export function addSet(doc: LogDocument, si: number, gi: number, ii: number): Lo
             prefilled: true,
           },
           notations: prev ? [...prev.notations] : [],
+          added: true,
         },
       ],
     };
