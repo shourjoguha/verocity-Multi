@@ -978,16 +978,26 @@ export const ASPECT_SCALE = { min: 1, max: 10 } as const;
 // Each length keeps its OWN baseline series (aspect_snapshots.window_days).
 // Scoring a 28-day reading against a distribution of 60-day readings would
 // silently skew every axis.
+//
+// Four steps because the window is the control people actually use — it is
+// the first thing on the card. Every length is backfilled and maintained
+// whichever is selected (useAspectProfile), so adding one costs a cold-start
+// rebuild of ASPECT_BACKFILL_WEEKS snapshots for it, once.
 export const ASPECT_WINDOWS = [
-  { key: 'recent', days: 28, label: 'Recent' },
-  { key: 'trend', days: 60, label: 'Trend' },
+  { key: '28d', days: 28, label: '28D' },
+  { key: '45d', days: 45, label: '45D' },
+  { key: '60d', days: 60, label: '60D' },
+  { key: '90d', days: 90, label: '90D' },
 ] as const;
 
-// Default window, and the basis of the Stats log fetch: it spans this window
-// plus the block before it, which also covers every shorter window in
-// ASPECT_WINDOWS for free. Never hardcode the number in a component — the legend
-// dates and the query bounds must move together.
+// The window selected on arrival. Never hardcode the number in a component.
 export const ASPECT_WINDOW_DAYS = 60;
+
+// The basis of the Stats log fetch: the LONGEST window plus the block before
+// it, so every window in ASPECT_WINDOWS (and its comparison) is covered by one
+// read and switching never refetches. The legend dates and the query bounds
+// must move together.
+export const ASPECT_READ_DAYS = Math.max(...ASPECT_WINDOWS.map((w) => w.days));
 
 // How far back the radar reads its baseline, in WEEKLY snapshots
 // (aspect_snapshots). Scores are RELATIVE: an axis is placed against the
@@ -1039,11 +1049,6 @@ export const ASPECT_GOOD_BASELINE = 26;
 // where the score has stopped carrying information and is only reporting "off
 // the top of your history".
 export const ASPECT_MAX_Z = 8;
-
-// A check-in speaks for itself while it is fresh. Past this many days before the
-// window end, the derived score takes back over rather than letting a months-old
-// self-rating masquerade as current.
-export const ASPECT_OVERRIDE_DAYS = 21;
 
 // Which definition of computeAspectMetrics is current. Stored on every snapshot
 // so a row written under an older definition can never enter a baseline: the

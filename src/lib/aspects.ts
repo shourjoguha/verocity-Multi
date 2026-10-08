@@ -23,7 +23,6 @@ import {
   ASPECT_GOOD_BASELINE,
   ASPECT_MAX_Z,
   ASPECT_MIN_BASELINE,
-  ASPECT_OVERRIDE_DAYS,
   ASPECT_SCALE,
   ASPECT_SOFTNESS,
   ASPECT_WINDOW_DAYS,
@@ -41,7 +40,6 @@ import type {
   AspectMetrics,
   AspectScores,
   AspectSnapshotInput,
-  FitnessAssessment,
   WorkoutLog,
 } from '@/lib/types';
 
@@ -484,33 +482,4 @@ export function buildBaselines(snapshots: { metrics: AspectMetrics }[]): AspectB
     }
   }
   return out;
-}
-
-/**
- * A check-in overrides the derived scores for the axes it rated — but only while
- * it is fresh. Past ASPECT_OVERRIDE_DAYS before the window end the derived score
- * takes back over, so a rating from four months ago stops presenting itself as
- * current. `assessments` must be newest-first (`taken_at desc`, as queried).
- */
-export function applyAssessmentOverride(
-  scoring: AspectScoring,
-  assessments: FitnessAssessment[],
-  endDate: string,
-  overrideDays: number = ASPECT_OVERRIDE_DAYS,
-): AspectScoring {
-  const rated = assessments.find((a) => a.taken_at.slice(0, 10) <= endDate);
-  if (!rated) return scoring;
-  if (daysBetween(rated.taken_at.slice(0, 10), endDate) > overrideDays) return scoring;
-
-  const scores = { ...scoring.scores };
-  const confidence = { ...scoring.confidence };
-  for (const aspect of FITNESS_ASPECTS) {
-    const key = aspect.key as AspectKey;
-    const value = rated.scores[key];
-    if (value == null) continue;
-    scores[key] = value;
-    // A rating the user typed is a statement, not an estimate from thin history.
-    confidence[key] = 'ok';
-  }
-  return { metrics: scoring.metrics, scores, confidence };
 }

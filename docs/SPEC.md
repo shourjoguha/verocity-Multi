@@ -207,11 +207,12 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
 - **`recommendations`** — coach output (status, drift_score, confidence, tldr,
   action, body_md, disposition fields, snooze fields…). **Kept in schema but
   unused until the AI phase.**
-- **`fitness_assessments`** — dated 1–10 self-ratings backing the Stats radar:
-  `owner_user_id, taken_at, scores jsonb (keyed by AspectKey), created_at`. A
-  rating overrides the derived score for the axes it names, and only for
-  `ASPECT_OVERRIDE_DAYS` — past that the derivation takes back over rather than
-  letting a months-old check-in read as current.
+- **`fitness_assessments`** — dated 1–10 self-ratings from the retired Stats
+  check-in: `owner_user_id, taken_at, scores jsonb (keyed by AspectKey),
+  created_at`. **Kept in schema, read by nothing.** Ratings used to override the
+  derived radar score; the check-in button was removed and, with it, the
+  override, since an override the user can no longer see or change is a number
+  with no source on screen.
 - **`aspect_snapshots`** — derived radar history: `owner_user_id, period_end,
   window_days, metrics_version, metrics jsonb, scores jsonb, computed_at,
   created_at`, unique on `(owner_user_id, period_end, window_days)`. One row per

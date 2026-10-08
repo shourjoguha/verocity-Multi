@@ -6,7 +6,6 @@ import {
   ASPECT_WINDOW_DAYS,
 } from '@/app.config';
 import {
-  applyAssessmentOverride,
   aspectWindows,
   baselinesFor,
   buildBaselines,
@@ -18,9 +17,8 @@ import {
   scoreAgainstBaseline,
   scoreAspects,
   windowEndingOn,
-  type AspectScoring,
 } from '@/lib/aspects';
-import type { FitnessAssessment, VibeCheck, WorkoutLog } from '@/lib/types';
+import type { VibeCheck, WorkoutLog } from '@/lib/types';
 
 const day = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
 const spanDays = (a: string, b: string) =>
@@ -657,51 +655,6 @@ describe('buildSnapshots', () => {
   it('produces rows that round-trip as snapshot input', () => {
     const [row] = buildSnapshots([log('2026-06-20', [{ movement: 'Back Squat', sets: squatSets(4) }])], ['2026-06-30']);
     expect(Object.keys(row).sort()).toEqual(['metrics', 'period_end', 'scores', 'window_days']);
-  });
-});
-
-describe('applyAssessmentOverride', () => {
-  const derived = (): AspectScoring => ({
-    metrics: { strength: 110, power: 5, recovery: 0.6 },
-    scores: { strength: 4, power: 4, recovery: 4 },
-    confidence: { strength: 'low', power: 'low', recovery: 'low' },
-  });
-  const assessment = (taken_at: string, scores: Record<string, number>): FitnessAssessment =>
-    ({ id: taken_at, owner_user_id: 'u', taken_at, scores, created_at: taken_at }) as FitnessAssessment;
-
-  it('lets a fresh check-in speak for the axes it rated', () => {
-    const out = applyAssessmentOverride(derived(), [assessment('2026-07-25', { strength: 9 })], END);
-    expect(out.scores.strength).toBe(9);
-    expect(out.scores.power).toBe(4); // unrated axis keeps the derived value
-    expect(out.confidence.strength).toBe('ok');
-  });
-
-  it('stops trusting a stale check-in', () => {
-    const out = applyAssessmentOverride(derived(), [assessment('2026-04-25', { strength: 9 })], END);
-    expect(out.scores.strength).toBe(4);
-    expect(out.confidence.strength).toBe('low');
-  });
-
-  it('ignores a check-in taken after the window end', () => {
-    const out = applyAssessmentOverride(
-      derived(),
-      [assessment('2026-08-20', { strength: 9 }), assessment('2026-07-28', { strength: 7 })],
-      END,
-    );
-    expect(out.scores.strength).toBe(7);
-  });
-
-  it('carries the raw metrics through untouched', () => {
-    // A rating changes what the axis SCORES, never what was measured — the
-    // snapshot history has to stay a record of the training, not the self-image.
-    const out = applyAssessmentOverride(derived(), [assessment('2026-07-29', { strength: 9 })], END);
-    expect(out.metrics).toEqual(derived().metrics);
-  });
-
-  it('does not mutate the scoring it was given', () => {
-    const input = derived();
-    applyAssessmentOverride(input, [assessment('2026-07-29', { strength: 9 })], END);
-    expect(input.scores.strength).toBe(4);
   });
 });
 

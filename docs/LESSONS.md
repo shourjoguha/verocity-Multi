@@ -1698,8 +1698,8 @@ The fitness radar:
   is only meaningful against a baseline, and the baseline is not in the logs.
 - **`power` and `mobility` are `auto: false`, so they only move on a check-in.**
   The `auto` flag no longer exists. Both derive from the taxonomy's
-  `plyometric` / `mobility` modality minutes; a check-in still overrides any
-  axis, but only for `ASPECT_OVERRIDE_DAYS`.
+  `plyometric` / `mobility` modality minutes. (Manual check-ins no longer
+  override any axis — the check-in was removed from Stats.)
 - **A thin baseline falls back to `ASPECT_ABSOLUTE_ANCHORS`.** Removed outright.
   Those six constants were invented reference values, and while an axis rested on
   one the chart still captioned itself "the middle ring is typical for you" — a
