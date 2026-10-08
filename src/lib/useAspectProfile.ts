@@ -3,9 +3,14 @@
 // This exists so the radar's logic stops being smeared across three files. It
 // used to live partly in StatsView (windows and legend labels), partly in
 // aspects.ts (scores) and partly in FitnessProfile (the manual-axis merge),
-// which is exactly how the override rule ended up letting a months-old check-in
-// present itself as current. aspects.ts holds the pure maths; this holds the
-// fetching and the write-back; FitnessProfile just draws what it is given.
+// which is how a months-old manual check-in once presented itself as current.
+// aspects.ts holds the pure maths; this holds the fetching and the write-back;
+// FitnessProfile just draws what it is given.
+//
+// Manual check-ins (fitness_assessments) are no longer read. They used to
+// override the derived score on the axes they rated; with the check-in button
+// gone, an override would be a number the user could neither see the source of
+// nor change. The table and its rows are untouched.
 //
 // It is called from StatsView's top level rather than from inside
 // FitnessProfile so its reads start on mount, in parallel with the log fetch.
@@ -18,13 +23,12 @@ import {
   ASPECT_BACKFILL_WEEKS,
   ASPECT_BASELINE_WEEKS,
   ASPECT_MIN_BASELINE,
+  ASPECT_READ_DAYS,
+  ASPECT_WINDOW_DAYS,
   ASPECT_WINDOWS,
-  FITNESS_ASPECTS,
-  type AspectKey,
   type AspectWindowKey,
 } from '@/app.config';
 import {
-  applyAssessmentOverride,
   aspectWindows,
   baselinesFor,
   buildSnapshots,
@@ -38,20 +42,13 @@ import {
 import { formatDate } from '@/lib/format';
 import {
   getAspectSnapshots,
-  getAssessments,
   getLogsInRange,
   getUserStats,
   upsertAspectSnapshots,
 } from '@/lib/queries';
 import { hrMaxFromAge, unweightedRepKg } from '@/lib/userStats';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
-import type {
-  AspectMetrics,
-  AspectScores,
-  AspectSnapshot,
-  FitnessAssessment,
-  WorkoutLog,
-} from '@/lib/types';
+import type { AspectMetrics, AspectSnapshot, WorkoutLog } from '@/lib/types';
 
 export interface AspectPeriod extends AspectScoring {
   /** Legend text, e.g. "Jun 1 – Jul 30". */
@@ -70,11 +67,6 @@ export interface AspectProfile {
   prior: AspectPeriod | null;
   /** The oldest stored snapshot, for a long-range comparison. */
   earliest: AspectPeriod | null;
-  /** Seeds the check-in sliders; integers on ASPECT_SCALE. */
-  suggestions: AspectScores;
-  latestAssessment: FitnessAssessment | null;
-  /** Fold a just-saved check-in in without waiting for a refetch. */
-  onAssessmentSaved: (a: FitnessAssessment) => void;
   /** Selected measurement window — the responsiveness control. */
   windowKey: AspectWindowKey;
   setWindowKey: (k: AspectWindowKey) => void;
@@ -90,6 +82,9 @@ const periodLabel = (w: { start: string; end: string }) =>
 const daysFor = (key: AspectWindowKey) =>
   ASPECT_WINDOWS.find((w) => w.key === key)?.days ?? ASPECT_WINDOWS[0].days;
 
+const DEFAULT_WINDOW: AspectWindowKey =
+  ASPECT_WINDOWS.find((w) => w.days === ASPECT_WINDOW_DAYS)?.key ?? ASPECT_WINDOWS[0].key;
+
 export function useAspectProfile({
   logs,
   today,
@@ -102,20 +97,16 @@ export function useAspectProfile({
   client: SupabaseClient;
 }): AspectProfile {
   const authed = mode === 'app';
-  const [windowKey, setWindowKey] = useState<AspectWindowKey>('trend');
+  const [windowKey, setWindowKey] = useState<AspectWindowKey>(DEFAULT_WINDOW);
   const windowDays = daysFor(windowKey);
   const windows = aspectWindows(today, windowDays);
   // Read span is anchored to the longest window so switching never refetches.
-  const readEnd = aspectWindows(today).current.end;
+  const readEnd = aspectWindows(today, ASPECT_READ_DAYS).current.end;
   const baselineFrom = windowEndingOn(readEnd, ASPECT_BASELINE_WEEKS * 7).start;
 
   const { data: fetchedSnapshots, loading: snapshotsLoading } = useAuthedQuery(
     () => getAspectSnapshots(baselineFrom, readEnd, client),
     { auth: authed, key: authed ? `aspects:snapshots:${ASPECT_BASELINE_WEEKS}w` : undefined },
-  );
-  const { data: assessments, loading: assessmentsLoading } = useAuthedQuery(
-    () => getAssessments(client),
-    { auth: authed, key: authed ? 'aspects:assessments' : undefined },
   );
   // Owner stats feed two metric inputs: bodyweight prices unweighted work, and
   // birth year supplies the HR ceiling. Not fetched in showcase mode —
@@ -139,11 +130,6 @@ export function useAspectProfile({
   // Snapshots written during this session, merged over what was fetched.
   const [written, setWritten] = useState<StoredSnapshot[]>([]);
   const [building, setBuilding] = useState(false);
-  // A check-in saved on this screen, folded in ahead of the fetched list (which
-  // is newest-first) so the radar reflects it without a round trip.
-  const [saved, setSaved] = useState<FitnessAssessment[]>([]);
-  const onAssessmentSaved = (a: FitnessAssessment) => setSaved((prev) => [a, ...prev]);
-  const allAssessments = [...saved, ...(assessments ?? [])];
 
   const stored: StoredSnapshot[] = [
     ...(fetchedSnapshots ?? []).map((s: AspectSnapshot) => ({
@@ -155,8 +141,8 @@ export function useAspectProfile({
   ];
 
   // Keep the stored history complete: reconstruct a cold start in one pass, or
-  // top up the weeks that have completed since the last visit. BOTH window
-  // lengths are maintained regardless of which is selected, so toggling is
+  // top up the weeks that have completed since the last visit. EVERY window
+  // length is maintained regardless of which is selected, so toggling is
   // instant and never scores a reading against the wrong series. Showcase is
   // strictly read-only — it renders someone else's profile under the anon role.
   useEffect(() => {
@@ -175,7 +161,7 @@ export function useAspectProfile({
 
     // The most recent completed weeks fall inside the logs Stats already
     // fetched; only a genuine cold start needs to reach further back.
-    const coveredFrom = aspectWindows(today).prior.start;
+    const coveredFrom = aspectWindows(today, ASPECT_READ_DAYS).prior.start;
     const needsFetch = work.some((w) =>
       w.missing.some((e) => windowEndingOn(e, w.days).start < coveredFrom),
     );
@@ -221,7 +207,7 @@ export function useAspectProfile({
   const baselineSamples = forWindow.length;
   const weeksUntilBaseline = Math.max(0, ASPECT_MIN_BASELINE - baselineSamples);
 
-  const loading = snapshotsLoading || assessmentsLoading || statsLoading || logs === null;
+  const loading = snapshotsLoading || statsLoading || logs === null;
   if (loading) {
     return {
       loading: true,
@@ -229,9 +215,6 @@ export function useAspectProfile({
       current: null,
       prior: null,
       earliest: null,
-      suggestions: {},
-      latestAssessment: null,
-      onAssessmentSaved,
       windowKey,
       setWindowKey,
       windowDays,
@@ -248,12 +231,7 @@ export function useAspectProfile({
       ...metricOpts,
     });
     if (Object.keys(metrics).length === 0) return null;
-    const scoring = applyAssessmentOverride(
-      scoreAspects(metrics, baselines),
-      allAssessments,
-      window.end,
-    );
-    return { label: periodLabel(window), ...scoring };
+    return { label: periodLabel(window), ...scoreAspects(metrics, baselines) };
   };
 
   const current = scored(windows.current);
@@ -266,20 +244,9 @@ export function useAspectProfile({
     oldest && oldest.period_end < windows.prior.start
       ? {
           label: formatDate(oldest.period_end),
-          ...applyAssessmentOverride(
-            scoreAspects(oldest.metrics, baselines),
-            allAssessments,
-            oldest.period_end,
-          ),
+          ...scoreAspects(oldest.metrics, baselines),
         }
       : null;
-
-  // The check-in sliders are integers, so the seed has to be too.
-  const suggestions: AspectScores = {};
-  for (const aspect of FITNESS_ASPECTS) {
-    const value = current?.scores[aspect.key as AspectKey];
-    if (value != null) suggestions[aspect.key as AspectKey] = Math.round(value);
-  }
 
   return {
     loading: false,
@@ -287,9 +254,6 @@ export function useAspectProfile({
     current,
     prior,
     earliest,
-    suggestions,
-    latestAssessment: allAssessments[0] ?? null,
-    onAssessmentSaved,
     windowKey,
     setWindowKey,
     windowDays,

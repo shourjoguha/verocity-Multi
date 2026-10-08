@@ -1,8 +1,8 @@
 import {
   ASPECT_MIN_BASELINE,
   ASPECT_SCALE,
+  ASPECT_WINDOWS,
   FITNESS_ASPECTS,
-  type AspectWindowKey,
 } from '@/app.config';
 import { Modal } from '@/components/ui/Modal';
 
@@ -27,13 +27,11 @@ const METRIC_NOTES: Record<string, string> = {
 export function AspectExplainer({
   open,
   onClose,
-  windowKey,
   windowDays,
   baselineSamples,
 }: {
   open: boolean;
   onClose: () => void;
-  windowKey: AspectWindowKey;
   windowDays: number;
   baselineSamples: number;
 }) {
@@ -42,6 +40,16 @@ export function AspectExplainer({
   return (
     <Modal open={open} onClose={onClose} title="How this chart is scored">
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 text-sm leading-relaxed text-muted">
+        <section>
+          <h3 className="mb-1.5 text-fg">Reading the chart</h3>
+          <p>
+            The outline is the period you selected; the grey area behind it is the period you
+            are comparing with. Where the outline sits outside the grey, that axis went up.
+            The dotted middle ring is typical for you. Hover a point, or tap it, for its score
+            and how far it moved.
+          </p>
+        </section>
+
         <section>
           <h3 className="mb-1.5 text-fg">Two steps, not one</h3>
           <p>
@@ -83,15 +91,14 @@ export function AspectExplainer({
         </section>
 
         <section>
-          <h3 className="mb-1.5 text-fg">The two windows</h3>
+          <h3 className="mb-1.5 text-fg">The windows</h3>
           <p>
-            <strong className="text-fg">Recent</strong> measures a shorter span, so one session
-            moves it noticeably — useful for seeing whether this week landed.{' '}
-            <strong className="text-fg">Trend</strong> measures a longer one and is steadier.
-            Each keeps its own separate history, so a Recent reading is only ever compared with
-            other Recent readings.
+            {ASPECT_WINDOWS.map((w) => w.label).join(', ')}. A shorter window moves
+            noticeably after one session — useful for seeing whether this week landed. A
+            longer one is steadier. Each keeps its own separate history, so a 28-day reading
+            is only ever compared with other 28-day readings.
           </p>
-          <p className="mt-2 text-subtle">Currently showing: {windowKey === 'recent' ? 'Recent' : 'Trend'}, {windowDays} days.</p>
+          <p className="mt-2 text-subtle">Currently showing: the last {windowDays} days.</p>
         </section>
 
         <section>
@@ -100,7 +107,7 @@ export function AspectExplainer({
             Because the baseline follows you, sustained improvement gets normalised away: train
             hard for a year and your median rises with you, pulling scores back toward the
             middle. That is working as intended — it reads "typical for you lately", not
-            lifetime progress. Use the comparison below the chart against an older block to see
+            lifetime progress. Use the comparison chip under the chart to switch to your oldest stored block to see
             long-range change.
           </p>
         </section>

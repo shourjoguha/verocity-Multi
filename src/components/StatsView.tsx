@@ -29,7 +29,7 @@ import { aspectWindows, logsInWindow } from '@/lib/aspects';
 import { formatDuration, formatRound } from '@/lib/format';
 import { sessionTagColors, stripeBackground } from '@/lib/tags';
 import {
-  ASPECT_WINDOW_DAYS,
+  ASPECT_READ_DAYS,
   BODY_LENSES,
   BODY_LENS_KEYS,
   CONSISTENCY,
@@ -41,7 +41,6 @@ import {
   LoadingScreen,
   SectionHeader,
   StatStrip,
-  Takeaway,
 } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Disclosure } from '@/components/ui/Disclosure';
@@ -455,8 +454,10 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // Real "now" on both surfaces — the showcase is live (migration 0034).
   const today = new Date();
   // The radar compares the rolling aspect window against the block before it, so
-  // the fetch spans both — wider than the 8 weeks the rest of this page reads.
-  const windows = aspectWindows(today);
+  // the fetch spans both, at the LONGEST selectable window — wider than the 8
+  // weeks the rest of this page reads, and wide enough that switching the radar's
+  // window never refetches.
+  const windows = aspectWindows(today, ASPECT_READ_DAYS);
   // Cache key names the window: with the old 8-week key a revisit would paint a
   // cached 56-day array on the first frame (useAuthedQuery seeds synchronously)
   // and the radar would compute over the wrong span until revalidation landed.
@@ -464,7 +465,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     () => getLogsInRange(windows.prior.start, windows.current.end, client),
     {
       auth: mode === 'app',
-      key: mode === 'app' ? `stats:logs:${ASPECT_WINDOW_DAYS * 2}d` : undefined,
+      key: mode === 'app' ? `stats:logs:${ASPECT_READ_DAYS * 2}d` : undefined,
     },
   );
 
@@ -577,40 +578,13 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
   return (
     <>
+      {/* No page title here: the Stats / Body / Coach tabs above already say
+          where you are, and the title plus a two-line display headline cost
+          ~200px before the first chart. The headline's content now leads the
+          radar card, under the window toggle that changes it. */}
       <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
         <Item>
-          <EchoText
-            text="STATS"
-            as="h1"
-            className={`mb-6 ${ECHO_APP_TITLE}`}
-          />
-        </Item>
-
-        {/* The headline the radar used to make you decode. Both movers are
-            named in plain language before any chart appears; the radar below
-            then shows the shape they belong to. Renders nothing until there is
-            a prior period to compare against — an invented takeaway is worse
-            than none. */}
-        {movers ? (
-          <Item>
-            <section className="mb-6">
-              <Takeaway
-                lead={`${movers.up.label} up ${formatRound(movers.up.delta, 1)}.`}
-                trail={
-                  movers.down
-                    ? `${movers.down.label} down ${formatRound(Math.abs(movers.down.delta), 1)}.`
-                    : undefined
-                }
-                detail={`Against the previous ${profile.windowDays} days.${
-                  movers.lowest ? ` ${movers.lowest} is now your lowest axis.` : ''
-                }`}
-              />
-            </section>
-          </Item>
-        ) : null}
-
-        <Item>
-          <FitnessProfile profile={profile} canEdit={mode === 'app'} />
+          <FitnessProfile profile={profile} movers={movers} />
         </Item>
 
         <Item>

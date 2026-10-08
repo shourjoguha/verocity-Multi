@@ -68,13 +68,17 @@ export function StatStrip({
       {stats.map((s, i) => (
         <div
           key={s.label}
-          className={`px-3 py-2.5 ${i === 0 ? '' : 'border-l border-border-soft'}`}
+          className={`px-2.5 py-2 ${i === 0 ? '' : 'border-l border-border-soft'}`}
         >
           <div className="t-label text-muted">{s.label}</div>
           {/* min-w-0 + the grid's minmax(0,1fr) above: without both, a long
               value forces the column wider than its share and the strip
               overflows at 375px instead of truncating. */}
-          <div className="mt-1 min-w-0 font-display text-lg leading-[1.1] tabular-nums tracking-[-0.02em] text-fg">
+          {/* text-base, not the StatCard's text-lg: this strip sits directly under
+              the radar card and is the page's secondary summary, not a headline.
+              nowrap because a wrapped "48h / 31m" doubled the strip's height at
+              320px; at text-base it fits a third of a 320px screen. */}
+          <div className="mt-0.5 min-w-0 whitespace-nowrap font-display text-base leading-[1.1] tabular-nums tracking-[-0.02em] text-fg">
             {typeof s.value === 'number' ? <AnimatedNumber value={s.value} /> : s.value}
             {s.unit ? <span className="ml-1 text-xs font-medium text-muted">{s.unit}</span> : null}
           </div>
@@ -357,34 +361,6 @@ export function TickProgress({
           className={`h-[3px] flex-1 rounded-full ${i < value ? 'bg-fg' : 'bg-elevated'}`}
         />
       ))}
-    </div>
-  );
-}
-
-// The plain-language headline that goes ABOVE a chart that needs decoding. The
-// second line is muted so the pair reads as one sentence with a subordinate
-// clause rather than as two competing headlines.
-export function Takeaway({
-  lead,
-  trail,
-  detail,
-}: {
-  lead: string;
-  trail?: string;
-  detail?: string;
-}) {
-  return (
-    <div>
-      <h1 className="font-display text-xl leading-[1.2] tracking-[-0.02em] text-fg">
-        {lead}
-        {trail ? (
-          <>
-            <br />
-            <span className="text-muted">{trail}</span>
-          </>
-        ) : null}
-      </h1>
-      {detail ? <p className="mt-2 text-sm leading-relaxed text-muted">{detail}</p> : null}
     </div>
   );
 }
