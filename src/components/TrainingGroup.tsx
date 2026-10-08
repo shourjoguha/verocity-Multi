@@ -1,5 +1,6 @@
 import GroupPager from './GroupPager';
 import PlanView from './PlanView';
+import ReviewView from './ReviewView';
 import SessionsView from './SessionsView';
 import LibraryView from './LibraryView';
 import type { Surface } from '@/lib/surface';
@@ -23,7 +24,10 @@ export default function TrainingGroup({
       initial={initial}
       surface={mode}
       views={{
-        plan: <PlanView mode={mode} />,
+        // The app's Plan tab is the review hub; the plan itself is one tap
+        // away at /app/plan/view. The showcase keeps PlanView: ReviewView
+        // reads authed-only data (user_stats) and has no showcase mode.
+        plan: mode === 'app' ? <ReviewView /> : <PlanView mode={mode} />,
         sessions: <SessionsView mode={mode} />,
         library: <LibraryView mode={mode} />,
       }}

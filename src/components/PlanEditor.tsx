@@ -116,7 +116,7 @@ export default function PlanEditor() {
                 {save === 'saving' ? 'Saving…' : save === 'pending' ? 'Editing…' : save === 'saved' ? 'Saved' : ''}
               </span>
               <a
-                href="/app/plan"
+                href="/app/plan/view"
                 className="t-control text-muted transition-colors hover:text-fg"
               >
                 Done →

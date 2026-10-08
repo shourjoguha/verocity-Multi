@@ -840,7 +840,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                           + min-h-11 gives it the 44px box without changing how it
                           reads. A bare text link measured 12px tall here. */}
                       <a
-                        href={hrefFor('/app/plan', mode)}
+                        href={mode === 'app' ? '/app/plan/view' : hrefFor('/app/plan', mode)}
                         className="t-eyebrow -my-2 inline-flex min-h-11 shrink-0 items-center text-muted transition-colors hover:text-fg"
                       >
                         View →
