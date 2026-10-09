@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getActivePlan, getAllLogs } from '@/lib/queries';
+import { loadAllLogs } from '@/lib/logStore';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { flattenWorkingSets } from '@/lib/stats';
 import { e1rm } from '@/lib/e1rm';
@@ -22,7 +23,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const { data, loading } = useAuthedQuery(
     async () => {
       const plan = await getActivePlan(client);
-      const logs = plan ? await getAllLogs(client) : [];
+      const logs = plan ? await (showcase ? getAllLogs(client) : loadAllLogs()) : [];
       return { plan, logs };
     },
     { auth: !showcase, key: showcase ? undefined : 'plan:view' },

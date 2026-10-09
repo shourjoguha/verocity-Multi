@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { createMovement, getLogsInRange, getMovements, getUserStats } from '@/lib/queries';
+import { loadAllLogs, logsBetween } from '@/lib/logStore';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { supabasePublic } from '@/lib/supabase';
 import type { Movement, WorkoutLog } from '@/lib/types';
@@ -196,7 +197,10 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   );
 
   const { data: logs, loading } = useAuthedQuery(
-    () => getLogsInRange(ymd(from), ymd(today), client),
+    () =>
+      showcase
+        ? getLogsInRange(ymd(from), ymd(today), client)
+        : loadAllLogs().then((all) => logsBetween(all, ymd(from), ymd(today))),
     { auth: !showcase, key: showcase ? undefined : `body:logs:${windowKey}` },
   );
   const { data: movements } = useAuthedQuery(() => getMovements(client), {

@@ -10,6 +10,7 @@ import {
   getRecommendations,
 } from '@/lib/queries';
 import { getCached, setCached } from '@/lib/queryCache';
+import { invalidateLogs, loadAllLogs, newestLogs } from '@/lib/logStore';
 import { todayLocal } from '@/lib/mealPhoto';
 import { draftFor, type MealDraft, type MealOpener } from '@/lib/mealDraft';
 import type { MealLog, MealPreset } from '@/lib/types';
@@ -526,11 +527,17 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           }
         }
         const today = todayLocal();
-        const [p, pl, lg, all, meals, presets] = await Promise.all([
+        // App mode reads the shared history once and slices the recent list
+        // out of it; the showcase reads through the anon client and keeps its
+        // own two reads (logStore is owner-only).
+        const logReads =
+          mode === 'app'
+            ? loadAllLogs().then((all) => [newestLogs(all, 30), all] as const)
+            : Promise.all([getRecentLogs(30, client), getAllLogs(client)]);
+        const [p, pl, [lg, all], meals, presets] = await Promise.all([
           getCurrentProfile(client),
           getActivePlan(client),
-          getRecentLogs(30, client),
-          getAllLogs(client),
+          logReads,
           // Showcase renders through the anon client, which has no read
           // access to meal_logs by RLS design (no anon policy exists — see
           // 0032_meal_logs.sql). Skip the read there rather than surface a
@@ -585,13 +592,13 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           filter: `owner_user_id=eq.${profile.id}`,
         },
         () => {
-          getRecentLogs(30).then((l) => {
-            setCached('logs:recent30', l);
-            setLogs(l);
-          });
-          getAllLogs().then((l) => {
-            setCached('logs:all', l);
-            setAllLogs(l);
+          // Another device (or tab) changed a log: one fetch, both lists.
+          invalidateLogs();
+          loadAllLogs().then((all) => {
+            const recent = newestLogs(all, 30);
+            setCached('logs:recent30', recent);
+            setLogs(recent);
+            setAllLogs(all);
           });
         },
       )

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getActivePlan, getLogsInRange } from '@/lib/queries';
+import { loadAllLogs, logsBetween } from '@/lib/logStore';
 import { getCached, setCached } from '@/lib/queryCache';
 import type { Plan, WorkoutLog } from '@/lib/types';
 import { sessionTagColors } from '@/lib/tags';
@@ -73,7 +74,10 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
     } else {
       setLoading(true);
     }
-    getLogsInRange(ymd(start), ymd(end), client).then((l) => {
+    (showcase
+      ? getLogsInRange(ymd(start), ymd(end), client)
+      : loadAllLogs().then((all) => logsBetween(all, ymd(start), ymd(end)))
+    ).then((l) => {
       if (!active) return;
       if (cacheKey) setCached(cacheKey, l);
       setLogs(l);
