@@ -32,10 +32,53 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(SHELL))
+      .then((cache) => cache.addAll(SHELL).then(() => warmScripts(cache).catch(() => {})))
       .then(() => self.skipWaiting()),
   );
 });
+
+// Cache the JavaScript every SHELL page needs, not just its HTML. The HTML was
+// already precached, but each tab's island chunks were only cached on first
+// visit — and every deploy renames them and drops the old cache, so after each
+// deploy the first tap on each tab waited on the network for its code. Link
+// prefetch could not help: it fetches HTML only, and on touch its "hover"
+// trigger fires at the tap itself.
+//
+// Walks static imports only (`import"./x.js"` / `from"./x.js"` in the built
+// chunks). Dynamic imports — three.js, p5, exceljs — are deliberately not
+// followed: they are large and most sessions never load them. Runs inside
+// `install`, so the previous worker keeps serving until this finishes, and a
+// failure here never fails the install. Skipped when the user has asked the
+// browser to save data.
+const SCRIPT_IN_HTML = /\/_astro\/[^"'\s>]+\.js/g;
+const STATIC_IMPORT = /(?:import|from)\s*"\.\/([^"]+\.js)"/g;
+
+async function warmScripts(cache) {
+  if (self.navigator.connection && self.navigator.connection.saveData) return;
+  const seen = new Set();
+  let next = [];
+  for (const path of SHELL) {
+    const page = await cache.match(path);
+    if (!page) continue;
+    for (const [src] of (await page.text()).matchAll(SCRIPT_IN_HTML)) next.push(src);
+  }
+  while (next.length > 0) {
+    const level = [...new Set(next)].filter((src) => !seen.has(src));
+    level.forEach((src) => seen.add(src));
+    next = [];
+    await Promise.all(
+      level.map(async (src) => {
+        let response = await cache.match(src, { ignoreVary: true });
+        if (!response) {
+          response = await fetch(src);
+          if (!response.ok) return;
+          await cache.put(src, response.clone());
+        }
+        for (const [, rel] of (await response.text()).matchAll(STATIC_IMPORT)) next.push('/_astro/' + rel);
+      }).map((p) => p.catch(() => {})),
+    );
+  }
+}
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -48,9 +91,15 @@ self.addEventListener('activate', (event) => {
 
 // Cache-first: serve immutable hashed assets from cache, fall back to network
 // (and store) on a miss.
+//
+// `ignoreVary`: a server that sends `Vary: Origin` (astro preview does) makes
+// the page's module request — which carries an Origin header — miss every
+// entry stored by warmScripts' own fetch, which does not. Measured: all 13 of
+// Stats' chunks were in the cache and all 13 went to the network anyway. A
+// content-hashed file is the same bytes whatever the request headers were.
 function cacheFirst(request) {
   return caches.open(CACHE).then((cache) =>
-    cache.match(request).then((cached) => {
+    cache.match(request, { ignoreVary: true }).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((response) => {
         if (response.ok) cache.put(request, response.clone());
