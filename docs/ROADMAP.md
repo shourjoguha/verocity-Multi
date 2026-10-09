@@ -437,6 +437,14 @@ Logger, plan grid, coach load-step and adherence all read that one number.
 counts the final in-flight week in full once the plan is inactive, so 3 days ×
 8 weeks with one day logged 4 times reads 20 of 24.
 
+**Backdating.** A finished session's start date and time are editable on the
+session page and the calendar quick view (`SessionWhen`, `src/lib/logWhen.ts`),
+moving `ended_at` with it so the duration holds. Cycle order is `log_date`, then
+`started_at` (`byLoggedOrder`), so a session entered late sorts where it
+happened. A live session shows its start read-only: `started_at` anchors the
+stopwatch and the 2-hour auto-end, and backdating it mid-session would trip the
+auto-end. The Logger's date field is unchanged.
+
 **Deferred:** no explicit "skip" or "redo" action. Logging the same day twice
 in a row closes the cycle on the other days; if that is a redo, delete or
 cancel the first log. Stored `week_number` on existing rows is not backfilled —

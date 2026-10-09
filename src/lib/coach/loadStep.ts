@@ -22,7 +22,7 @@ import { RPE_LADDER } from '@/app.config';
 import { parsePlanned } from '@/lib/logBuilder';
 import { normalizeMovementName } from '@/lib/movementTaxonomy';
 import { workingSections } from '@/lib/stats';
-import { blockForWeek, planWeekByLog, planWeekCount } from '@/lib/progression';
+import { blockForWeek, byLoggedOrder, planWeekByLog, planWeekCount } from '@/lib/progression';
 import type { Measured } from '@/lib/coach/types';
 import type { LogItem, Plan, PlanExercise, WorkoutLog } from '@/lib/types';
 
@@ -173,11 +173,7 @@ export function measureLoadSteps(
   for (const day of plan.parsed.days) {
     const dayLogs = planLogs
       .filter((l) => l.day_key === day.dayKey)
-      .sort((a, b) =>
-        a.log_date === b.log_date
-          ? a.created_at.localeCompare(b.created_at)
-          : a.log_date.localeCompare(b.log_date),
-      );
+      .sort(byLoggedOrder);
     for (const ex of day.exercises) {
       const range = rangeOf(ex);
       if (!range) continue;
