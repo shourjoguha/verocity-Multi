@@ -250,6 +250,28 @@ const movements = [
   },
 ];
 
+// Saved sessions, so /app/sessions renders rows instead of "No sessions yet."
+// Owned AND shared on purpose, same reason as m3 above: an owned row can carry
+// controls a shared one never does. Multi-tag and from-plan rows are the
+// widest variants of the row.
+const sessionRow = (id, extra) => ({
+  id, owner_user_id: session.user.id, name: 'Upper A — Push bias', tags: ['strength'],
+  frame: { exercises: [
+    { movement: 'bench press', section: 'primary', primaryMetric: 'weight', planned: '4x5' },
+    { movement: 'weighted pull-up', section: 'accessory', primaryMetric: 'reps', planned: '3x8' },
+  ] },
+  source_plan_id: null, source_day_key: null, is_mini: false, created_at: '2026-01-10T00:00:00Z',
+  session_type: null, time_cap_seconds: null, duration_seconds: null, rounds: null, partner: false,
+  instructions: null, source: null, source_text: null, source_ref: null,
+  ...extra,
+});
+const savedSessions = [
+  sessionRow('s1'),
+  sessionRow('s2', { name: 'Hyrox Sim — Half Race Simulation', tags: ['hyrox', 'endurance'], session_type: 'FOR_TIME' }),
+  sessionRow('s3', { name: '5×5 Base · Day 2', tags: [], source_plan_id: 'plan-1', source_day_key: 'd2' }),
+  sessionRow('s4', { owner_user_id: null, name: 'Fran', tags: ['crossfit'], session_type: 'FOR_TIME', source: 'crossfit' }),
+];
+
 // Coach rows, so /app/coach renders its brief card, the created-at slider and
 // the Snoozed/Decided lists instead of the empty state — without them this
 // audit measured none of those controls.
@@ -284,6 +306,7 @@ function fixtureFor(url) {
   if (path.includes('/coach_briefs')) return coachBriefs;
   if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog, doneLog];
   if (path.includes('/movements')) return movements;
+  if (path.endsWith('/sessions')) return url.includes('id=eq.') ? savedSessions[0] : savedSessions;
   if (path.includes('/profiles')) return url.includes('id=eq.') ? null : [];
   // getUserStats() is .maybeSingle() with no filter, so it must resolve to an
   // OBJECT or null. null is the interesting case: it is what a user who has

@@ -1072,7 +1072,10 @@ measuring 12px tall. Every one was live on a phone the whole time.
 data-driven surface, confirm the surface was in the DOM.** Either extend the
 fixture, or run a throwaway probe that seeds the row (copy the auth/REST stubbing
 out of the audit; it needs no credentials). Still thin, and still able to hide a
-regression this way: saved sessions, the movement library, and `aspect_snapshots`.
+regression this way: the movement library (three rows) and `aspect_snapshots`.
+**Fixed for saved sessions** — see "A sheet grows while it rises" below; the
+first run with a sessions fixture flagged eleven sub-44px targets on
+`/app/sessions` that had been live the whole time.
 Note also that `getActivePlan()` uses `.maybeSingle()`, so the `is_active=eq.true`
 lookup must be fulfilled with an **object** while the unfiltered list query wants
 an array — return the wrong shape and the surface silently stays empty, which
@@ -1102,6 +1105,25 @@ exactly on `ASPECT_BACKFILL_WEEKS`, so every successful backfill landed on
 "settled" and the hollow state was unreachable in production. A scenario whose
 fixture cannot produce the state it is named for passes silently.
 → `scripts/mobile-audit.mjs`
+
+### A sheet grows while it rises, only for users who have data
+`[measured in Chromium, and the symptom observed to stop]`
+Giving `scripts/flicker-probe.mjs` a saved-sessions fixture (it served `[]`)
+turned **AddSessionMenu** red on both of its scenarios: `layout-churn: panel
+height 175/243 while animating`. The sheet fetches sessions and plans on open,
+and the "Past plans & saved sessions" button only rendered once a list came
+back non-empty — so it appeared mid-`sheet-rise` and grew the panel. Every
+real account hits it, because the shared library seeds sessions for everyone;
+the probe never did, because its fixture had none. The fix renders that button
+while either list is still loading (`AddSessionMenu.tsx`, `loading ||` in
+`hasMore`). **An empty fixture is the one state no user is in** — when a sheet
+fetches on open, seed the fixture with whatever the fetch returns in
+production, or the probe is measuring a sheet nobody sees.
+Same PR, same gap in `audit:mobile`: the session list's Start / Edit / × were
+12–24px tall and the row itself 40px, unseen because the fixture had no
+sessions. The row now opens `SessionSheet` and carries no controls; the footer
+holds trash (left, armed by a first tap) and Edit + Start (right).
+→ `scripts/flicker-probe.mjs`, `scripts/mobile-audit.mjs`, `src/components/SessionSheet.tsx`
 
 ### A scenario that stops finding its target reads as a pass
 `[measured in Chromium]`

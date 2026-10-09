@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Tag } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { PencilGlyph, PlayGlyph, TrashGlyph } from '@/components/ui/icons';
 import { ACTIVITY_TAGS, SECTIONS, type ActivityTagKey, type SectionKey } from '@/app.config';
 import { tagColor } from '@/lib/tags';
 import { formatSessionMeta } from '@/lib/sessionMeta';
@@ -12,31 +13,55 @@ import type { ScalingLevel, Session, SessionExercise, SessionGroup, SessionVaria
 // centered card on desktop, via the shared Modal primitive (already handles
 // scroll lock, focus trap, ESC, and the sheet-panel styling). Rendered by
 // SessionsView with `session` set to the selected row (or null to close).
+//
+// The sheet is where a session's actions live; the list row carries none. The
+// row buttons were 12–24px tall, and Start/Edit duplicated this footer anyway.
+// Footer: destructive on the left behind a confirm, Edit + Start on the right
+// with Start outermost. Edit/Delete only exist for owned rows and only when
+// the caller passes them (the showcase passes neither).
 export function SessionSheet({
   session,
   onClose,
   onEdit,
+  onDelete,
 }: {
   session: Session | null;
   onClose: () => void;
   onEdit?: (s: Session) => void;
+  onDelete?: (s: Session) => Promise<boolean>;
 }) {
   return (
     <Modal open={!!session} onClose={onClose} title={session?.name}>
-      {session ? <SheetBody session={session} onClose={onClose} onEdit={onEdit} /> : null}
+      {session ? (
+        <SheetBody key={session.id} session={session} onEdit={onEdit} onDelete={onDelete} />
+      ) : null}
     </Modal>
   );
 }
 
+// How long the armed trash waits for its second tap before disarming.
+const CONFIRM_MS = 4000;
+
+const ICON_BTN =
+  'hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-border bg-surface transition-colors';
+const GLYPH = 'h-[1.15rem] w-[1.15rem]';
+
 function SheetBody({
   session,
-  onClose,
   onEdit,
+  onDelete,
 }: {
   session: Session;
-  onClose: () => void;
   onEdit?: (s: Session) => void;
+  onDelete?: (s: Session) => Promise<boolean>;
 }) {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  useEffect(() => {
+    if (!confirming) return;
+    const t = window.setTimeout(() => setConfirming(false), CONFIRM_MS);
+    return () => window.clearTimeout(t);
+  }, [confirming]);
   const meta = formatSessionMeta(session);
   const isShared = session.owner_user_id === null;
   const levels = availableLevels(session.frame);
@@ -103,29 +128,61 @@ function SheetBody({
       </div>
 
       <div className="pb-safe flex shrink-0 items-center justify-between gap-2 border-t border-border px-4 py-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="t-control text-muted transition-colors hover:text-fg"
-        >
-          Close
-        </button>
+        <div className="flex items-center gap-2">
+          {!isShared && onDelete ? (
+            confirming ? (
+              <>
+                <span className="t-control text-muted">Delete?</span>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={async () => {
+                    setDeleting(true);
+                    const ok = await onDelete(session);
+                    // On success the sheet closes and this body unmounts.
+                    if (!ok) {
+                      setDeleting(false);
+                      setConfirming(false);
+                    }
+                  }}
+                  className="hill-btn flex h-11 items-center border border-danger bg-surface px-3 t-control text-danger transition-colors disabled:opacity-40"
+                  aria-label={`Confirm delete ${session.name}`}
+                >
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className={`${ICON_BTN} text-danger hover:border-danger`}
+                aria-label="Delete session"
+                title="Delete session"
+              >
+                <TrashGlyph className={GLYPH} />
+              </button>
+            )
+          ) : null}
+        </div>
         <div className="flex items-center gap-2">
           {!isShared && onEdit ? (
             <button
               type="button"
               onClick={() => onEdit(session)}
-              className="hill-btn border border-border bg-surface px-3 py-2 t-control text-fg transition-colors hover:border-fg"
+              className={`${ICON_BTN} text-fg hover:border-fg`}
+              aria-label="Edit session"
+              title="Edit session"
             >
-              Edit
+              <PencilGlyph className={GLYPH} />
             </button>
           ) : null}
           <a
             href={`/app/log?session=${encodeURIComponent(session.id)}${
               levels.length > 0 ? `&level=${level}` : ''
             }`}
-            className="hill-btn border border-fg bg-surface px-3 py-2 t-control text-fg"
+            className="hill-btn flex h-11 items-center gap-2 border border-fg bg-surface px-4 t-control text-fg"
           >
+            <PlayGlyph className={GLYPH} />
             Start
           </a>
         </div>

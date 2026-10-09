@@ -66,7 +66,13 @@ export function AddSessionMenu({
   const rowClass =
     'flex items-center justify-between border-b border-border px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-elevated';
   const groupLabelClass = 'mb-2 t-label text-muted';
+  // Shown while the two lists are still loading, not just once they turn out
+  // non-empty: the button appearing after the fetch grew the sheet mid-rise
+  // (audit:flicker, layout-churn). In practice it is almost always needed —
+  // the shared library seeds sessions for everyone.
+  const loading = sessions === null || plans === null;
   const hasMore =
+    loading ||
     savedSessions.length > 0 || pastPlans.length > 0 || hyroxShared.length > 0 || crossfitShared.length > 0;
 
   return (

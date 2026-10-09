@@ -19,7 +19,7 @@ import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { tagColor } from '@/lib/tags';
 import { distinctSessionMovements, formatSessionMeta, sessionMovementKeys, TYPE_SHORT } from '@/lib/sessionMeta';
 import { SessionSheet } from '@/components/SessionSheet';
-import { Button, EmptyState, LoadingScreen, Tag } from '@/components/ui/primitives';
+import { Button, EmptyState, ListCard, LoadingScreen } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
@@ -586,13 +586,21 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
     }
   }
 
-  async function handleDelete(s: Session) {
-    if (busy) return;
-    if (!confirm(`Delete "${s.name}"? This can't be undone.`)) return;
+  // Called from the sheet's armed trash, which is the confirm step. Logs that
+  // used this session survive it: workout_logs.session_id is ON DELETE SET NULL.
+  async function handleDelete(s: Session): Promise<boolean> {
+    if (busy) return false;
     setBusy(true);
     const ok = await deleteSession(s.id);
     setBusy(false);
-    if (ok) setItems((prev) => (prev ?? []).filter((x) => x.id !== s.id));
+    if (!ok) {
+      toast('Could not delete session', 'error');
+      return false;
+    }
+    setPreviewId(null);
+    setItems((prev) => (prev ?? []).filter((x) => x.id !== s.id));
+    toast('Session deleted · your logged workouts stay', 'success');
+    return true;
   }
 
   async function saveDayAsSession(plan: Plan, day: PlanDay) {
@@ -707,11 +715,11 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
         </Item>
       ) : (
         <Item>
-          <ul className="divide-y divide-border border border-border">
+          <ListCard>
             {filtered.map((s) => {
               if (editingId === s.id) {
                 return (
-                  <li key={s.id} className="p-4">
+                  <div key={s.id} className="p-4">
                     <SessionForm
                       draft={draft}
                       setDraft={setDraft}
@@ -721,67 +729,34 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
                       submitLabel="Save"
                       busy={busy}
                     />
-                  </li>
+                  </div>
                 );
               }
               const groupCount = s.frame.groups?.reduce((n, g) => n + g.items.length, 0);
               const count = groupCount ?? s.frame.exercises?.length ?? 0;
               const meta = formatSessionMeta(s);
-              const isShared = s.owner_user_id === null;
+              // One line, one target: the row opens the sheet, and every action
+              // (Start / Edit / Delete) lives in the sheet's footer. The first
+              // tag is the stripe, as in LogList; the sheet shows all of them.
+              const stripe = s.tags[0] ? tagColor(s.tags[0]) : 'transparent';
               return (
-                <li key={s.id} className="flex items-center gap-3 px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewId(s.id)}
-                    className="min-w-0 flex-1 text-left"
-                    aria-label={`Preview ${s.name}`}
-                  >
-                    <div className="truncate text-fg">{s.name}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      {s.tags.map((t) => (
-                        <Tag key={t} label={ACTIVITY_TAGS[t as ActivityTagKey]?.label ?? t} color={tagColor(t)} />
-                      ))}
-                      <span className="t-control text-muted">
-                        {meta ? `${meta} · ` : ''}
-                        {count} {count === 1 ? 'movement' : 'movements'}
-                        {s.source_plan_id ? ' · from plan' : ''}
-                        {isShared ? ' · shared' : ''}
-                      </span>
-                    </div>
-                  </button>
-                  <div
-                    className="flex shrink-0 items-center gap-1"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <a
-                      href={`/app/log?session=${encodeURIComponent(s.id)}`}
-                      className="hill-btn border border-border bg-surface px-2 py-1 t-control text-fg hover:border-fg"
-                    >
-                      Start
-                    </a>
-                    {isShared ? null : (
-                      <>
-                        <button
-                          onClick={() => startEdit(s)}
-                          className="px-2 t-control text-muted hover:text-fg"
-                          aria-label={`Edit ${s.name}`}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(s)}
-                          className="px-2 text-muted hover:text-accent"
-                          aria-label={`Delete ${s.name}`}
-                        >
-                          ×
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </li>
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setPreviewId(s.id)}
+                  className="flex min-h-11 w-full items-center gap-3 px-3 text-left transition-colors hover:bg-elevated"
+                  style={{ boxShadow: `inset 3px 0 0 ${stripe}` }}
+                  aria-label={`Open ${s.name}`}
+                >
+                  <span className="min-w-0 flex-1 truncate text-fg">{s.name}</span>
+                  <span className="shrink-0 t-control tabular-nums text-muted">
+                    {meta ? `${meta} · ` : ''}
+                    {count} mv
+                  </span>
+                </button>
               );
             })}
-          </ul>
+          </ListCard>
         </Item>
       )}
 
@@ -790,10 +765,15 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
       <SessionSheet
         session={sessions.find((s) => s.id === previewId) ?? null}
         onClose={() => setPreviewId(null)}
-        onEdit={(s) => {
-          setPreviewId(null);
-          startEdit(s);
-        }}
+        onEdit={
+          readOnly
+            ? undefined
+            : (s) => {
+                setPreviewId(null);
+                startEdit(s);
+              }
+        }
+        onDelete={readOnly ? undefined : handleDelete}
       />
 
       <Modal open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filters">
