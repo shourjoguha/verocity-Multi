@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getAllLogs, getLogsInRange, getUserStats } from '@/lib/queries';
 import { bodyweightMultiple } from '@/lib/userStats';
@@ -471,13 +472,19 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     { auth: mode === 'app', key: mode === 'app' ? 'userStats' : undefined },
   );
 
-  const [tip, setTip] = useState<{ x: number; y: number; label: string } | null>(null);
+  // `shown` rather than null: the tooltip box stays mounted (see the render
+  // below), so hiding keeps the last position and label instead of unmounting.
+  const [tip, setTip] = useState<{ x: number; y: number; label: string; shown: boolean } | null>(null);
+  // The portal target only exists in the browser; the island also renders on
+  // the server, where `document` does not.
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => setPortalReady(true), []);
   const [groupBy, setGroupBy] = useState<'movement' | 'family'>('movement');
   const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   function showTip(e: { clientX: number; clientY: number }, label: string) {
-    setTip({ x: e.clientX, y: e.clientY, label });
+    setTip({ x: e.clientX, y: e.clientY, label, shown: true });
     clearTimeout(tipTimer.current);
-    tipTimer.current = setTimeout(() => setTip(null), TOOLTIP.holdMs);
+    tipTimer.current = setTimeout(() => setTip((t) => (t ? { ...t, shown: false } : t)), TOOLTIP.holdMs);
   }
   useEffect(() => () => clearTimeout(tipTimer.current), []);
 
@@ -838,26 +845,42 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
         </Item>
       </PageStagger>
 
-      {tip ? (
-        <div
-          // Wraps, and the centre is clamped so the whole box stays on screen.
-          // A nowrap line centred on the finger ran off the right edge on the
-          // grid's last column. `pre-line` honours the label's line break.
-          // CSS entrance (`tip-in`), not Motion — see global.css.
-          className="tip-in pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-pre-line bg-fg px-2 py-1 text-[0.7rem] leading-snug tabular-nums text-bg"
-          style={{
-            left: Math.min(
-              Math.max(tip.x, TOOLTIP.maxWidthPx / 2 + TOOLTIP.edgePx),
-              window.innerWidth - TOOLTIP.maxWidthPx / 2 - TOOLTIP.edgePx,
-            ),
-            top: tip.y - 8,
-            width: 'max-content',
-            maxWidth: TOOLTIP.maxWidthPx,
-          }}
-        >
-          {tip.label}
-        </div>
-      ) : null}
+      {portalReady
+        ? createPortal(
+            <div
+              aria-hidden={!tip?.shown}
+              // Portaled to <body> and mounted ONCE, with the page, not on the
+              // tap. It used to be created by the first tap as a `fixed` box
+              // inside the [data-scroll-root] scroller, and on iPhone the first
+              // tap after every visit to Progress flickered while later taps,
+              // which only moved the existing box, did not. Sheets portal to
+              // <body> for the same reason (docs/LESSONS.md). Opacity is the
+              // only thing a tap changes; hiding is instant.
+              //
+              // Wraps, and the centre is clamped so the whole box stays on
+              // screen. A nowrap line centred on the finger ran off the right
+              // edge on the grid's last column. `pre-line` honours the label's
+              // line break.
+              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-pre-line bg-fg px-2 py-1 text-[0.7rem] leading-snug tabular-nums text-bg"
+              style={{
+                left: tip
+                  ? Math.min(
+                      Math.max(tip.x, TOOLTIP.maxWidthPx / 2 + TOOLTIP.edgePx),
+                      window.innerWidth - TOOLTIP.maxWidthPx / 2 - TOOLTIP.edgePx,
+                    )
+                  : 0,
+                top: tip ? tip.y - 8 : 0,
+                width: 'max-content',
+                maxWidth: TOOLTIP.maxWidthPx,
+                opacity: tip?.shown ? 1 : 0,
+                transition: tip?.shown ? 'opacity 0.15s var(--ease-editorial)' : 'none',
+              }}
+            >
+              {tip?.label}
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

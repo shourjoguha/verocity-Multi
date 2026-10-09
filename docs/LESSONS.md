@@ -148,14 +148,16 @@ Distinguishing symptom: happens while *not* scrolling, and on every page.
 
 ### A chart tooltip flickers on the first tap, and not on later ones
 `[argued — not reproduced]`
-Reported on a phone for the Stats consistency grid. The tooltip was the last
-Motion (`AnimatePresence`) overlay, so it was moved to a CSS `tip-in` fade —
-but a per-frame probe (390px touch context, 4x CPU) measured **both** versions
-fading in monotonically on the first tap, with no blank or snapped frame.
-The cause is **unknown**; do not cite this change as the fix. Untested suspects:
-iOS tap highlight on a `cursor-pointer` cell with mouse listeners, and iOS
-hover emulation (`onMouseMove` fires on tap). Needs a WebKit observation.
-→ `src/components/StatsView.tsx` (tooltip), `.tip-in` in `global.css`
+iPhone, Stats consistency grid: the **first tap after every visit to Progress**
+flickered; later taps, which only moved the visible tooltip, did not. A
+per-frame Chromium probe saw clean fades on every version, so the engine is
+the suspect. Ruled out: loading (nothing is fetched on tap) and Motion (a CSS
+fade did not stop it on the device). What was left differed from the sheets
+that stopped flickering: a `fixed` box **created by the tap inside the
+`[data-scroll-root]` scroller**. It is now portaled to `<body>` and mounted
+once with the page, and a tap only changes its opacity. Unconfirmed on a
+device until someone reports it.
+→ `src/components/StatsView.tsx` (tooltip)
 
 ### Flicker on touch devices, fine on desktop
 `[argued — not reproduced]`
