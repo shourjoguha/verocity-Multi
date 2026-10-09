@@ -15,15 +15,6 @@ function initials(name: string): string {
     .join('') || '?';
 }
 
-// A small play-triangle in a rounded frame — the "there's a demo here" cue.
-function PlayGlyph({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
-      <path d="M8 5v14l11-7z" />
-    </svg>
-  );
-}
-
 // A video-camera glyph — reads as "there's a clip here" next to a movement name.
 function VideoGlyph({ className = '' }: { className?: string }) {
   return (
@@ -116,57 +107,6 @@ export function MovementDemo({ name }: { name: string }) {
   return <DemoMedia asset={demo.asset} note={demo.exact ? undefined : 'closest match'} />;
 }
 
-/**
- * A small square trigger for a Library row. Renders the still thumbnail when a
- * demo exists (with a play badge) and calls `onOpen`; renders a static initials
- * placeholder, non-interactive, when it does not.
- */
-export function MovementDemoThumb({
-  name,
-  onOpen,
-}: {
-  name: string;
-  onOpen: () => void;
-}) {
-  const demo = getMovementDemo(name);
-  if (!demo) {
-    return (
-      <div
-        aria-hidden="true"
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-chip border border-border bg-elevated"
-      >
-        <span className="font-display text-xs text-faint">{initials(name)}</span>
-      </div>
-    );
-  }
-  // 44px hit box (TOUCH.minTargetPx) around a 40px tile, pulled back by -2px so
-  // the visual footprint stays 40px and the row doesn't shift — the "bigger hit
-  // box, not a bigger glyph" rule from CLAUDE.md.
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={`View ${name} demo`}
-      className="-m-0.5 grid h-11 w-11 shrink-0 place-items-center"
-    >
-      <span className="relative block h-10 w-10 overflow-hidden rounded-chip border border-border bg-surface">
-        <img
-          src={demoThumbUrl(demo.asset)}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          width={40}
-          height={40}
-          className="block h-full w-full object-cover"
-        />
-        <span className="absolute bottom-0.5 right-0.5 grid h-3.5 w-3.5 place-items-center rounded-full border border-surface bg-accent text-accent-fg">
-          <PlayGlyph className="h-2 w-2" />
-        </span>
-      </span>
-    </button>
-  );
-}
-
 /** The Library's demo sheet — GIF only, on the shared Modal primitive. */
 export function MovementDemoSheet({
   name,
@@ -181,5 +121,34 @@ export function MovementDemoSheet({
     <Modal open={open} onClose={onClose} title={name ?? undefined} ariaLabel={name ? `${name} demo` : 'Demo'}>
       <div className="px-4 py-5">{name ? <MovementDemo name={name} /> : null}</div>
     </Modal>
+  );
+}
+
+/**
+ * A 28px decorative tile for a one-line Library row: the demo's still when one
+ * exists, the initials monogram when not. Not a control — the whole row is the
+ * target, and the demo plays in the movement sheet it opens.
+ */
+export function MovementTile({ name }: { name: string }) {
+  const demo = getMovementDemo(name);
+  return (
+    <span
+      aria-hidden="true"
+      className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-chip border border-border bg-elevated"
+    >
+      {demo ? (
+        <img
+          src={demoThumbUrl(demo.asset)}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          width={28}
+          height={28}
+          className="block h-full w-full object-cover"
+        />
+      ) : (
+        <span className="font-display text-[0.6rem] text-faint">{initials(name)}</span>
+      )}
+    </span>
   );
 }

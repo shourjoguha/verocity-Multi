@@ -102,9 +102,12 @@ const workoutLog = {
 
 // Enough movements that /app/library scrolls — a page that cannot scroll cannot
 // show a scroll jump, which would make the scroll-jump assertion vacuous.
+// m0 is owned, so its sheet renders the footer (trash / Map / Edit).
 const movements = Array.from({ length: 40 }, (_, i) => ({
   id: `m${i}`,
-  owner_user_id: null,
+  owner_user_id: i === 0 ? '00000000-0000-0000-0000-000000000001' : null,
+  primary_metric: 'reps',
+  default_rest_seconds: 120,
   name: `movement ${i}`,
   category: i % 2 ? 'squat' : 'press',
 }));
@@ -168,9 +171,17 @@ const SCENARIOS = [
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
-    name: 'Library · + Subroutine (SubroutineEditor)',
+    name: 'Library · + → Subroutine (add menu → SubroutineEditor handoff)',
     route: '/app/library',
-    open: 'button:has-text("+ Subroutine")',
+    open: 'button[aria-label="Add to library"]',
+    then: '[role="dialog"] button:has-text("Subroutine")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Library · movement → Map (movement sheet → TaxonomyEditor handoff)',
+    route: '/app/library',
+    open: 'button[aria-label="Open movement 0"]',
+    then: '[role="dialog"] button[aria-label^="Muscle map"]',
     close: '[role="dialog"] button:has-text("Close")',
   },
   {

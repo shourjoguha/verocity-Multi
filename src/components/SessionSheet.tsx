@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Tag } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
-import { PencilGlyph, PlayGlyph, TrashGlyph } from '@/components/ui/icons';
+import { PencilGlyph, PlayGlyph } from '@/components/ui/icons';
+import { ArmedDelete, SHEET_GLYPH, SHEET_ICON_BTN } from '@/components/ui/SheetActions';
 import { ACTIVITY_TAGS, SECTIONS, type ActivityTagKey, type SectionKey } from '@/app.config';
 import { tagColor } from '@/lib/tags';
 import { formatSessionMeta } from '@/lib/sessionMeta';
@@ -39,13 +40,6 @@ export function SessionSheet({
   );
 }
 
-// How long the armed trash waits for its second tap before disarming.
-const CONFIRM_MS = 4000;
-
-const ICON_BTN =
-  'hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-border bg-surface transition-colors';
-const GLYPH = 'h-[1.15rem] w-[1.15rem]';
-
 function SheetBody({
   session,
   onEdit,
@@ -55,13 +49,6 @@ function SheetBody({
   onEdit?: (s: Session) => void;
   onDelete?: (s: Session) => Promise<boolean>;
 }) {
-  const [confirming, setConfirming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  useEffect(() => {
-    if (!confirming) return;
-    const t = window.setTimeout(() => setConfirming(false), CONFIRM_MS);
-    return () => window.clearTimeout(t);
-  }, [confirming]);
   const meta = formatSessionMeta(session);
   const isShared = session.owner_user_id === null;
   const levels = availableLevels(session.frame);
@@ -130,38 +117,7 @@ function SheetBody({
       <div className="pb-safe flex shrink-0 items-center justify-between gap-2 border-t border-border px-4 py-3">
         <div className="flex items-center gap-2">
           {!isShared && onDelete ? (
-            confirming ? (
-              <>
-                <span className="t-control text-muted">Delete?</span>
-                <button
-                  type="button"
-                  disabled={deleting}
-                  onClick={async () => {
-                    setDeleting(true);
-                    const ok = await onDelete(session);
-                    // On success the sheet closes and this body unmounts.
-                    if (!ok) {
-                      setDeleting(false);
-                      setConfirming(false);
-                    }
-                  }}
-                  className="hill-btn flex h-11 items-center border border-danger bg-surface px-3 t-control text-danger transition-colors disabled:opacity-40"
-                  aria-label={`Confirm delete ${session.name}`}
-                >
-                  {deleting ? 'Deleting…' : 'Delete'}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirming(true)}
-                className={`${ICON_BTN} text-danger hover:border-danger`}
-                aria-label="Delete session"
-                title="Delete session"
-              >
-                <TrashGlyph className={GLYPH} />
-              </button>
-            )
+            <ArmedDelete label="Delete session" name={session.name} onConfirm={() => onDelete(session)} />
           ) : null}
         </div>
         <div className="flex items-center gap-2">
@@ -169,11 +125,11 @@ function SheetBody({
             <button
               type="button"
               onClick={() => onEdit(session)}
-              className={`${ICON_BTN} text-fg hover:border-fg`}
+              className={`${SHEET_ICON_BTN} text-fg hover:border-fg`}
               aria-label="Edit session"
               title="Edit session"
             >
-              <PencilGlyph className={GLYPH} />
+              <PencilGlyph className={SHEET_GLYPH} />
             </button>
           ) : null}
           <a
@@ -182,7 +138,7 @@ function SheetBody({
             }`}
             className="hill-btn flex h-11 items-center gap-2 border border-fg bg-surface px-4 t-control text-fg"
           >
-            <PlayGlyph className={GLYPH} />
+            <PlayGlyph className={SHEET_GLYPH} />
             Start
           </a>
         </div>

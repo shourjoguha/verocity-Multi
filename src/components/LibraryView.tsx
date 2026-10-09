@@ -13,11 +13,14 @@ import type { Movement } from '@/lib/types';
 import { METRICS, type MetricKey, PRIMARY_METRICS } from '@/app.config';
 import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { isSubroutine } from '@/lib/subroutine';
-import { Button, EmptyState, LoadingScreen } from '@/components/ui/primitives';
+import { Button, EmptyState, FilterChip, ListCard, LoadingScreen } from '@/components/ui/primitives';
+import { Modal } from '@/components/ui/Modal';
+import { PencilGlyph, PlusGlyph } from '@/components/ui/icons';
+import { ArmedDelete, SHEET_GLYPH, SHEET_ICON_BTN } from '@/components/ui/SheetActions';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { SubroutineBody } from '@/components/SubroutineBody';
-import { MovementDemoSheet, MovementDemoThumb } from '@/components/MovementDemo';
+import { MovementDemo, MovementTile } from '@/components/MovementDemo';
 import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { TaxonomyEditor } from '@/components/TaxonomyEditor';
 import type { MovementProfile } from '@/app.config';
@@ -167,9 +170,11 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   // Muscle-map override for one owned movement. Corrects what the static rules
   // in lib/movementTaxonomy.ts got wrong; feeds the /app/body map.
   const [mapEditingId, setMapEditingId] = useState<string | null>(null);
-  // Movement whose demo GIF sheet is open, by name (the demo mapping is
-  // name-keyed, not id-keyed).
-  const [demoFor, setDemoFor] = useState<string | null>(null);
+  // The movement whose sheet is open. Every per-movement action (demo, Map,
+  // Edit, Delete) lives in that sheet; the row itself carries none.
+  const [openId, setOpenId] = useState<string | null>(null);
+  // The "+" menu: Movement or Subroutine.
+  const [addOpen, setAddOpen] = useState(false);
 
   useEffect(() => {
     if (data) setItems(data);
@@ -314,13 +319,14 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
     }
   }
 
-  async function handleDelete(m: Movement) {
-    if (busy) return;
-    if (!confirm(`Delete "${m.name}"? This can't be undone.`)) return;
+  // Called from the sheet's armed trash, which is the confirm step.
+  async function handleDelete(m: Movement): Promise<boolean> {
+    if (busy) return false;
     setBusy(true);
     const ok = await deleteMovement(m.id);
     setBusy(false);
     if (ok) {
+      setOpenId(null);
       setItems((prev) => (prev ?? []).filter((x) => x.id !== m.id));
       track('movement_deleted', {
         category: m.category,
@@ -329,27 +335,37 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
         is_custom: m.owner_user_id !== null,
       });
     }
+    return ok;
   }
 
   if (loading || items === null) {
     return <LoadingScreen />;
   }
 
+  const open = movements.find((m) => m.id === openId) ?? null;
+  const openOwned = !!open && open.owner_user_id != null && !showcase;
+  const openSub = !!open && isSubroutine(open);
+
   return (
     <>
     <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
       <Item>
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <div className="mb-6 flex items-end justify-between gap-4">
           <EchoText
             text="LIBRARY"
             as="h1"
             className={ECHO_APP_TITLE}
           />
           {!showcase && !adding ? (
-            <div className="flex shrink-0 gap-2 pb-1">
-              <Button variant="ghost" onClick={startAdd}>+ Movement</Button>
-              <Button variant="ghost" onClick={() => setSubEditing({ mode: 'add' })}>+ Subroutine</Button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className={`${SHEET_ICON_BTN} mb-1 text-fg hover:border-fg`}
+              aria-label="Add to library"
+              title="Add to library"
+            >
+              <PlusGlyph className={SHEET_GLYPH} />
+            </button>
           ) : null}
         </div>
       </Item>
@@ -376,30 +392,20 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search movements"
-          className="mb-4 min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
+          placeholder={`Search ${movements.length} movements`}
+          className="mb-1 min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
         />
 
         {categories.length > 0 ? (
-          <div className="mb-5 flex flex-wrap gap-2">
-            <button
-              onClick={() => setCategory(null)}
-              className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
-                category === null ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-              }`}
-            >
-              All
-            </button>
+          <div className="mb-3 flex flex-wrap gap-x-1.5">
+            <FilterChip label="All" on={category === null} onClick={() => setCategory(null)} />
             {categories.map((c) => (
-              <button
+              <FilterChip
                 key={c}
-                onClick={() => setCategory(c)}
-                className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
-                  category === c ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-                }`}
-              >
-                {c}
-              </button>
+                label={c}
+                on={category === c}
+                onClick={() => setCategory(category === c ? null : c)}
+              />
             ))}
           </div>
         ) : null}
@@ -411,12 +417,11 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
         </Item>
       ) : (
         <Item>
-          <ul className="divide-y divide-border border border-border">
+          <ListCard>
           {filtered.map((m) => {
-            const custom = m.owner_user_id != null;
             if (editingId === m.id) {
               return (
-                <li key={m.id} className="p-4">
+                <div key={m.id} className="p-4">
                   <MovementForm
                     draft={draft}
                     setDraft={setDraft}
@@ -428,78 +433,140 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
                     customCat={customCat}
                     setCustomCat={setCustomCat}
                   />
-                </li>
+                </div>
               );
             }
             const sub = isSubroutine(m);
+            const custom = m.owner_user_id != null;
+            // One line, one target, as in the Sessions list: the row opens the
+            // movement sheet. Category and shared/custom moved into the sheet;
+            // "mine" stays because it says which rows the sheet can edit.
             return (
-              <li key={m.id} className="flex items-center gap-3 px-4 py-3">
-                {sub ? null : (
-                  <MovementDemoThumb name={m.name} onOpen={() => setDemoFor(m.name)} />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="capitalize text-fg">{m.name}</div>
-                  {sub ? (
-                    <>
-                      <SubroutineBody description={m.notes ?? undefined} url={m.url ?? undefined} className="mt-0.5" />
-                      <div className="mt-0.5 t-control text-muted">
-                        subroutine{custom ? ' · custom' : ' · shared'}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="t-control text-muted">
-                      {m.category ?? 'uncategorized'}
-                      {custom ? ' · custom' : ' · shared'}
-                      {m.taxonomy ? ' · mapped' : ''}
-                    </div>
-                  )}
-                </div>
-                {sub ? null : (
-                  <div className="text-right text-sm text-subtle">
-                    {METRICS[m.primary_metric]?.label ?? m.primary_metric}
-                    <div className="text-[0.7rem] text-muted">{m.default_rest_seconds}s rest</div>
-                  </div>
-                )}
-                {custom && !showcase ? (
-                  <div className="flex shrink-0 items-center gap-1">
-                    {sub ? null : (
-                      <button
-                        onClick={() => setMapEditingId(m.id)}
-                        className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
-                        aria-label={`Muscle map for ${m.name}`}
-                      >
-                        Map
-                      </button>
-                    )}
-                    <button
-                      onClick={() => (sub ? setSubEditing({ mode: 'edit', id: m.id }) : startEdit(m))}
-                      className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
-                      aria-label={`Edit ${m.name}`}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(m)}
-                      className="flex min-h-11 items-center px-2 text-muted hover:text-accent"
-                      aria-label={`Delete ${m.name}`}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ) : null}
-              </li>
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setOpenId(m.id)}
+                className="flex min-h-11 w-full items-center gap-3 px-3 text-left transition-colors hover:bg-elevated"
+                aria-label={`Open ${m.name}`}
+              >
+                <MovementTile name={m.name} />
+                <span className="min-w-0 flex-1 truncate capitalize text-fg">{m.name}</span>
+                <span className="shrink-0 t-control tabular-nums text-muted">
+                  {custom ? 'mine · ' : ''}
+                  {sub ? 'routine' : (METRICS[m.primary_metric]?.label ?? m.primary_metric)}
+                </span>
+              </button>
             );
           })}
-          </ul>
+          </ListCard>
         </Item>
       )}
 
     </PageStagger>
 
-      {/* Outside PageStagger, like every other view's sheets, and mounted
-          permanently with `open`. Unmounting it instead destroyed the
-          AnimatePresence inside Modal along with the child it was supposed to
-          animate out, so the sheet vanished in a single frame. */}
+      {/* Sheets live outside PageStagger and stay mounted with `open`:
+          unmounting a Modal destroyed its exit along with it. */}
+      <Modal open={open !== null} onClose={() => setOpenId(null)} title={open?.name}>
+        {open ? (
+          <>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {openSub ? (
+                <SubroutineBody description={open.notes ?? undefined} url={open.url ?? undefined} />
+              ) : (
+                <MovementDemo name={open.name} />
+              )}
+              <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                {openSub ? null : (
+                  <>
+                    <dt className="t-label text-muted">Metric</dt>
+                    <dd className="text-fg">{METRICS[open.primary_metric]?.label ?? open.primary_metric}</dd>
+                    <dt className="t-label text-muted">Rest</dt>
+                    <dd className="tabular-nums text-fg">{open.default_rest_seconds}s</dd>
+                    <dt className="t-label text-muted">Category</dt>
+                    <dd className="capitalize text-fg">{open.category ?? '—'}</dd>
+                    <dt className="t-label text-muted">Muscle map</dt>
+                    <dd className="text-fg">{open.taxonomy ? 'Set by you' : 'Automatic'}</dd>
+                  </>
+                )}
+                <dt className="t-label text-muted">Source</dt>
+                <dd className="text-fg">{open.owner_user_id != null ? 'Yours' : 'Shared library'}</dd>
+              </dl>
+            </div>
+            {/* Same layout as the session sheet: destructive left behind a
+                confirm, the item's own actions right. Shared rows are locked
+                by 0005_lock_shared_library.sql, so they get no footer. */}
+            {openOwned ? (
+              <div className="pb-safe flex shrink-0 items-center justify-between gap-2 border-t border-border px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <ArmedDelete
+                    label={openSub ? 'Delete subroutine' : 'Delete movement'}
+                    name={open.name}
+                    onConfirm={() => handleDelete(open)}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  {openSub ? null : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenId(null);
+                        setMapEditingId(open.id);
+                      }}
+                      className="hill-btn flex h-11 items-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg"
+                      aria-label={`Muscle map for ${open.name}`}
+                    >
+                      Map
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenId(null);
+                      if (openSub) setSubEditing({ mode: 'edit', id: open.id });
+                      else startEdit(open);
+                    }}
+                    className={`${SHEET_ICON_BTN} text-fg hover:border-fg`}
+                    aria-label={openSub ? 'Edit subroutine' : 'Edit movement'}
+                    title="Edit"
+                  >
+                    <PencilGlyph className={SHEET_GLYPH} />
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </Modal>
+
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add to library">
+        <div className="flex flex-col p-4">
+          <ListCard>
+            <button
+              type="button"
+              onClick={() => {
+                setAddOpen(false);
+                startAdd();
+              }}
+              className="flex min-h-11 w-full items-center justify-between px-3 text-left text-fg transition-colors hover:bg-elevated"
+            >
+              Movement
+              <span className="t-control text-muted">a lift, drill or erg</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAddOpen(false);
+                setSubEditing({ mode: 'add' });
+              }}
+              className="flex min-h-11 w-full items-center justify-between px-3 text-left text-fg transition-colors hover:bg-elevated"
+            >
+              Subroutine
+              <span className="t-control text-muted">a warm-up or flow, with a link</span>
+            </button>
+          </ListCard>
+        </div>
+      </Modal>
+
       <SubroutineEditor
         open={subEditing !== null}
         initial={{
@@ -509,12 +576,6 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
         }}
         onSave={handleSaveSubroutine}
         onClose={() => setSubEditing(null)}
-      />
-
-      <MovementDemoSheet
-        name={demoFor}
-        open={demoFor !== null}
-        onClose={() => setDemoFor(null)}
       />
 
       <TaxonomyEditor
