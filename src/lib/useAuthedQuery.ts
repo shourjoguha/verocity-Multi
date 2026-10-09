@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCached, setCached } from '@/lib/queryCache';
 
@@ -26,24 +26,31 @@ export function useAuthedQuery<T>(
   loader: () => Promise<T>,
   { auth = true, key }: { auth?: boolean; key?: string } = {},
 ): { data: T | null; loading: boolean } {
-  const cached = key ? getCached<T>(key) : undefined;
-  const [data, setData] = useState<T | null>(cached ?? null);
-  const [loading, setLoading] = useState(cached === undefined);
+  // The first render is ALWAYS the loading state, never the cache. These
+  // islands are server-rendered, and the server has no cache, so it renders
+  // loading; seeding `useState` from the cache made the first client render
+  // differ on every revisit, which is React #418 — React discards the server
+  // HTML and re-renders the root from scratch. The layout effect below seeds
+  // after hydration and before the browser paints, so a revisit still shows
+  // cached data on its first painted frame.
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const loaderRef = useRef(loader);
   loaderRef.current = loader;
 
-  useEffect(() => {
-    let active = true;
-
-    // Re-seed for THIS key. On the first run this matches what useState already
-    // holds and React bails out; on a key change it swaps in that window's
-    // cached value, or clears to a spinner when there is nothing cached yet.
-    // Without it a new window would keep painting the previous window's numbers
-    // while its own request was still in flight.
+  // Seed for THIS key. On a key change it swaps in that window's cached value,
+  // or clears to a spinner when there is nothing cached yet. Without it a new
+  // window would keep painting the previous window's numbers while its own
+  // request was still in flight.
+  useLayoutEffect(() => {
     const seeded = key ? getCached<T>(key) : undefined;
     setData(seeded ?? null);
     setLoading(seeded === undefined);
+  }, [key]);
+
+  useEffect(() => {
+    let active = true;
 
     (async () => {
       if (auth) {

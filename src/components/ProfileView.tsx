@@ -469,28 +469,33 @@ export default function ProfileView({ mode }: { mode: Surface }) {
   const readOnly = isReadOnly(mode);
 
   // Seed from the SWR cache (app mode only) so revisiting Home paints instantly
-  // while the effect below revalidates in the background.
-  const seeded = mode === 'app' ? getCached<Profile>('profile') : undefined;
-  const [loading, setLoading] = useState(seeded === undefined);
-  const [profile, setProfile] = useState<Profile | null>(seeded ?? null);
-  const [plan, setPlan] = useState<Plan | null>(
-    mode === 'app' ? (getCached<Plan>('plan:active') ?? null) : null,
-  );
-  const [logs, setLogs] = useState<WorkoutLog[]>(
-    mode === 'app' ? (getCached<WorkoutLog[]>('logs:recent30') ?? []) : [],
-  );
-  const [allLogs, setAllLogs] = useState<WorkoutLog[]>(
-    mode === 'app' ? (getCached<WorkoutLog[]>('logs:all') ?? []) : [],
-  );
-  const [mealsToday, setMealsToday] = useState<MealLog[]>(
-    mode === 'app' ? (getCached<MealLog[]>('meals:today') ?? []) : [],
-  );
+  // while the effect below revalidates in the background. Seeded in a layout
+  // effect, not in `useState`: the server renders the empty/loading state, and
+  // a first client render that differs from it is React #418 (see
+  // useAuthedQuery). The layout effect runs before the first paint, so the
+  // cached data is still what a revisit shows first.
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [logs, setLogs] = useState<WorkoutLog[]>([]);
+  const [allLogs, setAllLogs] = useState<WorkoutLog[]>([]);
+  const [mealsToday, setMealsToday] = useState<MealLog[]>([]);
   // Hoisted so the chip rail and Today's meals share ONE drawer instance —
   // one dialog, one focus trap, one scroll lock (docs/MEAL_LOGGING.md §11.3).
   const [mealDraft, setMealDraft] = useState<MealDraft | null>(null);
-  const [mealPresets, setMealPresets] = useState<MealPreset[]>(
-    mode === 'app' ? (getCached<MealPreset[]>('meals:presets') ?? []) : [],
-  );
+  const [mealPresets, setMealPresets] = useState<MealPreset[]>([]);
+  useLayoutEffect(() => {
+    if (mode !== 'app') return;
+    const seeded = getCached<Profile>('profile');
+    if (seeded === undefined) return;
+    setProfile(seeded);
+    setPlan(getCached<Plan>('plan:active') ?? null);
+    setLogs(getCached<WorkoutLog[]>('logs:recent30') ?? []);
+    setAllLogs(getCached<WorkoutLog[]>('logs:all') ?? []);
+    setMealsToday(getCached<MealLog[]>('meals:today') ?? []);
+    setMealPresets(getCached<MealPreset[]>('meals:presets') ?? []);
+    setLoading(false);
+  }, [mode]);
   const [savedMealsOpen, setSavedMealsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   // Pre-filled date when Add is opened from a specific calendar cell.
