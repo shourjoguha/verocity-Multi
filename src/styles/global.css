@@ -1115,6 +1115,24 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   animation: pop-in 0.16s var(--ease-editorial) both;
 }
 
+/* Toast entrance (Toaster.tsx). Was a Motion fade+rise with an exit; now CSS
+   from the first painted frame, and removal is instant, like the sheets. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .toast-in {
+    animation: toast-in 0.25s var(--ease-editorial) both;
+  }
+}
+
 /* Grouped-page tab slide (Training / Progress — GroupPager.tsx). The sibling
    view stays mounted underneath and swaps to `hidden` the same frame the new
    one appears, so this is a single-element entrance like the rest of the
