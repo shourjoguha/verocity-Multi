@@ -736,6 +736,18 @@ failure state**; silent staleness is the one outcome the SWR pattern must never
 have.
 → `ProfileView.tsx`
 
+### A file is in the service worker's cache and still goes to the network
+`[measured in Chromium]`
+`cache.match(request)` honours the stored response's `Vary`. `astro preview`
+sends `Vary: Origin`; a page's module-script request carries an `Origin`
+header and the worker's own `fetch(src)` does not, so every chunk precached by
+`warmScripts` missed — all 13 of Stats' chunks were cached and all 13 hit the
+server. **Match hashed `/_astro/*` with `{ ignoreVary: true }`**: the same hash
+is the same bytes. Verify with server-side hits (a logging proxy), not with
+Playwright's `request.serviceWorker()` events, which fire for requests the
+worker *handled* whether or not it answered from cache.
+→ `src/sw-source.js` (`cacheFirst`, `warmScripts`)
+
 ### Users are stuck on a previous build
 `[confirmed in the wild]`
 The service worker serves HTML **stale-while-revalidate**, so the first view
