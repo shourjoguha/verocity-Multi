@@ -13,7 +13,8 @@
     "audit:mobile": "node scripts/mobile-audit.mjs",
     "audit:flicker": "node scripts/flicker-probe.mjs",
     "audit:shell": "node scripts/shell-audit.mjs",
-    "audit:docs": "node scripts/docs-audit.mjs"
+    "audit:docs": "node scripts/docs-audit.mjs",
+    "perf:baseline": "node scripts/perf-baseline.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^5.0.5",

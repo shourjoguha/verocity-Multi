@@ -146,6 +146,19 @@ both`, so the from-state holds from the first painted frame.
 Distinguishing symptom: happens while *not* scrolling, and on every page.
 → `src/components/anim.tsx` (`PageStagger`/`Item`), `.stagger` in `global.css`
 
+### A chart tooltip flickers on the first tap, and not on later ones
+`[argued — not reproduced]`
+iPhone, Stats consistency grid: the **first tap after every visit to Progress**
+flickered; later taps, which only moved the visible tooltip, did not. A
+per-frame Chromium probe saw clean fades on every version, so the engine is
+the suspect. Ruled out: loading (nothing is fetched on tap) and Motion (a CSS
+fade did not stop it on the device). What was left differed from the sheets
+that stopped flickering: a `fixed` box **created by the tap inside the
+`[data-scroll-root]` scroller**. It is now portaled to `<body>` and mounted
+once with the page, and a tap only changes its opacity. Unconfirmed on a
+device until someone reports it.
+→ `src/components/StatsView.tsx` (tooltip)
+
 ### Flicker on touch devices, fine on desktop
 `[argued — not reproduced]`
 `backdrop-filter` on an element that is opacity-animated, or fixed/sticky over
@@ -656,9 +669,21 @@ size before clearing anything. Tiles that mean "all time" must read an
 unbounded source; keep the windowed fetch for the list that wants a window.
 → `ProfileView.tsx`, `completedLogs` in `src/lib/stats.ts`
 
+### React #418 in the console, only when revisiting a tab
+`[measured in Chromium]`
+A first visit is clean; Home on its second visit and Stats on every revisit log
+`Minified React error #418` (hydration mismatch). The islands are
+server-rendered, and the server has no query cache, so it renders the loading
+state. Seeding `useState` from `getCached` made the first client render show data
+on any revisit, React threw away the server HTML, and re-rendered the root.
+**Seed the cache in a `useLayoutEffect`, never in `useState`**: the first render
+matches the server, and the seed still lands before the first paint. Measured
+per frame: revisits show data on frame one either way.
+→ `src/lib/useAuthedQuery.ts`, `ProfileView.tsx`
+
 ### A widened query window paints the old window first
 `[argued — not reproduced]`
-`useAuthedQuery` seeds `useState` synchronously from `getCached(key)`, so the
+`useAuthedQuery` seeds from `getCached(key)` before the first paint, so the
 first frame is whatever the last visit stored under that key. Widening a fetch
 without renaming the key therefore paints the **old** span and computes anything
 derived from it — legend dates, window-scoped scores — against the wrong range
