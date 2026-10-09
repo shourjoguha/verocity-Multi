@@ -121,6 +121,20 @@ describe('planWeekByLog', () => {
   });
 });
 
+describe('byLoggedOrder', () => {
+  it('orders same-day sessions by start time, not by when the row was entered', () => {
+    // Evening session backdated after this morning's was already logged.
+    const morning = { ...log('lower-jump', '2026-05-01'), started_at: '2026-05-01T07:00:00Z', created_at: '2026-05-01T07:00:00Z' };
+    const evening = { ...log('upper', '2026-05-01'), started_at: '2026-05-01T18:00:00Z', created_at: '2026-05-02T09:00:00Z' };
+    const backdated = { ...log('upper', '2026-05-01'), started_at: '2026-05-01T06:00:00Z', created_at: '2026-05-02T09:30:00Z' };
+    const map = planWeekByLog(PLAN_ID, [morning, evening, backdated], 4);
+    // backdated upper (06:00) → morning lower (07:00) → evening upper repeats → cycle 2
+    expect(map.get(backdated.id)).toBe(1);
+    expect(map.get(morning.id)).toBe(1);
+    expect(map.get(evening.id)).toBe(2);
+  });
+});
+
 describe('dayCycleStatus', () => {
   it('counts closed cycles a day was missing from, and finishes past the last cycle', () => {
     const logs = [

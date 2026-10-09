@@ -34,16 +34,21 @@ export interface PlanCycles {
   loggedInCurrent: Set<string>;
 }
 
-// Walk a plan's non-cancelled logs in logged order (log_date, then created_at as
-// a stable tiebreak within a day), opening a new cycle whenever a day repeats.
+// The order sessions happened in: log_date, then the start time within a day.
+// started_at is editable after the fact (SessionWhen), so a session backdated
+// to yesterday evening sorts after yesterday morning's even though its row was
+// created today. created_at only stands in for a session with no start time.
+export function byLoggedOrder(a: WorkoutLog, b: WorkoutLog): number {
+  if (a.log_date !== b.log_date) return a.log_date.localeCompare(b.log_date);
+  return (a.started_at ?? a.created_at).localeCompare(b.started_at ?? b.created_at);
+}
+
+// Walk a plan's non-cancelled logs in logged order, opening a new cycle whenever
+// a day repeats.
 export function planCycles(planId: string, logs: WorkoutLog[]): PlanCycles {
   const ordered = logs
     .filter((l) => l.plan_id === planId && l.day_key && l.status !== 'cancelled')
-    .sort((a, b) =>
-      a.log_date === b.log_date
-        ? a.created_at.localeCompare(b.created_at)
-        : a.log_date.localeCompare(b.log_date),
-    );
+    .sort(byLoggedOrder);
   const cycleByLog = new Map<string, number>();
   let current = 1;
   let loggedInCurrent = new Set<string>();

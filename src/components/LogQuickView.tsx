@@ -6,6 +6,7 @@ import { Tag } from '@/components/ui/primitives';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { isSubroutine } from '@/lib/subroutine';
 import { SessionTime } from '@/components/SessionTime';
+import { SessionWhen } from '@/components/SessionWhen';
 import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { Modal } from '@/components/ui/Modal';
@@ -74,6 +75,11 @@ export function LogQuickView({
                 <SessionTime log={log} onUpdate={(s) => onUpdated?.({ ...log, total_seconds: s })} />
               )}
             </div>
+            {!readOnly ? (
+              <div className="mt-2 flex text-sm">
+                <SessionWhen log={log} onUpdate={(patch) => onUpdated?.({ ...log, ...patch })} />
+              </div>
+            ) : null}
             {!readOnly ? (
               <div className="mt-2 flex justify-end text-sm">
                 <HeartRate log={log} onUpdate={(hr) => onUpdated?.({ ...log, ...hr })} />

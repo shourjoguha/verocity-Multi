@@ -17,6 +17,7 @@ import {
 import { EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { SessionTime } from '@/components/SessionTime';
+import { SessionWhen } from '@/components/SessionWhen';
 import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { LogShareControl } from '@/components/LogShareControl';
@@ -143,6 +144,7 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
               </span>
             ) : (
               <>
+                <SessionWhen log={log} onUpdate={(patch) => setLog({ ...log, ...patch })} />
                 <SessionTime log={log} onUpdate={(s) => setLog({ ...log, total_seconds: s })} />
                 <HeartRate log={log} onUpdate={(hr) => setLog({ ...log, ...hr })} />
               </>
