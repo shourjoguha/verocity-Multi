@@ -29,6 +29,7 @@ intent, LESSONS describes what actually happened.
 | **Measure how much of a plan was followed, or what counts as a swap**    | `src/lib/planAdherence.ts`, `src/lib/movementSimilarity.ts` |
 | **Split training time by kind of work**                                  | `sessionLens` vs `modalityMinutes` — read the LESSONS entry first |
 | Write coach output from a Claude Code session                            | `src/lib/coach/governor.ts` (the boundary), `supabase/migrations/0043_coach_briefs_notes.sql` |
+| **Run or change the weekly coach-tuning routine**                        | `docs/COACH_TUNING.md` (budget + boundary), `scripts/coach-tuning/scorecard.sql` |
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
 | **Change a component, sheet, token or layout**                           | skill ui-change — `.claude/skills/ui-change/SKILL.md` |
 | **Add a migration, RLS policy, edge function or query helper**           | skill db-change — `.claude/skills/db-change/SKILL.md` |
