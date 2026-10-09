@@ -12,7 +12,7 @@ import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { SubroutineBody } from '@/components/SubroutineBody';
 import { isSubroutine } from '@/lib/subroutine';
-import { nextWeekForDay, planWeekByLog, planWeekCount } from '@/lib/progression';
+import { dayCycleStatus, planWeekByLog, planWeekCount } from '@/lib/progression';
 import { computePlanAdherence } from '@/lib/planAdherence';
 import { PlanAdherenceSection } from '@/components/PlanAdherence';
 
@@ -88,8 +88,8 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
 
   // Best actual set per (movement, week) from this plan's done logs, plus the
   // most recent completed week — to overlay real performance onto the plan grid.
-  // The week is recomputed from logging order (the Nth session of a day is week
-  // N), so stored week_number never drives display.
+  // The week is recomputed from logging order (the plan cycle the log fell in),
+  // so stored week_number never drives display.
   const weekByLog = planWeekByLog(plan.id, logs, maxWeek);
   const doneLogs = logs.filter(
     (l) => l.plan_id === plan.id && l.status === 'done' && weekByLog.has(l.id),
@@ -99,7 +99,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   // How much of the plan was actually done, over its whole life — not the
   // 8-week window Stats reads. `logs` here is every log, which is what this
   // needs and what /app/stats does not have.
-  const adherence = computePlanAdherence(plan.id, parsed, logs, new Date());
+  const adherence = computePlanAdherence(plan.id, parsed, logs, new Date(), undefined, !plan.is_active);
 
   const actualBest = new Map<string, { e1rm: number; label: string }>();
   for (const log of doneLogs) {
@@ -143,13 +143,10 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const weekProgrammed = (w: number) =>
     parsed.days.some((d) => d.exercises.some((ex) => ex.plannedByWeek[w]));
 
-  // Each day advances on its own counter (see nextWeekForDay): the Nth log of
-  // a day is its cycle N. The rail above is one week for every day, so this is
-  // where a day that has been skipped shows how far behind the others it sits.
-  const dayLogged = (dayKey: string) =>
-    logs.filter((l) => l.plan_id === plan.id && l.day_key === dayKey && l.status !== 'cancelled').length;
-  const dayCycle = (dayKey: string) => nextWeekForDay(logs, plan.id, dayKey, maxWeek);
-  const leadCycle = Math.max(1, ...parsed.days.map((d) => dayCycle(d.dayKey)));
+  // Every day shares one cycle counter (see planCycles): a cycle closes when a
+  // day repeats, so a skipped day does not lag — it is a missed cycle, and this
+  // is where the day card says how many.
+  const dayStatus = (dayKey: string) => dayCycleStatus(logs, plan.id, dayKey, maxWeek);
   const weekNote = parsed.weekNotes?.[activeWeek];
 
   const toggleDay = (dayKey: string) => {
@@ -272,9 +269,8 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
         const hasContent = count > 0;
         const isCollapsed = collapsedDays.has(day.dayKey);
         const isMatrix = matrixDayId === day.dayKey;
-        const logged = dayLogged(day.dayKey);
-        const cycle = dayCycle(day.dayKey);
-        const behind = leadCycle - cycle;
+        const { next: cycle, missed } = dayStatus(day.dayKey);
+        const finished = cycle > maxWeek;
         const dayNote = day.notesByWeek?.[activeWeek];
 
         return (
@@ -307,21 +303,20 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   <span className="min-w-0 truncate t-control">
                     Day {letter} · {day.label}
                   </span>
-                  {/* This day's own cycle: the one its next log will be. Its
-                      counter runs apart from the other days', so a day that
-                      has been skipped reads as behind the furthest one. */}
+                  {/* The cycle this day's next log falls in, and how many closed
+                      cycles went by without it. */}
                   <span
                     className="shrink-0 t-control tabular-nums text-muted"
                     title={
-                      logged >= maxWeek
-                        ? `All ${maxWeek} cycles logged`
-                        : `Next log is cycle ${cycle} of ${maxWeek}${behind > 0 ? `, ${behind} behind` : ''}`
+                      finished
+                        ? `All ${maxWeek} cycles passed${missed > 0 ? `, ${missed} missed` : ''}`
+                        : `Next log is cycle ${cycle} of ${maxWeek}${missed > 0 ? `, ${missed} missed` : ''}`
                     }
                   >
-                    {logged >= maxWeek ? 'done' : `${cycle}/${maxWeek}`}
-                    {behind > 0 && logged < maxWeek ? (
-                      <sub className="ml-0.5 text-down" aria-label={`${behind} behind`}>
-                        −{behind}
+                    {finished ? 'done' : `${cycle}/${maxWeek}`}
+                    {missed > 0 ? (
+                      <sub className="ml-0.5 text-down" aria-label={`${missed} missed`}>
+                        −{missed}
                       </sub>
                     ) : null}
                   </span>

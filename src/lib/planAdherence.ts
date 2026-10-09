@@ -8,18 +8,21 @@
 // entirely — or a whole training day you stopped showing up for — was invisible
 // to it, and `reduceLogDocument` minis trimmed their own denominator away.
 //
-// THE DENOMINATOR IS PACED BY LOGGING, NOT THE CALENDAR. Program week is
-// `currentProgramWeek` — the most times any one day has been logged — so a week
-// that took ten days costs nothing, which is the whole reason weeks are
-// logging-grounded elsewhere in the app. But the cursor advances for the WHOLE
-// plan: reaching week 8 on Mondays makes week 8's Friday due as well, so a day
-// you quietly stopped training shows up as the miss it is. A per-day cursor
-// (the obvious first cut) never grows for a day you never log, which hides
-// exactly the failure worth seeing.
+// THE DENOMINATOR IS PACED BY LOGGING, NOT THE CALENDAR. Program week is the
+// shared plan cycle (`planCycles` in progression.ts — a cycle closes when a day
+// repeats), so a week that took ten days costs nothing, which is the whole
+// reason weeks are logging-grounded elsewhere in the app. But the cycle is one
+// counter for the WHOLE plan: logging Monday's day again closes the cycle, and
+// a Friday that did not happen in it is the miss it is. A per-day cursor (the
+// obvious first cut) never grows for a day you never log, which hides exactly
+// the failure worth seeing.
 //
 // THE IN-FLIGHT WEEK IS NOT A FAILURE. Weeks 1..E-1 count in full; week E
 // counts only the days already logged in it. Otherwise Wednesday reads as
 // missed on Monday evening, and adherence sawtooths every week for no reason.
+// Once the plan is FINISHED — no longer the active plan, or a day repeated past
+// its final cycle — there is no in-flight week, and the last one counts in
+// full: 3 days × 8 weeks with one day logged 4 times is 20 of 24, not 20 of 23.
 //
 // OVERSHOOT IS NOT ADHERENCE AND NOT A PENALTY. Extra sets are counted and
 // reported beside the bar, never in the ratio. The per-exercise cap is there so
@@ -32,7 +35,7 @@ import type { ParsedPlan, PlanDay, WorkoutLog } from '@/lib/types';
 import type { OverrideMap } from '@/lib/movementTaxonomy';
 import { parsePlanned } from '@/lib/logBuilder';
 import { compareMovements, type SwapVerdict } from '@/lib/movementSimilarity';
-import { currentProgramWeek, planWeekByLog, planWeekCount } from '@/lib/progression';
+import { planCycles, planWeekByLog, planWeekCount } from '@/lib/progression';
 import { isSubroutine } from '@/lib/subroutine';
 
 /** One prescribed movement, rolled up across every elapsed week of one day. */
@@ -56,7 +59,7 @@ export interface AdherenceRow {
 }
 
 export interface PlanAdherence {
-  /** Program week reached — the most times any one day has been logged. */
+  /** Program week reached — the plan cycle in progress, clamped to its length. */
   elapsedWeeks: number;
   /** Weeks the plan programmes in total. */
   planWeeks: number;
@@ -168,13 +171,17 @@ export function computePlanAdherence(
   logs: WorkoutLog[],
   today: Date,
   overrides?: OverrideMap,
+  /** The plan is over (no longer active), so its final week is not in flight. */
+  finished = false,
 ): PlanAdherence | null {
   const done = logs.filter((l) => l.status === 'done');
   const planLogs = done.filter((l) => l.plan_id === planId && l.day_key);
   if (planLogs.length === 0) return null;
 
   const planWeeks = planWeekCount(parsed);
-  const elapsedWeeks = currentProgramWeek(planId, planLogs, planWeeks);
+  const cycle = planCycles(planId, planLogs).current;
+  const elapsedWeeks = Math.min(cycle, planWeeks);
+  const inFlight = !finished && cycle <= planWeeks;
   const weekByLog = planWeekByLog(planId, planLogs, planWeeks);
   const firstLogDate = planLogs
     .map((l) => l.log_date.slice(0, 10))
@@ -183,7 +190,7 @@ export function computePlanAdherence(
   const dayByKey = new Map(parsed.days.map((d) => [d.dayKey, d]));
 
   // Which (day, week) cells are due. Weeks 1..E-1 in full; week E only where a
-  // log already exists.
+  // log already exists, unless the plan is finished.
   const loggedCells = new Set<string>();
   for (const log of planLogs) {
     const w = weekByLog.get(log.id);
@@ -193,7 +200,7 @@ export function computePlanAdherence(
   const owed: Owed[] = [];
   for (const day of parsed.days) {
     for (let w = 1; w <= elapsedWeeks; w += 1) {
-      if (w === elapsedWeeks && !loggedCells.has(`${day.dayKey}|${w}`)) continue;
+      if (inFlight && w === elapsedWeeks && !loggedCells.has(`${day.dayKey}|${w}`)) continue;
       for (const p of prescribedFor(day, w)) {
         owed.push({ dayKey: day.dayKey, week: w, movement: p.movement, sets: p.sets });
       }
