@@ -18,6 +18,7 @@
 // stated in.
 
 import {
+  ALL_OUT_HR,
   MODALITY_KEYS,
   MUSCLE_REGION_KEYS,
   RPE,
@@ -71,6 +72,33 @@ export function rpeWasRated(log: WorkoutLog): boolean {
   if (values.length === 0) return false;
   if (values.some((v) => v !== RPE.default)) return true;
   return new Set(values).size >= RPE_LADDER.minDistinctPerSession;
+}
+
+/**
+ * Whether one set's RPE is a rating rather than a seed.
+ *
+ * Sets logged since `SetActual.rpeRated` existed say so directly. Older sets
+ * cannot, and fall back to the session-level heuristic above — which is
+ * generous (one moved dial admits every carried value in the session), but is
+ * the best the old rows allow.
+ */
+export function setRpeIsRating(
+  actual: { rpe?: number | null; rpeRated?: boolean },
+  sessionRated: boolean,
+): boolean {
+  if (actual.rpe == null) return false;
+  return actual.rpeRated ?? sessionRated;
+}
+
+/**
+ * The athlete's own max heart rate reference: the highest hr_max ever logged,
+ * once enough sessions carry one for it to be a reference rather than a single
+ * reading. Null otherwise — the HR channel then says nothing.
+ */
+export function observedPeakHr(allLogs: WorkoutLog[]): number | null {
+  const readings = allLogs.map((l) => l.hr_max).filter((v): v is number => v != null && v > 0);
+  if (readings.length < ALL_OUT_HR.minSessionsForPeak) return null;
+  return Math.max(...readings);
 }
 
 /**
@@ -300,9 +328,18 @@ export interface TrainingSignals {
     allOutBouts: number;
     allOutMinutes: number;
     meanBoutSeconds: number;
+    /** Mean over RATED bouts only (`setRpeIsRating`). Null when none were. */
     meanRpe: number | null;
+    /** Bouts whose RPE was the athlete's rating rather than a seed. */
+    ratedBouts: number;
     /** Sessions that contained at least one timed conditioning bout. */
     sessions: number;
+    /** The athlete's own peak hr_max (`observedPeakHr`), or null. */
+    peakHr: number | null;
+    /** Bout sessions whose hr_max reached ALL_OUT_HR.fractionOfPeak of the peak. */
+    hrAllOutSessions: number;
+    /** Bout sessions that logged an hr_max at all. */
+    hrSessions: number;
   }>;
   /**
    * Everything else the conditioning block recorded, so nothing logged goes
@@ -430,6 +467,9 @@ export function measureTraining(
   let boutRpeSum = 0;
   let boutRpeCount = 0;
   const boutSessions = new Set<string>();
+  const peakHr = observedPeakHr(completedLogs(allLogs));
+  const hrSessions = new Set<string>();
+  const hrAllOutSessions = new Set<string>();
   let condSets = 0;
   let condSeconds = 0;
   let condDistance = 0;
@@ -502,7 +542,15 @@ export function measureTraining(
                 bouts += 1;
                 boutSeconds += a.time;
                 boutSessions.add(log.id);
-                if (a.rpe != null) {
+                if (log.hr_max != null && log.hr_max > 0) {
+                  hrSessions.add(log.id);
+                  if (peakHr != null && log.hr_max >= peakHr * ALL_OUT_HR.fractionOfPeak) {
+                    hrAllOutSessions.add(log.id);
+                  }
+                }
+                // A seeded RPE is last session's number, so it says nothing
+                // about how hard THIS bout went. Only ratings are averaged.
+                if (a.rpe != null && setRpeIsRating(a, sessionRated)) {
                   boutRpeSum += a.rpe;
                   boutRpeCount += 1;
                   if (a.rpe >= opts.allOutRpe) {
@@ -538,7 +586,7 @@ export function measureTraining(
               // exactly the fatigue-aware read — see the note on
               // `hypertrophyEffort`. Only hypertrophy-band sets from a session
               // that actually used the dial are eligible.
-              if (inHypBand && a.rpe != null && sessionRated) {
+              if (inHypBand && a.rpe != null && setRpeIsRating(a, sessionRated)) {
                 const profile = classifyMovement(item.movement, { overrides }).profile;
                 for (const region of Object.keys(profile.regions)) {
                   const prev = terminalByRegion.get(region);
@@ -751,7 +799,11 @@ export function measureTraining(
         allOutMinutes: allOutSeconds / 60,
         meanBoutSeconds: bouts ? boutSeconds / bouts : 0,
         meanRpe: boutRpeCount ? boutRpeSum / boutRpeCount : null,
+        ratedBouts: boutRpeCount,
         sessions: boutSessions.size,
+        peakHr,
+        hrAllOutSessions: hrAllOutSessions.size,
+        hrSessions: hrSessions.size,
       },
       bouts,
       6,

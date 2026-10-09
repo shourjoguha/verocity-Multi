@@ -28,7 +28,7 @@
 // stamped onto every recommendation row so a finding can always be traced to
 // the exact evidence that produced it, including after the pack moves on.
 
-export const KNOWLEDGE_PACK_VERSION = '2026.10.2';
+export const KNOWLEDGE_PACK_VERSION = '2026.10.3';
 
 export interface Source {
   /** A person. Never an institution, never "research". */
@@ -147,6 +147,16 @@ export const TRAINING = {
     caveat:
       'Stated for the moderately-to-highly trained. Galpin puts the same lifter at ~75% when only moderately trained, and says of the untrained "everything works".',
   }),
+  strengthIntensityModerate: claim({
+    id: 'strength.intensityModerate',
+    statement: 'For the moderately trained, around 75% of one-rep max already loads for strength.',
+    value: 0.75,
+    unit: 'fraction of 1RM',
+    source: 'galpinStrength',
+    quote: "If you're moderately trained, maybe 75% will work",
+    caveat:
+      'The same breath as the 85% line, and the condition on it. He goes on: "lowly trained again. Everything works." The app reads its own experience levels onto his words — intermediate as moderately trained, beginner as lowly trained — which is our mapping, not his.',
+  }),
   strengthReps: claim({
     id: 'strength.reps',
     statement: 'True strength sets run to five reps or fewer.',
@@ -262,6 +272,16 @@ export const TRAINING = {
     quote: "as long as you touch that max heart rate, I'm good",
     caveat:
       "The RPE number is the APP'S translation of touching max heart rate — Galpin speaks in heart rate, and the athlete's own hr_max is the better read whenever the session logged one. He is explicit that the bout LENGTH does not matter (\"If that takes you 20 seconds or 90 seconds, it's fine\"); only the intensity reached does.",
+  }),
+  maxHrObserved: claim({
+    id: 'endurance.maxHrObserved',
+    statement: 'Age-predicted max heart rate is a rough guide; your own measured peak beats it.',
+    value: 'observed-peak',
+    unit: 'max heart rate reference',
+    source: 'galpinStrength',
+    quote: 'So take that number with a grain of salt.',
+    caveat:
+      'Said of 220-minus-age, right after noting his own max is close to 210. He names no replacement formula, so the app uses the highest heart rate the athlete has actually logged, and treats a session within a fixed fraction of it as touching max (ALL_OUT_HR in app.config.ts — our line, not his).',
   }),
   vo2Bouts: claim({
     id: 'endurance.vo2Bouts',

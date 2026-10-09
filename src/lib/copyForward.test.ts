@@ -67,6 +67,8 @@ describe('addSet (+ button)', () => {
       calories: 12,
       completed: false,
       prefilled: true,
+      // The copied RPE is the previous set's rating, not this one's.
+      rpeRated: false,
     });
     expect(added.notations).toEqual(['/side']);
     expect(added.planned).toBe('10 RPE8');

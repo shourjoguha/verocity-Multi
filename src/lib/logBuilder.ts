@@ -31,7 +31,7 @@ export function parsePlanned(raw: string): { count: number; label: string } {
 }
 
 function emptyActual() {
-  return { completed: false, prefilled: false, rpe: RPE.default };
+  return { completed: false, prefilled: false, rpe: RPE.default, rpeRated: false };
 }
 
 // A section-tagged exercise with a single planned string — the common shape

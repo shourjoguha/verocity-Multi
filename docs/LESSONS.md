@@ -1649,6 +1649,31 @@ parenthesised form — so a spring of paused sets was invisible, and a claim tha
 `src/lib/notations.ts` only. A variation is its own track (`trackName`), never
 priced; a genuinely different exercise gets its own movement name.
 
+### The coach fires the same finding every check-in after the athlete acted on it
+
+**The RPE it read was last session's, not this one's.** `prefilled` is stamped
+when the logger seeds a set and never cleared, and the seed for RPE is
+`last?.rpe` — so one rating echoed forward for weeks, and 85–96% of completed
+sets in every section carried it. `rpeWasRated` is session-level: one moved
+dial admitted every carried value in that session. `intervals-not-all-out`
+fired 8/8 check-ins at drift 0.67 on that average while 10 of the same 28 days'
+sessions logged hr_max within 90% of the athlete's own peak.
+
+**Decision.** `SetActual.rpeRated` (true only when the stepper or a spoken RPE
+writes the value; false when seeded, copied or defaulted; absent on old rows,
+which fall back to `rpeWasRated`), read through `setRpeIsRating`. Heart rate
+outranks RPE for all-out (`ALL_OUT_HR`, `TRAINING.maxHrObserved`). And a cited
+threshold's condition is part of the citation: `strength.intensity` is 85% "for
+the moderately-to-highly trained", so the line now follows
+`user_stats.experience` (`strengthLine`). Files: `src/lib/coach/signals.ts`,
+`src/lib/coach/rules/training.ts`, `src/lib/logEdits.ts`,
+`src/components/logger/SetEntrySheet.tsx`, `measurementHonesty.test.ts`.
+
+**What no test here can see:** whether a rule is RIGHT about a real athlete.
+The check that observed this was `coach_observations` — a rule that fires every
+reading with flat drift while the athlete keeps marking it done is a measurement
+bug until shown otherwise.
+
 ## Superseded
 
 Kept so the search path survives, **demoted so it stops reading as advice.**

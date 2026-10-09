@@ -257,7 +257,7 @@ export function SetEntrySheet({
                 <StepperField
                   inline
                   value={a.rpe ?? RPE.default}
-                  onChange={(v) => onPatch({ rpe: v })}
+                  onChange={(v) => onPatch({ rpe: v, rpeRated: true })}
                   step={RPE.step}
                   clamp={snapRpe}
                   display={() => a.rpe ?? '—'}

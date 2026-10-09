@@ -10,7 +10,7 @@ function newId(): string {
 }
 
 function emptyActual(): SetActual {
-  return { completed: false, prefilled: false, rpe: RPE.default };
+  return { completed: false, prefilled: false, rpe: RPE.default, rpeRated: false };
 }
 
 function mapSection(doc: LogDocument, si: number, fn: (s: LogDocument['sections'][number]) => LogDocument['sections'][number]): LogDocument {
@@ -80,6 +80,8 @@ export function addSet(doc: LogDocument, si: number, gi: number, ii: number): Lo
             rpe: prev?.actual.rpe ?? RPE.default,
             completed: false,
             prefilled: true,
+            // A copied RPE is the previous set's rating, not this one's.
+            rpeRated: false,
           },
           notations: prev ? [...prev.notations] : [],
           added: true,
@@ -112,8 +114,8 @@ export function copyForward(
   if (!it || isSubroutine(it) || !it.sets[ki]) return { doc, outcome: 'last-open' };
   if (ki + 1 < it.sets.length) {
     // Every logged metric, never the completion state of either set.
-    const { completed: _c, prefilled: _p, ...metrics } = it.sets[ki].actual;
-    const patch: Partial<SetActual> = { prefilled: true };
+    const { completed: _c, prefilled: _p, rpeRated: _r, ...metrics } = it.sets[ki].actual;
+    const patch: Partial<SetActual> = { prefilled: true, rpeRated: false };
     for (const [k, v] of Object.entries(metrics)) if (v != null) (patch as Record<string, unknown>)[k] = v;
     return { doc: patchSetActual(doc, si, gi, ii, ki + 1, patch), outcome: 'copied' };
   }

@@ -52,7 +52,7 @@ import {
 } from '@/lib/coach/signals';
 import { NUTRITION as N, READINESS as R, TRAINING as T } from '@/lib/coach/knowledge';
 import { hoursToDays } from '@/lib/soreness';
-import { TRAINING_RULES, rpeCalibration } from '@/lib/coach/rules/training';
+import { TRAINING_RULES, heavyFractionFor, rpeCalibration } from '@/lib/coach/rules/training';
 import { goalDrift } from '@/lib/coach/rules/goals';
 import { loadStepDue } from '@/lib/coach/rules/progression';
 import { measureLoadSteps } from '@/lib/coach/loadStep';
@@ -404,7 +404,7 @@ export function runCoach(input: CoachInput): {
   const training = measureTraining(
     input.logs,
     {
-      heavyFraction: T.strengthIntensity.value,
+      heavyFraction: heavyFractionFor(input.stats),
       strengthRepMax: T.strengthReps.value,
       hypertrophyReps: T.hypertrophyReps.value,
       nearFailureRpe: RPE_LADDER.nearFailure,

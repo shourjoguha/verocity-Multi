@@ -11,6 +11,7 @@
 import { LOAD_EQUIVALENCE, MUSCLE_REGIONS, RPE_LADDER, type BodyLensKey, type RegionKey } from '@/app.config';
 import { sessionClockSeconds, sessionLens } from '@/lib/bodyLoad';
 import { TRAINING as T } from '@/lib/coach/knowledge';
+import { heavyFractionFor } from '@/lib/coach/rules/training';
 import { GOAL_MODALITIES, measureGoals, measureTraining, rpeWasRated, type GoalShare } from '@/lib/coach/signals';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import { computePlanAdherence, type PlanAdherence } from '@/lib/planAdherence';
@@ -208,7 +209,7 @@ export function buildReview(period: ReviewPeriod, input: ReviewInput): Review | 
   const training = measureTraining(
     input.logs.filter((l) => dayOf(l) <= window.end),
     {
-      heavyFraction: T.strengthIntensity.value,
+      heavyFraction: heavyFractionFor(input.stats),
       strengthRepMax: T.strengthReps.value,
       hypertrophyReps: T.hypertrophyReps.value,
       nearFailureRpe: RPE_LADDER.nearFailure,

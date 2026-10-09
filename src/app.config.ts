@@ -122,6 +122,21 @@ export const RPE_LADDER = {
   minDistinctPerSession: 2,
 } as const;
 
+// Heart rate as the all-out read for conditioning (TRAINING.vo2AllOut says the
+// bar is touching max heart rate, and that hr_max is the better read than RPE).
+// The reference is the athlete's own highest logged hr_max, never 220-minus-age
+// (TRAINING.maxHrObserved). Both numbers are this app's choices:
+//   - `fractionOfPeak`: a session whose hr_max reaches this share of the peak
+//     counts as having touched max. A strap reads the top of a bout, not a
+//     sustained plateau, so the line sits a little under the peak rather than
+//     on it.
+//   - `minSessionsForPeak`: below this many sessions carrying hr_max, the peak
+//     is one reading and not a reference, and the HR channel stays silent.
+export const ALL_OUT_HR = {
+  fractionOfPeak: 0.9,
+  minSessionsForPeak: 5,
+} as const;
+
 // Jump marks — how high or how far a plyometric rep went, in centimetres.
 //
 // Only jumps whose outcome is a measurable mark: a box (height) or a landing
