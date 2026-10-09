@@ -125,6 +125,26 @@ export function LinkGlyph({ className }: GlyphProps) {
   );
 }
 
+// Play — "start this session". Stroked, not filled, so it sits at the same
+// weight as the pencil beside it.
+export function PlayGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M7 4.75v14.5L19 12z" />
+    </Glyph>
+  );
+}
+
+// Pencil — "edit".
+export function PencilGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M4 20l1.1-4.4L15.6 5.1a2 2 0 0 1 2.8 0l.5.5a2 2 0 0 1 0 2.8L8.4 18.9z" />
+      <path d="M13.5 7.2l3.3 3.3" />
+    </Glyph>
+  );
+}
+
 export function TrashGlyph({ className }: GlyphProps) {
   return (
     <Glyph className={className}>

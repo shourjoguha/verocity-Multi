@@ -109,8 +109,22 @@ const movements = Array.from({ length: 40 }, (_, i) => ({
   category: i % 2 ? 'squat' : 'press',
 }));
 
+// Enough saved sessions that /app/sessions scrolls, for the same reason. Owned,
+// so the sheet renders its full footer (trash / edit / start).
+const savedSessions = Array.from({ length: 30 }, (_, i) => ({
+  id: `s${i}`,
+  owner_user_id: '00000000-0000-0000-0000-000000000001',
+  name: `session ${i}`,
+  tags: ['strength'],
+  frame: { exercises: [{ movement: 'bench press', section: 'primary', primaryMetric: 'weight', planned: '4x5' }] },
+  source_plan_id: null, source_day_key: null, is_mini: false, created_at: '2026-01-10T00:00:00Z',
+  session_type: null, time_cap_seconds: null, duration_seconds: null, rounds: null, partner: false,
+  instructions: null, source: null, source_text: null, source_ref: null,
+}));
+
 function fixtureFor(url) {
   const path = new URL(url).pathname;
+  if (path.endsWith('/sessions')) return savedSessions;
   if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog];
   if (path.includes('/movements')) return movements;
   if (path.includes('/profiles')) return url.includes('id=eq.') ? null : [];
@@ -157,6 +171,12 @@ const SCENARIOS = [
     name: 'Library · + Subroutine (SubroutineEditor)',
     route: '/app/library',
     open: 'button:has-text("+ Subroutine")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Sessions · open a session (SessionSheet)',
+    route: '/app/sessions',
+    open: 'button[aria-label="Open session 3"]',
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
