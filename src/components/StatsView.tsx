@@ -492,6 +492,29 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   }
   useEffect(() => () => clearTimeout(tipTimer.current), []);
 
+  // The tooltip is `fixed` at the finger, so once the page moves it points at
+  // nothing: hide it on any scroll of the app's scroller, and on a tap anywhere
+  // that is not another tooltip target (a tap on one moves it instead — that
+  // target's own handler fires after this). Listeners exist only while shown.
+  const tipShown = tip?.shown ?? false;
+  useEffect(() => {
+    if (!tipShown) return;
+    const hide = () => {
+      clearTimeout(tipTimer.current);
+      setTip((t) => (t ? { ...t, shown: false } : t));
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (!(e.target instanceof Element) || !e.target.closest('[data-tip-target]')) hide();
+    };
+    const scroller = document.querySelector('[data-scroll-root]') ?? window;
+    scroller.addEventListener('scroll', hide, { passive: true });
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      scroller.removeEventListener('scroll', hide);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+    };
+  }, [tipShown]);
+
   // `today` is intentionally out of the dep list: in app mode it is a fresh Date
   // on every render, and re-deriving 8 weeks of buckets because the clock moved a
   // millisecond is the cost this memo exists to avoid.
@@ -700,6 +723,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                       <div
                         key={row}
                         className="hill relative aspect-square cursor-pointer overflow-hidden"
+                        data-tip-target
                         onMouseMove={(e) => showTip(e, label)}
                       >
                         <span aria-hidden className="absolute inset-0 flex flex-col gap-px bg-bg/60">
@@ -820,6 +844,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
                               <div
                                 key={i}
                                 className="h-full cursor-pointer"
+                                data-tip-target
                                 style={{
                                   width: `${(count / r.total) * 100}%`,
                                   backgroundColor: 'var(--color-fg)',
