@@ -250,7 +250,7 @@ export function buildReview(period: ReviewPeriod, input: ReviewInput): Review | 
     adherence: window.plan
       ? // Measured to the window's end, so a finished plan reads its own
         // length rather than the weeks that have passed since it stopped.
-        computePlanAdherence(window.plan.id, window.plan.parsed, input.logs, new Date(`${window.end}T12:00:00Z`), overrides)
+        computePlanAdherence(window.plan.id, window.plan.parsed, input.logs, new Date(`${window.end}T12:00:00Z`), overrides, !window.plan.is_active)
       : null,
   };
 }

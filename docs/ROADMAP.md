@@ -425,35 +425,25 @@ replaces 0009's fixed 2026-04-20…04-29 window on `logs_select_anon` with
 frozen April window. Also confirm `is_showcase` is true on the intended
 `profiles` row; every anon policy resolves through `showcase_profile_id()`.
 
+### Phase 13 — One cycle counter for the whole plan  `[shipped]`
+Plan days used to advance on their own counters (`nextWeekForDay` stamped the
+Nth log of a day as week N), so a skipped day lagged instead of missing: in the
+Endurance & Cut Block the upper day reached cycle 9 while full-body sat at 5,
+and each day hit its deload at a different time. `planCycles` in
+`src/lib/progression.ts` now walks the plan's logs in order and closes a cycle
+when a day repeats; every log's program week is the cycle it fell in, and the
+Logger, plan grid, coach load-step and adherence all read that one number.
+`/app/plan` day cards show `−N` as cycles **missed**, not "behind". Adherence
+counts the final in-flight week in full once the plan is inactive, so 3 days ×
+8 weeks with one day logged 4 times reads 20 of 24.
+
+**Deferred:** no explicit "skip" or "redo" action. Logging the same day twice
+in a row closes the cycle on the other days; if that is a redo, delete or
+cancel the first log. Stored `week_number` on existing rows is not backfilled —
+nothing reads it for display, and the Logger stamps new logs correctly.
+
 ## Backlog
 
 Open work that has been scoped but not started. Move an item into a phase when
 it starts.
 
-### Plan days progress independently, so a "cycle" drifts apart
-Each plan day advances on its own counter: `nextWeekForDay` in
-`src/lib/progression.ts` stamps the Nth log of a day as program week N. The
-dashboard, the coach's block lookup and the adherence denominator instead read
-`currentProgramWeek`, which is the *most*-logged day. A day that is skipped
-therefore does not skip — it lags — and the week it will be logged at next no
-longer matches the others.
-
-Seen in real data (Endurance & Cut Block, 2026-07-13 → 2026-09-25): the upper
-day was logged 9 times and the full-body day 5, so the four days sat four
-cycles apart by the end, each day hit its deload week at a different time, and
-logging one day twice in a cycle (upper, week 8) moved its whole progression
-on early.
-
-Options to weigh when this is picked up:
-- A cycle-level counter: a cycle closes when every day has been logged (or
-  explicitly skipped), and every day's next log takes that cycle's week.
-- Keep per-day counters but surface the spread (e.g. "D is 3 cycles behind")
-  and offer to skip or catch up. **The surfacing half shipped:** each day card
-  on /app/plan now reads "Next: cycle N of M · K logged · J behind". Skip and
-  catch-up are still open.
-- Either way, decide what `currentProgramWeek` and the adherence denominator in
-  `src/lib/planAdherence.ts` should read, so dashboard, coach and adherence
-  agree on one cycle number.
-
-Workaround until then: log the "Short on time?" express version of a day
-(`reduceLogDocument` keeps warm-up and primary) rather than skipping it.

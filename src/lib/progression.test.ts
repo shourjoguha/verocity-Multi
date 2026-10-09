@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   blockForWeek,
   currentProgramWeek,
+  dayCycleStatus,
   nextWeekForDay,
   planWeekByLog,
   planWeekCount,
@@ -73,10 +74,15 @@ describe('nextWeekForDay', () => {
     expect(nextWeekForDay([], PLAN_ID, 'lower-jump', 4)).toBe(1);
   });
 
-  it("second log of the SAME day is week 2, independent of other days", () => {
-    const logs = [log('lower-jump', '2026-05-01'), log('upper', '2026-05-02')];
+  it('a day already logged in the cycle opens the next one; an unlogged day is still in it', () => {
+    const logs = [log('lower-jump', '2026-05-01')];
     expect(nextWeekForDay(logs, PLAN_ID, 'lower-jump', 4)).toBe(2);
-    // the once-logged 'upper' day is still on its second session → week 2
+    expect(nextWeekForDay(logs, PLAN_ID, 'upper', 4)).toBe(1);
+  });
+
+  it('a skipped day does not lag: it joins the cycle every other day is in', () => {
+    // lower twice with no upper between → cycle 1 closed without upper.
+    const logs = [log('lower-jump', '2026-05-01'), log('lower-jump', '2026-05-08')];
     expect(nextWeekForDay(logs, PLAN_ID, 'upper', 4)).toBe(2);
   });
 
@@ -101,6 +107,33 @@ describe('planWeekByLog', () => {
     expect(map.get(b.id)).toBe(2);
     expect(map.get(c.id)).toBe(1);
   });
+
+  it('stamps a day logged after a skipped cycle with the shared cycle, not its own count', () => {
+    // THE DRIFT. Per-day counters stamped upper's 2nd log week 2 while lower
+    // was on week 3, so the days hit their deload weeks at different times.
+    const l1 = log('lower-jump', '2026-05-01');
+    const u1 = log('upper', '2026-05-02');
+    const l2 = log('lower-jump', '2026-05-08'); // cycle 2, upper skipped
+    const l3 = log('lower-jump', '2026-05-15');
+    const u2 = log('upper', '2026-05-16');
+    const map = planWeekByLog(PLAN_ID, [l1, u1, l2, l3, u2], 4);
+    expect([l1, u1, l2, l3, u2].map((l) => map.get(l.id))).toEqual([1, 1, 2, 3, 3]);
+  });
+});
+
+describe('dayCycleStatus', () => {
+  it('counts closed cycles a day was missing from, and finishes past the last cycle', () => {
+    const logs = [
+      log('lower-jump', '2026-05-01'),
+      log('upper', '2026-05-02'),
+      log('lower-jump', '2026-05-08'),
+      log('lower-jump', '2026-05-15'),
+    ];
+    expect(dayCycleStatus(logs, PLAN_ID, 'upper', 4)).toEqual({ next: 3, missed: 1 });
+    expect(dayCycleStatus(logs, PLAN_ID, 'lower-jump', 4)).toEqual({ next: 4, missed: 0 });
+    const more = [...logs, log('lower-jump', '2026-05-22')];
+    expect(dayCycleStatus(more, PLAN_ID, 'lower-jump', 4).next).toBe(5);
+  });
 });
 
 describe('currentProgramWeek', () => {
@@ -108,7 +141,7 @@ describe('currentProgramWeek', () => {
     expect(currentProgramWeek(PLAN_ID, [], 4)).toBe(1);
   });
 
-  it('is the furthest cycle reached across days', () => {
+  it('is the cycle in progress across days', () => {
     const logs = [
       log('lower-jump', '2026-05-01'),
       log('lower-jump', '2026-05-08'),

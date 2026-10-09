@@ -246,10 +246,13 @@ UI audit have both run.
 - **Adherence is measured against the PLAN, and time is measured PER SESSION.**
   Two metrics that used to be computed from the log document alone, and could
   only ever flatter. `planAdherence.ts` reads `plans.parsed`: the denominator is
-  paced by logging (`currentProgramWeek`, so a ten-day week costs nothing) but
+  paced by logging (`planCycles`, so a ten-day week costs nothing) but
   advances for the **whole** plan, because a per-day cursor never grows for a
-  day you stopped showing up to. The in-flight week counts only days already
-  logged in it. Overshoot is capped **per exercise** — not a penalty, just so
+  day you stopped showing up to. **One cycle counter for every day**: a cycle
+  closes when a day repeats, and every log's program week is the cycle it fell
+  in — never a per-day count, which let skipped days lag and hit their deloads
+  late. The in-flight week counts only days already logged in it, until the
+  plan is finished (inactive), when it counts in full. Overshoot is capped **per exercise** — not a penalty, just so
   extra squats cannot pay for a skipped press. A substitution counts when
   `movementSimilarity.ts` calls it minor; **never use `familyOf` for that**, it
   is substring-matched with misfires pinned by test (`Med-Ball Throw` → `pull`).

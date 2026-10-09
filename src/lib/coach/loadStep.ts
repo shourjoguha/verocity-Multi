@@ -16,7 +16,7 @@
 // and comparing the deload to the session before would call it a missed step.
 //
 // Weeks come from `planWeekByLog`, not the stored week_number, for the same
-// reason the Logger uses it: the Nth logged session of a day is program week N.
+// reason the Logger uses it: a log's program week is the plan cycle it fell in.
 
 import { RPE_LADDER } from '@/app.config';
 import { parsePlanned } from '@/lib/logBuilder';

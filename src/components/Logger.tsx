@@ -408,11 +408,10 @@ export default function Logger() {
         if (plan && dk) {
           const planDay = plan.parsed.days.find((d) => d.dayKey === dk);
           if (planDay) {
-            // Active plan: the week is how many times this day has already been
-            // logged (+1) — the Nth session of a day is program week N, grounded
-            // in real logging rather than the calendar. A historic plan day
-            // (launched via ?plan=) still derives its week from the plan's start
-            // date, falling back to a week that has content.
+            // Active plan: the week is the plan cycle this log falls in (see
+            // planCycles) — grounded in real logging rather than the calendar.
+            // A historic plan day (launched via ?plan=) still derives its week
+            // from the plan's start date, falling back to a week that has content.
             weekNumber = planParam
               ? resolveWeek(planDay, weekFromDate(plan.start_date, new Date(logDate)))
               : nextWeekForDay(allLogs, plan.id, dk, planWeekCount(plan.parsed));

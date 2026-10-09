@@ -175,6 +175,39 @@ describe('computePlanAdherence', () => {
     expect(a.pct).toBe(100);
   });
 
+  describe('three days over eight weeks, A and B logged 8 times, C 4 times', () => {
+    const W = [1, 2, 3, 4, 5, 6, 7, 8];
+    const P = plan([
+      { dayKey: 'a', label: 'A', exercises: [ex('Back Squat', '3x5', W)] },
+      { dayKey: 'b', label: 'B', exercises: [ex('Bench Press', '3x5', W)] },
+      { dayKey: 'c', label: 'C', exercises: [ex('Deadlift', '3x5', W)] },
+    ]);
+    const MOVE = { a: 'Back Squat', b: 'Bench Press', c: 'Deadlift' } as const;
+    // One week per cycle; `withC(w)` says whether C was trained that week.
+    const logsFor = (withC: (w: number) => boolean) =>
+      W.flatMap((w) => {
+        const d = (n: number) => `2026-0${w < 5 ? 1 : 2}-${String(((w - 1) % 4) * 7 + n).padStart(2, '0')}`;
+        const days = (['a', 'b', 'c'] as const).filter((k) => k !== 'c' || withC(w));
+        return days.map((k, i) => log(`${k}${w}`, d(i + 1), k, [[MOVE[k], 3]]));
+      });
+
+    it('is 20/24 when the skipped cycles are inside the plan', () => {
+      const a = run(P, logsFor((w) => w % 2 === 0))!;
+      expect(a.prescribedSets).toBe(72);
+      expect(a.exactSets).toBe(60);
+      expect(a.missedSets).toBe(12);
+    });
+
+    it('holds the in-flight last cycle open while the plan is active, and closes it once finished', () => {
+      const active = run(P, logsFor((w) => w <= 4))!;
+      expect(active.prescribedSets).toBe(69); // C's week 8 not yet due
+      const done = computePlanAdherence('p1', P, logsFor((w) => w <= 4), TODAY, undefined, true)!;
+      expect(done.prescribedSets).toBe(72);
+      expect(done.exactSets).toBe(60);
+      expect(done.pct).toBe(83);
+    });
+  });
+
   it('counts a minor swap as following the plan', () => {
     const p = plan([{ dayKey: 'mon', label: 'Mon', exercises: [ex('Pull-up', '3x8')] }]);
     const a = run(p, [log('l1', '2026-01-05', 'mon', [['Lat Pulldown', 3]])])!;

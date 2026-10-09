@@ -1218,12 +1218,18 @@ not obvious:
 - **The denominator must be paced by logging, but advance for the WHOLE plan.**
   The obvious first cut — a per-day cursor, "how many times has Friday been
   logged" — never grows for a day you stopped showing up to, hiding precisely
-  the failure worth seeing. `currentProgramWeek` (the most times ANY day has
-  been logged) is the cursor: a week that took ten days costs nothing, and
-  reaching week 8 on Mondays makes week 8's Friday due as well.
+  the failure worth seeing. The cursor is the shared plan cycle (`planCycles`
+  in `src/lib/progression.ts`): a cycle closes when a day repeats, so a week
+  that took ten days costs nothing, and logging Monday again makes the Friday
+  that did not happen a miss. (The first cursor was "the most times ANY day has
+  been logged" over per-day week stamps. That denominator was right but the
+  stamps were not: a skipped day's next log took ITS count + 1, so in a real
+  block the upper day reached cycle 9 while full-body sat at 5, and each day hit
+  its deload at a different time.)
 - **The in-flight week has to be exempt**, or Wednesday reads as missed on
   Monday evening and the number sawtooths every week. Weeks 1..E-1 count in
-  full; week E counts only the days already logged in it.
+  full; week E counts only the days already logged in it — until the plan is
+  finished (no longer active), when the last week counts in full.
 - **Overshoot is capped per exercise, and that is not a penalty.** Extra sets
   are counted and shown beside the bar. The cap exists so five sets of a
   prescribed three cannot *pay for* a skipped row elsewhere and report 100%.
