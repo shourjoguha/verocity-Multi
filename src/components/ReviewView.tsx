@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { getAllLogs, getAllPlans, getMovements, getUserStats } from '@/lib/queries';
+import { getAllPlans, getMovements, getUserStats } from '@/lib/queries';
+import { loadAllLogs } from '@/lib/logStore';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
 import {
@@ -53,7 +54,7 @@ export default function ReviewView() {
   const { data, loading } = useAuthedQuery(
     async () => {
       const [logs, plans, stats, movements] = await Promise.all([
-        getAllLogs(supabase),
+        loadAllLogs(),
         getAllPlans(supabase),
         getUserStats(supabase),
         getMovements(supabase),

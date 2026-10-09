@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
-import { createShare, getAllPlans, getRecentLogs, getShares, revokeShare } from '@/lib/queries';
+import { createShare, getAllPlans, getShares, revokeShare } from '@/lib/queries';
+import { loadAllLogs, newestLogs } from '@/lib/logStore';
 import { randomToken, sha256Hex, shareUrl } from '@/lib/share';
 import type { Plan, Share, ShareScope, WorkoutLog } from '@/lib/types';
 import { formatDate } from '@/lib/format';
@@ -49,7 +50,11 @@ export default function ShareManager({ embedded = false }: { embedded?: boolean 
         window.location.href = '/login';
         return;
       }
-      const [sh, pl, lg] = await Promise.all([getShares(), getAllPlans(), getRecentLogs(30)]);
+      const [sh, pl, lg] = await Promise.all([
+        getShares(),
+        getAllPlans(),
+        loadAllLogs().then((all) => newestLogs(all, 30)),
+      ]);
       setShares(sh);
       setPlans(pl);
       setLogs(lg);

@@ -15,6 +15,16 @@ export function setCached<T>(key: string, value: T): void {
   cache.set(key, value);
 }
 
+// Bumped by every clear. A read that started before a clear (a log write, a
+// sign-out) must not write its now-stale result back afterwards; logStore
+// compares generations before storing.
+let generation = 0;
+
+export function cacheGeneration(): number {
+  return generation;
+}
+
 export function clearQueryCache(): void {
   cache.clear();
+  generation++;
 }

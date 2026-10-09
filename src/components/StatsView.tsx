@@ -4,6 +4,7 @@ import { supabase, supabasePublic } from '@/lib/supabase';
 import { getAllLogs, getLogsInRange, getUserStats } from '@/lib/queries';
 import { bodyweightMultiple } from '@/lib/userStats';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
+import { loadAllLogs, logsBetween } from '@/lib/logStore';
 import { useAspectProfile } from '@/lib/useAspectProfile';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
@@ -444,7 +445,10 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // cached 56-day array on the first frame (useAuthedQuery seeds synchronously)
   // and the radar would compute over the wrong span until revalidation landed.
   const { data: logs, loading } = useAuthedQuery(
-    () => getLogsInRange(windows.prior.start, windows.current.end, client),
+    () =>
+      mode === 'app'
+        ? loadAllLogs().then((all) => logsBetween(all, windows.prior.start, windows.current.end))
+        : getLogsInRange(windows.prior.start, windows.current.end, client),
     {
       auth: mode === 'app',
       key: mode === 'app' ? `stats:logs:${ASPECT_READ_DAYS * 2}d` : undefined,
@@ -462,7 +466,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // Every finished session, for the bars' per-tag reference and the load
   // change "vs last time". All time on purpose: the 120-day fetch above held 27
   // of 42 strength sessions, and a reference should not drift as old ones age out.
-  const { data: history, loading: historyLoading } = useAuthedQuery(() => getAllLogs(client), {
+  const { data: history, loading: historyLoading } = useAuthedQuery(() => (mode === 'app' ? loadAllLogs() : getAllLogs(client)), {
     auth: mode === 'app',
     key: mode === 'app' ? 'stats:logs:all' : undefined,
   });

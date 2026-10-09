@@ -7,17 +7,16 @@ import {
   deleteLog,
   dismissMovementSub,
   getActivePlan,
-  getAllLogs,
   getLogById,
   getMovementSubs,
   createMovement,
   getMovements,
   resolveMovement,
   getPlanById,
-  getRecentLogs,
   getSessionById,
   updateLog,
 } from '@/lib/queries';
+import { loadAllLogs, newestLogs } from '@/lib/logStore';
 import { track } from '@/lib/analytics';
 import {
   buildBlankLog,
@@ -358,15 +357,15 @@ export default function Logger() {
 
       // Source the workout from a saved session, a specific (possibly historic)
       // plan day, or — by default — the active plan.
-      const [source, recent, allLogs] = await Promise.all([
+      const [source, allLogs] = await Promise.all([
         sessionParam
           ? getSessionById(sessionParam)
           : planParam
             ? getPlanById(planParam)
             : getActivePlan(),
-        getRecentLogs(50),
-        getAllLogs(),
+        loadAllLogs(),
       ]);
+      const recent = newestLogs(allLogs, 50);
       setBestByMovement(bestE1rmByTrack(allLogs));
 
       // Everything below builds and creates a NEW row, so this is the one

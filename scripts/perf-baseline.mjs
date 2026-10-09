@@ -4,6 +4,7 @@
 // (ClientRouter) walk through the tabs that read log history. It reports:
 //
 //   home-ready     ms from navigation start until Home's loading state is gone
+//   tab-ready      ms from a tab tap until that tab's loading state is gone
 //   js-bytes       script bytes Home fetched before it was ready
 //   log-requests   every request to workout_logs across the walk, with rows and
 //                  bytes — the same history fetched again is visible here as a
@@ -250,8 +251,10 @@ counting = false;
 // Soft navigations, the way a tab tap does it: ClientRouter intercepts any
 // same-origin anchor click, so the JS realm (and the in-memory query cache)
 // survives — which is the condition under which duplicate fetches matter.
+const tabReady = [];
 async function softGo(path) {
   phase = path;
+  const t0 = Date.now();
   await page.evaluate((href) => {
     const a = document.createElement('a');
     a.href = href;
@@ -262,6 +265,7 @@ async function softGo(path) {
   // networkidle alone returns before a freshly swapped island has hydrated and
   // issued its reads, which credited one tab's requests to the next.
   await ready();
+  tabReady.push([path, Date.now() - t0]);
   await quiet();
 }
 await quiet();
@@ -273,7 +277,9 @@ const perLog = Math.round(JSON.stringify(history).length / LOGS);
 const full = logRequests.filter((r) => !/log_date=|limit=|id=eq\./.test(r.filter));
 console.log(`\nperf-baseline · ${LOGS} synthetic logs (~${perLog} B each) · ${LATENCY_MS}ms + ${KBPS}KB/s · CPU ${CPU}x\n`);
 console.log(`home-ready   ${homeReady} ms`);
-console.log(`js-bytes     ${Math.round(jsBytes / 1024)} KB (transferred, before Home was ready)\n`);
+console.log(`js-bytes     ${Math.round(jsBytes / 1024)} KB (transferred, before Home was ready)`);
+// Tap → that tab's loading state gone, over a soft (ClientRouter) navigation.
+console.log(`tab-ready    ${tabReady.map(([p, ms]) => `${p} ${ms}ms`).join(' · ')}\n`);
 console.log('workout_logs requests (KB = uncompressed JSON):');
 for (const r of logRequests)
   console.log(`  ${r.phase.padEnd(11)} ${String(r.rows).padStart(5)} rows ${String(Math.round(r.bytes / 1024)).padStart(6)} KB  ${r.filter}`);
