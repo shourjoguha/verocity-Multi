@@ -1115,6 +1115,22 @@ html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
   animation: pop-in 0.16s var(--ease-editorial) both;
 }
 
+/* Chart tooltip (StatsView). Opacity only, CSS, from the first painted frame:
+   it was a Motion `AnimatePresence` fade+rise, the one JS-driven overlay left,
+   and on a phone the first tap on the consistency grid flickered while later
+   ones did not. Removal stays instant — nothing to linger over a moving grid. */
+@keyframes tip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.tip-in {
+  animation: tip-in 0.15s var(--ease-editorial) both;
+}
+
 /* Grouped-page tab slide (Training / Progress — GroupPager.tsx). The sibling
    view stays mounted underneath and swaps to `hidden` the same frame the new
    one appears, so this is a single-element entrance like the rest of the

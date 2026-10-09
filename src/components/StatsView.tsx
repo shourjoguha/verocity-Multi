@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getAllLogs, getLogsInRange, getUserStats } from '@/lib/queries';
 import { bodyweightMultiple } from '@/lib/userStats';
@@ -839,31 +838,26 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
         </Item>
       </PageStagger>
 
-      <AnimatePresence>
-        {tip ? (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            // Wraps, and the centre is clamped so the whole box stays on screen.
-            // A nowrap line centred on the finger ran off the right edge on the
-            // grid's last column. `pre-line` honours the label's line break.
-            className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-pre-line bg-fg px-2 py-1 text-[0.7rem] leading-snug tabular-nums text-bg"
-            style={{
-              left: Math.min(
-                Math.max(tip.x, TOOLTIP.maxWidthPx / 2 + TOOLTIP.edgePx),
-                window.innerWidth - TOOLTIP.maxWidthPx / 2 - TOOLTIP.edgePx,
-              ),
-              top: tip.y - 8,
-              width: 'max-content',
-              maxWidth: TOOLTIP.maxWidthPx,
-            }}
-          >
-            {tip.label}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {tip ? (
+        <div
+          // Wraps, and the centre is clamped so the whole box stays on screen.
+          // A nowrap line centred on the finger ran off the right edge on the
+          // grid's last column. `pre-line` honours the label's line break.
+          // CSS entrance (`tip-in`), not Motion — see global.css.
+          className="tip-in pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-pre-line bg-fg px-2 py-1 text-[0.7rem] leading-snug tabular-nums text-bg"
+          style={{
+            left: Math.min(
+              Math.max(tip.x, TOOLTIP.maxWidthPx / 2 + TOOLTIP.edgePx),
+              window.innerWidth - TOOLTIP.maxWidthPx / 2 - TOOLTIP.edgePx,
+            ),
+            top: tip.y - 8,
+            width: 'max-content',
+            maxWidth: TOOLTIP.maxWidthPx,
+          }}
+        >
+          {tip.label}
+        </div>
+      ) : null}
     </>
   );
 }

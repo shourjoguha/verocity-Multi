@@ -146,6 +146,17 @@ both`, so the from-state holds from the first painted frame.
 Distinguishing symptom: happens while *not* scrolling, and on every page.
 → `src/components/anim.tsx` (`PageStagger`/`Item`), `.stagger` in `global.css`
 
+### A chart tooltip flickers on the first tap, and not on later ones
+`[argued — not reproduced]`
+Reported on a phone for the Stats consistency grid. The tooltip was the last
+Motion (`AnimatePresence`) overlay, so it was moved to a CSS `tip-in` fade —
+but a per-frame probe (390px touch context, 4x CPU) measured **both** versions
+fading in monotonically on the first tap, with no blank or snapped frame.
+The cause is **unknown**; do not cite this change as the fix. Untested suspects:
+iOS tap highlight on a `cursor-pointer` cell with mouse listeners, and iOS
+hover emulation (`onMouseMove` fires on tap). Needs a WebKit observation.
+→ `src/components/StatsView.tsx` (tooltip), `.tip-in` in `global.css`
+
 ### Flicker on touch devices, fine on desktop
 `[argued — not reproduced]`
 `backdrop-filter` on an element that is opacity-animated, or fixed/sticky over
