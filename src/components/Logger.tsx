@@ -490,7 +490,7 @@ export default function Logger() {
               // session's is the reference the athlete tries to match or beat.
               if (last?.mark != null && markKindOf(item)) patch.mark = last.mark;
               if (Object.keys(patch).length === 0) return set;
-              return { ...set, actual: { ...set.actual, ...patch, prefilled: true } };
+              return { ...set, actual: { ...set.actual, ...patch, prefilled: true, rpeRated: false } };
             });
           }
         }
@@ -669,7 +669,7 @@ export default function Logger() {
       setDoc((d) => {
         const item = d.sections[si]?.groups[gi]?.items[ii];
         const ki = item ? Math.max(0, item.sets.length - 1) : 0;
-        return patchSetActual(d, si, gi, ii, ki, parsed);
+        return patchSetActual(d, si, gi, ii, ki, parsed.rpe != null ? { ...parsed, rpeRated: true } : parsed);
       });
     });
   }

@@ -6,7 +6,7 @@
 // from becoming a weekly recital of the same four complaints — see the cooldown
 // in ../evaluate.ts for the other half of that problem.
 
-import { RPE, RPE_LADDER, SORENESS } from '@/app.config';
+import { ALL_OUT_HR, RPE, RPE_LADDER, SORENESS } from '@/app.config';
 import { RPE_DRIFT_SPAN, below, share as shareOf, shortfall } from '@/lib/coach/impact';
 import { READINESS, TRAINING } from '@/lib/coach/knowledge';
 import type { Finding } from '@/lib/coach/types';
@@ -20,6 +20,34 @@ const round = (n: number, d = 0) => Number(n.toFixed(d));
 /** Goal weight 0..100, or 0 when the athlete never ranked it. */
 function goalWeight(stats: UserStats | null, id: string): number {
   return stats?.goals?.find((g) => g.id === id)?.weight ?? 0;
+}
+
+/**
+ * Where strength loading starts for THIS athlete, honouring the condition
+ * Galpin put on his own number: 85% for the moderately-to-highly trained, ~75%
+ * when moderately trained, and "everything works" when lowly trained — so a
+ * beginner gets no line at all and the rule built on it stays silent.
+ *
+ * Experience is the athlete's own self-report (`user_stats.experience`); with
+ * none on file the stricter published line applies, as it always did.
+ */
+export function strengthLine(
+  stats: UserStats | null,
+): typeof TRAINING.strengthIntensity | typeof TRAINING.strengthIntensityModerate | null {
+  switch (stats?.experience) {
+    case 'beginner':
+      return null;
+    case 'intermediate':
+      return TRAINING.strengthIntensityModerate;
+    default:
+      return TRAINING.strengthIntensity;
+  }
+}
+
+/** The fraction `measureTraining` should count as heavy. Signals need a number
+ *  even when the rule is silent, so a beginner falls back to the published one. */
+export function heavyFractionFor(stats: UserStats | null): number {
+  return (strengthLine(stats) ?? TRAINING.strengthIntensity).value;
 }
 
 /**
@@ -43,10 +71,13 @@ export function loadedTooLight(
   if (intensity.sufficiency === 'insufficient') return null;
   const weight = goalWeight(stats, 'strength');
   if (weight < 25) return null;
+  const line = strengthLine(stats);
+  if (!line) return null;
 
   const { share, atOrAboveHeavy, total, topMovement, topMovementBestKg, topMovementMeanFraction } =
     intensity.value;
-  const heavy = TRAINING.strengthIntensity.value;
+  const heavy = line.value;
+  const moderate = line.id === TRAINING.strengthIntensityModerate.id;
   // A fifth of loaded sets landing heavy is the product's line for "there is
   // real strength work in here", not a number from the corpus, and it is set
   // low on purpose. Galpin's own Prilipin discussion has even a strength-focused
@@ -75,12 +106,17 @@ export function loadedTooLight(
     periodKey,
     tldr: `${pct(share)} of loaded sets reach ${pct(heavy)}`,
     action: `Take one lift per session to ${pct(heavy)} of its best for sets of ${TRAINING.strengthReps.value} or fewer.`,
-    body: `${atOrAboveHeavy} of ${total} loaded sets in the last ${s.windowDays} days sat at or above ${pct(heavy)} of that movement's own best estimate.${lift} Galpin puts true strength work "${TRAINING.strengthIntensity.quote}" at ${TRAINING.strengthReps.value} reps or fewer — below that the adaptation on offer is size, not force. You ranked strength at ${weight}/100, so this is work that is not paying into the goal you set for it. His caveat: that 85% is for the moderately-to-highly trained; at a lower training age far less will do.${shape}`,
+    body: `${atOrAboveHeavy} of ${total} loaded sets in the last ${s.windowDays} days sat at or above ${pct(heavy)} of that movement's own best estimate.${lift} ${
+      moderate
+        ? `You logged your experience as intermediate, so the line here is Galpin's own for that case — "${line.quote}" — rather than his ${pct(TRAINING.strengthIntensity.value)} for the highly trained, at ${TRAINING.strengthReps.value} reps or fewer.`
+        : `Galpin puts true strength work "${TRAINING.strengthIntensity.quote}" at ${TRAINING.strengthReps.value} reps or fewer — below that the adaptation on offer is size, not force. His caveat: that is for the moderately-to-highly trained; at a lower training age far less will do.`
+    } You ranked strength at ${weight}/100, so this is work that is not paying into the goal you set for it.${shape}`,
     drift: shortfall(share, 0.2),
     confidence: intensity.sufficiency === 'ok' ? 0.7 : 0.45,
     sufficiency: intensity.sufficiency,
-    claims: [TRAINING.strengthIntensity, TRAINING.strengthReps],
+    claims: [line, TRAINING.strengthReps],
     observed: {
+      heavyLine: heavy,
       heavySets: atOrAboveHeavy,
       loadedSets: total,
       share: round(share, 2),
@@ -482,24 +518,51 @@ export function intervalsNotAllOut(
 ): Finding | null {
   const iv = s.intervals;
   if (iv.sufficiency === 'insufficient') return null;
-  const { bouts, boutMinutes, allOutBouts, allOutMinutes, meanBoutSeconds, meanRpe } = iv.value;
+  const {
+    bouts,
+    boutMinutes,
+    allOutBouts,
+    allOutMinutes,
+    meanBoutSeconds,
+    meanRpe,
+    ratedBouts,
+    peakHr,
+    hrAllOutSessions,
+    hrSessions,
+  } = iv.value;
   if (bouts === 0 || meanRpe == null) return null;
+  // HEART RATE OUTRANKS RPE. Galpin's bar is touching max heart rate, and the
+  // vo2Weekly caveat puts the floor as low as one bout a week near max HR. When
+  // the strap shows that happening weekly, an RPE average — even a rated one —
+  // cannot overrule it, and the rule says nothing.
+  if (peakHr != null && hrAllOutSessions / s.weeks >= 1) return null;
   const [floorMin] = TRAINING.vo2Weekly.value;
   const perWeek = allOutMinutes / s.weeks;
   if (perWeek >= floorMin) return null;
   const mark = TRAINING.vo2AllOut.value;
   if (meanRpe >= mark) return null;
+  const hrNote =
+    peakHr == null
+      ? ` RPE ${mark} as the all-out mark is this app's translation; he speaks in heart rate, and too few sessions carry hr_max for the strap to settle it.`
+      : ` Your strap agrees: of ${hrSessions} bout session${hrSessions === 1 ? '' : 's'} with heart rate, ${hrAllOutSessions} reached ${pct(ALL_OUT_HR.fractionOfPeak)} of your own peak of ${peakHr} — Galpin trusts the measured peak over any age formula, "${TRAINING.maxHrObserved.quote}"`;
+  const ratedNote =
+    ratedBouts < bouts ? ` The RPE average covers the ${ratedBouts} bouts you rated; the rest carried a seeded value and were left out.` : '';
 
   return {
     ruleId: 'training.endurance.intervals-not-all-out',
     periodKey,
     tldr: `Intervals average RPE ${round(meanRpe, 1)}, not all-out`,
     action: `Take ${TRAINING.vo2Bouts.value[0]}–${TRAINING.vo2Bouts.value[1]} bouts to genuinely maximal effort, resting until you can breathe through your nose again.`,
-    body: `You logged ${bouts} timed conditioning bouts averaging ${Math.round(meanBoutSeconds)}s over the last ${s.windowDays} days — ${round(boutMinutes, 1)} minutes of interval work — but ${allOutBouts === 0 ? 'none of them reached' : `only ${allOutBouts} reached`} RPE ${mark}. The prescription is ${floorMin}–${TRAINING.vo2Weekly.value[1]} minutes a week, and it is about intensity rather than volume: Galpin's bar is "${TRAINING.vo2AllOut.quote}". He is equally explicit that the bout LENGTH does not matter — your ${Math.round(meanBoutSeconds)}-second format is fine — only the effort reached does. RPE ${mark} as the all-out mark is this app's translation; he speaks in heart rate, so a session that logs hr_max is the better read.`,
+    body: `You logged ${bouts} timed conditioning bouts averaging ${Math.round(meanBoutSeconds)}s over the last ${s.windowDays} days — ${round(boutMinutes, 1)} minutes of interval work — but ${allOutBouts === 0 ? 'none of them reached' : `only ${allOutBouts} reached`} RPE ${mark}. The prescription is ${floorMin}–${TRAINING.vo2Weekly.value[1]} minutes a week, and it is about intensity rather than volume: Galpin's bar is "${TRAINING.vo2AllOut.quote}". He is equally explicit that the bout LENGTH does not matter — your ${Math.round(meanBoutSeconds)}-second format is fine — only the effort reached does.${hrNote}${ratedNote}`,
     drift: below(meanRpe, mark, RPE_DRIFT_SPAN),
     confidence: iv.sufficiency === 'ok' ? 0.6 : 0.4,
     sufficiency: iv.sufficiency,
-    claims: [TRAINING.vo2Weekly, TRAINING.vo2AllOut, TRAINING.vo2Bouts],
+    claims: [
+      TRAINING.vo2Weekly,
+      TRAINING.vo2AllOut,
+      TRAINING.vo2Bouts,
+      ...(peakHr != null ? [TRAINING.maxHrObserved] : []),
+    ],
     observed: {
       bouts,
       boutMinutes: round(boutMinutes, 1),
@@ -507,6 +570,9 @@ export function intervalsNotAllOut(
       allOutMinutesPerWeek: round(perWeek, 1),
       meanBoutSeconds: Math.round(meanBoutSeconds),
       meanRpe: round(meanRpe, 1),
+      ratedBouts,
+      peakHr,
+      hrAllOutSessions,
     },
   };
 }
