@@ -180,6 +180,12 @@ const SCENARIOS = [
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
+    name: 'Sessions · filters',
+    route: '/app/sessions',
+    open: 'button[aria-label="Filters"]',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
     name: 'Logger · movement options',
     route: `/app/log?logId=${LOG_ID}`,
     open: '[aria-label="Movement options"]',
