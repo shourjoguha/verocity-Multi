@@ -538,8 +538,9 @@ export function intervalsNotAllOut(
   // them did, an RPE average cannot overrule it and the rule says nothing.
   // The first version gated on max-HR sessions PER WEEK, and kept firing on an
   // athlete whose every strapped interval session had reached 90% of peak.
-  const hrSaysAllOut = peakHr != null && hrSessions > 0 && hrAllOutSessions * 2 >= hrSessions;
-  if (hrSaysAllOut) return null;
+  // When the strap and the dial disagree this way, the finding is about the
+  // DIAL — see `intervalRpeUnderreads`, which speaks instead of this rule.
+  if (hrSaysAllOut(iv.value)) return null;
   const [floorMin] = TRAINING.vo2Weekly.value;
   const perWeek = allOutMinutes / s.weeks;
   if (perWeek >= floorMin) return null;
@@ -580,6 +581,57 @@ export function intervalsNotAllOut(
       peakHr,
       hrAllOutSessions,
       hrSessions,
+    },
+  };
+}
+
+/** Most strapped interval sessions reached the athlete's own max. */
+function hrSaysAllOut(v: TrainingSignals['intervals']['value']): boolean {
+  return v.peakHr != null && v.hrSessions > 0 && v.hrAllOutSessions * 2 >= v.hrSessions;
+}
+
+/**
+ * The strap says max; the RPE says it wasn't.
+ *
+ * The other half of the HR-outranks-RPE decision. When most strapped interval
+ * sessions reached max, `intervalsNotAllOut` goes quiet — but a rated RPE well
+ * below all-out on those same bouts is still information: the dial is reading
+ * low against the body. Either the value was carried forward and never moved,
+ * or the athlete's own scale runs conservative at the top. Both have the same
+ * fix, and neither is "train harder", which is the sentence the athlete would
+ * otherwise have kept reading.
+ *
+ * The suggestion came from the athlete: "if I reached 90% of my heart rate,
+ * maybe the RPE rating is wrong and I should up it?"
+ */
+export function intervalRpeUnderreads(
+  s: TrainingSignals,
+  _stats: UserStats | null,
+  periodKey: string,
+): Finding | null {
+  const iv = s.intervals;
+  if (iv.sufficiency === 'insufficient') return null;
+  const v = iv.value;
+  if (!hrSaysAllOut(v) || v.meanRpe == null || v.ratedBouts === 0) return null;
+  const mark = TRAINING.vo2AllOut.value;
+  if (v.meanRpe >= mark) return null;
+
+  return {
+    ruleId: 'training.effort.interval-rpe-underreads',
+    periodKey,
+    tldr: `Strap says max; interval RPE says ${round(v.meanRpe, 1)}`,
+    action: `On interval days, rate the bouts where your heart rate nears your peak as ${mark} or higher.`,
+    body: `${v.hrAllOutSessions} of the ${v.hrSessions} interval session${v.hrSessions === 1 ? '' : 's'} that logged heart rate reached ${pct(ALL_OUT_HR.fractionOfPeak)} of your own peak of ${v.peakHr}, which is Galpin's bar: "${TRAINING.vo2AllOut.quote}". So the intervals were all-out. But the ${v.ratedBouts} bouts carrying an RPE average ${round(v.meanRpe, 1)}, short of the ${mark} that reads as all-out. Either the dial kept a value carried over from an earlier session, or your scale runs low at the top. The strap is the better read, so this is a note about the rating, not the training.`,
+    drift: below(v.meanRpe, mark, RPE_DRIFT_SPAN),
+    confidence: 0.5,
+    sufficiency: iv.sufficiency,
+    claims: [TRAINING.vo2AllOut, TRAINING.maxHrObserved],
+    observed: {
+      meanRpe: round(v.meanRpe, 1),
+      ratedBouts: v.ratedBouts,
+      peakHr: v.peakHr,
+      hrSessions: v.hrSessions,
+      hrAllOutSessions: v.hrAllOutSessions,
     },
   };
 }
@@ -728,6 +780,7 @@ export function sorenessSource(
 
 export const TRAINING_RULES = [
   intervalsNotAllOut,
+  intervalRpeUnderreads,
   readinessAndLoad,
   sorenessSource,
   loadedTooLight,

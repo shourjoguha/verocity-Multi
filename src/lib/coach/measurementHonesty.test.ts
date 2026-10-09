@@ -9,6 +9,7 @@ import { TRAINING } from '@/lib/coach/knowledge';
 import { measureTraining, observedPeakHr, setRpeIsRating } from '@/lib/coach/signals';
 import {
   heavyFractionFor,
+  intervalRpeUnderreads,
   intervalsNotAllOut,
   loadedTooLight,
   strengthLine,
@@ -137,6 +138,21 @@ describe('heart rate outranks RPE for all-out', () => {
     expect(t.intervals.value.hrSessions).toBe(3);
     expect(t.intervals.value.hrAllOutSessions).toBe(3);
     expect(intervalsNotAllOut(t, null, '2026-W41')).toBeNull();
+    // ...and says the useful thing instead: the dial reads low against the strap.
+    const f = intervalRpeUnderreads(t, null, '2026-W41');
+    expect(f?.ruleId).toBe('training.effort.interval-rpe-underreads');
+    expect(f?.tldr).toBe('Strap says max; interval RPE says 7');
+    expect(f?.body).toContain('3 of the 3');
+    expect(f?.body).not.toMatch(/train harder/i);
+  });
+
+  it('keeps quiet about the dial when the strap disagrees with it too, or the bouts were rated all-out', () => {
+    const missed = block({ rpe: 7, rpeRated: true }, (i) => (i === 0 ? 196 : 150));
+    expect(intervalRpeUnderreads(measureTraining(missed, opts, TODAY), null, 'w')).toBeNull();
+    const honest = block({ rpe: 9, rpeRated: true }, (i) => (i === 0 ? 196 : 182));
+    expect(intervalRpeUnderreads(measureTraining(honest, opts, TODAY), null, 'w')).toBeNull();
+    const seeded = block({ rpe: 7, rpeRated: false }, (i) => (i === 0 ? 196 : 182));
+    expect(intervalRpeUnderreads(measureTraining(seeded, opts, TODAY), null, 'w')).toBeNull();
   });
 
   it('does not claim the strap agrees when it saw no interval session', () => {

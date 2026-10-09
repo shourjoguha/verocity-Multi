@@ -78,6 +78,9 @@ export const RULE_IMPACT: Record<string, number> = {
   // Measurement hygiene: it changes what every other rule is allowed to say,
   // but it is not itself a training problem.
   'training.effort.rpe-calibration': 0.4,
+  // The strap and the dial disagree on intervals. Hygiene, like the above, and
+  // themed with it.
+  'training.effort.interval-rpe-underreads': 0.4,
 
   // Standing numbers. True at drift 0 by construction, so this weight only ever
   // decides their order among themselves.
