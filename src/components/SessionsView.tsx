@@ -19,7 +19,7 @@ import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { tagColor } from '@/lib/tags';
 import { distinctSessionMovements, formatSessionMeta, sessionMovementKeys, TYPE_SHORT } from '@/lib/sessionMeta';
 import { SessionSheet } from '@/components/SessionSheet';
-import { Button, EmptyState, ListCard, LoadingScreen } from '@/components/ui/primitives';
+import { Button, EmptyState, FilterChip, ListCard, LoadingScreen } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
 import { Disclosure } from '@/components/ui/Disclosure';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
@@ -66,40 +66,6 @@ function FilterIcon() {
     >
       <path d="M3 4.5h14l-5.5 6.25v5.25l-3 1.5v-6.75L3 4.5z" />
     </svg>
-  );
-}
-
-// One toggle chip for the filter sheet. The BUTTON is the 44px target and is
-// transparent; the bordered chip is a 32px span inside it. Wrapped rows sit
-// with no vertical gap, so each row's 44px box abuts the next instead of
-// overlapping it (LESSONS: the slim-thumb trick does not transfer to stacked
-// rows) — the chips read slim, the 12px between them is hit box, not margin.
-function FilterChip({
-  label,
-  on,
-  onClick,
-}: {
-  label: string;
-  on: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={`group flex min-h-11 items-center t-control transition-colors ${
-        on ? 'text-fg' : 'text-muted hover:text-fg'
-      }`}
-    >
-      <span
-        className={`hill-btn flex min-h-8 items-center border bg-surface px-2.5 ${
-          on ? 'border-fg' : 'border-border group-hover:border-subtle'
-        }`}
-      >
-        {label}
-      </span>
-    </button>
   );
 }
 
@@ -714,25 +680,15 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
             {activeFilterCount > 0 ? <span className="tabular-nums">({activeFilterCount})</span> : null}
           </button>
         </div>
-        <div className="mb-5 flex flex-wrap gap-2">
-          <button
-            onClick={() => setTagFilter(null)}
-            className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
-              tagFilter === null ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-            }`}
-          >
-            All
-          </button>
+        <div className="mb-3 flex flex-wrap gap-x-1.5">
+          <FilterChip label="All" on={tagFilter === null} onClick={() => setTagFilter(null)} />
           {TAG_KEYS.map((key) => (
-            <button
+            <FilterChip
               key={key}
+              label={ACTIVITY_TAGS[key].label}
+              on={tagFilter === key}
               onClick={() => setTagFilter(tagFilter === key ? null : key)}
-              className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
-                tagFilter === key ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-              }`}
-            >
-              {ACTIVITY_TAGS[key].label}
-            </button>
+            />
           ))}
         </div>
       </Item>

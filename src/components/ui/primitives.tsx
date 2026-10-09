@@ -276,6 +276,41 @@ export function Tag({
   );
 }
 
+// One toggle chip for a filter row — the Sessions tag row, the Filters sheet,
+// the Library category row. The BUTTON is the 44px target and is
+// transparent; the bordered chip is a 32px span inside it. Wrapped rows sit
+// with no vertical gap, so each row's 44px box abuts the next instead of
+// overlapping it (LESSONS: the slim-thumb trick does not transfer to stacked
+// rows) — the chips read slim, the 12px between them is hit box, not margin.
+export function FilterChip({
+  label,
+  on,
+  onClick,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={`group flex min-h-11 items-center t-control transition-colors ${
+        on ? 'text-fg' : 'text-muted hover:text-fg'
+      }`}
+    >
+      <span
+        className={`hill-btn flex min-h-8 items-center border bg-surface px-2.5 ${
+          on ? 'border-fg' : 'border-border group-hover:border-subtle'
+        }`}
+      >
+        {label}
+      </span>
+    </button>
+  );
+}
+
 export function Button({
   children,
   variant = 'primary',
