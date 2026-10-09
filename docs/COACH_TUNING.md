@@ -47,6 +47,11 @@ not a new one.
    (the clone is the routine's own; nothing else lives in it).
 2. Read the newest ledger entry. Its **Check next week** lines are this run's
    first job.
+3. `~/.kv-setup/venv/bin/kv-ops coach-claims --repo <clone>` (kv-setup). It checks
+   every `quote` in `knowledge.ts` is still verbatim in its vault file and lists
+   the health notes no source cites. **Exit 1 means a citation is broken: open no
+   PR this run**, name the broken claim ids in the ledger and the final report.
+   The uncited list is step 4's backlog.
 
 ### 1. Measure (no judgement yet)
 1. Run `scripts/coach-tuning/scorecard.sql` with `{{OWNER_USER_ID}}` substituted.
@@ -106,8 +111,10 @@ For the PR candidate and each note:
    the vault file (`grep -F` the exact sentence) and a person as `speaker`,
    exactly as `src/lib/coach/knowledge.ts` demands. If you cannot paste the
    sentence, it does not go in. Bump `KNOWLEDGE_PACK_VERSION`.
-3. Note which uncited vault sources were relevant. They are the backlog for
-   `kv coach-claims` (kv-setup) and get listed in the ledger, not acted on here.
+3. Start from the uncited notes `kv-ops coach-claims` listed. Note the relevant
+   ones in the ledger; one becomes a claim only through the PR, with its quote.
+4. Before opening the PR, re-run `kv-ops coach-claims --repo <clone>` on the
+   branch. It must exit 0.
 
 ### 5. Write — within budget
 **Brief** — expire your own earlier open briefs first, then insert one:
