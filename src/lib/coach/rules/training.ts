@@ -531,11 +531,15 @@ export function intervalsNotAllOut(
     hrSessions,
   } = iv.value;
   if (bouts === 0 || meanRpe == null) return null;
-  // HEART RATE OUTRANKS RPE. Galpin's bar is touching max heart rate, and the
-  // vo2Weekly caveat puts the floor as low as one bout a week near max HR. When
-  // the strap shows that happening weekly, an RPE average — even a rated one —
-  // cannot overrule it, and the rule says nothing.
-  if (peakHr != null && hrAllOutSessions / s.weeks >= 1) return null;
+  // HEART RATE OUTRANKS RPE. Galpin's bar is touching max heart rate. This rule
+  // is about INTENSITY, not frequency (see the header: it fires only when bouts
+  // exist), so the question the strap answers is "of the interval sessions it
+  // saw, did they reach max?" — not "did that happen every week". When most of
+  // them did, an RPE average cannot overrule it and the rule says nothing.
+  // The first version gated on max-HR sessions PER WEEK, and kept firing on an
+  // athlete whose every strapped interval session had reached 90% of peak.
+  const hrSaysAllOut = peakHr != null && hrSessions > 0 && hrAllOutSessions * 2 >= hrSessions;
+  if (hrSaysAllOut) return null;
   const [floorMin] = TRAINING.vo2Weekly.value;
   const perWeek = allOutMinutes / s.weeks;
   if (perWeek >= floorMin) return null;
@@ -544,7 +548,9 @@ export function intervalsNotAllOut(
   const hrNote =
     peakHr == null
       ? ` RPE ${mark} as the all-out mark is this app's translation; he speaks in heart rate, and too few sessions carry hr_max for the strap to settle it.`
-      : ` Your strap agrees: of ${hrSessions} bout session${hrSessions === 1 ? '' : 's'} with heart rate, ${hrAllOutSessions} reached ${pct(ALL_OUT_HR.fractionOfPeak)} of your own peak of ${peakHr} — Galpin trusts the measured peak over any age formula, "${TRAINING.maxHrObserved.quote}"`;
+      : hrSessions === 0
+        ? ` None of these sessions logged heart rate, which is the better read — Galpin speaks in heart rate, and your own peak of ${peakHr} is the reference to beat.`
+        : ` Your strap agrees: of ${hrSessions} bout session${hrSessions === 1 ? '' : 's'} with heart rate, only ${hrAllOutSessions} reached ${pct(ALL_OUT_HR.fractionOfPeak)} of your own peak of ${peakHr} — Galpin trusts the measured peak over any age formula, "${TRAINING.maxHrObserved.quote}"`;
   const ratedNote =
     ratedBouts < bouts ? ` The RPE average covers the ${ratedBouts} bouts you rated; the rest carried a seeded value and were left out.` : '';
 
@@ -573,6 +579,7 @@ export function intervalsNotAllOut(
       ratedBouts,
       peakHr,
       hrAllOutSessions,
+      hrSessions,
     },
   };
 }
