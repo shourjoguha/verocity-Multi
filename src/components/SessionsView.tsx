@@ -21,6 +21,8 @@ import { distinctSessionMovements, formatSessionMeta, sessionMovementKeys, TYPE_
 import { SessionSheet } from '@/components/SessionSheet';
 import { Button, EmptyState, ListCard, LoadingScreen } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
+import { Disclosure } from '@/components/ui/Disclosure';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { MovementPicker } from '@/components/logger/MovementPicker';
@@ -67,9 +69,41 @@ function FilterIcon() {
   );
 }
 
-// A pill-toggle row shared by the session-type and duration filter groups —
-// the TagPicker idiom (hill-btn + aria-pressed), parameterised over a fixed
-// option list rather than ActivityTagKey.
+// One toggle chip for the filter sheet. The BUTTON is the 44px target and is
+// transparent; the bordered chip is a 32px span inside it. Wrapped rows sit
+// with no vertical gap, so each row's 44px box abuts the next instead of
+// overlapping it (LESSONS: the slim-thumb trick does not transfer to stacked
+// rows) — the chips read slim, the 12px between them is hit box, not margin.
+function FilterChip({
+  label,
+  on,
+  onClick,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={`group flex min-h-11 items-center t-control transition-colors ${
+        on ? 'text-fg' : 'text-muted hover:text-fg'
+      }`}
+    >
+      <span
+        className={`hill-btn flex min-h-8 items-center border bg-surface px-2.5 ${
+          on ? 'border-fg' : 'border-border group-hover:border-subtle'
+        }`}
+      >
+        {label}
+      </span>
+    </button>
+  );
+}
+
+// A multi-select chip row — the session-type and duration filter groups.
 function PillFilter<T extends string>({
   options,
   selected,
@@ -80,95 +114,83 @@ function PillFilter<T extends string>({
   onToggle: (key: T) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      {options.map(({ key, label }) => {
-        const on = selected.includes(key);
-        return (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onToggle(key)}
-            className={`hill-btn flex min-h-11 items-center border bg-surface px-3 t-control transition-colors ${
-              on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-            }`}
-          >
-            {label}
-          </button>
-        );
-      })}
+    <div className="flex flex-wrap gap-x-1.5">
+      {options.map(({ key, label }) => (
+        <FilterChip key={key} label={label} on={selected.includes(key)} onClick={() => onToggle(key)} />
+      ))}
     </div>
   );
 }
 
-// Searchable multi-select for the movement include/exclude filters. Options
-// come from the movements actually present across the user's sessions (see
-// distinctSessionMovements), not the full shared library — there is no point
-// filtering by a movement no session uses.
-function MovementFilterList({
-  title,
-  hint,
+type MovementMode = 'include' | 'exclude';
+
+// Include and exclude share one list of movements, so they are one section with
+// a mode switch rather than two copies of the same chip wall. A movement is in
+// at most one of the two lists: picking it in the other mode moves it across.
+// Options come from the movements actually present across the user's sessions
+// (distinctSessionMovements), not the whole library.
+function MovementFilter({
   options,
-  selected,
+  include,
+  exclude,
   onChange,
 }: {
-  title: string;
-  hint: string;
   options: { key: string; label: string }[];
-  selected: string[];
-  onChange: (next: string[]) => void;
+  include: string[];
+  exclude: string[];
+  onChange: (include: string[], exclude: string[]) => void;
 }) {
+  const [mode, setMode] = useState<MovementMode>('include');
   const [query, setQuery] = useState('');
-  const toggle = (key: string) =>
-    onChange(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]);
+  const mine = mode === 'include' ? include : exclude;
+  const toggle = (key: string) => {
+    const without = (xs: string[]) => xs.filter((k) => k !== key);
+    if (mine.includes(key)) {
+      onChange(mode === 'include' ? without(include) : include, mode === 'exclude' ? without(exclude) : exclude);
+    } else if (mode === 'include') {
+      onChange([...include, key], without(exclude));
+    } else {
+      onChange(without(include), [...exclude, key]);
+    }
+  };
   const visible = query ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase())) : options;
 
+  if (options.length === 0) {
+    return <p className="text-sm text-muted">No movements logged in any session yet.</p>;
+  }
   return (
-    <div>
-      <div className="mb-2 t-label text-muted">{title}</div>
-      {options.length === 0 ? (
-        <p className="text-sm text-muted">No movements logged in any session yet.</p>
-      ) : (
-        <>
-          <p className="mb-2 text-xs text-muted">{hint}</p>
-          {options.length > 8 ? (
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search movements"
-              className={`${inputClass} mb-2`}
-              aria-label={`Search ${title.toLowerCase()}`}
-            />
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            {visible.length === 0 ? (
-              <p className="text-sm text-muted">No matches.</p>
-            ) : (
-              visible.map((o) => {
-                const on = selected.includes(o.key);
-                return (
-                  <button
-                    key={o.key}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => toggle(o.key)}
-                    className={`hill-btn flex min-h-11 items-center border bg-surface px-3 t-control capitalize transition-colors ${
-                      on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-                    }`}
-                  >
-                    {o.label}
-                  </button>
-                );
-              })
-            )}
-          </div>
-          {selected.length > 0 ? (
-            <button type="button" onClick={() => onChange([])} className="mt-2 t-control text-muted hover:text-fg">
-              Clear {title.toLowerCase()}
-            </button>
-          ) : null}
-        </>
-      )}
+    <div className="flex flex-col gap-2">
+      <SegmentedTabs
+        tabs={[
+          { key: 'include', label: `Include${include.length ? ` · ${include.length}` : ''}` },
+          { key: 'exclude', label: `Exclude${exclude.length ? ` · ${exclude.length}` : ''}` },
+        ]}
+        active={mode}
+        onChange={(k) => setMode(k as MovementMode)}
+        ariaLabel="Movement filter mode"
+        size="sm"
+      />
+      <p className="text-xs text-muted">
+        {mode === 'include' ? 'Show sessions with any of these.' : 'Hide sessions with any of these.'}
+      </p>
+      {options.length > 8 ? (
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search movements"
+          className={inputClass}
+          aria-label="Search movements"
+        />
+      ) : null}
+      <div className="flex flex-wrap gap-x-1.5 capitalize">
+        {visible.length === 0 ? (
+          <p className="text-sm text-muted">No matches.</p>
+        ) : (
+          visible.map((o) => (
+            <FilterChip key={o.key} label={o.label} on={mine.includes(o.key)} onClick={() => toggle(o.key)} />
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -522,6 +544,12 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
 
   const activeFilterCount =
     typeFilter.length + durationFilter.length + includeMovements.length + excludeMovements.length;
+  const movementSummary = [
+    includeMovements.length ? `${includeMovements.length} in` : '',
+    excludeMovements.length ? `${excludeMovements.length} out` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   function clearAdvancedFilters() {
     setTypeFilter([]);
@@ -777,9 +805,9 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
       />
 
       <Modal open={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filters">
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           <div>
-            <div className="mb-2 t-label text-muted">Workout type</div>
+            <div className="t-label text-muted">Workout type</div>
             <PillFilter
               options={SESSION_TYPES.map((t) => ({ key: t, label: TYPE_SHORT[t] }))}
               selected={typeFilter}
@@ -788,7 +816,7 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
           </div>
 
           <div>
-            <div className="mb-2 t-label text-muted">Duration</div>
+            <div className="t-label text-muted">Duration</div>
             <PillFilter
               options={DURATION_BUCKETS.map((b) => ({ key: b.key, label: b.label }))}
               selected={durationFilter}
@@ -796,21 +824,21 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
             />
           </div>
 
-          <MovementFilterList
-            title="Include movements"
-            hint="Show sessions with any of:"
-            options={movementOptions}
-            selected={includeMovements}
-            onChange={setIncludeMovements}
-          />
-
-          <MovementFilterList
-            title="Exclude movements"
-            hint="Hide sessions with any of:"
-            options={movementOptions}
-            selected={excludeMovements}
-            onChange={setExcludeMovements}
-          />
+          <Disclosure
+            title="Movements"
+            headerRight={movementSummary}
+            defaultOpen={includeMovements.length + excludeMovements.length > 0}
+          >
+            <MovementFilter
+              options={movementOptions}
+              include={includeMovements}
+              exclude={excludeMovements}
+              onChange={(inc, exc) => {
+                setIncludeMovements(inc);
+                setExcludeMovements(exc);
+              }}
+            />
+          </Disclosure>
         </div>
         <div className="flex shrink-0 border-t border-border p-4">
           <Button variant="ghost" onClick={clearAdvancedFilters} disabled={activeFilterCount === 0}>
