@@ -123,6 +123,35 @@ describe('heart rate outranks RPE for all-out', () => {
     expect(intervalsNotAllOut(t, null, '2026-W41')).toBeNull();
   });
 
+  it('stays silent when every strapped interval session reached max, however rare they are', () => {
+    // The live false finding: only three of the window's interval sessions wore
+    // a strap, all three reached max — under one a week, and it still fired.
+    // The peak comes from the athlete's other strapped sessions, as it did live.
+    const intervals = block({ rpe: 7, rpeRated: true }, (i) => (i < 3 ? 182 : null));
+    const others = Array.from({ length: 5 }, (_, i) => ({
+      ...intervalLog(2 + i * 3, 0, {}, 192 + i),
+      id: `easy-${i}`,
+    }));
+    const t = measureTraining([...intervals, ...others], opts, TODAY);
+    expect(t.intervals.value.peakHr).toBe(196);
+    expect(t.intervals.value.hrSessions).toBe(3);
+    expect(t.intervals.value.hrAllOutSessions).toBe(3);
+    expect(intervalsNotAllOut(t, null, '2026-W41')).toBeNull();
+  });
+
+  it('does not claim the strap agrees when it saw no interval session', () => {
+    // Peak comes from other sessions; none of the interval ones logged HR.
+    const intervals = block({ rpe: 7, rpeRated: true }, () => null);
+    const others = Array.from({ length: 5 }, (_, i) => ({
+      ...intervalLog(2 + i * 3, 0, {}, 190 + i),
+      id: `easy-${i}`,
+    }));
+    const t = measureTraining([...intervals, ...others], opts, TODAY);
+    const f = intervalsNotAllOut(t, null, '2026-W41');
+    expect(f?.body).not.toContain('agrees');
+    expect(f?.body).toContain('None of these sessions logged heart rate');
+  });
+
   it('speaks, and cites the measured peak, when neither channel reaches max', () => {
     const logs = block({ rpe: 7, rpeRated: true }, (i) => (i === 0 ? 196 : 150));
     const t = measureTraining(logs, opts, TODAY);
@@ -130,6 +159,7 @@ describe('heart rate outranks RPE for all-out', () => {
     expect(f).not.toBeNull();
     expect(f?.claims.map((c) => c.id)).toContain(TRAINING.maxHrObserved.id);
     expect(f?.body).toContain('196');
+    expect(f?.body).toContain('only 1 reached');
   });
 });
 
