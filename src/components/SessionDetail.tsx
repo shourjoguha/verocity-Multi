@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { createSession, getLogById, getLogsInRange } from '@/lib/queries';
+import { createSession, getLogById, getLogsInRange, updateLog } from '@/lib/queries';
 import { frameFromLogDocument } from '@/lib/logBuilder';
 import { toast } from '@/lib/toast';
-import type { WorkoutLog } from '@/lib/types';
+import type { VibeCheck, WorkoutLog } from '@/lib/types';
+import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
 import { tagColor } from '@/lib/tags';
 import { formatDate, formatDuration, formatSetActual } from '@/lib/format';
 import { SECTIONS, type SectionKey } from '@/app.config';
@@ -36,6 +37,31 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
   const [savingSession, setSavingSession] = useState(false);
   const [savedAsSession, setSavedAsSession] = useState(false);
   const [soreFrom, setSoreFrom] = useState<SorenessCandidate[]>([]);
+  const [editingVibe, setEditingVibe] = useState(false);
+  const [savingVibe, setSavingVibe] = useState(false);
+
+  async function saveVibe(next: VibeCheck) {
+    if (!log) return;
+    const data = { ...(log.data ?? { sections: [] }), session: { ...log.data?.session, vibe: next } };
+    setSavingVibe(true);
+    const ok = await updateLog(log.id, { data });
+    setSavingVibe(false);
+    if (!ok) {
+      toast('Could not update readiness', 'error');
+      return;
+    }
+    setLog({ ...log, data });
+    setEditingVibe(false);
+    toast('Readiness updated', 'success');
+    // The "likely from" attribution was computed from the old sore areas.
+    if (next.sore?.length) {
+      const { from, to } = lagWindow(log.log_date);
+      const prior = await getLogsInRange(from, to, clientFor(mode));
+      setSoreFrom(likelySources(attributeSoreness({ ...log, data }, prior)));
+    } else {
+      setSoreFrom([]);
+    }
+  }
 
   async function saveAsSession(current: WorkoutLog) {
     if (savingSession || savedAsSession) return;
@@ -150,14 +176,42 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
               </>
             )}
           </div>
-          {vibe ? (
-            <div className="mt-3 flex gap-4 t-control text-muted">
+          {editingVibe ? (
+            <div className="mt-3">
+              <VibeCheckCard
+                initial={vibe}
+                saveLabel="Save"
+                skipLabel="Cancel"
+                saving={savingVibe}
+                onSave={saveVibe}
+                onSkip={() => setEditingVibe(false)}
+              />
+            </div>
+          ) : vibe ? (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 t-control text-muted">
               <span>Sleep {vibe.sleep}</span>
               <span>Energy {vibe.energy}</span>
               <span>Soreness {vibe.soreness}</span>
+              {!readOnly ? (
+                <button
+                  type="button"
+                  onClick={() => setEditingVibe(true)}
+                  className="inline-flex min-h-11 items-center text-[0.6rem] uppercase tracking-wider transition-colors hover:text-fg"
+                >
+                  edit
+                </button>
+              ) : null}
             </div>
+          ) : !readOnly ? (
+            <button
+              type="button"
+              onClick={() => setEditingVibe(true)}
+              className="mt-3 inline-flex min-h-11 items-center t-control text-muted transition-colors hover:text-fg"
+            >
+              Add readiness
+            </button>
           ) : null}
-          {vibe?.sore?.length ? (
+          {!editingVibe && vibe?.sore?.length ? (
             <p className="mt-1 t-control text-muted">
               Sore:{' '}
               {vibe.sore.map(soreLabel).join(', ')}

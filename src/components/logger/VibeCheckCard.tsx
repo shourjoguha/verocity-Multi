@@ -16,11 +16,20 @@ const FIELDS: { key: 'sleep' | 'energy' | 'soreness'; label: string }[] = [
 export function VibeCheckCard({
   onSave,
   onSkip,
+  initial,
+  saveLabel = 'Start session',
+  skipLabel = 'Skip',
+  saving = false,
 }: {
   onSave: (vibe: VibeCheck) => void;
   onSkip: () => void;
+  // Editing an existing reading rather than taking a fresh one.
+  initial?: VibeCheck;
+  saveLabel?: string;
+  skipLabel?: string;
+  saving?: boolean;
 }) {
-  const [vibe, setVibe] = useState<VibeCheck>({ sleep: 3, energy: 3, soreness: 3 });
+  const [vibe, setVibe] = useState<VibeCheck>(initial ?? { sleep: 3, energy: 3, soreness: 3 });
 
   return (
     // Banded like the movement cards: a surface-filled card whose heading sits
@@ -80,16 +89,17 @@ export function VibeCheckCard({
             const { sore, ...rest } = vibe;
             onSave(sore?.length && vibe.soreness >= SORENESS.askAreaFrom ? { ...rest, sore } : rest);
           }}
-          className="inline-flex min-h-11 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg hover:bg-subtle"
+          disabled={saving}
+          className="inline-flex min-h-11 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg hover:bg-subtle disabled:opacity-40"
         >
-          Start session
+          {saveLabel}
         </button>
         <button
           type="button"
           onClick={onSkip}
           className="inline-flex min-h-11 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg hover:border-subtle"
         >
-          Skip
+          {skipLabel}
         </button>
       </div>
     </div>
