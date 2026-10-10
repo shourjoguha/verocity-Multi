@@ -491,7 +491,12 @@ export default function ProfileView({ mode }: { mode: Surface }) {
     if (seeded === undefined) return;
     setProfile(seeded);
     setPlan(getCached<Plan>('plan:active') ?? null);
-    setLogs(getCached<WorkoutLog[]>('logs:recent30') ?? []);
+    // Not persisted across launches (persistedCache.ts) — the history is, and
+    // the recent list is a slice of it.
+    setLogs(
+      getCached<WorkoutLog[]>('logs:recent30') ??
+        newestLogs(getCached<WorkoutLog[]>('logs:all') ?? [], 30),
+    );
     setAllLogs(getCached<WorkoutLog[]>('logs:all') ?? []);
     setMealsToday(getCached<MealLog[]>('meals:today') ?? []);
     setMealPresets(getCached<MealPreset[]>('meals:presets') ?? []);
