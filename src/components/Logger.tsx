@@ -1651,6 +1651,15 @@ export default function Logger() {
                 </button>
               );
             })}
+            {editing ? (
+              <button
+                type="button"
+                onClick={() => setShowVibe(true)}
+                className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 t-control text-muted transition-colors hover:text-fg"
+              >
+                Readiness
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -1666,7 +1675,15 @@ export default function Logger() {
         ) : null}
       </header>
 
-      {showVibe ? <VibeCheckCard onSave={saveVibe} onSkip={() => setShowVibe(false)} /> : null}
+      {showVibe ? (
+        <VibeCheckCard
+          onSave={saveVibe}
+          onSkip={() => setShowVibe(false)}
+          initial={editing ? doc.session?.vibe : undefined}
+          saveLabel={editing ? 'Save' : undefined}
+          skipLabel={editing ? 'Cancel' : undefined}
+        />
+      ) : null}
 
 
       {ordered.map((section) => {
