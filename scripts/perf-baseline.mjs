@@ -5,6 +5,7 @@
 //
 //   home-ready     ms from navigation start until Home's loading state is gone
 //   tab-ready      ms from a tab tap until that tab's loading state is gone
+//   relaunch       home-ready again after a full reload that keeps storage
 //   js-bytes       script bytes Home fetched before it was ready
 //   log-requests   every request to workout_logs across the walk, with rows and
 //                  bytes — the same history fetched again is visible here as a
@@ -271,12 +272,23 @@ async function softGo(path) {
 await quiet();
 for (const path of ['/app/stats', '/app/plan', '/app/you', '/app']) await softGo(path);
 
+// A second cold launch: a full reload, so the JS realm (and the in-memory query
+// cache) is gone but this browser's storage is not. What reopening the app
+// looks like; the persisted cache (persistedCache.ts) is what it measures.
+phase = 'relaunch';
+await page.goto(BASE + '/app', { waitUntil: 'commit' });
+await page.waitForSelector('astro-island', { state: 'attached' });
+await ready();
+const relaunchReady = await page.evaluate(() => Math.round(performance.now()));
+await quiet();
+
 await browser.close();
 
 const perLog = Math.round(JSON.stringify(history).length / LOGS);
 const full = logRequests.filter((r) => !/log_date=|limit=|id=eq\./.test(r.filter));
 console.log(`\nperf-baseline · ${LOGS} synthetic logs (~${perLog} B each) · ${LATENCY_MS}ms + ${KBPS}KB/s · CPU ${CPU}x\n`);
-console.log(`home-ready   ${homeReady} ms`);
+console.log(`home-ready   ${homeReady} ms (first launch)`);
+console.log(`relaunch    ${relaunchReady} ms (reload, storage kept)`);
 console.log(`js-bytes     ${Math.round(jsBytes / 1024)} KB (transferred, before Home was ready)`);
 // Tap → that tab's loading state gone, over a soft (ClientRouter) navigation.
 console.log(`tab-ready    ${tabReady.map(([p, ms]) => `${p} ${ms}ms`).join(' · ')}\n`);
