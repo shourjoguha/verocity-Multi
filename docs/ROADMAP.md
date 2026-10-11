@@ -481,9 +481,12 @@ PRs #255 and #256. Reads: `docs/LESSONS.md` Decisions (shade is % of total).
 - [x] Every Stats card follows the period; consistency grid capped at 8 weeks;
   `useAspectProfile` memoises the current / prior measurement
 - [x] Taxonomy: `run-named` rule (Easy Run, Zone 2 Run, Running)
-- [ ] Deferred: horizontal scroll for the consistency grid at 12W / 6M (it
-  shows the last 8 weeks and says so); owner iPhone check of Body in all
-  three styles (see Phase 14)
+- [x] History scrolling on the Stats consistency grid and Home activity bars
+  (`ui/HistoryScroller`): fixed in-view column count, date note fades 2s after
+  scroll stops, Home headline follows the bars in view
+- [ ] Owner iPhone check: Body in all three styles (see Phase 14), and history
+  scrolling on WebKit (momentum, snap, vertical swipe from the chart)
+- [ ] Tap-to-peek on Home's activity columns cancels itself on touch (LESSONS)
 
 ## Backlog
 

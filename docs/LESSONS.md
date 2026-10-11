@@ -34,6 +34,26 @@ two live answers — see that section for why.
 
 ## Rendering & animation
 
+### A tap-to-peek chart column shows nothing on touch, and works on hover
+`[measured in Chromium touch emulation; iOS not observed]`
+A touch tap fires `mouseenter` before `click`. With `onMouseEnter` setting the
+peek and `onClick` toggling it, one tap sets the peek and clears it again, so
+Home's activity columns show no peek on a tap even though hover works. Hover
+handlers plus a toggle on the same element cancel out on touch. Pick one per
+pointer type (e.g. set the peek on `pointerenter` only when
+`pointerType === 'mouse'`). Found while adding history scrolling; **not fixed
+yet**. → `ActivityStrip` in `src/components/ProfileView.tsx`
+
+### A history strip that opened on today shows some earlier stretch
+`[argued, not measured]`
+When column widths come from the measured width, a later width change (font
+load, rotation, a ResizeObserver settling) changes `scrollWidth` while
+`scrollLeft` stays put, so the strip silently stops being pinned to today.
+`ui/HistoryScroller` re-pins to the end on resize only while the latest column
+is in view, and ignores the scroll event its own `scrollLeft` write fires,
+which would otherwise flash the date note on load.
+→ `src/components/ui/HistoryScroller.tsx`
+
 ### One route paints, blinks, and goes blank
 `[reproduced in Chromium, and the symptom observed to stop]`
 `/app/you` showed a blank screen; tapping the tab flashed the page in for about
@@ -799,6 +819,14 @@ headless automation. If this bites again, the durable fix is network-first for
 navigations rather than more patching of the update path.
 
 ## Testing & tooling
+
+### A touch-scroll probe reports "can't scroll" when the page scrolls fine
+`[measured in headless Chromium]`
+CDP `Input.synthesizeScrollGesture` with `gestureSourceType: 'touch'` does
+nothing in this headless Chromium, in either direction. Raw
+`Input.dispatchTouchEvent` touchStart / touchMove / touchEnd sequences do scroll,
+snap included. A probe built on the first reports a broken scroller that is not
+broken. → the probes behind the HistoryScroller change
 
 ### A slim segmented tab shipped a sub-44px tap target and reddened audit:mobile
 `[measured in Chromium, and the symptom observed to stop]`
