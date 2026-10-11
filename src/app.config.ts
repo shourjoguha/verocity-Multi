@@ -1028,6 +1028,21 @@ export const FITNESS_ASPECTS = [
 
 export const ASPECT_SCALE = { min: 1, max: 10 } as const;
 
+// The one period selector shared by Body and Stats, so choosing "12W" on one
+// tab is still "12W" on the other. Saved per device (lib/periodPrefs.ts).
+// Never hardcode these day counts in a component.
+export const TRAINING_PERIODS = [
+  { key: '4w', label: '4W', days: 28 },
+  { key: '6w', label: '6W', days: 42 },
+  { key: '8w', label: '8W', days: 56 },
+  { key: '12w', label: '12W', days: 84 },
+  { key: '6m', label: '6M', days: 182 },
+] as const;
+
+export type TrainingPeriodKey = (typeof TRAINING_PERIODS)[number]['key'];
+
+export const DEFAULT_PERIOD: TrainingPeriodKey = '8w';
+
 // Selectable measurement windows. This is the responsiveness control: one
 // session is ~1/25th of a 60-day window and ~1/12th of a 28-day one, so the
 // short window is what makes a single workout visibly move the shape. The
