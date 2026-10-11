@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   addCoachAthleteNote,
+  deleteCoachAthleteNote,
   getActivePlan,
   getCoachAthleteNotes,
   getCoachBriefs,
@@ -28,10 +29,22 @@ import {
   isBriefLive,
 } from '@/lib/coach/governor';
 import { impactScore } from '@/lib/coach/impact';
+import type { Reading } from '@/lib/coach/recurrence';
+import type { EvidencePayload } from '@/lib/coach/types';
+import {
+  TRAJECTORY_POINTS,
+  checkinDelta,
+  mergeSeries,
+  readingsByRule,
+  trajectoryLabel,
+  type CheckinDelta,
+  type TrajectoryLabel,
+} from '@/lib/coach/trajectory';
 import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
 import type {
   CoachAthleteNote,
   CoachBrief,
+  CoachObservation,
   CoachRuleNote,
   Recommendation,
   RecDisposition,
@@ -123,12 +136,163 @@ const inkBtn =
 const ghostBtn =
   'hill-btn inline-flex min-h-11 items-center justify-center border border-border bg-surface px-3 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg';
 
+/**
+ * One bar per check-in, oldest on the left, height = drift. A day the rule did
+ * not fire is drawn in the elevated tone, so the coach staying quiet reads as
+ * quiet rather than as a short bar. Monochrome: this is chrome around data, and
+ * the direction is carried by TrajectoryTag, which also says it in words.
+ */
+function TrajectoryBars({ series }: { series: readonly Reading[] }) {
+  const tail = series.slice(-TRAJECTORY_POINTS);
+  const label = `Drift at the last ${tail.length} check-ins: ${tail
+    .map((r) => `${Math.round(r.drift * 100)}%`)
+    .join(', ')}`;
+  return (
+    <div
+      role="img"
+      aria-label={label}
+      className="grid h-7 items-end gap-1"
+      style={{ gridTemplateColumns: `repeat(${TRAJECTORY_POINTS}, minmax(0, 1fr))` }}
+    >
+      {Array.from({ length: TRAJECTORY_POINTS - tail.length }, (_, i) => (
+        <span key={`pad-${i}`} />
+      ))}
+      {tail.map((r) => (
+        <span
+          key={r.observedOn}
+          className={r.fired ? 'bg-fg' : 'bg-elevated'}
+          style={{ height: `${Math.max(8, Math.round(r.drift * 100))}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Direction in words AND an arrow, so it survives without colour. The hue is
+ *  the delta tokens' meaning (worse / better), not decoration. */
+const TRAJECTORY_TAG: Record<TrajectoryLabel, { text: string; tone: string }> = {
+  'came-back': { text: '↑ Came back', tone: 'text-down' },
+  persisting: { text: '→ Persisting', tone: 'text-subtle' },
+  improving: { text: '↓ Improving', tone: 'text-up' },
+  resolving: { text: '↓ Clearing', tone: 'text-up' },
+  new: { text: 'New', tone: 'text-fg' },
+};
+
+function TrajectoryTag({ series }: { series: readonly Reading[] }) {
+  const label = trajectoryLabel(series);
+  if (!label) return null;
+  const t = TRAJECTORY_TAG[label];
+  return (
+    <span className={`shrink-0 text-[0.6rem] font-semibold uppercase tracking-wider ${t.tone}`}>
+      {t.text}
+    </span>
+  );
+}
+
+/** What the last check-in changed, kept on the page instead of in a toast. */
+function CheckinStrip({ delta }: { delta: CheckinDelta }) {
+  const cells: [number, string][] = [
+    [delta.fresh, 'New'],
+    [delta.still, 'Still there'],
+    [delta.cleared, 'Cleared'],
+  ];
+  return (
+    <div>
+      <div className="grid grid-cols-3 border border-border bg-surface">
+        {cells.map(([n, label], i) => (
+          <div key={label} className={`px-3 py-2 ${i > 0 ? 'border-l border-border-soft' : ''}`}>
+            <div className="font-display text-xl tabular-nums text-fg">{n}</div>
+            <div className="text-[0.6rem] uppercase tracking-[0.2em] text-muted">{label}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1 text-[0.6rem] uppercase tracking-[0.2em] text-muted">
+        Last check-in · {formatDate(delta.on)}
+      </p>
+    </div>
+  );
+}
+
+/** `recommendations.evidence` is untyped JSON; rows written before 0036, or by
+ *  the AI edge function, carry none. */
+function asEvidence(e: unknown): EvidencePayload | null {
+  if (!e || typeof e !== 'object') return null;
+  const v = e as Partial<EvidencePayload>;
+  return Array.isArray(v.claims) && v.observed != null && typeof v.observed === 'object'
+    ? (v as EvidencePayload)
+    : null;
+}
+
+const humanize = (key: string) =>
+  key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_.]/g, ' ')
+    .toLowerCase();
+
+const formatObserved = (v: number | string | null) =>
+  v == null ? '—' : typeof v === 'number' ? String(Math.round(v * 100) / 100) : v;
+
+/**
+ * The finding's receipts: the numbers the rule measured, how much data they
+ * rest on, and each cited claim with its verbatim quote. This is what makes a
+ * deterministic finding different from advice, and it used to be invisible —
+ * the sheet showed a drift percentage and nothing it was a percentage of.
+ */
+function EvidenceBlock({ evidence, sessions }: { evidence: EvidencePayload; sessions: number | null }) {
+  const observed = Object.entries(evidence.observed);
+  return (
+    <section className="mt-5">
+      <div className="text-[0.6rem] uppercase tracking-[0.3em] text-subtle">What was measured</div>
+      {observed.length > 0 ? (
+        <dl className="mt-2 border border-border">
+          {observed.map(([k, v]) => (
+            <div
+              key={k}
+              className="flex items-baseline justify-between gap-3 border-t border-border-soft px-3 py-2 first:border-t-0"
+            >
+              <dt className="text-sm text-muted">{humanize(k)}</dt>
+              <dd className="text-sm tabular-nums text-fg">{formatObserved(v)}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      <p className="mt-2 text-xs text-muted">
+        {sessions != null ? `${sessions} sessions in the window · ` : ''}
+        {evidence.sufficiency === 'partial' ? 'Thin data — read with care' : 'Enough data'} · pack{' '}
+        {evidence.packVersion}
+      </p>
+      {evidence.claims.map((c) => (
+        <div key={c.id} className="mt-2">
+          <Disclosure title={`Rests on · ${c.speaker}`}>
+            <p className="text-sm text-fg">{c.statement}</p>
+            <blockquote className="mt-2 bg-bg px-3 py-2 text-sm text-subtle">“{c.quote}”</blockquote>
+            {c.caveat ? <p className="mt-2 text-xs text-muted">Caveat: {c.caveat}</p> : null}
+            {c.url ? (
+              <a
+                href={c.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex min-h-11 items-center text-xs uppercase tracking-wider text-subtle underline"
+              >
+                {c.work}
+              </a>
+            ) : (
+              <p className="mt-2 text-xs uppercase tracking-wider text-subtle">{c.work}</p>
+            )}
+          </Disclosure>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function RecRow({
   rec,
   onClick,
   snoozed,
   muted,
   noted,
+  series,
 }: {
   rec: Recommendation;
   onClick: () => void;
@@ -136,6 +300,8 @@ function RecRow({
   muted?: boolean;
   /** An athlete note the weekly routine has not read yet. */
   noted?: boolean;
+  /** The rule's readings, when the row should show its trajectory. */
+  series?: readonly Reading[];
 }) {
   const aging = rec.status === 'open' && Date.now() - Date.parse(rec.created_at) > 14 * 86_400_000;
   return (
@@ -143,11 +309,11 @@ function RecRow({
       <button
         type="button"
         onClick={onClick}
-        className={`hill-btn flex w-full items-start justify-between gap-3 border border-border bg-surface p-4 text-left transition-colors hover:border-fg ${
+        className={`hill-btn flex w-full flex-wrap items-start justify-between gap-3 border border-border bg-surface p-4 text-left transition-colors hover:border-fg ${
           muted ? 'opacity-60' : ''
         }`}
       >
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-medium text-fg">{rec.tldr}</div>
           {rec.action ? <div className="mt-0.5 text-xs text-muted">{rec.action}</div> : null}
         </div>
@@ -159,7 +325,13 @@ function RecRow({
             <span>{rec.disposition.replace(/_/g, ' ')}</span>
           ) : null}
           {rec.status === 'dismissed' ? <span>dismissed</span> : null}
+          {series && series.length > 0 ? <TrajectoryTag series={series} /> : null}
         </div>
+        {series && series.length > 0 ? (
+          <div className="w-full">
+            <TrajectoryBars series={series} />
+          </div>
+        ) : null}
       </button>
     </li>
   );
@@ -277,11 +449,14 @@ function ThemeCard({
   rows,
   onOpen,
   noted,
+  series,
 }: {
   theme: Theme;
   rows: Recommendation[];
   onOpen: (r: Recommendation) => void;
   noted: Set<string>;
+  /** The members' readings merged per check-in at the worst member. */
+  series: readonly Reading[];
 }) {
   return (
     <li className="lift overflow-hidden border border-border bg-surface">
@@ -290,11 +465,20 @@ function ThemeCard({
           <span className="font-display text-sm uppercase tracking-[0.04em] text-fg">
             {theme.title}
           </span>
-          <span className="shrink-0 text-[0.6rem] uppercase tracking-wider text-muted">
-            {rows.length} findings
-          </span>
+          {series.length > 0 ? (
+            <TrajectoryTag series={series} />
+          ) : (
+            <span className="shrink-0 text-[0.6rem] uppercase tracking-wider text-muted">
+              {rows.length} findings
+            </span>
+          )}
         </div>
         <p className="mt-1 text-xs text-muted">{theme.blurb}</p>
+        {series.length > 0 ? (
+          <div className="mt-3">
+            <TrajectoryBars series={series} />
+          </div>
+        ) : null}
       </div>
       <ul>
         {rows.map((r) => (
@@ -326,6 +510,9 @@ export default function CoachView() {
   const [briefs, setBriefs] = useState<CoachBrief[]>([]);
   const [ruleNotes, setRuleNotes] = useState<CoachRuleNote[]>([]);
   const [athleteNotes, setAthleteNotes] = useState<CoachAthleteNote[]>([]);
+  // The trajectory memory (0042), read on open so the page can draw where each
+  // finding has been — previously it was only loaded inside a check-in.
+  const [observations, setObservations] = useState<CoachObservation[]>([]);
   const [noting, setNoting] = useState(false);
   const [activeBrief, setActiveBrief] = useState<CoachBrief | null>(null);
   // Null = no filter. Kept apart from the slider position so the default stays
@@ -345,16 +532,18 @@ export default function CoachView() {
         window.location.href = '/login';
         return;
       }
-      const [rows, briefRows, noteRows, athleteRows] = await Promise.all([
+      const [rows, briefRows, noteRows, athleteRows, obsRows] = await Promise.all([
         getRecommendations(),
         getCoachBriefs(),
         getCoachRuleNotes(),
         getCoachAthleteNotes(),
+        getCoachObservations(),
       ]);
       setRecs(rows);
       setBriefs(briefRows);
       setRuleNotes(noteRows);
       setAthleteNotes(athleteRows);
+      setObservations(obsRows);
       setReady(true);
     });
   }, []);
@@ -424,7 +613,9 @@ export default function CoachView() {
       if (!(await upsertCoachObservations(readings))) {
         console.error('coach observations not saved; trajectory will have a gap');
       }
-      setRecs(await getRecommendations());
+      const [freshRecs, freshObs] = await Promise.all([getRecommendations(), getCoachObservations()]);
+      setRecs(freshRecs);
+      setObservations(freshObs);
       // Say what actually happened. "Nothing new since last check-in" used to
       // cover four different situations, one of which was the engine being
       // gagged by its own cooldowns while the athlete kept training — so the
@@ -495,6 +686,16 @@ export default function CoachView() {
     }
   }
 
+  /** Delete one of your own notes. Irreversible, so it asks, as removeBrief does. */
+  async function removeNote(n: CoachAthleteNote) {
+    if (!window.confirm('Delete this note? This cannot be undone.')) return;
+    if (!(await deleteCoachAthleteNote(n.id))) {
+      toast('Could not delete — try again', 'error');
+      return;
+    }
+    setAthleteNotes((prev) => prev.filter((x) => x.id !== n.id));
+  }
+
   async function dismiss(rec: Recommendation) {
     await updateRecommendation(rec.id, { status: 'dismissed' });
     closeDetail();
@@ -554,26 +755,40 @@ export default function CoachView() {
   if (!ready) return <LoadingScreen />;
 
   const now = Date.now();
-  // The created-at filter. Sized to the oldest row so the top stop means "all";
-  // applied to findings and briefs alike, since both are suggestions.
-  const oldest = Math.min(now, ...recs.map((r) => Date.parse(r.created_at)), ...briefs.map((b) => Date.parse(b.created_at)));
+  const brief = currentBrief(briefs);
+  const contextNotes = governContextNotes(ruleNotes);
+  // Open findings are never filtered by age: a live problem does not stop being
+  // one because it was first raised a while ago, and the old created-at slider
+  // hid exactly the aging findings that most needed seeing.
+  const open = recs.filter((r) => isLiveRec(r, now));
+  const { lead, rest } = partitionOpen(open);
+
+  const byRule = readingsByRule(observations);
+  const seriesOf = (r: Recommendation): Reading[] => (r.rule_id ? (byRule.get(r.rule_id) ?? []) : []);
+  const delta = checkinDelta(observations);
+
+  // History — snoozed and decided — is where the created-at filter lives now.
+  const snoozedAll = recs.filter(
+    (r) => r.status === 'snoozed' && r.snooze_until != null && Date.parse(r.snooze_until) > now,
+  );
+  const decidedAll = recs.filter((r) => r.status === 'acted' || r.status === 'dismissed');
+  const snoozedBriefsAll = briefs.filter((b) => b.status === 'snoozed' && !isBriefLive(b));
+  const decidedBriefsAll = briefs.filter((b) => b.status === 'acted');
+  const historyCreated = [...snoozedAll, ...decidedAll, ...snoozedBriefsAll, ...decidedBriefsAll].map(
+    (x) => Date.parse(x.created_at),
+  );
+  // Sized to the oldest history row so the top stop means "all".
+  const oldest = Math.min(now, ...historyCreated);
   const maxWeeks = Math.max(1, Math.ceil((now - oldest) / (7 * 86_400_000)));
   const shownWeeks = weeks == null ? maxWeeks : Math.min(weeks, maxWeeks);
   const inWindow = (createdAt: string) =>
     shownWeeks >= maxWeeks || now - Date.parse(createdAt) <= shownWeeks * 7 * 86_400_000;
-  const windowRecs = recs.filter((r) => inWindow(r.created_at));
-  const windowBriefs = briefs.filter((b) => inWindow(b.created_at));
-
-  const brief = currentBrief(windowBriefs);
-  const contextNotes = governContextNotes(ruleNotes);
-  const open = windowRecs.filter((r) => isLiveRec(r, now));
-  const { lead, rest } = partitionOpen(open);
-  const snoozed = windowRecs.filter(
-    (r) => r.status === 'snoozed' && r.snooze_until != null && Date.parse(r.snooze_until) > now,
-  );
-  const decided = windowRecs.filter((r) => r.status === 'acted' || r.status === 'dismissed');
-  const snoozedBriefs = windowBriefs.filter((b) => b.status === 'snoozed' && !isBriefLive(b));
-  const decidedBriefs = windowBriefs.filter((b) => b.status === 'acted');
+  const snoozed = snoozedAll.filter((r) => inWindow(r.created_at));
+  const decided = decidedAll.filter((r) => inWindow(r.created_at));
+  const snoozedBriefs = snoozedBriefsAll.filter((b) => inWindow(b.created_at));
+  const decidedBriefs = decidedBriefsAll.filter((b) => inWindow(b.created_at));
+  const snoozedCount = snoozedAll.length + snoozedBriefsAll.length;
+  const decidedCount = decidedAll.length + decidedBriefsAll.length;
   // Findings carrying a note the routine has not read yet.
   const noted = new Set(
     athleteNotes
@@ -581,14 +796,20 @@ export default function CoachView() {
       .map((n) => n.recommendation_id as string),
   );
   const activeNotes = active ? athleteNotes.filter((n) => n.recommendation_id === active.id) : [];
+  const activeSeries = active ? seriesOf(active) : [];
+  const activeEvidence = active ? asEvidence(active.evidence) : null;
+  /** Sessions in the measurement window at the rule's newest reading. */
+  const latestSessions = (ruleId: string | null): number | null => {
+    const s = ruleId ? observations.filter((o) => o.rule_id === ruleId) : [];
+    return s.length > 0 ? s[s.length - 1].sessions : null;
+  };
 
   return (
     <>
       <PageStagger className="mx-auto max-w-3xl px-4 pb-10 pt-5 sm:px-6">
         <Item>
-          <header className="mb-8">
-            <p className="text-[0.7rem] uppercase tracking-[0.35em] text-muted">Coach</p>
-            <div className="mt-2 flex items-end justify-between gap-4">
+          <header className="mb-6">
+            <div className="flex items-end justify-between gap-4">
               <EchoText
                 text="COACH"
                 as="h1"
@@ -601,10 +822,10 @@ export default function CoachView() {
           </header>
         </Item>
 
-        {recs.length + briefs.length > 0 ? (
+        {delta ? (
           <Item>
-            <div className="mb-6">
-              <WeeksFilter weeks={shownWeeks} max={maxWeeks} onChange={(w) => setWeeks(w)} />
+            <div className="mb-8">
+              <CheckinStrip delta={delta} />
             </div>
           </Item>
         ) : null}
@@ -621,11 +842,7 @@ export default function CoachView() {
           <section className="mb-10">
             <SectionHeader>Open</SectionHeader>
             {open.length === 0 ? (
-              <EmptyState>
-                {shownWeeks < maxWeeks
-                  ? `Nothing open from the last ${shownWeeks} wk.`
-                  : 'Nothing open. Tap “Check-in” to scan recent sessions.'}
-              </EmptyState>
+              <EmptyState>Nothing open. Tap “Check-in” to scan recent sessions.</EmptyState>
             ) : (
               <>
                 <ul className="flex flex-col gap-2">
@@ -637,6 +854,7 @@ export default function CoachView() {
                         rows={u.rows}
                         onOpen={setActive}
                         noted={noted}
+                        series={mergeSeries(u.rows.map(seriesOf))}
                       />
                     ) : (
                       <RecRow
@@ -644,6 +862,7 @@ export default function CoachView() {
                         rec={u.row}
                         onClick={() => setActive(u.row)}
                         noted={noted.has(u.row.id)}
+                        series={seriesOf(u.row)}
                       />
                     ),
                   )}
@@ -653,7 +872,13 @@ export default function CoachView() {
                     <Disclosure title={`${rest.length} more`}>
                       <ul className="flex flex-col gap-2 p-4 pt-0">
                         {rest.map((r) => (
-                          <RecRow key={r.id} rec={r} onClick={() => setActive(r)} noted={noted.has(r.id)} />
+                          <RecRow
+                            key={r.id}
+                            rec={r}
+                            onClick={() => setActive(r)}
+                            noted={noted.has(r.id)}
+                            series={seriesOf(r)}
+                          />
                         ))}
                       </ul>
                     </Disclosure>
@@ -664,53 +889,82 @@ export default function CoachView() {
           </section>
         </Item>
 
-        {snoozed.length + snoozedBriefs.length > 0 ? (
-          <Item>
-            <section className="mb-10">
-              <SectionHeader>Snoozed</SectionHeader>
-              <ul className="flex flex-col gap-2">
-                {snoozedBriefs.map((b) => (
-                  <BriefRow key={b.id} brief={b} onClick={() => setActiveBrief(b)} />
-                ))}
-                {snoozed.map((r) => (
-                  <RecRow
-                    key={r.id}
-                    rec={r}
-                    onClick={() => setActive(r)}
-                    snoozed
-                    noted={noted.has(r.id)}
-                  />
-                ))}
-              </ul>
-            </section>
-          </Item>
-        ) : null}
-
-        {decided.length + decidedBriefs.length > 0 ? (
+        {snoozedCount + decidedCount > 0 ? (
           <Item>
             <section>
-              <SectionHeader>Decided</SectionHeader>
-              <ul className="flex flex-col gap-2">
-                {decidedBriefs.map((b) => (
-                  <BriefRow key={b.id} brief={b} onClick={() => setActiveBrief(b)} />
-                ))}
-                {decided.map((r) => (
-                  <RecRow key={r.id} rec={r} onClick={() => setActive(r)} muted />
-                ))}
-              </ul>
+              <Disclosure
+                title="History"
+                headerRight={`${snoozedCount} snoozed · ${decidedCount} decided`}
+              >
+                <div className="flex flex-col gap-6">
+                  <WeeksFilter weeks={shownWeeks} max={maxWeeks} onChange={(w) => setWeeks(w)} />
+                  {snoozed.length + snoozedBriefs.length > 0 ? (
+                    <div>
+                      <SectionHeader>Snoozed</SectionHeader>
+                      <ul className="flex flex-col gap-2">
+                        {snoozedBriefs.map((b) => (
+                          <BriefRow key={b.id} brief={b} onClick={() => setActiveBrief(b)} />
+                        ))}
+                        {snoozed.map((r) => (
+                          <RecRow
+                            key={r.id}
+                            rec={r}
+                            onClick={() => setActive(r)}
+                            snoozed
+                            noted={noted.has(r.id)}
+                          />
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {decided.length + decidedBriefs.length > 0 ? (
+                    <div>
+                      <SectionHeader>Decided</SectionHeader>
+                      <ul className="flex flex-col gap-2">
+                        {decidedBriefs.map((b) => (
+                          <BriefRow key={b.id} brief={b} onClick={() => setActiveBrief(b)} />
+                        ))}
+                        {decided.map((r) => (
+                          <RecRow key={r.id} rec={r} onClick={() => setActive(r)} muted />
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {snoozed.length + snoozedBriefs.length + decided.length + decidedBriefs.length === 0 ? (
+                    <EmptyState>Nothing from the last {shownWeeks} wk.</EmptyState>
+                  ) : null}
+                </div>
+              </Disclosure>
             </section>
           </Item>
         ) : null}
       </PageStagger>
 
-      <Modal open={active !== null} onClose={closeDetail} title="Recommendation">
+      <Modal open={active !== null} onClose={closeDetail} title="Finding">
         {active ? (
           <>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="mb-1 font-display text-lg font-semibold text-fg">{active.tldr}</div>
+              <div className="mb-1 font-display text-lg uppercase leading-tight text-fg">{active.tldr}</div>
               {active.action ? <div className="mb-3 text-sm text-subtle">{active.action}</div> : null}
               {active.body_md ? (
                 <p className="whitespace-pre-line text-sm text-muted">{active.body_md}</p>
+              ) : null}
+              {activeSeries.length > 0 ? (
+                <div className="mt-4">
+                  <div className="mb-2 flex items-baseline justify-between gap-3">
+                    <span className="text-[0.6rem] uppercase tracking-[0.3em] text-subtle">
+                      Last {Math.min(activeSeries.length, TRAJECTORY_POINTS)} check-ins
+                    </span>
+                    <TrajectoryTag series={activeSeries} />
+                  </div>
+                  <TrajectoryBars series={activeSeries} />
+                </div>
+              ) : null}
+              {activeEvidence ? (
+                <EvidenceBlock
+                  evidence={activeEvidence}
+                  sessions={activeSeries.length > 0 ? latestSessions(active.rule_id) : null}
+                />
               ) : null}
               {active.rule_id && contextNotes.has(active.rule_id) ? (
                 <div className="mt-3 border-l-2 border-border-soft pl-3">
@@ -763,17 +1017,29 @@ export default function CoachView() {
                   </div>
                   <ul className="mt-2 border border-border">
                     {activeNotes.map((n) => (
-                      <li key={n.id} className="border-t border-border-soft px-3 py-2 first:border-t-0">
-                        <p className="whitespace-pre-line text-sm text-fg">{n.body}</p>
-                        <div className="mt-1 text-[0.65rem] uppercase tracking-wider text-muted">
-                          {formatDate(n.created_at.slice(0, 10))} ·{' '}
-                          {n.reviewed_at
-                            ? `Read ${formatDate(n.reviewed_at.slice(0, 10))}${
-                                // An id points at a brief or rule note; only prose is worth showing.
-                                n.review_ref && !UUID.test(n.review_ref) ? ` · ${n.review_ref}` : ''
-                              }`
-                            : 'Waiting for weekly review'}
+                      <li
+                        key={n.id}
+                        className="flex items-start gap-2 border-t border-border-soft py-2 pl-3 first:border-t-0"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="whitespace-pre-line text-sm text-fg">{n.body}</p>
+                          <div className="mt-1 text-[0.65rem] uppercase tracking-wider text-muted">
+                            {formatDate(n.created_at.slice(0, 10))} ·{' '}
+                            {n.reviewed_at
+                              ? `Read ${formatDate(n.reviewed_at.slice(0, 10))}${
+                                  // An id points at a brief or rule note; only prose is worth showing.
+                                  n.review_ref && !UUID.test(n.review_ref) ? ` · ${n.review_ref}` : ''
+                                }`
+                              : 'Waiting for weekly review'}
+                          </div>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => removeNote(n)}
+                          className="-my-1 inline-flex min-h-11 shrink-0 items-center px-3 text-[0.65rem] uppercase tracking-wider text-muted hover:text-fg"
+                        >
+                          Delete
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -794,13 +1060,19 @@ export default function CoachView() {
                     Skipped
                   </button>
                 </div>
+                <div className="text-[0.6rem] uppercase tracking-[0.2em] text-muted">Ask again in</div>
                 <div className="flex gap-2">
                   {[1, 3, 7].map((d) => (
-                    <button key={d} onClick={() => snooze(active, d)} className={`flex-1 ${ghostBtn}`}>
-                      Snooze {d}d
+                    <button
+                      key={d}
+                      onClick={() => snooze(active, d)}
+                      aria-label={`Snooze ${d} days`}
+                      className={`flex-1 ${ghostBtn}`}
+                    >
+                      {d}d
                     </button>
                   ))}
-                  <button onClick={() => dismiss(active)} className={ghostBtn}>
+                  <button onClick={() => dismiss(active)} className={`flex-1 ${ghostBtn}`}>
                     Dismiss
                   </button>
                 </div>
