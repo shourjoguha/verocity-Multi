@@ -676,6 +676,25 @@ export interface CoachBrief {
 
 export type CoachBriefStatus = Exclude<RecStatus, 'dismissed'>;
 
+/**
+ * Migration 0048. The athlete's context on a finding ("Noted"), for the weekly
+ * coach-tuning routine. Decides nothing — the finding stays open — and is never
+ * read by src/lib/coach/**. The athlete inserts and deletes; `reviewed_*` are
+ * set only by the routine.
+ */
+export interface CoachAthleteNote {
+  id: string;
+  owner_user_id: string;
+  recommendation_id: string | null;
+  rule_id: string | null;
+  body: string;
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  /** What the note became: a brief or rule-note id, or e.g. 'no change'. */
+  review_ref: string | null;
+}
+
 export type CoachNoteKind = 'context' | 'edge';
 
 /**

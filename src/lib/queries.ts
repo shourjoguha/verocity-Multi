@@ -16,6 +16,7 @@ import type {
   AspectScores,
   AspectSnapshot,
   AspectSnapshotInput,
+  CoachAthleteNote,
   CoachBrief,
   CoachObservation,
   CoachObservationInput,
@@ -740,6 +741,52 @@ export async function getCoachRuleNotes(
     .select('*')
     .order('created_at', { ascending: false });
   return (data as CoachRuleNote[]) ?? [];
+}
+
+/** The athlete's notes on findings (migration 0048), newest first. */
+export async function getCoachAthleteNotes(
+  client: SupabaseClient = supabase,
+): Promise<CoachAthleteNote[]> {
+  const { data } = await client
+    .from('coach_athlete_notes')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  return (data as CoachAthleteNote[]) ?? [];
+}
+
+/**
+ * "Noted": attach context to a finding without deciding it. The finding's own
+ * row is not touched, so it stays open and every cooldown is unaffected. The
+ * weekly routine reads unreviewed notes; see docs/COACH_TUNING.md.
+ */
+export async function addCoachAthleteNote(
+  rec: Pick<Recommendation, 'id' | 'rule_id'>,
+  body: string,
+): Promise<CoachAthleteNote | null> {
+  const text = body.trim();
+  if (!text) return null;
+  const { data: u } = await supabase.auth.getUser();
+  if (!u.user) return null;
+  const { data, error } = await supabase
+    .from('coach_athlete_notes')
+    .insert({
+      owner_user_id: u.user.id,
+      recommendation_id: rec.id,
+      rule_id: rec.rule_id,
+      body: text,
+    })
+    .select('*')
+    .single();
+  if (error) console.error('addCoachAthleteNote failed', error);
+  return (data as CoachAthleteNote) ?? null;
+}
+
+/** Delete one of your own notes. Owner-only under `can_delete_own` (0048). */
+export async function deleteCoachAthleteNote(id: string): Promise<boolean> {
+  const { error } = await supabase.from('coach_athlete_notes').delete().eq('id', id);
+  if (error) console.error('deleteCoachAthleteNote failed', error);
+  return !error;
 }
 
 export async function updateRecommendation(
