@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { ASPECT_WINDOWS, type AspectWindowKey } from '@/app.config';
 import { Delta } from '@/components/ui/primitives';
-import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { RadarChart, type RadarSeries } from '@/components/RadarChart';
 import { AspectExplainer } from '@/components/AspectExplainer';
 import type { AspectProfile } from '@/lib/useAspectProfile';
@@ -20,11 +18,12 @@ const tenth = (v: number) => Math.round(v * 10) / 10;
 // and write-back lives in useAspectProfile; this file decides what the two
 // overlaid series are and what to say when there is nothing to draw.
 //
-// One card, read top to bottom: the window toggle (the control people use
-// most, so it leads), the takeaway it produces, the shape, then a one-line
+// One card, read top to bottom: the takeaway, the shape, then a one-line
 // legend whose comparison chip picks what the ghost series is — the previous
 // block for "am I moving now", the oldest sample held for "am I better than I
 // was". The scoring caption lives behind the (!) sheet, not under the chart.
+// The window is the page's period picker, above this card — it sets the whole
+// Stats page, so it no longer lives inside the radar.
 export function FitnessProfile({
   profile,
   movers,
@@ -37,7 +36,7 @@ export function FitnessProfile({
 
   if (profile.loading) return null;
 
-  const { current, prior, earliest, windowKey, windowDays } = profile;
+  const { current, prior, earliest, windowDays } = profile;
   const baseline = compare === 'earliest' && earliest ? earliest : prior;
 
   const series: RadarSeries[] = [];
@@ -80,18 +79,7 @@ export function FitnessProfile({
 
       {series.length > 0 ? (
         <div className="lift border border-border bg-surface">
-          <div className="px-3 pt-3">
-            <SegmentedTabs
-              tabs={ASPECT_WINDOWS.map((w) => ({ key: w.key, label: w.label }))}
-              active={windowKey}
-              onChange={(k) => profile.setWindowKey(k as AspectWindowKey)}
-              ariaLabel="Measurement window"
-              size="sm"
-              className="max-w-[16rem]"
-            />
-          </div>
-
-          {/* The takeaway, under the toggle that changes it. Renders nothing
+          {/* The takeaway. Renders nothing
               until there is a prior period to compare against — an invented
               takeaway is worse than none. Compared with the PREVIOUS block
               always, whatever the chip below shows. */}

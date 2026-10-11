@@ -1043,35 +1043,34 @@ export type TrainingPeriodKey = (typeof TRAINING_PERIODS)[number]['key'];
 
 export const DEFAULT_PERIOD: TrainingPeriodKey = '8w';
 
-// Selectable measurement windows. This is the responsiveness control: one
-// session is ~1/25th of a 60-day window and ~1/12th of a 28-day one, so the
-// short window is what makes a single workout visibly move the shape. The
-// *displayed* value has always rolled daily — what felt unresponsive was the
-// window length, not how often anything recomputed.
+// The radar's measurement window IS the page's training period
+// (TRAINING_PERIODS above): one picker at the top of Stats sets the tiles, the
+// grid, the mix bar, top lifts and the radar together, and carries to Body.
+// The window is still the radar's responsiveness control: one session is
+// ~1/12th of a 4W window and ~1/75th of a 6M one, so the short window is what
+// makes a single workout visibly move the shape. The *displayed* value has
+// always rolled daily — what felt unresponsive was the window length, not how
+// often anything recomputed.
 //
 // Each length keeps its OWN baseline series (aspect_snapshots.window_days).
 // Scoring a 28-day reading against a distribution of 60-day readings would
-// silently skew every axis.
-//
-// Four steps because the window is the control people actually use — it is
-// the first thing on the card. Every length is backfilled and maintained
-// whichever is selected (useAspectProfile), so adding one costs a cold-start
-// rebuild of ASPECT_BACKFILL_WEEKS snapshots for it, once.
-export const ASPECT_WINDOWS = [
-  { key: '28d', days: 28, label: '28D' },
-  { key: '45d', days: 45, label: '45D' },
-  { key: '60d', days: 60, label: '60D' },
-  { key: '90d', days: 90, label: '90D' },
-] as const;
+// silently skew every axis. Every period is backfilled and maintained
+// whichever is selected (useAspectProfile), so adding a length costs a
+// cold-start rebuild of ASPECT_BACKFILL_WEEKS snapshots for it, once — which is
+// what happened to 42/56/84/182 when these replaced 28/45/60/90. Rows stored
+// under the retired 45/60/90 lengths are never read into a baseline (baselines
+// filter on window_days) and are simply left in place.
 
-// The window selected on arrival. Never hardcode the number in a component.
-export const ASPECT_WINDOW_DAYS = 60;
+// The basis of the Stats log fetch: the LONGEST period plus the block before
+// it, so every period (and its comparison) is covered by one read and
+// switching never refetches. The legend dates and the query bounds must move
+// together.
+export const ASPECT_READ_DAYS = Math.max(...TRAINING_PERIODS.map((p) => p.days));
 
-// The basis of the Stats log fetch: the LONGEST window plus the block before
-// it, so every window in ASPECT_WINDOWS (and its comparison) is covered by one
-// read and switching never refetches. The legend dates and the query bounds
-// must move together.
-export const ASPECT_READ_DAYS = Math.max(...ASPECT_WINDOWS.map((w) => w.days));
+// The window aspects.ts assumes when a caller names none. The default
+// period's length, so a bare call measures what Stats shows on arrival.
+export const ASPECT_WINDOW_DAYS: number =
+  TRAINING_PERIODS.find((p) => p.key === DEFAULT_PERIOD)!.days;
 
 // How far back the radar reads its baseline, in WEEKLY snapshots
 // (aspect_snapshots). Scores are RELATIVE: an axis is placed against the
@@ -1270,7 +1269,6 @@ export type SectionKey = (typeof SECTIONS)[number];
 export type BlockKey = keyof typeof BLOCKS;
 export type ActivityTagKey = keyof typeof ACTIVITY_TAGS;
 export type AspectKey = (typeof FITNESS_ASPECTS)[number]['key'];
-export type AspectWindowKey = (typeof ASPECT_WINDOWS)[number]['key'];
 export type RegionKey = keyof typeof MUSCLE_REGIONS;
 export type MuscleKey = keyof typeof MUSCLES;
 export type SoreAreaKey = keyof typeof SORE_AREAS;

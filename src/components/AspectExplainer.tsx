@@ -1,8 +1,8 @@
 import {
   ASPECT_MIN_BASELINE,
   ASPECT_SCALE,
-  ASPECT_WINDOWS,
   FITNESS_ASPECTS,
+  TRAINING_PERIODS,
 } from '@/app.config';
 import { Modal } from '@/components/ui/Modal';
 
@@ -93,7 +93,8 @@ export function AspectExplainer({
         <section>
           <h3 className="mb-1.5 text-fg">The windows</h3>
           <p>
-            {ASPECT_WINDOWS.map((w) => w.label).join(', ')}. A shorter window moves
+            {TRAINING_PERIODS.map((w) => w.label).join(', ')} — the period picked at the top of
+            the page, which sets everything else on it too. A shorter window moves
             noticeably after one session — useful for seeing whether this week landed. A
             longer one is steadier. Each keeps its own separate history, so a 28-day reading
             is only ever compared with other 28-day readings.

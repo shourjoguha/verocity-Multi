@@ -6,6 +6,7 @@ import { bodyweightMultiple } from '@/lib/userStats';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { loadAllLogs, logsBetween } from '@/lib/logStore';
 import { useAspectProfile } from '@/lib/useAspectProfile';
+import { setPeriod, usePeriod } from '@/lib/periodPrefs';
 import type { WorkoutLog } from '@/lib/types';
 import { e1rm } from '@/lib/e1rm';
 import { completedLogs, flattenWorkingSets, familyOf } from '@/lib/stats';
@@ -36,6 +37,8 @@ import {
   CONSISTENCY,
   FITNESS_ASPECTS,
   TOOLTIP,
+  TRAINING_PERIODS,
+  type TrainingPeriodKey,
 } from '@/app.config';
 import {
   EmptyState,
@@ -51,7 +54,19 @@ import { FitnessProfile } from '@/components/FitnessProfile';
 import { GarminHealthSection } from '@/components/GarminHealthSection';
 import { Item, PageStagger } from '@/components/anim';
 
-const WEEKS = 8;
+// The consistency grid shows the last min(period, GRID_WEEKS) weeks, one
+// column per week — the owner's call: at 12W and 6M it stays at 8 and says so,
+// rather than folding weeks together or shrinking 26 columns to ~9px slivers
+// at 375px. Fewer weeks never widen a column past its 8-week size either: at
+// 4W, four full-width columns of square days made the grid ~600px tall.
+// (Horizontal scrolling for the longer periods is a separate, later change.)
+const GRID_WEEKS = 8;
+
+// "the last 6 weeks", "the last 6 months" — the empty state's wording.
+function periodPhrase(key: TrainingPeriodKey): string {
+  const p = TRAINING_PERIODS.find((t) => t.key === key)!;
+  return p.key.endsWith('m') ? `${parseInt(p.label, 10)} months` : `${p.days / 7} weeks`;
+}
 
 // Both lanes, named. The old label printed one summed figure, which is the
 // number `workIntensity` exists to stop anyone reading as meaningful.
@@ -179,9 +194,11 @@ function formatWeekTime(seconds: number): string {
   return seconds < 3600 ? `${Math.round(seconds / 60)}m` : `${formatRound(seconds / 3600, 1)}h`;
 }
 
-// Everything on this page except the radar reads the 8-week window it always
-// read — the wider fetch is for the radar's baseline alone, and must not quietly
-// restate the tiles, bars, RPE fingerprint and heatmap over 120 days.
+// Everything on this page reads the selected PERIOD (lib/periodPrefs.ts) — the
+// tiles, grid, mix bar, top lifts and RPE fingerprint here, the radar in
+// useAspectProfile. The fetch is wider (the longest period plus the block
+// before it, for the radar's comparison) and must not leak into these: they
+// filter to the period themselves.
 //
 // Extracted from the render body and memoised by the caller. It used to run
 // inline on every render, so hovering a sparkline point re-derived every bucket,
@@ -236,27 +253,30 @@ function deriveStats(
   today: Date,
   groupBy: 'movement' | 'family',
   bodyWeightKg: number,
+  periodDays: number,
 ) {
-  const eightWeeksAgo = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (WEEKS * 7 - 1)),
+  const periodStart = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (periodDays - 1)),
   );
   const all: WorkoutLog[] = logsInWindow(fetched, {
-    start: ymd(eightWeeksAgo),
+    start: ymd(periodStart),
     end: ymd(today),
   });
 
-  // Week buckets (oldest → newest).
+  // Week columns (oldest → newest), the last one this week. Capped at
+  // GRID_WEEKS whatever the period; everything else follows the period.
+  const weeks = Math.min(Math.ceil(periodDays / 7), GRID_WEEKS);
+  const gridCapped = Math.ceil(periodDays / 7) > GRID_WEEKS;
   const thisMonday = mondayOf(today);
-  const weekStarts = Array.from({ length: WEEKS }, (_, i) => {
+  const weekStarts = Array.from({ length: weeks }, (_, i) => {
     const d = new Date(thisMonday);
-    d.setUTCDate(thisMonday.getUTCDate() - (WEEKS - 1 - i) * 7);
+    d.setUTCDate(thisMonday.getUTCDate() - (weeks - 1 - i) * 7);
     return d;
   });
 
   // The footer under each grid column: that week's time and its highest
-  // logged max HR. Finished sessions on the same clock as the TIME tile, so
-  // the eight figures sum to it. The session count is not repeated here — the
-  // column above already shows it.
+  // logged max HR. Finished sessions on the same clock as the TIME tile. The
+  // session count is not repeated here — the column above already shows it.
   const weekFoot = weekStarts.map((start) => {
     const end = new Date(start);
     end.setUTCDate(start.getUTCDate() + 6);
@@ -419,6 +439,7 @@ function deriveStats(
 
   return {
     all,
+    gridCapped,
     weekStarts,
     weekFoot,
     dayMap,
@@ -436,10 +457,14 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   const client = mode === 'showcase' ? supabasePublic : supabase;
   // Real "now" on both surfaces — the showcase is live (migration 0034).
   const today = new Date();
-  // The radar compares the rolling aspect window against the block before it, so
-  // the fetch spans both, at the LONGEST selectable window — wider than the 8
-  // weeks the rest of this page reads, and wide enough that switching the radar's
-  // window never refetches.
+  // The page's period, shared with Body and saved on this device.
+  const periodKey = usePeriod();
+  const periodDays = TRAINING_PERIODS.find((p) => p.key === periodKey)!.days;
+  // The radar compares the period against the block before it, so the fetch
+  // spans both, at the LONGEST period — wide enough that switching never
+  // refetches. In app mode this is a slice of the shared all-logs cache
+  // (loadAllLogs), so widening it moves no extra bytes; only the showcase's
+  // anon read is bounded by it.
   const windows = aspectWindows(today, ASPECT_READ_DAYS);
   // Cache key names the window: with the old 8-week key a revisit would paint a
   // cached 56-day array on the first frame (useAuthedQuery seeds synchronously)
@@ -458,7 +483,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // The radar's own reads start here, alongside the log fetch rather than behind
   // it — FitnessProfile does not mount until logs land, so fetching from inside
   // it waterfalled a second round trip.
-  const profile = useAspectProfile({ logs, today, mode, client });
+  const profile = useAspectProfile({ logs, today, mode, client, windowDays: periodDays });
 
   // Bodyweight, for the ×BW multiples on the e1RM cards. Null in showcase mode
   // (no anon policy on user_stats) and null for anyone who has not filled it in,
@@ -516,13 +541,14 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   }, [tipShown]);
 
   // `today` is intentionally out of the dep list: in app mode it is a fresh Date
-  // on every render, and re-deriving 8 weeks of buckets because the clock moved a
-  // millisecond is the cost this memo exists to avoid.
+  // on every render, and re-deriving a period of buckets because the clock moved a
+  // millisecond is the cost this memo exists to avoid. The period IS a dep:
+  // picking one is the only thing besides data that should re-derive.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const bodyWeightKg = workBodyWeight(stats ?? null);
   const derived = useMemo(
-    () => deriveStats(logs ?? [], history ?? logs ?? [], today, groupBy, bodyWeightKg),
-    [logs, history, groupBy, bodyWeightKg],
+    () => deriveStats(logs ?? [], history ?? logs ?? [], today, groupBy, bodyWeightKg, periodDays),
+    [logs, history, groupBy, bodyWeightKg, periodDays],
   );
 
   // Kept before the loading guard: hooks must not sit behind an early return.
@@ -565,6 +591,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
   const {
     all,
+    gridCapped,
     weekStarts,
     weekFoot,
     dayMap,
@@ -597,6 +624,20 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   })();
 
 
+  // The one period control for the page. Rendered in the empty state too: an
+  // empty 4W is exactly when you want to reach for 6M.
+  const periodPicker = (
+    <div className="mb-4">
+      <SegmentedTabs
+        tabs={TRAINING_PERIODS.map((p) => ({ key: p.key, label: p.label }))}
+        active={periodKey}
+        onChange={(k) => setPeriod(k as TrainingPeriodKey)}
+        ariaLabel="Period"
+        size="sm"
+      />
+    </div>
+  );
+
   if (all.length === 0) {
     return (
       <div className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
@@ -605,10 +646,20 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
           as="h1"
           className={`mb-6 ${ECHO_APP_TITLE}`}
         />
-        <EmptyState>No sessions in the last {WEEKS} weeks.</EmptyState>
+        {periodPicker}
+        <EmptyState>No sessions in the last {periodPhrase(periodKey)}.</EmptyState>
       </div>
     );
   }
+
+  // Grid columns are never wider than at GRID_WEEKS: fewer weeks take that
+  // fraction of the row instead of stretching. gap-1 = 0.25rem.
+  const gridWidth =
+    weekStarts.length < GRID_WEEKS
+      ? `calc(${weekStarts.length} * (100% - ${GRID_WEEKS - 1} * 0.25rem) / ${GRID_WEEKS} + ${
+          weekStarts.length - 1
+        } * 0.25rem)`
+      : undefined;
 
   return (
     <>
@@ -617,6 +668,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
           ~200px before the first chart. The headline's content now leads the
           radar card, under the window toggle that changes it. */}
       <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
+        <Item>{periodPicker}</Item>
         <Item>
           <FitnessProfile profile={profile} movers={movers} />
         </Item>
@@ -677,90 +729,96 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
         <Item>
           <section className="mb-6">
-            <SectionHeader>Consistency</SectionHeader>
-            <div className="flex gap-1">
-              {weekStarts.map((ws, col) => (
-                <div key={col} className="flex flex-1 flex-col gap-1">
-                  {Array.from({ length: 7 }).map((_, row) => {
-                    const d = new Date(ws);
-                    d.setUTCDate(ws.getUTCDate() + row);
-                    const key = ymd(d);
-                    const cell = dayMap.get(key);
-                    const dateLabel = d.toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      timeZone: 'UTC',
-                    });
-                    if (!cell) {
-                      return <div key={row} className="hill aspect-square bg-fg/[0.05]" />;
-                    }
-                    const loads = formatLoadChanges(
-                      [...cell.loads].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
-                    );
-                    const vsBest = laneLabel(cell.lift, cell.cardio);
-                    const label = `${dateLabel} · ${cell.labels.join(', ')} · ${workLabel(cell.work)}${
-                      vsBest ? `\n${vsBest}` : ''
-                    }${loads ? `\nLoad vs last: ${loads}` : ''}`;
-                    // One horizontal band PER LOG, stacked and split by a hairline
-                    // (the container bg shows through a 1px gap), each band's share
-                    // proportional to that log's duration. A single-log day is one
-                    // full-box band — unchanged from the old solid/striped square.
-                    // Within a band: stripes for a mixed-tag session, a solid fill
-                    // for one tag. The old code merged every tag of the day into
-                    // one striped square, so two separate logs read as a single
-                    // mixed session.
-                    const totalSecs = cell.sessions.reduce((a, s) => a + s.seconds, 0);
-                    // Colour is IDENTITY, at full strength, so a strength day and
-                    // a mobility day never converge on the same washed-out grey.
-                    // The old `opacity: 0.3 + volume/dayMax * 0.7` folded amount
-                    // into the hue's lightness, which is exactly what made two
-                    // different activities hard to tell apart at low volume.
-                    // Volume moves to its own channel: the bars along the
-                    // bottom edge, monochrome LENGTHS that cannot distort the
-                    // colour above them. (Border-glow was the other candidate, but
-                    // an inset box-shadow is a CLAUDE.md "never" in a component.)
-                    return (
-                      <div
-                        key={row}
-                        className="hill relative aspect-square cursor-pointer overflow-hidden"
-                        data-tip-target
-                        onMouseMove={(e) => showTip(e, label)}
-                      >
-                        <span aria-hidden className="absolute inset-0 flex flex-col gap-px bg-bg/60">
-                          {cell.sessions.map((s, si) => {
-                            const stripes = stripeBackground(s.colors);
-                            return (
-                              <span
-                                key={si}
-                                className="block w-full"
-                                style={{
-                                  // Time share drives the band height; equal split
-                                  // when a day carries no durations at all.
-                                  flex: `${totalSecs > 0 ? s.seconds || 0.0001 : 1} 1 0`,
-                                  ...(stripes
-                                    ? { backgroundImage: stripes }
-                                    : { backgroundColor: s.colors[0] }),
-                                }}
-                              />
-                            );
-                          })}
-                        </span>
-                        <WorkBars lift={cell.lift} cardio={cell.cardio} />
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-            {/* Same flex-1 / gap-1 columns as the grid, so each figure sits
-                under its own week. */}
-            <div className="mt-1.5 flex gap-1 text-center text-[0.6rem] leading-tight tabular-nums">
-              {weekFoot.map((w, i) => (
-                <div key={i} className="flex-1">
-                  <div className="text-fg">{w.seconds > 0 ? formatWeekTime(w.seconds) : '—'}</div>
-                  <div className="text-muted">{w.hrMax ?? ' '}</div>
-                </div>
-              ))}
+            <SectionHeader>
+              Consistency{gridCapped ? ` · Last ${GRID_WEEKS} weeks` : ''}
+            </SectionHeader>
+            <div style={{ width: gridWidth }}>
+              <div className="flex gap-1">
+                {weekStarts.map((ws, col) => (
+                  <div key={col} className="flex flex-1 flex-col gap-1">
+                    {Array.from({ length: 7 }).map((_, row) => {
+                      const d = new Date(ws);
+                      d.setUTCDate(ws.getUTCDate() + row);
+                      const key = ymd(d);
+                      const cell = dayMap.get(key);
+                      const dateLabel = d.toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        timeZone: 'UTC',
+                      });
+                      if (!cell) {
+                        return (
+                          <div key={row} className="hill aspect-square bg-fg/[0.05]" />
+                        );
+                      }
+                      const loads = formatLoadChanges(
+                        [...cell.loads].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
+                      );
+                      const vsBest = laneLabel(cell.lift, cell.cardio);
+                      const label = `${dateLabel} · ${cell.labels.join(', ')} · ${workLabel(cell.work)}${
+                        vsBest ? `\n${vsBest}` : ''
+                      }${loads ? `\nLoad vs last: ${loads}` : ''}`;
+                      // One horizontal band PER LOG, stacked and split by a hairline
+                      // (the container bg shows through a 1px gap), each band's share
+                      // proportional to that log's duration. A single-log day is one
+                      // full-box band — unchanged from the old solid/striped square.
+                      // Within a band: stripes for a mixed-tag session, a solid fill
+                      // for one tag. The old code merged every tag of the day into
+                      // one striped square, so two separate logs read as a single
+                      // mixed session.
+                      const totalSecs = cell.sessions.reduce((a, s) => a + s.seconds, 0);
+                      // Colour is IDENTITY, at full strength, so a strength day and
+                      // a mobility day never converge on the same washed-out grey.
+                      // The old `opacity: 0.3 + volume/dayMax * 0.7` folded amount
+                      // into the hue's lightness, which is exactly what made two
+                      // different activities hard to tell apart at low volume.
+                      // Volume moves to its own channel: the bars along the
+                      // bottom edge, monochrome LENGTHS that cannot distort the
+                      // colour above them. (Border-glow was the other candidate, but
+                      // an inset box-shadow is a CLAUDE.md "never" in a component.)
+                      return (
+                        <div
+                          key={row}
+                          className="hill relative aspect-square cursor-pointer overflow-hidden"
+                          data-tip-target
+                          onMouseMove={(e) => showTip(e, label)}
+                        >
+                          <span aria-hidden className="absolute inset-0 flex flex-col gap-px bg-bg/60">
+                            {cell.sessions.map((s, si) => {
+                              const stripes = stripeBackground(s.colors);
+                              return (
+                                <span
+                                  key={si}
+                                  className="block w-full"
+                                  style={{
+                                    // Time share drives the band height; equal split
+                                    // when a day carries no durations at all.
+                                    flex: `${totalSecs > 0 ? s.seconds || 0.0001 : 1} 1 0`,
+                                    ...(stripes
+                                      ? { backgroundImage: stripes }
+                                      : { backgroundColor: s.colors[0] }),
+                                  }}
+                                />
+                              );
+                            })}
+                          </span>
+                          <WorkBars lift={cell.lift} cardio={cell.cardio} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+              {/* Same flex-1 / gap-1 columns as the grid, so each figure sits
+                  under its own week. */}
+              <div className="mt-1.5 flex gap-1 text-center text-[0.6rem] leading-tight tabular-nums">
+                {weekFoot.map((w, i) => (
+                  <div key={i} className="flex-1">
+                    <div className="text-fg">{w.seconds > 0 ? formatWeekTime(w.seconds) : '—'}</div>
+                    <div className="text-muted">{w.hrMax ?? ' '}</div>
+                  </div>
+                ))}
+              </div>
             </div>
             <p className="mt-2 text-[0.65rem] text-muted">
               Under each week: time, then the highest max HR logged (bpm).
@@ -775,7 +833,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
         {/* Real analysis most visits do not need on arrival, as one card of
             rows that each state their answer while closed — the single "More
             detail" fold said nothing until tapped. The weekly table it held is
-            gone: the grid's columns are the same eight weeks, and their time
+            gone: the grid's columns are the same weeks, and their time
             and max HR now sit under them. Native <details>, so no JS state. */}
         <Item>
             {/* `empty:hidden`: with no lifts, no RPE and no Garmin rows every
