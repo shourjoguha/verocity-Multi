@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import { getAllLogs, getLogsInRange, getUserStats } from '@/lib/queries';
@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Disclosure } from '@/components/ui/Disclosure';
+import { formatDateRange, HistoryScroller } from '@/components/ui/HistoryScroller';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { FitnessProfile } from '@/components/FitnessProfile';
 import { GarminHealthSection } from '@/components/GarminHealthSection';
@@ -59,7 +60,8 @@ import { Item, PageStagger } from '@/components/anim';
 // rather than folding weeks together or shrinking 26 columns to ~9px slivers
 // at 375px. Fewer weeks never widen a column past its 8-week size either: at
 // 4W, four full-width columns of square days made the grid ~600px tall.
-// (Horizontal scrolling for the longer periods is a separate, later change.)
+// That is how many weeks are IN VIEW; the grid scrolls sideways back to the
+// first logged session (deriveGrid, ui/HistoryScroller).
 const GRID_WEEKS = 8;
 
 // "the last 6 weeks", "the last 6 months" — the empty state's wording.
@@ -247,43 +249,44 @@ function sessionTimeMix(
     .filter((p) => p.key !== UNCLASSIFIED || p.pct > 0);
 }
 
-function deriveStats(
-  fetched: WorkoutLog[],
-  history: WorkoutLog[],
-  today: Date,
-  groupBy: 'movement' | 'family',
-  bodyWeightKg: number,
-  periodDays: number,
-) {
-  const periodStart = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (periodDays - 1)),
-  );
-  const all: WorkoutLog[] = logsInWindow(fetched, {
-    start: ymd(periodStart),
-    end: ymd(today),
-  });
-
-  // Week columns (oldest → newest), the last one this week. Capped at
-  // GRID_WEEKS whatever the period; everything else follows the period.
-  const weeks = Math.min(Math.ceil(periodDays / 7), GRID_WEEKS);
-  const gridCapped = Math.ceil(periodDays / 7) > GRID_WEEKS;
+// The consistency grid's columns: one per week from the week of the first
+// logged session through this one, at least GRID_WEEKS of them, oldest first.
+// Over ALL history, not the period — the grid scrolls back through it
+// (ui/HistoryScroller), and only how many weeks are IN VIEW follows the period.
+// Memoised on history and bodyweight alone, so neither a period change nor a
+// scroll re-derives it.
+function deriveGrid(history: WorkoutLog[], today: Date, bodyWeightKg: number) {
+  // Nothing after today, as when the grid read the period's window.
+  const todayKey = ymd(today);
+  const past = history.filter((l) => l.log_date.slice(0, 10) <= todayKey);
   const thisMonday = mondayOf(today);
-  const weekStarts = Array.from({ length: weeks }, (_, i) => {
+  let firstMonday = thisMonday;
+  for (const l of past) {
+    const m = mondayOf(new Date(`${l.log_date.slice(0, 10)}T00:00:00Z`));
+    if (m < firstMonday) firstMonday = m;
+  }
+  const span = Math.round((thisMonday.getTime() - firstMonday.getTime()) / (7 * 86_400_000)) + 1;
+  const total = Math.max(GRID_WEEKS, span);
+  const weekStarts = Array.from({ length: total }, (_, i) => {
     const d = new Date(thisMonday);
-    d.setUTCDate(thisMonday.getUTCDate() - (weeks - 1 - i) * 7);
+    d.setUTCDate(thisMonday.getUTCDate() - (total - 1 - i) * 7);
     return d;
   });
 
   // The footer under each grid column: that week's time and its highest
   // logged max HR. Finished sessions on the same clock as the TIME tile. The
   // session count is not repeated here — the column above already shows it.
+  // Bucketed in one pass: a column per week of history is too many to filter
+  // the whole log list once each.
+  const byWeek = new Map<string, WorkoutLog[]>();
+  for (const l of completedLogs(past)) {
+    const key = ymd(mondayOf(new Date(`${l.log_date.slice(0, 10)}T00:00:00Z`)));
+    const arr = byWeek.get(key) ?? [];
+    arr.push(l);
+    byWeek.set(key, arr);
+  }
   const weekFoot = weekStarts.map((start) => {
-    const end = new Date(start);
-    end.setUTCDate(start.getUTCDate() + 6);
-    const inWeek = completedLogs(all).filter((l) => {
-      const d = l.log_date.slice(0, 10);
-      return d >= ymd(start) && d <= ymd(end);
-    });
+    const inWeek = byWeek.get(ymd(start)) ?? [];
     const hrs = inWeek.map((l) => l.hr_max).filter((v): v is number => v != null);
     return {
       seconds: inWeek.reduce((a, l) => a + sessionClockSeconds(l), 0),
@@ -326,7 +329,7 @@ function deriveStats(
   const refs = workReferencesByKind(history, bodyWeightKg);
   const loadIndex = buildLoadIndex(history);
   const dayMap = new Map<string, DayCell>();
-  for (const log of all) {
+  for (const log of past) {
     const key = log.log_date.slice(0, 10);
     const cur: DayCell = dayMap.get(key) ?? {
       work: ZERO_WORK,
@@ -349,6 +352,23 @@ function deriveStats(
     cur.loads.push(...loadChanges(log, loadIndex));
     dayMap.set(key, cur);
   }
+
+  return { weekStarts, weekFoot, dayMap, span };
+}
+
+function deriveStats(
+  fetched: WorkoutLog[],
+  today: Date,
+  groupBy: 'movement' | 'family',
+  periodDays: number,
+) {
+  const periodStart = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (periodDays - 1)),
+  );
+  const all: WorkoutLog[] = logsInWindow(fetched, {
+    start: ymd(periodStart),
+    end: ymd(today),
+  });
 
   // RPE fingerprint: distribution across RPE buckets, per movement family.
   const fam = new Map<string, { dist: number[]; sum: number; n: number }>();
@@ -439,10 +459,6 @@ function deriveStats(
 
   return {
     all,
-    gridCapped,
-    weekStarts,
-    weekFoot,
-    dayMap,
     rpeRows,
     topMoves,
     cards,
@@ -452,6 +468,134 @@ function deriveStats(
     totalSeconds,
   };
 }
+
+type GridData = ReturnType<typeof deriveGrid>;
+
+// The consistency grid, memoised: the tooltip moves on every pointer move and
+// re-renders the page, and with a column per week of history there are too
+// many cells (and too many label strings) to rebuild for that. `onTip` must be
+// stable. `visible` weeks fill the width; the rest are reached by scrolling.
+const ConsistencyGrid = memo(function ConsistencyGrid({
+  weekStarts,
+  weekFoot,
+  dayMap,
+  visible,
+  todayKey,
+  onTip,
+}: {
+  weekStarts: GridData['weekStarts'];
+  weekFoot: GridData['weekFoot'];
+  dayMap: GridData['dayMap'];
+  visible: number;
+  todayKey: string;
+  onTip: (e: { clientX: number; clientY: number }, label: string) => void;
+}) {
+  // Grid columns are never wider than at GRID_WEEKS: fewer weeks in view take
+  // that fraction of the row instead of stretching. gap-1 = 0.25rem.
+  const gridWidth =
+    visible < GRID_WEEKS
+      ? `calc(${visible} * (100% - ${GRID_WEEKS - 1} * 0.25rem) / ${GRID_WEEKS} + ${visible - 1} * 0.25rem)`
+      : undefined;
+  // A percentage of the scroller, so `visible` columns fill it exactly.
+  const colWidth = `calc((100% - ${visible - 1} * 0.25rem) / ${visible})`;
+  return (
+    <HistoryScroller
+      count={weekStarts.length}
+      visible={visible}
+      ariaLabel="Consistency by week"
+      labelFor={({ start, end }) => {
+        const last = new Date(weekStarts[end]);
+        last.setUTCDate(last.getUTCDate() + 6);
+        const to = ymd(last) < todayKey ? ymd(last) : todayKey;
+        return formatDateRange(ymd(weekStarts[start]), to);
+      }}
+      className="gap-1"
+      style={{ width: gridWidth }}
+    >
+      {weekStarts.map((ws, col) => (
+        <div key={ymd(ws)} className="flex flex-col gap-1" style={{ width: colWidth }}>
+          {Array.from({ length: 7 }).map((_, row) => {
+            const d = new Date(ws);
+            d.setUTCDate(ws.getUTCDate() + row);
+            const key = ymd(d);
+            const cell = dayMap.get(key);
+            const dateLabel = d.toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              timeZone: 'UTC',
+            });
+            if (!cell) {
+              return (
+                <div key={row} className="hill aspect-square bg-fg/[0.05]" />
+              );
+            }
+            const loads = formatLoadChanges(
+              [...cell.loads].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
+            );
+            const vsBest = laneLabel(cell.lift, cell.cardio);
+            const label = `${dateLabel} · ${cell.labels.join(', ')} · ${workLabel(cell.work)}${
+              vsBest ? `\n${vsBest}` : ''
+            }${loads ? `\nLoad vs last: ${loads}` : ''}`;
+            // One horizontal band PER LOG, stacked and split by a hairline
+            // (the container bg shows through a 1px gap), each band's share
+            // proportional to that log's duration. A single-log day is one
+            // full-box band — unchanged from the old solid/striped square.
+            // Within a band: stripes for a mixed-tag session, a solid fill
+            // for one tag. The old code merged every tag of the day into
+            // one striped square, so two separate logs read as a single
+            // mixed session.
+            const totalSecs = cell.sessions.reduce((a, s) => a + s.seconds, 0);
+            // Colour is IDENTITY, at full strength, so a strength day and
+            // a mobility day never converge on the same washed-out grey.
+            // The old `opacity: 0.3 + volume/dayMax * 0.7` folded amount
+            // into the hue's lightness, which is exactly what made two
+            // different activities hard to tell apart at low volume.
+            // Volume moves to its own channel: the bars along the
+            // bottom edge, monochrome LENGTHS that cannot distort the
+            // colour above them. (Border-glow was the other candidate, but
+            // an inset box-shadow is a CLAUDE.md "never" in a component.)
+            return (
+              <div
+                key={row}
+                className="hill relative aspect-square cursor-pointer overflow-hidden"
+                data-tip-target
+                onMouseMove={(e) => onTip(e, label)}
+              >
+                <span aria-hidden className="absolute inset-0 flex flex-col gap-px bg-bg/60">
+                  {cell.sessions.map((s, si) => {
+                    const stripes = stripeBackground(s.colors);
+                    return (
+                      <span
+                        key={si}
+                        className="block w-full"
+                        style={{
+                          // Time share drives the band height; equal split
+                          // when a day carries no durations at all.
+                          flex: `${totalSecs > 0 ? s.seconds || 0.0001 : 1} 1 0`,
+                          ...(stripes
+                            ? { backgroundImage: stripes }
+                            : { backgroundColor: s.colors[0] }),
+                        }}
+                      />
+                    );
+                  })}
+                </span>
+                <WorkBars lift={cell.lift} cardio={cell.cardio} />
+              </div>
+            );
+          })}
+          {/* Under each week, in its own column so it scrolls with it. */}
+          <div className="mt-0.5 text-center text-[0.6rem] leading-tight tabular-nums">
+            <div className="text-fg">
+              {weekFoot[col].seconds > 0 ? formatWeekTime(weekFoot[col].seconds) : '—'}
+            </div>
+            <div className="text-muted">{weekFoot[col].hrMax ?? ' '}</div>
+          </div>
+        </div>
+      ))}
+    </HistoryScroller>
+  );
+});
 
 export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
   const client = mode === 'showcase' ? supabasePublic : supabase;
@@ -510,15 +654,18 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   useEffect(() => setPortalReady(true), []);
   const [groupBy, setGroupBy] = useState<'movement' | 'family'>('movement');
   const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  function showTip(e: { clientX: number; clientY: number }, label: string) {
+  // Stable, so the memoised grid is not re-rendered by the tooltip it moves.
+  const showTip = useCallback((e: { clientX: number; clientY: number }, label: string) => {
     setTip({ x: e.clientX, y: e.clientY, label, shown: true });
     clearTimeout(tipTimer.current);
     tipTimer.current = setTimeout(() => setTip((t) => (t ? { ...t, shown: false } : t)), TOOLTIP.holdMs);
-  }
+  }, []);
   useEffect(() => () => clearTimeout(tipTimer.current), []);
 
   // The tooltip is `fixed` at the finger, so once the page moves it points at
-  // nothing: hide it on any scroll of the app's scroller, and on a tap anywhere
+  // nothing: hide it on any scroll — the app's scroller or the grid's own
+  // sideways one (a capturing listener on the document hears both, since
+  // scroll does not bubble) — and on a tap anywhere
   // that is not another tooltip target (a tap on one moves it instead — that
   // target's own handler fires after this). Listeners exist only while shown.
   const tipShown = tip?.shown ?? false;
@@ -531,11 +678,10 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     const onPointerDown = (e: PointerEvent) => {
       if (!(e.target instanceof Element) || !e.target.closest('[data-tip-target]')) hide();
     };
-    const scroller = document.querySelector('[data-scroll-root]') ?? window;
-    scroller.addEventListener('scroll', hide, { passive: true });
+    document.addEventListener('scroll', hide, { capture: true, passive: true });
     document.addEventListener('pointerdown', onPointerDown, true);
     return () => {
-      scroller.removeEventListener('scroll', hide);
+      document.removeEventListener('scroll', hide, true);
       document.removeEventListener('pointerdown', onPointerDown, true);
     };
   }, [tipShown]);
@@ -547,9 +693,22 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const bodyWeightKg = workBodyWeight(stats ?? null);
   const derived = useMemo(
-    () => deriveStats(logs ?? [], history ?? logs ?? [], today, groupBy, bodyWeightKg, periodDays),
-    [logs, history, groupBy, bodyWeightKg, periodDays],
+    () => deriveStats(logs ?? [], today, groupBy, periodDays),
+    [logs, groupBy, periodDays],
   );
+  // The grid reads all history and ignores the period; only how many weeks
+  // are in view follows it. Back to the week of the first logged session, and
+  // never fewer columns than fit in view.
+  const grid = useMemo(
+    () => deriveGrid(history ?? logs ?? [], today, bodyWeightKg),
+    [history, logs, bodyWeightKg],
+  );
+  const visibleWeeks = Math.min(Math.ceil(periodDays / 7), GRID_WEEKS);
+  const gridCapped = Math.ceil(periodDays / 7) > GRID_WEEKS;
+  const gridCols = useMemo(() => {
+    const k = Math.max(visibleWeeks, grid.span);
+    return { weekStarts: grid.weekStarts.slice(-k), weekFoot: grid.weekFoot.slice(-k) };
+  }, [grid, visibleWeeks]);
 
   // Kept before the loading guard: hooks must not sit behind an early return.
   const mix = useMemo(() => sessionTimeMix(derived.finished), [derived]);
@@ -591,10 +750,6 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
   const {
     all,
-    gridCapped,
-    weekStarts,
-    weekFoot,
-    dayMap,
     rpeRows,
     topMoves,
     cards,
@@ -651,15 +806,6 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
       </div>
     );
   }
-
-  // Grid columns are never wider than at GRID_WEEKS: fewer weeks take that
-  // fraction of the row instead of stretching. gap-1 = 0.25rem.
-  const gridWidth =
-    weekStarts.length < GRID_WEEKS
-      ? `calc(${weekStarts.length} * (100% - ${GRID_WEEKS - 1} * 0.25rem) / ${GRID_WEEKS} + ${
-          weekStarts.length - 1
-        } * 0.25rem)`
-      : undefined;
 
   return (
     <>
@@ -732,94 +878,14 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
             <SectionHeader>
               Consistency{gridCapped ? ` · Last ${GRID_WEEKS} weeks` : ''}
             </SectionHeader>
-            <div style={{ width: gridWidth }}>
-              <div className="flex gap-1">
-                {weekStarts.map((ws, col) => (
-                  <div key={col} className="flex flex-1 flex-col gap-1">
-                    {Array.from({ length: 7 }).map((_, row) => {
-                      const d = new Date(ws);
-                      d.setUTCDate(ws.getUTCDate() + row);
-                      const key = ymd(d);
-                      const cell = dayMap.get(key);
-                      const dateLabel = d.toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        timeZone: 'UTC',
-                      });
-                      if (!cell) {
-                        return (
-                          <div key={row} className="hill aspect-square bg-fg/[0.05]" />
-                        );
-                      }
-                      const loads = formatLoadChanges(
-                        [...cell.loads].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
-                      );
-                      const vsBest = laneLabel(cell.lift, cell.cardio);
-                      const label = `${dateLabel} · ${cell.labels.join(', ')} · ${workLabel(cell.work)}${
-                        vsBest ? `\n${vsBest}` : ''
-                      }${loads ? `\nLoad vs last: ${loads}` : ''}`;
-                      // One horizontal band PER LOG, stacked and split by a hairline
-                      // (the container bg shows through a 1px gap), each band's share
-                      // proportional to that log's duration. A single-log day is one
-                      // full-box band — unchanged from the old solid/striped square.
-                      // Within a band: stripes for a mixed-tag session, a solid fill
-                      // for one tag. The old code merged every tag of the day into
-                      // one striped square, so two separate logs read as a single
-                      // mixed session.
-                      const totalSecs = cell.sessions.reduce((a, s) => a + s.seconds, 0);
-                      // Colour is IDENTITY, at full strength, so a strength day and
-                      // a mobility day never converge on the same washed-out grey.
-                      // The old `opacity: 0.3 + volume/dayMax * 0.7` folded amount
-                      // into the hue's lightness, which is exactly what made two
-                      // different activities hard to tell apart at low volume.
-                      // Volume moves to its own channel: the bars along the
-                      // bottom edge, monochrome LENGTHS that cannot distort the
-                      // colour above them. (Border-glow was the other candidate, but
-                      // an inset box-shadow is a CLAUDE.md "never" in a component.)
-                      return (
-                        <div
-                          key={row}
-                          className="hill relative aspect-square cursor-pointer overflow-hidden"
-                          data-tip-target
-                          onMouseMove={(e) => showTip(e, label)}
-                        >
-                          <span aria-hidden className="absolute inset-0 flex flex-col gap-px bg-bg/60">
-                            {cell.sessions.map((s, si) => {
-                              const stripes = stripeBackground(s.colors);
-                              return (
-                                <span
-                                  key={si}
-                                  className="block w-full"
-                                  style={{
-                                    // Time share drives the band height; equal split
-                                    // when a day carries no durations at all.
-                                    flex: `${totalSecs > 0 ? s.seconds || 0.0001 : 1} 1 0`,
-                                    ...(stripes
-                                      ? { backgroundImage: stripes }
-                                      : { backgroundColor: s.colors[0] }),
-                                  }}
-                                />
-                              );
-                            })}
-                          </span>
-                          <WorkBars lift={cell.lift} cardio={cell.cardio} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-              {/* Same flex-1 / gap-1 columns as the grid, so each figure sits
-                  under its own week. */}
-              <div className="mt-1.5 flex gap-1 text-center text-[0.6rem] leading-tight tabular-nums">
-                {weekFoot.map((w, i) => (
-                  <div key={i} className="flex-1">
-                    <div className="text-fg">{w.seconds > 0 ? formatWeekTime(w.seconds) : '—'}</div>
-                    <div className="text-muted">{w.hrMax ?? ' '}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ConsistencyGrid
+              weekStarts={gridCols.weekStarts}
+              weekFoot={gridCols.weekFoot}
+              dayMap={grid.dayMap}
+              visible={visibleWeeks}
+              todayKey={ymd(today)}
+              onTip={showTip}
+            />
             <p className="mt-2 text-[0.65rem] text-muted">
               Under each week: time, then the highest max HR logged (bpm).
               Colored by activity · striped = several activities. Bars: lifting blocks on top,
