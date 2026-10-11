@@ -21,6 +21,7 @@ import {
   ENDURANCE,
   LOAD,
   MODALITY_KEYS,
+  MUSCLE_KEYS,
   MUSCLE_REGION_KEYS,
   PLANE_KEYS,
   ROM,
@@ -30,6 +31,7 @@ import {
   type BodyLensKey,
   type ModalityKey,
   type MovementProfile,
+  type MuscleKey,
   type PlaneKey,
   type RegionKey,
   type RotaryRole,
@@ -107,6 +109,48 @@ export interface BodyLoadSummary {
    */
   hardSetsByRegion: Record<RegionKey, number>;
   resistanceTonnage: Record<RegionKey, number>;
+  /**
+   * PER-MUSCLE TWINS of the region outputs above (docs/MUSCLE_MAP_PLAN.md
+   * Phase D). Same walk, same allocated minutes, same prep exclusion, read from
+   * `profile.muscles` instead of `profile.regions`. Because a profile's muscles
+   * sum per parent to its regions, summing any of the ADDITIVE ones —
+   * minutes, volume, byLens, resistanceSets — over a region's muscles
+   * reproduces that region's number to floating point (asserted).
+   *
+   * Additive fields only: nothing above changed, and the coach reads none of
+   * these. Regions stay the coach's unit (ground rule 1).
+   */
+  muscleMinutes: Record<MuscleKey, number>;
+  muscleVolume: Record<MuscleKey, number>;
+  byLensMuscle: Record<BodyLensKey, { minutes: Record<MuscleKey, number>; volume: Record<MuscleKey, number> }>;
+  /** Fractional, sums to 1 per resistance set — the twin of `resistanceSets`. */
+  resistanceSetsByMuscle: Record<MuscleKey, number>;
+  /**
+   * WHOLE sets per muscle that clears `meaningfulMuscleShare`, every loaded set
+   * whatever its modality. Never total it, and do NOT expect a region's
+   * muscles to sum to `hardSetsByRegion` — the cutoffs are separate judgements
+   * at separate granularity, and a squat set counts once for every muscle above
+   * its cutoff.
+   */
+  hardSetsByMuscle: Record<MuscleKey, number>;
+  /**
+   * The part of each muscle output that came from `muscleSource: 'authored'`
+   * profiles. `muscleX[k] - muscleAuthored.x[k]` is the estimated part (from
+   * MUSCLE_DEFAULT_SPLIT), so the map can mark a muscle estimated per muscle.
+   */
+  muscleAuthored: {
+    minutes: Record<MuscleKey, number>;
+    volume: Record<MuscleKey, number>;
+    resistanceSets: Record<MuscleKey, number>;
+    hardSets: Record<MuscleKey, number>;
+  };
+  /**
+   * 0..1 per output: authored total / total (plan decision D4). 0 when every
+   * contributing profile is `split`, 1 when every one is `authored`, and 0 when
+   * the output is empty. The hard-set ratio is a share of set-credits, the only
+   * place that field is ever summed.
+   */
+  muscleCoverage: { minutes: number; volume: number; resistanceSets: number; hardSets: number };
   unmapped: UnmappedMovement[];
   totalMinutes: number;
   // classified / (classified + unmapped), 0..1
@@ -169,6 +213,53 @@ export const REGION_SHARE_FLOOR = 0.1;
 export function meaningfulRegionShare(regions: Partial<Record<string, number>>): number {
   const top = Math.max(0, ...Object.values(regions).map((v) => v ?? 0));
   return Math.max(REGION_SHARE_FLOOR, REGION_SHARE_OF_PRIMARY * top);
+}
+
+/**
+ * The muscle twin of `meaningfulRegionShare`: a muscle counts as trained by a
+ * movement when it takes at least MUSCLE_SHARE_OF_PRIMARY of the movement's
+ * TOP MUSCLE, and never below MUSCLE_SHARE_FLOOR.
+ *
+ * THE RATIO CARRIES OVER (0.25). It is a statement about profile SHAPE —
+ * "a quarter of what the prime mover takes" — and is scale-free, so moving
+ * from 9 buckets to 21 does not change what it means. The top muscle is lower
+ * than the top region (a region's share is spread across its muscles), and the
+ * relative cutoff drops with it, which is the point of making it relative.
+ *
+ * THE FLOOR DOES NOT (0.1 -> 0.05). The region floor sits just under a flat
+ * 9-way share (1/9 = 0.11); the same intent at 21 muscles is ~0.05 (1/21 =
+ * 0.048). Kept at 0.1 it would silently drop most of a carry. Worked on the
+ * current (split) profiles:
+ *
+ *   Back Squat — quads 0.54, gluteMax 0.146, hamstrings 0.098, adductors 0.06,
+ *   abs 0.06, obliques 0.042, gluteMed 0.036, hipFlexors 0.018.
+ *   Cutoff max(0.05, 0.25 x 0.54) = 0.135: quads and gluteMax count, the same
+ *   two muscles behind the two regions the region cutoff (0.15) counts. The
+ *   floor is not in play; the ratio does the work, as it does for regions.
+ *
+ *   Farmer Carry — abs 0.175, obliques 0.1225, biceps 0.1, triceps 0.1,
+ *   gluteMax 0.096, frontDelts 0.08, hamstrings 0.08, sideDelts 0.07,
+ *   hipFlexors 0.0525, forearms 0.05, rearDelts 0.05, gluteMed 0.024.
+ *   0.25 x 0.175 = 0.044, so the floor decides: 0.05. Eleven muscles count —
+ *   everything but gluteMed — which is what a loaded carry is. With the region
+ *   floor of 0.1 only abs, obliques, biceps and triceps would, losing the
+ *   shoulders, the glutes and (absurdly, for a grip event) the forearms.
+ *   One honest asymmetry: hamstrings (0.08) count here and not at region
+ *   level (0.08 < 0.1), because hamstrings is a one-muscle region and its
+ *   share is the same number judged against a lower floor. The coach reads
+ *   regions, so this moves no coach number.
+ *
+ * Forearms and rear delts land EXACTLY on the floor (0.25 x 0.2 in both
+ * cases) and count, because the comparison is `>=`, as it is for regions.
+ * Editorial judgement, like the region pair — which is why they live here.
+ */
+export const MUSCLE_SHARE_OF_PRIMARY = REGION_SHARE_OF_PRIMARY;
+export const MUSCLE_SHARE_FLOOR = 0.05;
+
+/** The cutoff for one movement's muscle profile. */
+export function meaningfulMuscleShare(muscles: Partial<Record<string, number>>): number {
+  const top = Math.max(0, ...Object.values(muscles).map((v) => v ?? 0));
+  return Math.max(MUSCLE_SHARE_FLOOR, MUSCLE_SHARE_OF_PRIMARY * top);
 }
 
 /**
@@ -752,6 +843,20 @@ export function summarizeBodyLoad(
     BODY_LENS_KEYS.map((k) => [k, { minutes: zeroed(MUSCLE_REGION_KEYS), volume: zeroed(MUSCLE_REGION_KEYS) }]),
   ) as BodyLoadSummary['byLens'];
 
+  const muscleMinutes = zeroed(MUSCLE_KEYS);
+  const muscleVolume = zeroed(MUSCLE_KEYS);
+  const resistanceSetsByMuscle = zeroed(MUSCLE_KEYS);
+  const hardSetsByMuscle = zeroed(MUSCLE_KEYS);
+  const byLensMuscle = Object.fromEntries(
+    BODY_LENS_KEYS.map((k) => [k, { minutes: zeroed(MUSCLE_KEYS), volume: zeroed(MUSCLE_KEYS) }]),
+  ) as BodyLoadSummary['byLensMuscle'];
+  const muscleAuthored: BodyLoadSummary['muscleAuthored'] = {
+    minutes: zeroed(MUSCLE_KEYS),
+    volume: zeroed(MUSCLE_KEYS),
+    resistanceSets: zeroed(MUSCLE_KEYS),
+    hardSets: zeroed(MUSCLE_KEYS),
+  };
+
   let systemicMinutes = 0;
   let classifiedMinutes = 0;
   let unmappedMinutes = 0;
@@ -833,6 +938,34 @@ export function summarizeBodyLoad(
         }
       }
 
+      // The muscle twins: the same arithmetic as the region loop above, read off
+      // `profile.muscles`. Kept as a separate loop rather than nested so the
+      // region outputs are computed by exactly the code they always were.
+      const authored = profile.muscleSource === 'authored';
+      const muscleCutoff = meaningfulMuscleShare(profile.muscles);
+      const completedSets = item.sets.filter((s) => s.actual.completed).length;
+      const loadedSets = isLoad ? item.sets.filter((s) => isLoadedSet(s, profile)).length : 0;
+      for (const [muscle, weight] of Object.entries(profile.muscles) as [MuscleKey, number][]) {
+        const m = minutes * weight;
+        const v = itemVolume * weight;
+        muscleMinutes[muscle] += m;
+        muscleVolume[muscle] += v;
+        if (lens) {
+          byLensMuscle[lens].minutes[muscle] += m;
+          byLensMuscle[lens].volume[muscle] += v;
+        }
+        const rs = isLoad && modality === 'resistance' ? completedSets * weight : 0;
+        resistanceSetsByMuscle[muscle] += rs;
+        const hs = weight >= muscleCutoff ? loadedSets : 0;
+        hardSetsByMuscle[muscle] += hs;
+        if (authored) {
+          muscleAuthored.minutes[muscle] += m;
+          muscleAuthored.volume[muscle] += v;
+          muscleAuthored.resistanceSets[muscle] += rs;
+          muscleAuthored.hardSets[muscle] += hs;
+        }
+      }
+
       for (const [plane, weight] of Object.entries(profile.planes) as [PlaneKey, number][]) {
         planeMinutes[plane] += minutes * weight;
       }
@@ -845,6 +978,12 @@ export function summarizeBodyLoad(
 
   const totalMinutes = classifiedMinutes + unmappedMinutes;
 
+  const sum = (r: Record<MuscleKey, number>) => MUSCLE_KEYS.reduce((a, k) => a + r[k], 0);
+  const share = (part: Record<MuscleKey, number>, whole: Record<MuscleKey, number>) => {
+    const w = sum(whole);
+    return w > 0 ? sum(part) / w : 0;
+  };
+
   return {
     regionMinutes,
     regionVolume,
@@ -856,6 +995,18 @@ export function summarizeBodyLoad(
     resistanceSets,
     hardSetsByRegion,
     resistanceTonnage,
+    muscleMinutes,
+    muscleVolume,
+    byLensMuscle,
+    resistanceSetsByMuscle,
+    hardSetsByMuscle,
+    muscleAuthored,
+    muscleCoverage: {
+      minutes: share(muscleAuthored.minutes, muscleMinutes),
+      volume: share(muscleAuthored.volume, muscleVolume),
+      resistanceSets: share(muscleAuthored.resistanceSets, resistanceSetsByMuscle),
+      hardSets: share(muscleAuthored.hardSets, hardSetsByMuscle),
+    },
     unmapped: [...unmapped.entries()]
       .map(([name, v]) => ({ name, minutes: v.minutes, sessions: v.sessions.size }))
       .sort((a, b) => b.minutes - a.minutes),
@@ -894,5 +1045,31 @@ export function regionIntensities(
   const out = zeroed(MUSCLE_REGION_KEYS);
   if (max <= 0) return out;
   for (const k of MUSCLE_REGION_KEYS) out[k] = totals[k] / max;
+  return out;
+}
+
+// The muscle twins of regionTotals / regionIntensities, for the per-muscle map.
+// Same funnel, same per-currency normalisation, same lens threading.
+export function muscleTotals(
+  summary: BodyLoadSummary,
+  currency: BodyCurrency,
+  lens?: BodyLensKey,
+): Record<MuscleKey, number> {
+  const scope = lens
+    ? summary.byLensMuscle[lens]
+    : { minutes: summary.muscleMinutes, volume: summary.muscleVolume };
+  return currency === 'volume' ? scope.volume : scope.minutes;
+}
+
+export function muscleIntensities(
+  summary: BodyLoadSummary,
+  currency: BodyCurrency = 'minutes',
+  lens?: BodyLensKey,
+): Record<MuscleKey, number> {
+  const totals = muscleTotals(summary, currency, lens);
+  const max = Math.max(...Object.values(totals));
+  const out = zeroed(MUSCLE_KEYS);
+  if (max <= 0) return out;
+  for (const k of MUSCLE_KEYS) out[k] = totals[k] / max;
   return out;
 }

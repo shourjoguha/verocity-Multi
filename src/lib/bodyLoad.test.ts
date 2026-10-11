@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  meaningfulMuscleShare,
+  meaningfulRegionShare,
+  MUSCLE_SHARE_FLOOR,
+  muscleIntensities,
+  muscleTotals,
   regionIntensities,
   regionTotals,
   romFactor,
@@ -9,12 +14,16 @@ import {
   summarizeBodyLoad,
   summarizeTrainingVolume,
 } from '@/lib/bodyLoad';
-import { classifyMovement } from '@/lib/movementTaxonomy';
+import { classifyMovement, pm, type OverrideMap } from '@/lib/movementTaxonomy';
 import {
   BODY_LENS_KEYS,
   LOAD,
   MODALITY_KEYS,
+  MUSCLE_KEYS,
   MUSCLE_REGION_KEYS,
+  MUSCLES,
+  type MuscleKey,
+  type RegionKey,
   ROM,
   RPE,
   VOLUME,
@@ -807,5 +816,171 @@ describe('warm-up and cooldown carry no load', () => {
     const yoga = log([{ key: 'cooldown', items: [goblet] }], { total_seconds: 1800 });
     const s = summarizeBodyLoad([yoga]);
     expect(Object.values(s.regionVolume).some((v) => v > 0)).toBe(true);
+  });
+});
+
+describe('per-muscle twins', () => {
+  // Realistic, multi-session: prep on both ends, a squat, a carry (endurance by
+  // modality, loaded by set), a slash compound, a bodyweight pull-up and an erg.
+  const week = [
+    log(
+      [
+        { key: 'warmup', items: [item('Band Pull-Apart', 'reps', [set({ reps: 15 }), set({ reps: 15 })])] },
+        {
+          key: 'primary',
+          items: [
+            item('Back Squat', 'weight', [
+              set({ weight: 100, reps: 5 }),
+              set({ weight: 100, reps: 5 }),
+              set({ weight: 100, reps: 5, completed: false }),
+            ]),
+          ],
+        },
+        {
+          key: 'secondary',
+          items: [
+            item('Cable Fly/Machine Press', 'weight', [set({ weight: 30, reps: 12 }), set({ weight: 30, reps: 10 })]),
+            item('Pull-up', 'reps', [set({ reps: 8 }), set({ reps: 6 })]),
+          ],
+        },
+        {
+          key: 'conditioning',
+          items: [item('Farmer Carry', 'distance', [set({ weight: 32, distance: 40 }), set({ weight: 32, distance: 40 })])],
+        },
+        { key: 'cooldown', items: [item('Pigeon / Hip Stretch', 'time', [set({ time: 120 })])] },
+      ],
+      { id: 'a', total_seconds: 3600, tags: ['strength'] },
+    ),
+    log(
+      [
+        { key: 'warmup', items: [item('Goblet Squat', 'weight', [set({ weight: 16, reps: 10 })])] },
+        { key: 'primary', items: [item('Ski Erg Interval', 'time', [set({ time: 240 }), set({ time: 240 })])] },
+        { key: 'secondary', items: [item('Back Squat', 'weight', [set({ weight: 80, reps: 8 })])] },
+      ],
+      { id: 'b', total_seconds: 1500 },
+    ),
+  ];
+
+  const childrenOf = (r: RegionKey) => MUSCLE_KEYS.filter((m) => MUSCLES[m].region === r);
+  const rollUp = (rec: Record<MuscleKey, number>, r: RegionKey) =>
+    childrenOf(r).reduce((a, m) => a + rec[m], 0);
+
+  it('the fixture exercises what it claims to', () => {
+    const s = summarizeBodyLoad(week);
+    expect(s.unmapped).toEqual([]);
+    expect(classifyMovement('Cable Fly/Machine Press').atoms).toHaveLength(2);
+    expect(classifyMovement('Farmer Carry').profile.modality).toBe('endurance');
+    expect(s.hardSetsByRegion.arms).toBeGreaterThan(0);
+  });
+
+  it('rolls up over each region to the region numbers', () => {
+    const s = summarizeBodyLoad(week);
+    for (const r of MUSCLE_REGION_KEYS) {
+      expect(Math.abs(rollUp(s.muscleMinutes, r) - s.regionMinutes[r])).toBeLessThan(1e-9);
+      expect(Math.abs(rollUp(s.muscleVolume, r) - s.regionVolume[r])).toBeLessThan(1e-9);
+      expect(Math.abs(rollUp(s.resistanceSetsByMuscle, r) - s.resistanceSets[r])).toBeLessThan(1e-9);
+      for (const lens of BODY_LENS_KEYS) {
+        expect(Math.abs(rollUp(s.byLensMuscle[lens].minutes, r) - s.byLens[lens].minutes[r])).toBeLessThan(1e-9);
+        expect(Math.abs(rollUp(s.byLensMuscle[lens].volume, r) - s.byLens[lens].volume[r])).toBeLessThan(1e-9);
+      }
+    }
+  });
+
+  it('fractional sets sum to one per completed resistance set, like resistanceSets', () => {
+    const s = summarizeBodyLoad(week);
+    const total = (rec: Record<string, number>) => Object.values(rec).reduce((a, b) => a + b, 0);
+    expect(total(s.resistanceSetsByMuscle)).toBeCloseTo(total(s.resistanceSets), 9);
+  });
+
+  it('prep sections carry minutes but no muscle volume or sets', () => {
+    const prepOnly = log(
+      [{ key: 'warmup', items: [item('Goblet Squat', 'weight', [set({ weight: 16, reps: 10 })])] },
+       { key: 'primary', items: [item('Back Squat', 'weight', [set({ weight: 100, reps: 5 })])] }],
+      { total_seconds: 1200 },
+    );
+    const mainOnly = log([{ key: 'primary', items: [item('Back Squat', 'weight', [set({ weight: 100, reps: 5 })])] }], {
+      total_seconds: 1200,
+    });
+    const a = summarizeBodyLoad([mainOnly]);
+    const b = summarizeBodyLoad([prepOnly]);
+    expect(b.muscleVolume).toEqual(a.muscleVolume);
+    expect(b.hardSetsByMuscle).toEqual(a.hardSetsByMuscle);
+    expect(b.resistanceSetsByMuscle).toEqual(a.resistanceSetsByMuscle);
+  });
+
+  it('counts a squat as a WHOLE set for each muscle above the cutoff', () => {
+    const squat = log([{ key: 'primary', items: [item('Back Squat', 'weight', [
+      set({ weight: 100, reps: 5 }), set({ weight: 100, reps: 5 }), set({ weight: 100, reps: 5 }),
+    ])] }]);
+    const s = summarizeBodyLoad([squat]);
+    const muscles = classifyMovement('Back Squat').profile.muscles;
+    const cutoff = meaningfulMuscleShare(muscles);
+    const above = (Object.keys(muscles) as MuscleKey[]).filter((m) => (muscles[m] ?? 0) >= cutoff).sort();
+    expect(above).toEqual(['gluteMax', 'quads']);
+    for (const m of MUSCLE_KEYS) expect(s.hardSetsByMuscle[m]).toBe(above.includes(m) ? 3 : 0);
+  });
+
+  it('cutoff worked examples match the comment on MUSCLE_SHARE_FLOOR', () => {
+    const squat = classifyMovement('Back Squat').profile;
+    expect(meaningfulMuscleShare(squat.muscles)).toBeCloseTo(0.135, 9);
+    expect(meaningfulRegionShare(squat.regions)).toBeCloseTo(0.15, 9);
+
+    const carry = classifyMovement('Farmer Carry').profile;
+    expect(meaningfulMuscleShare(carry.muscles)).toBe(MUSCLE_SHARE_FLOOR);
+    const counted = (Object.keys(carry.muscles) as MuscleKey[])
+      .filter((m) => (carry.muscles[m] ?? 0) >= MUSCLE_SHARE_FLOOR)
+      .sort();
+    expect(counted).toEqual(
+      ['abs', 'biceps', 'forearms', 'frontDelts', 'gluteMax', 'hamstrings', 'hipFlexors', 'obliques', 'rearDelts', 'sideDelts', 'triceps'],
+    );
+  });
+
+  it('counts a loaded carry toward muscle hard sets though it is not resistance', () => {
+    const s = summarizeBodyLoad([
+      log([{ key: 'conditioning', items: [item('Farmer Carry', 'distance', [set({ weight: 32, distance: 40 })])] }]),
+    ]);
+    expect(s.hardSetsByMuscle.forearms).toBe(1);
+    expect(s.hardSetsByMuscle.gluteMed).toBe(0);
+    expect(Object.values(s.resistanceSetsByMuscle).every((v) => v === 0)).toBe(true);
+  });
+
+  it('coverage is 0 when every profile is split', () => {
+    const s = summarizeBodyLoad(week);
+    expect(s.muscleCoverage).toEqual({ minutes: 0, volume: 0, resistanceSets: 0, hardSets: 0 });
+    expect(Object.values(s.muscleAuthored.minutes).every((v) => v === 0)).toBe(true);
+  });
+
+  it('coverage is 1 when every profile is authored', () => {
+    // Re-author every movement in the fixture at muscle level via pm().
+    const authored: OverrideMap = {};
+    for (const name of [
+      'band pull apart', 'back squat', 'cable fly', 'machine press', 'pull up', 'farmer carry',
+      'pigeon', 'hip stretch', 'goblet squat', 'ski erg interval',
+    ]) {
+      const base = classifyMovement(name).profile;
+      expect(base.muscleSource).toBe('split');
+      authored[name] = { muscles: pm(base.muscles, base.modality ?? 'resistance', base.planes).muscles };
+    }
+    for (const name of Object.keys(authored)) {
+      expect(classifyMovement(name, { overrides: authored }).profile.muscleSource).toBe('authored');
+    }
+    const s = summarizeBodyLoad(week, authored);
+    expect(s.muscleCoverage).toEqual({ minutes: 1, volume: 1, resistanceSets: 1, hardSets: 1 });
+    expect(s.muscleAuthored.minutes).toEqual(s.muscleMinutes);
+    expect(s.muscleAuthored.hardSets).toEqual(s.hardSetsByMuscle);
+  });
+
+  it('coverage is 0 for an empty window', () => {
+    expect(summarizeBodyLoad([]).muscleCoverage.minutes).toBe(0);
+  });
+
+  it('muscleTotals and muscleIntensities mirror the region helpers', () => {
+    const s = summarizeBodyLoad(week);
+    expect(muscleTotals(s, 'minutes')).toBe(s.muscleMinutes);
+    expect(muscleTotals(s, 'volume', 'strength')).toBe(s.byLensMuscle.strength.volume);
+    const i = muscleIntensities(s, 'minutes');
+    expect(Math.max(...Object.values(i))).toBeCloseTo(1, 9);
+    expect(Object.values(i).every((v) => v >= 0 && v <= 1)).toBe(true);
+    expect(Object.values(muscleIntensities(summarizeBodyLoad([]))).every((v) => v === 0)).toBe(true);
   });
 });
