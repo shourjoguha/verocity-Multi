@@ -463,7 +463,7 @@ plan, owner decisions and open questions: `docs/MUSCLE_MAP_PLAN.md`.
 - [x] F geometry, renderers and style picker: Plates (default), Engraved, Thermal, per device in Settings
 - [x] G docs (this pass)
 - [ ] Owner: iPhone check for slab-drag flicker, all three styles
-- [ ] Owner: clear the 7 saved region-level corrections after merge
+- [x] Owner's 7 saved region-level corrections cleared after merge (2026-10-11); none remain
 
 ## Backlog
 
