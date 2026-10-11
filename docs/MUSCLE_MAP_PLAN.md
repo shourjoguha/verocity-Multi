@@ -1,6 +1,6 @@
 # Muscle map: build plan
 
-Status: **built on the branch; awaiting owner iPhone check and merge.** Canonical copy of the plan. The review page
+Status: **shipped (PR #253, 2026-10-11); owner iPhone check still owed.** Canonical copy of the plan. The review page
 the owner filled in is a claude.ai artifact; everything decided there is
 recorded in the appendix below, so no session needs the artifact to proceed.
 
