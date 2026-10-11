@@ -450,6 +450,14 @@ in a row closes the cycle on the other days; if that is a redo, delete or
 cancel the first log. Stored `week_number` on existing rows is not backfilled —
 nothing reads it for display, and the Logger stamps new logs correctly.
 
+### Phase 14 — Muscle-level body map  `[planned]`
+Replace the 9-region body map with a 21-muscle Plates map (Engraved and Thermal
+as per-device alternatives in Settings). Regions stay the coach's unit; each
+muscle has one parent region and region weights become derived. Full phased
+plan, owner decisions and open questions: `docs/MUSCLE_MAP_PLAN.md`.
+- [ ] A inventory · B muscle-weight review CSV (owner gate) · C types + transcription
+- [ ] D per-muscle aggregation · F geometry, renderers, style picker · E tap-to-pick editor · G docs
+
 ## Backlog
 
 Open work that has been scoped but not started. Move an item into a phase when
