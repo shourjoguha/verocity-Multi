@@ -277,6 +277,23 @@ html[data-theme='dark'] {
   --spr-flash: hsl(48 100% 55%);
 }
 
+/* Thermal body-map ramp (BodyMap.tsx, Settings → Body map → Thermal). DATA
+   colour, legal under "colour only on data": fill is
+   color-mix(in oklab, --heat-hi p%, --heat-lo). Lightness is MONOTONIC in both
+   themes so the ramp still reads in greyscale — light runs pale → dark-warm,
+   dark runs carbon → bright-warm — and the callout percentages beside the
+   figure carry the numbers, so the hue is never the only cue. Kept out of
+   @theme (like --spr-*) because nothing reads them as a utility. Both themes
+   define both tokens. */
+:root {
+  --heat-lo: hsl(38 28% 90%);
+  --heat-hi: hsl(8 76% 44%);
+}
+html[data-theme='dark'] {
+  --heat-lo: hsl(230 10% 16%);
+  --heat-hi: hsl(26 95% 58%);
+}
+
 html,
 body {
   color: var(--color-fg);

@@ -597,6 +597,24 @@ card whose token says #141414 and sent this investigation after a phantom
 override. Set the attribute before first paint, or wait past 180ms.
 → `src/styles/global.css` (dark token block)
 
+### Engraved shows no dashed "estimated" outline, though the data says estimated
+`[argued — not reproduced]` (found in code review; the fixture had no estimated muscle)
+Engraved strokes every muscle piece with a solid outline, and the dashed
+"estimated" outline is drawn on the **same path** on top of it. The dash gaps
+simply showed the solid line underneath, so an estimated muscle looked
+authored. Fix: an estimated muscle drops its solid outline (opacity 0), so the
+dashes read. Drawing order alone cannot fix two strokes on one path.
+→ `src/components/BodyMap.tsx`
+
+### Every plate has a dashed outline and the gaps between plates vanish
+`[measured in Chromium]`
+Marking muscles "estimated" with a dashed outline is information only while
+coverage is **partial**. At 0% estimated every plate was dashed and at 100% the
+same, so the dashes buried the gaps that separate adjacent plates and carried no
+signal. The outline now shows only while coverage is partial; the gate lives
+where `estimated` is computed.
+→ `src/components/BodyView.tsx`, coverage from `src/lib/bodyLoad.ts`
+
 ## Build & deploy
 
 ### A build step works locally and silently does nothing on Vercel
@@ -1235,6 +1253,17 @@ that had the bug — including its fallback for finding the panel, because an
 assertion that passes by finding nothing is not an assertion.
 → `scripts/mobile-audit.mjs`, `scripts/flicker-probe.mjs`, `scripts/docs-audit.mjs`
 
+### Nothing here observes a slab drag on /app/body, and Thermal's blur is gated for that
+`[argued — not reproduced]`
+`audit:flicker` only exercises sheets and never visits `/app/body`;
+`audit:mobile` sees overflow and tap targets there. No standing check observes
+the drag of a body-map slab, in any style. Thermal's SVG blur is therefore gated
+to `pointer: fine`, on the same reasoning as every `backdrop-blur` (touch Safari
+re-samples a filtered layer each frame), without having been observed. An iPhone
+check of slab drag in all three styles is still owed; do not cite a green audit
+as evidence for it.
+→ `scripts/flicker-probe.mjs`, `src/components/BodyMap.tsx`
+
 ## Data & privacy
 
 ### Adherence reads 99% and always will
@@ -1710,6 +1739,24 @@ the moderately-to-highly trained", so the line now follows
 The check that observed this was `coach_observations` — a rule that fires every
 reading with flat drift while the athlete keeps marking it done is a measurement
 bug until shown otherwise.
+
+### A rule split out of another inherits the wrong bwLoad, force and calories
+`[measured against the review CSV]`
+Splitting a class rule (e.g. kettlebell swing, burpee, handstand push-up) copied
+the **parent** rule's bwLoad/force/horiz/cal/ROM. The exact-name sibling already
+had better-reviewed numbers: swing read 0.8 where its sibling says 0.4. The
+golden test pinned muscle weights, so the estimates drifted unseen. A new rule
+takes those fields from its exact-name sibling where one exists.
+→ `src/lib/movementTaxonomy.ts`, `docs/muscle-map-review.csv`
+
+### A movement classifies differently after a split, with no rule changed
+`[measured in vitest]`
+Two fragments of equal length in different rules ("Suitcase Deadlift" matched
+both) tie, and the result depended on order, breaking the invariant that
+shuffling `RULES` changes nothing. A split can create the tie silently by
+cutting a longer fragment into two shorter ones. Lengthen one fragment; never
+reorder.
+→ `src/lib/movementTaxonomy.ts` (`RULES`), `movementTaxonomy.test.ts`
 
 ## Superseded
 

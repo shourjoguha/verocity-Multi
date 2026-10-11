@@ -33,6 +33,7 @@ intent, LESSONS describes what actually happened.
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
 | **Change a component, sheet, token or layout**                           | skill ui-change — `.claude/skills/ui-change/SKILL.md` |
 | **Add a migration, RLS policy, edge function or query helper**           | skill db-change — `.claude/skills/db-change/SKILL.md` |
+| **Map a movement to a muscle, or edit muscle weights**                  | `docs/muscle-map-review.csv`, then skill movement-taxonomy |
 | **Map a movement to a region/modality/plane, or edit the body map**      | skill movement-taxonomy — `.claude/skills/movement-taxonomy/SKILL.md` |
 | Record a lesson, or reconcile the guidance docs                          | skill docs-upkeep — `.claude/skills/docs-upkeep/SKILL.md` |
 
@@ -151,6 +152,8 @@ UI audit have both run.
   lazy-loaded via `client:idle` + dynamic import. New backdrops stay monochrome
   and derived from the existing `--color-*` tokens. The user toggle is
   `BackgroundPicker.tsx`, rendered in `SettingsView.tsx`.
+  The body map has its own per-device style (`plates` default, `engraved`,
+  `thermal`; `src/lib/bodyMapPrefs.ts`), also picked in Settings.
 - **Default backdrop is device-gated.** Base.astro's pre-paint script picks
   `aurora` only when `(min-width: 768px) and (pointer: fine)` AND no
   `prefers-reduced-motion`. Touch / narrow / reduced-motion devices default
@@ -269,7 +272,8 @@ UI audit have both run.
   and shipped "No muscle group reaches 10 sets/week" to an athlete for whom
   three did. The coach reads `hardSetsByRegion`; the body map keeps
   `resistanceSets`. **Never total `hardSetsByRegion`** — a squat counts twice on
-  purpose — and never gate loaded volume on `modality === 'resistance'`: a
+  purpose — and `hardSetsByMuscle` follows the same whole-set rule and must not be summed into
+  a region figure; never gate loaded volume on `modality === 'resistance'`: a
   loaded carry is `endurance` by modality and still weight moved by muscle
   (`isLoadedSet`). A region's cutoff is **relative to that movement's own
   primary region**, because a flat one drops Back Squat's glutes (0.18) and a

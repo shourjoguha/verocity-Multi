@@ -1,6 +1,6 @@
 # Muscle map: build plan
 
-Status: **planned, nothing built.** Canonical copy of the plan. The review page
+Status: **built on the branch; awaiting owner iPhone check and merge.** Canonical copy of the plan. The review page
 the owner filled in is a claude.ai artifact; everything decided there is
 recorded in the appendix below, so no session needs the artifact to proceed.
 
@@ -140,7 +140,7 @@ per unknown library name and per inventory name, columns:
 | `rule:jump-plyo` | Split into three: **lower-body jumps** (box, broad, bound, hop: quads, glutes, calves, small hipFlexors share); **throws and slams** (med ball, slam: obliques, abs, lats, shoulders, triceps); **Olympic lifts** (see next row). |
 | Olympic lifts | New rules. Pulls (clean, snatch, and their power/hang/squat forms): gluteMax and hamstrings lead, then quads, traps, lowerBack; snatch adds shoulders/upperBack. **Jerk / push jerk**: quad-led dip-drive plus frontDelts and triceps (not glute-led; see Q5). |
 | `rule:squat-pattern` | Overhead squat gets its own rule with a shoulder/upperBack share. Thruster and wall ball already have shoulders; confirm. |
-| `rule:push-up` | Correct for push-ups (owner: right). Add a `pike` / `handstand` fragment that routes **Pike Push-up** to the shoulder profile. This is a matching fix, not an anatomy change. |
+| `rule:push-up` | Correct for push-ups (owner: right). Add a `pike` fragment that routes **Pike Push-up** to the handstand push-up profile (owner). This is a matching fix, not an anatomy change. |
 | `rule:hinge-pattern` | Split: conventional/trap-bar **deadlift** (gluteMax > hamstrings, plus lowerBack and quads); **RDL** incl. single-leg and split-stance (hamstrings > gluteMax); **swing** (gluteMax, lowerBack, abs, less hamstring); hip thrust and bridge unchanged. |
 | `rule:core-dynamic` | Split: ab wheel / rollout = abs; knee raise, leg raise, toes-to-bar = hipFlexors + abs (+ forearms when hanging); sit-up = abs + hipFlexors. |
 | `hanging knee raise` | hipFlexors + abs, forearms for the hang. |
@@ -158,7 +158,7 @@ per unknown library name and per inventory name, columns:
 | Unknown: **Toes-to-Bar** | hipFlexors, abs (lower), forearms. |
 | Unknown: **Burpee Box Step-Over** | pecs (floor), quads + gluteMax (step-over); conditioning. Plain **burpee**: pecs, quads, calves. |
 | Unknown: **Pull-to-Stand** | The rope-climb scaling in the CrossFit seed (lying, pull hand over hand to standing): lats, biceps, forearms. Confirm (Q7). |
-| Unknown: **Devil Press** | Blocked on Q1. |
+| Unknown: **Devil Press** | Burpee plus double-dumbbell swing to overhead (owner, Q1). |
 | `row` (bare) | The rowing machine (owner, D5). Not SkiErg, not any loaded row. Unchanged. |
 
 **Acceptance:** CSV covers every key; muscle weights sum to 1 per row; the owner
@@ -222,7 +222,7 @@ data-only, `mirrorX` structure. Changes from the mock-up:
   stand-in). The mock-up has none.
 - **Merge serratus into the obliques plate** (serratus isn't a muscle id).
 - The three quad heads stay three shapes, all with id `quads`.
-- `BODY_SILHOUETTE` stays one outline (the 3D slab's ribs use it).
+- `BODY_MUSCLE_SILHOUETTE` stays one outline (the 3D slab's ribs use it). Shipped in F2, which removed the old region exports.
 
 **Acceptance:** `bodyRegions.test.ts` asserts muscle ids ↔ paths both ways.
 
@@ -271,24 +271,21 @@ derived); CLAUDE.md routing row "Map a movement to a muscle". Then
 
 ---
 
-## Open questions for the owner (block only their rows)
+## Owner answers to the open questions (2026-10-11)
 
-- **Q1 Devil Press.** Your note describes pulling the weight while in a plank,
-  which is a renegade row. A devil press is a dumbbell burpee followed by a
-  double-dumbbell swing to overhead (glutes, hamstrings, shoulders, traps, plus
-  chest from the burpee). Which do you do?
-- **Q2 "Outer quads".** Not recommended. You accepted quads as one muscle (D1),
-  and the evidence that stance shifts load between quad heads is weak. Cossack
-  squats and lateral lunges are **adductor and glute-med** work, which the new
-  muscles capture. Keep quads single?
-- **Q3 Cossack squat** (you marked it right at quads 0.75): move about a third
-  to adductors?
-- **Q4 Erg.** Your erg note (lats, abs, hip flexors, triceps) matches the
-  SkiErg, not the rower. The plan splits them as above. Confirm.
-- **Q5 Jerks** are quad-led (a dip-and-drive), not glute-led like the pulls.
-  Agree?
-- **Q6 Box jump hip flexors**: a small share (≤10%) for the tuck. Agree?
-- **Q7 Pull-to-Stand**: rope-climb scaling as above. Confirm.
+- **Q1 Devil Press**: it is the dumbbell burpee plus double-dumbbell swing to
+  overhead. Map it as a burpee plus that overhead swing (pecs from the floor,
+  gluteMax/hamstrings for the swing, shoulders/traps for the finish).
+- **Q2 Outer quads**: dropped. Quads stay one muscle.
+- **Q3 Cossack squat / lateral lunge**: adductor and gluteMed share as
+  recommended (owner accepted the remaining comments).
+- **Q4 Erg**: confirmed. The owner's erg note described the SkiErg; the rower
+  stays leg-led (Concept2: 60 legs / 20 core / 20 arms). Split them.
+- **Q5 Jerks**: quad-led; move attribution to quads.
+- **Q6 Box jump**: small hipFlexors share (≤10%), as recommended.
+- **Q7 Pull-to-Stand**: confirmed as rope-climb scaling (lats, biceps, forearms).
+- **Pike Push-up**: map to the handstand push-up profile (shoulder-led).
+- Folding deep and indistinguishable muscles into neighbours: accepted.
 
 ## Appendix: owner input (review page, 2026-10-11)
 

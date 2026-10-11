@@ -5,7 +5,8 @@ description: Owns the movement classification model — muscle regions, modality
 
 # Movement taxonomy
 
-Classifies a free-text movement name into **regions × modality × plane**, and
+Classifies a free-text movement name into **muscles × modality × plane**
+(regions are derived from the muscles), and
 aggregates logged work onto a body map. Additive: it replaced nothing.
 
 ## The one thing to know first
@@ -20,7 +21,7 @@ logged has no library row to hang data on.
 
 | | |
 |---|---|
-| Vocabulary | `MUSCLE_REGIONS`, `MOVEMENT_MODALITIES`, `MOVEMENT_PLANES`, `ROTARY_ROLES`, `LOAD` in `src/app.config.ts` |
+| Vocabulary | `MUSCLES`, `MUSCLE_DEFAULT_SPLIT`, `MUSCLE_REGIONS`, `MOVEMENT_MODALITIES`, `MOVEMENT_PLANES`, `ROTARY_ROLES`, `LOAD` in `src/app.config.ts` |
 | Matching | `src/lib/movementTaxonomy.ts` — normalisation, `EXACT`, `RULES` |
 | Aggregation | `src/lib/bodyLoad.ts` |
 | Geometry | `src/lib/bodyRegions.ts` |
@@ -66,9 +67,10 @@ load distributes rather than double-counting. Asserted for every entry.
 **6. No bare `weighted` fragment in `RULES`.** It would swallow
 `Weighted Pull-up` and `Weighted Dips`, which have `EXACT` entries.
 
-**7. Region ids are the geometry ids.** `bodyRegions.test.ts` asserts the two
-sets match in *both* directions. A region with no path is a hole in the
-silhouette; a path with no region is dead weight. Neither throws at runtime.
+**7. Muscle ids are the geometry ids.** `BODY_MUSCLE_SHAPES` in
+`bodyRegions.ts`; `bodyRegions.test.ts` asserts the two sets match in *both*
+directions. A muscle with no path is a hole in the silhouette; a path with no
+muscle is dead weight. Neither throws at runtime.
 
 **8. The classifier is pure.** No DOM, no storage, no `Date`, no `queries.ts`.
 Overrides are passed in as an argument. This is what keeps it testable in
@@ -80,7 +82,25 @@ Do not add a per-modality multiplier — every such coefficient is a number
 nobody can defend when the chart looks wrong. Tonnage and hard sets ship as
 *secondary*, resistance-only readouts.
 
+## Muscles, not regions, are authored
+
+Profiles are written in **muscles** via `pm()`; regions are derived
+(`regionsFromMuscles`) and never authored. The 21 muscles live in `MUSCLES` in
+`app.config.ts`, each with exactly one parent region. `MUSCLE_DEFAULT_SPLIT`
+expands a region-only override (old `movements.taxonomy` rows) into muscles at
+read time, and marks the profile `muscleSource: 'split'` so the map shows it as
+estimated.
+
 ## Adding a movement
+
+Give it **muscle weights** and add a row to `docs/muscle-map-review.csv`; the
+golden test pins every row.
+
+**A rule split out of another** takes its bwLoad/force/horiz/cal/ROM from its
+**exact-name sibling** where one exists, not blindly from the parent rule
+(swing 0.8 vs 0.4, burpee and handstand push-up all bit). **Two fragments of
+equal length in different rules** make order load-bearing ("Suitcase Deadlift");
+lengthen one.
 
 1. Add it to `EXACT` keyed by its **normalised** form — run
    `normalizeMovementName` on it first; a test asserts every key round-trips.

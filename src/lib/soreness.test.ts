@@ -131,7 +131,13 @@ describe('explainSoreness — the athlete\'s two cases', () => {
 
   it('core: only the session two days back loaded it; the sled day is the quiet one', () => {
     expect(core.peak.map((c) => c.log.id)).toEqual(['fs']);
-    expect(core.peak[0].movements.map((m) => m.movement)).toEqual(['Ab Wheel Rollout', 'Landmine Twist']);
+    // Front Squat joins: the review gave it abs 0.15 (docs/muscle-map-review.csv, row
+    // 'front squat', core 0 -> 0.15). Ordered by core share, so it comes last.
+    expect(core.peak[0].movements.map((m) => m.movement)).toEqual([
+      'Ab Wheel Rollout',
+      'Landmine Twist',
+      'Front Squat',
+    ]);
     expect(core.quietInPeak.map((l) => l.id)).toEqual(['sled']);
   });
 

@@ -112,8 +112,11 @@ export interface Movement {
 }
 
 // A partial profile: setting only `modality` leaves the rule-derived regions in
-// place, which is what the classifier's shallow merge relies on.
-export type MovementTaxonomyOverride = Partial<MovementProfile>;
+// place, which is what the classifier's shallow merge relies on. May carry
+// `regions` (the shape stored to date) or `muscles`; applyOverride in
+// lib/movementTaxonomy.ts reconciles the two at read time. `muscleSource` is
+// computed on read, never stored. Same shape as TaxonomyOverride there.
+export type MovementTaxonomyOverride = Partial<Omit<MovementProfile, 'muscleSource'>>;
 
 export interface Plan {
   id: string;

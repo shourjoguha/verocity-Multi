@@ -4,8 +4,13 @@ import { createMovement, getLogsInRange, getMovements, getUserStats } from '@/li
 import { loadAllLogs, logsBetween } from '@/lib/logStore';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { supabasePublic } from '@/lib/supabase';
-import type { Movement, WorkoutLog } from '@/lib/types';
-import { regionIntensities, regionTotals, summarizeBodyLoad, type BodyCurrency } from '@/lib/bodyLoad';
+import type { Movement, MovementTaxonomyOverride, WorkoutLog } from '@/lib/types';
+import {
+  muscleIntensities,
+  regionTotals,
+  summarizeBodyLoad,
+  type BodyCurrency,
+} from '@/lib/bodyLoad';
 import { unweightedRepKg } from '@/lib/userStats';
 import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
 import { layoutCallouts } from '@/lib/bodyCallouts';
@@ -17,12 +22,12 @@ import {
   MODALITY_KEYS,
   MOVEMENT_MODALITIES,
   MOVEMENT_PLANES,
+  MUSCLE_KEYS,
   MUSCLE_REGIONS,
   MUSCLE_REGION_KEYS,
   PLANE_KEYS,
   ROTARY_ROLES,
   type ModalityKey,
-  type MovementProfile,
   type RegionKey,
   type BodyLensKey,
 } from '@/app.config';
@@ -34,6 +39,7 @@ import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { BodyMap } from '@/components/BodyMap';
+import { useBodyMapStyle } from '@/lib/bodyMapPrefs';
 import { EASE, Item, PageStagger } from '@/components/anim';
 
 const WINDOWS = [
@@ -183,6 +189,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   // duration re-spelled. See BODY_LENSES in app.config.ts.
   const [lens, setLens] = useState<BodyLensKey>(DEFAULT_BODY_LENS);
   const [face, setFace] = useState<BodyFace>('front');
+  const bodyMapStyle = useBodyMapStyle();
   const [selected, setSelected] = useState<RegionKey | null>(null);
   const [mapping, setMapping] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -230,7 +237,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   // saving a map CREATES the owner-scoped row. createMovement sets
   // owner_user_id itself, which satisfies 0005_lock_shared_library by
   // construction — and it is also how the library finally gets populated.
-  async function handleMap(name: string, taxonomy: MovementProfile) {
+  async function handleMap(name: string, taxonomy: MovementTaxonomyOverride) {
     if (busy) return;
     setBusy(true);
     const created = await createMovement({
@@ -254,9 +261,29 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     [all, overrides, unweightedKg],
   );
   // Normalised per currency, so the heat map cannot contradict the list beside it.
+  // The list ranks REGIONS and the map shades MUSCLES; each is normalised
+  // against its own busiest entry, so the list's bar keeps its region reading.
   const intensity = useMemo(
-    () => regionIntensities(summary, currency, lens),
+    () => muscleIntensities(summary, currency, lens),
     [summary, currency, lens],
+  );
+  // Decision D4: a muscle is ESTIMATED when any of its minutes came from the
+  // default region split rather than an authored muscle profile. The epsilon
+  // only absorbs float noise between two sums of the same minutes.
+  // Marked only while coverage is PARTIAL: when every muscle is estimated (or
+  // none is) the mark distinguishes nothing, dashes every plate and buries the
+  // gaps, and the caption below already says it.
+  const estimated = useMemo(
+    () => {
+      const partial = summary.muscleCoverage.minutes > 0 && summary.muscleCoverage.minutes < 1;
+      return Object.fromEntries(
+        MUSCLE_KEYS.map((m) => [
+          m,
+          partial && summary.muscleMinutes[m] - summary.muscleAuthored.minutes[m] > 1e-6,
+        ]),
+      ) as Record<(typeof MUSCLE_KEYS)[number], boolean>;
+    },
+    [summary],
   );
 
   // Wait on stats too, or Volume would paint at the flat constant and then jump
@@ -264,6 +291,9 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   if (loading || statsLoading) return <LoadingScreen />;
 
   const totals = regionTotals(summary, currency, lens);
+  const regionMax = Math.max(0, ...Object.values(totals));
+  // Share of this period's muscle minutes that is estimated (D4); 0 hides the line.
+  const estimatedPct = 100 - Math.round(summary.muscleCoverage.minutes * 100);
   // Emptiness is a property of the LENS, not the window — measured on minutes so
   // the answer does not change when the currency toggle does.
   const lensTotal = Object.values(regionTotals(summary, 'minutes', lens)).reduce((a, b) => a + b, 0);
@@ -273,7 +303,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     total: totals[k],
     minutes: summary.regionMinutes[k],
     sets: summary.resistanceSets[k],
-    intensity: intensity[k],
+    intensity: regionMax > 0 ? totals[k] / regionMax : 0,
   })).sort((a, b) => b.total - a.total);
 
   // Filter on minutes, not on the active currency: a region with logged work but
@@ -426,10 +456,12 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   <div className="relative">
                     <BodyMap
                       intensity={intensity}
+                      estimated={estimated}
                       systemic={systemicShare}
                       face={face}
                       onFaceChange={setFace}
                       selected={selected}
+                      style={bodyMapStyle}
                     />
                     {callouts.map((c) => (
                       <div
@@ -450,6 +482,11 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                     ))}
                   </div>
                 )}
+                {lensTotal > 0 && estimatedPct > 0 ? (
+                  <p className="mt-1 text-center text-xs text-muted tabular-nums">
+                    Muscle detail is estimated for {estimatedPct}% of this period
+                  </p>
+                ) : null}
               </div>
 
               {planeTotal > 0 ? (

@@ -22,6 +22,7 @@ import { SectionHeader } from '@/components/ui/primitives';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { BackgroundPicker } from '@/components/BackgroundPicker';
 import { CoachSpritePicker } from '@/components/CoachSpritePicker';
+import { BodyMapStylePicker } from '@/components/BodyMapStylePicker';
 import { GarminPanel } from '@/components/GarminPanel';
 import { UserStatsPanel } from '@/components/UserStatsPanel';
 
@@ -99,6 +100,8 @@ export default function SettingsView() {
           <BackgroundPicker />
           <div className="mt-6 mb-2 t-label text-muted">Coach icon</div>
           <CoachSpritePicker />
+          <div className="mt-6 mb-2 t-label text-muted">Body map</div>
+          <BodyMapStylePicker />
         </section>
       </Item>
 
