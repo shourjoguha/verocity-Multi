@@ -17,16 +17,14 @@
 // FitnessProfile does not render until logs have landed, so fetching from there
 // waterfalled a second round trip.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   ASPECT_BACKFILL_WEEKS,
   ASPECT_BASELINE_WEEKS,
   ASPECT_MIN_BASELINE,
   ASPECT_READ_DAYS,
-  ASPECT_WINDOW_DAYS,
-  ASPECT_WINDOWS,
-  type AspectWindowKey,
+  TRAINING_PERIODS,
 } from '@/app.config';
 import {
   aspectWindows,
@@ -67,9 +65,7 @@ export interface AspectProfile {
   prior: AspectPeriod | null;
   /** The oldest stored snapshot, for a long-range comparison. */
   earliest: AspectPeriod | null;
-  /** Selected measurement window — the responsiveness control. */
-  windowKey: AspectWindowKey;
-  setWindowKey: (k: AspectWindowKey) => void;
+  /** The measurement window — the page's training period, in days. */
   windowDays: number;
   /** Weekly samples held for the selected window, and how many are still needed. */
   baselineSamples: number;
@@ -79,26 +75,23 @@ export interface AspectProfile {
 const periodLabel = (w: { start: string; end: string }) =>
   `${formatDate(w.start)} – ${formatDate(w.end)}`;
 
-const daysFor = (key: AspectWindowKey) =>
-  ASPECT_WINDOWS.find((w) => w.key === key)?.days ?? ASPECT_WINDOWS[0].days;
-
-const DEFAULT_WINDOW: AspectWindowKey =
-  ASPECT_WINDOWS.find((w) => w.days === ASPECT_WINDOW_DAYS)?.key ?? ASPECT_WINDOWS[0].key;
-
+// The window is not chosen here: it is the page's training period
+// (lib/periodPrefs.ts), passed in by StatsView, so the radar always measures
+// the same span as the tiles and the grid beside it.
 export function useAspectProfile({
   logs,
   today,
   mode,
   client,
+  windowDays,
 }: {
   logs: WorkoutLog[] | null;
   today: Date;
   mode: 'app' | 'showcase';
   client: SupabaseClient;
+  windowDays: number;
 }): AspectProfile {
   const authed = mode === 'app';
-  const [windowKey, setWindowKey] = useState<AspectWindowKey>(DEFAULT_WINDOW);
-  const windowDays = daysFor(windowKey);
   const windows = aspectWindows(today, windowDays);
   // Read span is anchored to the longest window so switching never refetches.
   const readEnd = aspectWindows(today, ASPECT_READ_DAYS).current.end;
@@ -151,7 +144,7 @@ export function useAspectProfile({
     if (!authed || logs === null || fetchedSnapshots === null || statsLoading) return;
 
     const weekEnds = completedWeekEnds(today, ASPECT_BACKFILL_WEEKS);
-    const work = ASPECT_WINDOWS.map((w) => {
+    const work = TRAINING_PERIODS.map((w) => {
       const have = new Set(
         stored.filter((s) => s.window_days === w.days).map((s) => s.period_end),
       );
@@ -207,16 +200,36 @@ export function useAspectProfile({
   const baselineSamples = forWindow.length;
   const weeksUntilBaseline = Math.max(0, ASPECT_MIN_BASELINE - baselineSamples);
 
+  // The two measured periods, memoised. At 6M each is 182 days of LogDocument
+  // JSONB (~150ms together on a desktop, several times that on a phone), and
+  // StatsView re-renders on every tooltip move — recomputing them there is
+  // the cost its own deriveStats memo exists to avoid. Scoring against the
+  // baseline stays per render: it is cheap and the baseline grows mid-session.
+  const { unweightedKg, hrMaxFallback } = metricOpts;
+  const measured = useMemo(() => {
+    if (logs === null || statsLoading) return null;
+    const measure = (window: { start: string; end: string }) => ({
+      window,
+      metrics: computeAspectMetrics(logsInWindow(logs, window), {
+        end: window.end,
+        windowDays,
+        unweightedKg,
+        hrMaxFallback,
+      }),
+    });
+    return { current: measure(windows.current), prior: measure(windows.prior) };
+    // `windows` is rebuilt every render; its end date and length are what it is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logs, statsLoading, windowDays, windows.current.end, unweightedKg, hrMaxFallback]);
+
   const loading = snapshotsLoading || statsLoading || logs === null;
-  if (loading) {
+  if (loading || measured === null) {
     return {
       loading: true,
       building,
       current: null,
       prior: null,
       earliest: null,
-      windowKey,
-      setWindowKey,
       windowDays,
       baselineSamples,
       weeksUntilBaseline,
@@ -224,18 +237,19 @@ export function useAspectProfile({
   }
 
   const baselines = baselinesFor(stored, windowDays);
-  const scored = (window: { start: string; end: string }): AspectPeriod | null => {
-    const metrics = computeAspectMetrics(logsInWindow(logs, window), {
-      end: window.end,
-      windowDays,
-      ...metricOpts,
-    });
+  const scored = ({
+    window,
+    metrics,
+  }: {
+    window: { start: string; end: string };
+    metrics: AspectMetrics;
+  }): AspectPeriod | null => {
     if (Object.keys(metrics).length === 0) return null;
     return { label: periodLabel(window), ...scoreAspects(metrics, baselines) };
   };
 
-  const current = scored(windows.current);
-  const prior = scored(windows.prior);
+  const current = scored(measured.current);
+  const prior = scored(measured.prior);
 
   // Long-range comparison: the oldest sample we hold for THIS window length,
   // scored against the same baseline so the two polygons are on one scale.
@@ -254,8 +268,6 @@ export function useAspectProfile({
     current,
     prior,
     earliest,
-    windowKey,
-    setWindowKey,
     windowDays,
     baselineSamples,
     weeksUntilBaseline,

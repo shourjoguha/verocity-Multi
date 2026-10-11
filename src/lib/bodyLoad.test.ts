@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isLoadedSet,
   meaningfulMuscleShare,
   meaningfulRegionShare,
   MUSCLE_SHARE_FLOOR,
@@ -969,7 +970,7 @@ describe('per-muscle twins', () => {
 
   it('coverage is 1 for the built-in profiles, which are all authored', () => {
     const s = summarizeBodyLoad(week);
-    expect(s.muscleCoverage).toEqual({ minutes: 1, volume: 1, resistanceSets: 1, hardSets: 1 });
+    expect(s.muscleCoverage).toEqual({ minutes: 1, volume: 1, resistanceSets: 1, hardSets: 1, work: 1 });
   });
 
   it('coverage is 0 when every profile is split', () => {
@@ -979,7 +980,7 @@ describe('per-muscle twins', () => {
       expect(classifyMovement(name, { overrides: split }).profile.muscleSource).toBe('split');
     }
     const s = summarizeBodyLoad(week, split);
-    expect(s.muscleCoverage).toEqual({ minutes: 0, volume: 0, resistanceSets: 0, hardSets: 0 });
+    expect(s.muscleCoverage).toEqual({ minutes: 0, volume: 0, resistanceSets: 0, hardSets: 0, work: 0 });
     expect(Object.values(s.muscleAuthored.minutes).every((v) => v === 0)).toBe(true);
   });
 
@@ -998,7 +999,7 @@ describe('per-muscle twins', () => {
       expect(classifyMovement(name, { overrides: authored }).profile.muscleSource).toBe('authored');
     }
     const s = summarizeBodyLoad(week, authored);
-    expect(s.muscleCoverage).toEqual({ minutes: 1, volume: 1, resistanceSets: 1, hardSets: 1 });
+    expect(s.muscleCoverage).toEqual({ minutes: 1, volume: 1, resistanceSets: 1, hardSets: 1, work: 1 });
     expect(s.muscleAuthored.minutes).toEqual(s.muscleMinutes);
     expect(s.muscleAuthored.hardSets).toEqual(s.hardSetsByMuscle);
   });
@@ -1015,5 +1016,121 @@ describe('per-muscle twins', () => {
     expect(Math.max(...Object.values(i))).toBeCloseTo(1, 9);
     expect(Object.values(i).every((v) => v >= 0 && v <= 1)).toBe(true);
     expect(Object.values(muscleIntensities(summarizeBodyLoad([]))).every((v) => v === 0)).toBe(true);
+  });
+
+  describe('work — loaded working sets split by share', () => {
+    const total = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
+    // A hand-authored squat at the owner's worked example: 50 / 30 / 20.
+    const squat: OverrideMap = {
+      'back squat': { muscles: { quads: 0.5, gluteMax: 0.3, abs: 0.2 } },
+    };
+    const tenSquats = item(
+      'Back Squat',
+      'weight',
+      Array.from({ length: 10 }, () => set({ weight: 100, reps: 5 })),
+    );
+
+    it('ten squat sets at 50/30/20 are quads 5, glutes 3, core 2', () => {
+      const s = summarizeBodyLoad([log([{ key: 'primary', items: [tenSquats] }], { total_seconds: 3600 })], squat);
+      expect(s.regionWork.quads).toBeCloseTo(5, 9);
+      expect(s.regionWork.glutes).toBeCloseTo(3, 9);
+      expect(s.regionWork.core).toBeCloseTo(2, 9);
+      expect(s.muscleWork.quads).toBeCloseTo(5, 9);
+      expect(s.muscleWork.gluteMax).toBeCloseTo(3, 9);
+      expect(s.muscleWork.abs).toBeCloseTo(2, 9);
+      expect(total(s.regionWork)).toBeCloseTo(10, 9);
+      expect(total(s.muscleWork)).toBeCloseTo(10, 9);
+    });
+
+    it('counts a loaded carry, which resistanceSets does not', () => {
+      const s = summarizeBodyLoad([
+        log([{ key: 'conditioning', items: [item('Farmer Carry', 'distance', [set({ weight: 32, distance: 40 })])] }]),
+      ]);
+      expect(total(s.regionWork)).toBeCloseTo(1, 9);
+      expect(total(s.muscleWork)).toBeCloseTo(1, 9);
+      expect(total(s.resistanceSets)).toBe(0);
+    });
+
+    it('follows isLoadedSet: bodyweight reps count, an unloaded timed hold and an incomplete set do not', () => {
+      const s = summarizeBodyLoad([
+        log(
+          [
+            {
+              key: 'primary',
+              items: [
+                item('Pull-up', 'reps', [set({ reps: 8 }), set({ reps: 6, completed: false })]),
+                item('Plank', 'time', [set({ time: 60 })]),
+              ],
+            },
+          ],
+          { total_seconds: 1800 },
+        ),
+      ]);
+      expect(total(s.regionWork)).toBeCloseTo(1, 9);
+      expect(s.regionWork.core).toBe(0);
+    });
+
+    it('excludes warm-up and cooldown sets', () => {
+      const s = summarizeBodyLoad([
+        log([
+          { key: 'warmup', items: [item('Goblet Squat', 'weight', [set({ weight: 16, reps: 10 })])] },
+          { key: 'primary', items: [item('Pull-up', 'reps', [set({ reps: 8 })])] },
+          { key: 'cooldown', items: [item('Goblet Squat', 'weight', [set({ weight: 16, reps: 10 })])] },
+        ]),
+      ]);
+      // Only the pull-up. (A session with NOTHING outside prep counts in full
+      // — see workingSections — so the working section is what makes this a
+      // test of the exclusion.)
+      expect(total(s.regionWork)).toBeCloseTo(1, 9);
+      expect(total(s.muscleWork)).toBeCloseTo(1, 9);
+      expect(s.regionWork.quads).toBe(0);
+    });
+
+    it('a run contributes no work, only minutes', () => {
+      const s = summarizeBodyLoad([
+        log([{ key: 'conditioning', items: [item('Run', 'time', [set({ time: 1800, distance: 5000 })])] }]),
+      ]);
+      expect(total(s.regionMinutes)).toBeGreaterThan(0);
+      expect(total(s.regionWork)).toBe(0);
+    });
+
+    it('sums to the loaded working-set count, and per-lens work sums to the all-lens total', () => {
+      const s = summarizeBodyLoad(week);
+      let loaded = 0;
+      for (const l of week) {
+        for (const section of l.data.sections) {
+          if (section.key === 'warmup' || section.key === 'cooldown') continue;
+          for (const g of section.groups) {
+            for (const it of g.items) {
+              const profile = classifyMovement(it.movement).profile;
+              loaded += it.sets.filter((st) => isLoadedSet(st, profile)).length;
+            }
+          }
+        }
+      }
+      expect(loaded).toBeGreaterThan(0);
+      expect(total(s.regionWork)).toBeCloseTo(loaded, 9);
+      expect(total(s.muscleWork)).toBeCloseTo(loaded, 9);
+      for (const r of MUSCLE_REGION_KEYS) {
+        const byLens = BODY_LENS_KEYS.reduce((a, lens) => a + s.byLens[lens].work[r], 0);
+        expect(byLens).toBeCloseTo(s.regionWork[r], 9);
+      }
+      for (const m of MUSCLE_KEYS) {
+        const byLens = BODY_LENS_KEYS.reduce((a, lens) => a + s.byLensMuscle[lens].work[m], 0);
+        expect(byLens).toBeCloseTo(s.muscleWork[m], 9);
+      }
+    });
+
+    it('regionTotals / muscleTotals / *Intensities read work', () => {
+      const s = summarizeBodyLoad(week);
+      expect(regionTotals(s, 'work')).toBe(s.regionWork);
+      expect(regionTotals(s, 'work', 'strength')).toBe(s.byLens.strength.work);
+      expect(muscleTotals(s, 'work')).toBe(s.muscleWork);
+      expect(muscleTotals(s, 'work', 'strength')).toBe(s.byLensMuscle.strength.work);
+      expect(Math.max(...Object.values(regionIntensities(s, 'work')))).toBeCloseTo(1, 9);
+      expect(Math.max(...Object.values(muscleIntensities(s, 'work')))).toBeCloseTo(1, 9);
+      // Minutes still reads minutes.
+      expect(regionTotals(s, 'minutes')).toBe(s.regionMinutes);
+    });
   });
 });

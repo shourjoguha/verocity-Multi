@@ -1311,3 +1311,28 @@ describe('split rules and new entries price like the entry they were copied from
     expect(classifyMovement(a).profile.bwLoad).toBeDefined();
   });
 });
+
+describe('named runs classify exactly like a bare Run', () => {
+  const run = classifyMovement('Run').profile;
+  it.each(['Treadmill Run', 'Easy Run', 'Zone 2 Run', 'Running', 'Trail Running', 'Group Run'])(
+    '%s has the profile of Run',
+    (name) => {
+      const c = classifyMovement(name);
+      expect(c.source).not.toBe('unknown');
+      expect(c.profile).toEqual(run);
+    },
+  );
+  it.each([
+    'Run-up',
+    "Runner's Lunge",
+    'Running Man',
+    'Running Lunge',
+    'Run Through Drill',
+    'Trunk Rotation',
+    'Brunch Club',
+    'Prune Squat',
+    'Brick',
+  ])('%s is not read as a run', (name) => {
+    expect(classifyMovement(name).profile).not.toEqual(run);
+  });
+});
