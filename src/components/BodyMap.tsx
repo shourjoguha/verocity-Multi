@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import {
   ABS_DIVIDERS,
@@ -59,6 +59,37 @@ const HATCH_O_FLOOR = 0.4;
 const HATCH_O_RANGE = 0.6;
 const DEFAULT_ANGLE = 90;
 
+// Thermal: a sequential ramp between the --heat-lo/--heat-hi tokens (both
+// themes, lightness monotonic so it reads in greyscale), blurred and clipped to
+// the silhouette, hairline muscle outlines on top. The numbers live in the
+// callouts beside the figure, so the hue is never the only carrier.
+// The blur is STATIC: nothing inside the filtered group animates, so a slab
+// drag only changes the CSS transform on .bodymap-slab and the filtered layer
+// can be reused rather than re-rasterised. Modest deviation on the 100x220 grid.
+const HEAT_BLUR = 2.5;
+// Touch fallback (no <filter>): each fill is stroked in its own colour at low
+// opacity, so edges bleed slightly into their neighbours without a filter.
+const HEAT_FEATHER_W = 2.5;
+const HEAT_FEATHER_O = 0.45;
+const HEAT_OUTLINE_O = 0.18;
+
+function heatFill(intensity: number): string {
+  return `color-mix(in oklab, var(--heat-hi) ${Math.round(clamp01(intensity) * 100)}%, var(--heat-lo))`;
+}
+
+// Blur only under a fine pointer. CLAUDE.md gates every backdrop blur to
+// pointer-fine because touch Safari re-samples filtered content aggressively;
+// an SVG filter on a face that rotates in 3D is the same class of cost, so
+// touch gets the unfiltered fallback. Read once at mount — BodyMap only ever
+// renders client-side, after the body summary loads, so there is no SSR pass
+// to disagree with.
+function useFinePointer(): boolean {
+  const [fine] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches,
+  );
+  return fine;
+}
+
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
@@ -85,8 +116,10 @@ function Face({
   systemic,
   reduce,
   variant,
+  blur,
 }: {
   variant: BodyMapStyle;
+  blur: boolean;
   face: BodyFace;
   intensity: Record<MuscleKey, number>;
   estimated: Record<MuscleKey, boolean>;
@@ -99,18 +132,67 @@ function Face({
   // Unique per BodyMap instance and face; the piece suffix is appended below.
   const uid = useId().replace(/:/g, '');
   const engraved = variant === 'engraved';
+  const thermal = variant === 'thermal';
+  const clipId = `${uid}-${face}-clip`;
+  const blurId = `${uid}-${face}-blur`;
   return (
     <svg className="bodymap-face" data-face={face} viewBox={BODY_VIEWBOX} aria-hidden="true">
-      {/* base silhouette */}
+      {/* base silhouette. Thermal fills via `style` because color-mix and the
+          heat tokens are CSS values, not presentation-attribute values. */}
       <path
         d={BODY_MUSCLE_SILHOUETTE[face]}
-        fill={engraved ? 'none' : 'var(--color-fg)'}
-        fillOpacity={engraved ? undefined : 0.06}
+        fill={engraved ? 'none' : thermal ? undefined : 'var(--color-fg)'}
+        fillOpacity={engraved || thermal ? undefined : 0.06}
+        style={thermal ? { fill: 'var(--heat-lo)' } : undefined}
         stroke="var(--color-fg)"
         strokeOpacity={engraved ? 0.35 : 0.25}
         strokeWidth={0.6}
         vectorEffect="non-scaling-stroke"
       />
+      {/* Thermal: heat fills clipped to the silhouette, blurred under a fine
+          pointer, then unblurred hairline outlines. Static — no motion inside
+          the filtered group. */}
+      {thermal ? (
+        <>
+          <defs>
+            <clipPath id={clipId}>
+              <path d={BODY_MUSCLE_SILHOUETTE[face]} />
+            </clipPath>
+            {blur ? (
+              <filter id={blurId} x="-10%" y="-10%" width="120%" height="120%">
+                <feGaussianBlur stdDeviation={HEAT_BLUR} />
+              </filter>
+            ) : null}
+          </defs>
+          <g clipPath={`url(#${clipId})`}>
+            <g filter={blur ? `url(#${blurId})` : undefined}>
+              {pieces.map(({ m, j, shape }) => {
+                const fill = heatFill(intensity[m] ?? 0);
+                return (
+                  <Mirrored key={`${m}-${j}`} shape={shape}>
+                    {(d) => (
+                      <path
+                        d={d}
+                        strokeLinejoin="round"
+                        strokeWidth={blur ? undefined : HEAT_FEATHER_W}
+                        strokeOpacity={blur ? undefined : HEAT_FEATHER_O}
+                        style={blur ? { fill } : { fill, stroke: fill }}
+                      />
+                    )}
+                  </Mirrored>
+                );
+              })}
+            </g>
+          </g>
+          <g fill="none" stroke="var(--color-fg)" strokeOpacity={HEAT_OUTLINE_O} strokeWidth={0.5}>
+            {pieces.map(({ m, j, shape }) => (
+              <Mirrored key={`ol-${m}-${j}`} shape={shape}>
+                {(d) => <path d={d} vectorEffect="non-scaling-stroke" />}
+              </Mirrored>
+            ))}
+          </g>
+        </>
+      ) : null}
       {/* Engraved: one hatch pattern per piece. The twin of a mirrored piece sits
           inside the mirror transform, so its pattern mirrors with it. */}
       {engraved
@@ -154,9 +236,8 @@ function Face({
             );
           })
         : null}
-      {/* Plates (and Thermal until its renderer lands): one fill per muscle
-          piece, gap stroke in the surface colour. */}
-      {(engraved ? [] : pieces).map(({ m, j, shape }) => {
+      {/* Plates: one fill per muscle piece, gap stroke in the surface colour. */}
+      {(engraved || thermal ? [] : pieces).map(({ m, j, shape }) => {
         const target = fillOpacity(intensity[m] ?? 0);
         const delay = MUSCLE_REGION_KEYS.indexOf(MUSCLES[m].region) * 0.04;
         return (
@@ -178,7 +259,7 @@ function Face({
           </Mirrored>
         );
       })}
-      {face === 'front' && !engraved ? (
+      {face === 'front' && !engraved && !thermal ? (
         <g stroke="var(--color-surface)" strokeWidth={ABS_GAP_WIDTH}>
           {ABS_DIVIDERS.lines.map((l) => (
             <line key={l.y} x1={l.x1} x2={l.x2} y1={l.y} y2={l.y} />
@@ -256,7 +337,6 @@ export function BodyMap({
   selected,
   style = 'plates',
 }: {
-  // Thermal has no renderer yet (a later phase); it draws exactly like Plates.
   style?: BodyMapStyle;
   // Per MUSCLE, 0..1 against the busiest muscle (muscleIntensities).
   intensity: Record<MuscleKey, number>;
@@ -269,6 +349,7 @@ export function BodyMap({
   selected: RegionKey | null;
 }) {
   const reduce = useReducedMotion() ?? false;
+  const blur = useFinePointer();
   const slabRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startX: number; startSpin: number; id: number } | null>(null);
   const spin = useRef(0);
@@ -354,6 +435,7 @@ export function BodyMap({
             systemic={systemic}
             reduce={reduce}
             variant={style}
+            blur={blur}
           />
           {RIB_Z.map((z) => (
             <svg
@@ -374,6 +456,7 @@ export function BodyMap({
             systemic={systemic}
             reduce={reduce}
             variant={style}
+            blur={blur}
           />
         </div>
       </div>
