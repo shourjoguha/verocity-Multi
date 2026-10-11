@@ -269,6 +269,9 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     return sum('minutes') > 0 ? 'minutes' : measure;
   }, [summary, measure, lens]);
   const fellBack = effective !== measure;
+  // Work counts sets only, so a cardio or mobility lens on Work misses timed
+  // and distance work that Volume prices as rep-equivalents. Point at Volume.
+  const volumeHint = measure === 'work' && (lens === 'cardio' || lens === 'mobility');
 
   // The map shades each muscle by its SHARE of the active measure's total, in
   // fixed bands (bodyMapShade) — not relative to the busiest muscle, so one
@@ -460,7 +463,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   ariaLabel="Kind of work"
                   size="sm"
                 />
-                {fellBack && lensTotal > 0 ? (
+                {fellBack && lensTotal > 0 && !volumeHint ? (
                   <p className="mt-2 text-xs text-muted">
                     No {measure === 'work' ? 'sets' : 'volume'} logged for{' '}
                     {BODY_LENSES[lens].label.toLowerCase()} — showing time
@@ -520,6 +523,12 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                     ))}
                   </div>
                 )}
+                {volumeHint && lensTotal > 0 ? (
+                  <p className="mt-1 text-center text-xs text-muted">
+                    {fellBack ? 'Showing time. ' : ''}Pick Volume to see sports and other
+                    non set-rep work
+                  </p>
+                ) : null}
                 {lensTotal > 0 && estimatedPct > 0 ? (
                   <p className="mt-1 text-center text-xs text-muted tabular-nums">
                     Muscle detail is estimated for {estimatedPct}% of this period's{' '}
