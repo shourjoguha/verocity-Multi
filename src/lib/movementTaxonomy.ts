@@ -954,7 +954,7 @@ const RAW_RULES: MovementRule[] = [
   },
   {
     id: 'hamstring-isolation',
-    match: ['leg curl', 'nordic', 'ham curl'],
+    match: ['leg curl', 'nordic', 'ham curl', 'hamstring curl'],
     profile: pm({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
   },
   {
@@ -1174,7 +1174,7 @@ const RAW_RULES: MovementRule[] = [
   },
   {
     id: 'mobility',
-    match: ['stretch', 'mobility', 'flow', 'halo', 'prep', 'foam roll', 'pigeon', 'yoga'],
+    match: ['stretch', 'mobility', 'flow', 'halo', 'prep', 'foam roll', 'pigeon', 'yoga', 'leg swing', 'hip swing'],
     profile: pm({
                   quads: 0.25, hamstrings: 0.15, abs: 0.14, gluteMax: 0.12, hipFlexors: 0.1,
                   obliques: 0.1, adductors: 0.08, gluteMed: 0.06,
@@ -1290,7 +1290,8 @@ const RAW_RULES: MovementRule[] = [
     // Split out of hinge-pattern: glutes lead hamstrings, with erectors and quads. 'romanian
     // deadlift' and its siblings outlength it.
     id: 'deadlift',
-    match: ['deadlift'],
+    // 'suitcase deadlift' outlengths suitcase-carry's 'suitcase'; the two tied at 8 chars.
+    match: ['deadlift', 'suitcase deadlift'],
     profile: pm(
       {
         gluteMax: 0.28, hamstrings: 0.22, lowerBack: 0.15, quads: 0.15, adductors: 0.05,
@@ -1319,6 +1320,8 @@ const RAW_RULES: MovementRule[] = [
     // Split out of hinge-pattern; the kettlebell swing profile, plyometric like it.
     id: 'swing',
     match: ['swing'],
+    // Leg and hip swings are dynamic mobility drills, not loaded hinges.
+    not: ['leg swing', 'hip swing'],
     profile: pm(
       {
         gluteMax: 0.38, hamstrings: 0.2, lowerBack: 0.12, abs: 0.1, forearms: 0.08,
@@ -1326,7 +1329,7 @@ const RAW_RULES: MovementRule[] = [
       },
       'plyometric',
       'sagittal',
-      { rom: ROM.hinge },
+      { systemic: true, rom: ROM.hinge },
     ),
   },
   {
@@ -1506,7 +1509,7 @@ const BW_LOAD: Record<string, number> = {
   'rule:suitcase-carry'               : 0.8,
   'rule:hinge-pattern'                : 0.8,
   'rule:hip-thrust'                   : 0.8,
-  'rule:swing'                        : 0.8,
+  'rule:swing'                        : 0.4, // as 'kettlebell swing'
   'rule:romanian-deadlift'            : 0.8,
   'single leg romanian deadlift'      : 0.8,
   'rule:deadlift'                     : 0.8,
@@ -1558,7 +1561,7 @@ const BW_LOAD: Record<string, number> = {
   'rule:sit-up'                       : 0.3,
   'rule:leg-raise'                    : 0.3,
   'rule:hanging-raise'                : 0.3,
-  'rule:ab-rollout'                   : 0.3,
+  'rule:ab-rollout'                   : 0.5, // as 'ab wheel rollout'
   'rule:jump-plyo'                    : 0.3,
   'rule:burpee'                       : 0.65,
   'rule:jerk'                         : 0.3,
