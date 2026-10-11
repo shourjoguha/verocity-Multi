@@ -9,7 +9,7 @@ import {
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { track } from '@/lib/analytics';
 import { supabasePublic } from '@/lib/supabase';
-import type { Movement } from '@/lib/types';
+import type { Movement, MovementTaxonomyOverride } from '@/lib/types';
 import { METRICS, type MetricKey, PRIMARY_METRICS } from '@/app.config';
 import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { isSubroutine } from '@/lib/subroutine';
@@ -23,7 +23,6 @@ import { SubroutineBody } from '@/components/SubroutineBody';
 import { MovementDemo, MovementTile } from '@/components/MovementDemo';
 import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { TaxonomyEditor } from '@/components/TaxonomyEditor';
-import type { MovementProfile } from '@/app.config';
 
 // Only primary-eligible metrics are offered. A movement already stored as
 // weight/rpe-primary still renders (METRICS keeps both), it just cannot be chosen.
@@ -301,7 +300,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
   // Persist a muscle-map override. Only ever written to an owned row —
   // 0005_lock_shared_library.sql blocks writes to shared rows, so the control
   // is not offered on them.
-  async function handleSaveTaxonomy(id: string, taxonomy: MovementProfile) {
+  async function handleSaveTaxonomy(id: string, taxonomy: MovementTaxonomyOverride) {
     const m = movements.find((x) => x.id === id);
     if (busy || !m) return;
     setBusy(true);

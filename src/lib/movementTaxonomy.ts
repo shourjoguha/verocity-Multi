@@ -18,10 +18,14 @@
 
 import {
   MOVEMENT_PLANES,
+  MUSCLES,
+  MUSCLE_DEFAULT_SPLIT,
   MUSCLE_REGION_KEYS,
   ROM,
   type ModalityKey,
   type MovementProfile,
+  type MuscleKey,
+  type MuscleWeights,
   type PlaneKey,
   type PlaneWeights,
   type RegionWeights,
@@ -39,7 +43,16 @@ export interface MovementRule {
   profile: MovementProfile;
 }
 
-export type OverrideMap = Record<string, Partial<MovementProfile>>;
+/**
+ * A stored per-user correction (movements.taxonomy). Every key optional; it may
+ * carry `regions` (the shape stored today) or `muscles` (the new one), and is
+ * resolved against the matched profile by `applyOverride` at READ time, so no
+ * migration is needed and the change is reversible. `muscleSource` is never
+ * stored: it is a fact about where the muscles came from, computed on read.
+ */
+export type TaxonomyOverride = Partial<Omit<MovementProfile, 'muscleSource'>>;
+
+export type OverrideMap = Record<string, TaxonomyOverride>;
 
 export type ClassificationSource = 'override' | 'exact' | 'rule' | 'partial' | 'unknown';
 
@@ -55,6 +68,8 @@ export interface Classification {
 
 export const EMPTY_PROFILE: MovementProfile = {
   regions: {},
+  muscles: {},
+  muscleSource: 'split',
   modality: null,
   planes: {},
   rotary: null,
@@ -130,16 +145,111 @@ export function splitCompound(raw: string): string[] {
   return parts.length > 0 ? parts : [normalizeMovementName(stripped)].filter(Boolean);
 }
 
+// ---- muscles <-> regions --------------------------------------------------
+
+const isMuscleKey = (k: string): k is MuscleKey =>
+  Object.prototype.hasOwnProperty.call(MUSCLES, k);
+
+/**
+ * Region weights from muscle weights: each muscle summed into its one parent.
+ * This is the ONLY way an authored profile gets its regions (ground rule 1:
+ * derived, never authored). Unknown keys — possible in a stored override, which
+ * is untrusted jsonb — are skipped rather than invented a parent.
+ */
+export function regionsFromMuscles(m: MuscleWeights): RegionWeights {
+  const out: RegionWeights = {};
+  for (const [k, v] of Object.entries(m)) {
+    if (!isMuscleKey(k) || typeof v !== 'number') continue;
+    const r = MUSCLES[k].region;
+    out[r] = (out[r] ?? 0) + v;
+  }
+  return out;
+}
+
+/**
+ * Muscle weights from region weights through MUSCLE_DEFAULT_SPLIT. The inverse
+ * of regionsFromMuscles for any region the split covers, to floating point.
+ * A region with no split entry (only reachable through a corrupt override)
+ * contributes nothing.
+ */
+export function musclesFromRegions(r: RegionWeights): MuscleWeights {
+  const out: MuscleWeights = {};
+  for (const [region, w] of Object.entries(r)) {
+    const split = Object.prototype.hasOwnProperty.call(MUSCLE_DEFAULT_SPLIT, region)
+      ? MUSCLE_DEFAULT_SPLIT[region as keyof typeof MUSCLE_DEFAULT_SPLIT]
+      : undefined;
+    if (!split || typeof w !== 'number') continue;
+    for (const [m, share] of Object.entries(split) as [MuscleKey, number][]) {
+      out[m] = (out[m] ?? 0) + w * share;
+    }
+  }
+  return out;
+}
+
+/**
+ * Resolve a stored override against the profile it corrects. Shallow merge, as
+ * before, with one rule for the two weight maps so they can never disagree:
+ *   - `muscles` present → they win; regions are derived from them; `authored`.
+ *   - `regions` only    → regions as stored; muscles via the default split;
+ *                         `split` (estimated).
+ *   - neither           → the base profile's muscles, regions and source.
+ */
+export function applyOverride(base: MovementProfile, ov: TaxonomyOverride): MovementProfile {
+  const merged: MovementProfile = { ...base, ...ov, muscleSource: base.muscleSource };
+  if (ov.muscles != null) {
+    const muscles: MuscleWeights = {};
+    for (const [k, v] of Object.entries(ov.muscles)) {
+      if (isMuscleKey(k) && typeof v === 'number') muscles[k] = v;
+    }
+    return { ...merged, muscles, regions: regionsFromMuscles(muscles), muscleSource: 'authored' };
+  }
+  if (ov.regions != null) {
+    return { ...merged, muscles: musclesFromRegions(ov.regions), muscleSource: 'split' };
+  }
+  return { ...merged, muscles: base.muscles, regions: base.regions };
+}
+
 // ---- profile helpers ------------------------------------------------------
 
+type ProfileOpts = { rotary?: RotaryRole; systemic?: boolean; rom?: number; bwLoad?: number };
+
+// Region-level authoring. The region weights are kept EXACTLY as written — never
+// recomputed from the split muscles — so no existing number drifts by floating
+// point; the muscles are expanded through MUSCLE_DEFAULT_SPLIT and marked
+// `split`. Phase C2 moves entries to pm().
 function p(
   regions: RegionWeights,
   modality: ModalityKey,
   plane: PlaneKey | PlaneWeights,
-  opts: { rotary?: RotaryRole; systemic?: boolean; rom?: number; bwLoad?: number } = {},
+  opts: ProfileOpts = {},
+): MovementProfile {
+  return makeProfile(regions, musclesFromRegions(regions), 'split', modality, plane, opts);
+}
+
+// Muscle-level authoring (ground rule 2: author once, at muscle level). Regions
+// are derived by summing each muscle into its parent.
+// Exported for tests until Phase C2 converts the tables to it.
+export function pm(
+  muscles: MuscleWeights,
+  modality: ModalityKey,
+  plane: PlaneKey | PlaneWeights,
+  opts: ProfileOpts = {},
+): MovementProfile {
+  return makeProfile(regionsFromMuscles(muscles), muscles, 'authored', modality, plane, opts);
+}
+
+function makeProfile(
+  regions: RegionWeights,
+  muscles: MuscleWeights,
+  muscleSource: MovementProfile['muscleSource'],
+  modality: ModalityKey,
+  plane: PlaneKey | PlaneWeights,
+  opts: ProfileOpts,
 ): MovementProfile {
   return {
     regions,
+    muscles,
+    muscleSource,
     modality,
     planes: typeof plane === 'string' ? { [plane]: 1 } : plane,
     rotary: opts.rotary ?? null,
@@ -1176,7 +1286,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
     if (atomOverride) {
       sawOverride = true;
       matched.push({
-        profile: { ...(hit?.profile ?? EMPTY_PROFILE), ...atomOverride },
+        profile: applyOverride(hit?.profile ?? EMPTY_PROFILE, atomOverride),
         source: 'exact',
         id: `override:${atom}`,
       });
@@ -1193,7 +1303,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
         normalized,
         atoms,
         unresolvedAtoms: [],
-        profile: { ...EMPTY_PROFILE, ...wholeOverride },
+        profile: applyOverride(EMPTY_PROFILE, wholeOverride),
         source: 'override',
         matchedIds: [`override:${normalized}`],
       };
@@ -1211,6 +1321,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
 
   // Combine atoms: equal contribution, then renormalise.
   const regionAcc: Record<string, number> = {};
+  const muscleAcc: Record<string, number> = {};
   const planeAcc: Record<string, number> = {};
   const modalityVotes: Record<string, number> = {};
   let systemic = false;
@@ -1224,6 +1335,11 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
   for (const m of matched) {
     for (const [k, v] of Object.entries(m.profile.regions)) {
       regionAcc[k] = (regionAcc[k] ?? 0) + (v as number);
+    }
+    // Muscles merge exactly as regions do (sum, then one renormalisation), so
+    // the merged muscles still sum per parent to the merged regions.
+    for (const [k, v] of Object.entries(m.profile.muscles)) {
+      muscleAcc[k] = (muscleAcc[k] ?? 0) + (v as number);
     }
     for (const [k, v] of Object.entries(m.profile.planes)) {
       planeAcc[k] = (planeAcc[k] ?? 0) + (v as number);
@@ -1275,6 +1391,10 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
 
   let profile: MovementProfile = {
     regions: normalizeWeights(regionAcc),
+    muscles: normalizeWeights(muscleAcc),
+    // A compound is `authored` only when every atom is: one estimated half
+    // makes the merged muscles partly estimated.
+    muscleSource: matched.every((m) => m.profile.muscleSource === 'authored') ? 'authored' : 'split',
     modality,
     planes: normalizeWeights(planeAcc),
     rotary,
@@ -1295,7 +1415,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
   }
 
   if (wholeOverride) {
-    profile = { ...profile, ...wholeOverride };
+    profile = applyOverride(profile, wholeOverride);
     source = 'override';
     sawOverride = true;
   } else if (sawOverride) {

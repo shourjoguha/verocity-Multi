@@ -4,7 +4,7 @@ import { createMovement, getLogsInRange, getMovements, getUserStats } from '@/li
 import { loadAllLogs, logsBetween } from '@/lib/logStore';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { supabasePublic } from '@/lib/supabase';
-import type { Movement, WorkoutLog } from '@/lib/types';
+import type { Movement, MovementTaxonomyOverride, WorkoutLog } from '@/lib/types';
 import { regionIntensities, regionTotals, summarizeBodyLoad, type BodyCurrency } from '@/lib/bodyLoad';
 import { unweightedRepKg } from '@/lib/userStats';
 import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
@@ -22,7 +22,6 @@ import {
   PLANE_KEYS,
   ROTARY_ROLES,
   type ModalityKey,
-  type MovementProfile,
   type RegionKey,
   type BodyLensKey,
 } from '@/app.config';
@@ -230,7 +229,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   // saving a map CREATES the owner-scoped row. createMovement sets
   // owner_user_id itself, which satisfies 0005_lock_shared_library by
   // construction — and it is also how the library finally gets populated.
-  async function handleMap(name: string, taxonomy: MovementProfile) {
+  async function handleMap(name: string, taxonomy: MovementTaxonomyOverride) {
     if (busy) return;
     setBusy(true);
     const created = await createMovement({

@@ -589,6 +589,50 @@ export const MUSCLE_REGIONS = {
   calves: { label: 'Calves', short: 'Calves' },
 } as const;
 
+// The 21 muscles the body map draws (docs/MUSCLE_MAP_PLAN.md, decision D1).
+// Each has exactly ONE parent region, and a region's weight is the sum of its
+// muscles' weights — regions stay the coach's unit (decision D6), so adding a
+// muscle under the region it was already filed in moves no coach number.
+export const MUSCLES = {
+  pecs: { label: 'Pecs', short: 'Pecs', region: 'chest' },
+  frontDelts: { label: 'Front delts', short: 'F. delts', region: 'shoulders' },
+  sideDelts: { label: 'Side delts', short: 'S. delts', region: 'shoulders' },
+  rearDelts: { label: 'Rear delts', short: 'R. delts', region: 'shoulders' },
+  biceps: { label: 'Biceps', short: 'Biceps', region: 'arms' },
+  triceps: { label: 'Triceps', short: 'Triceps', region: 'arms' },
+  forearms: { label: 'Forearms', short: 'Forearms', region: 'arms' },
+  traps: { label: 'Traps', short: 'Traps', region: 'back' },
+  lats: { label: 'Lats', short: 'Lats', region: 'back' },
+  upperBack: { label: 'Upper back', short: 'Up. back', region: 'back' },
+  lowerBack: { label: 'Lower back', short: 'Lo. back', region: 'back' },
+  abs: { label: 'Abs', short: 'Abs', region: 'core' },
+  obliques: { label: 'Obliques', short: 'Obliques', region: 'core' },
+  hipFlexors: { label: 'Hip flexors', short: 'Hip flex.', region: 'core' },
+  gluteMax: { label: 'Glute max', short: 'Glute max', region: 'glutes' },
+  gluteMed: { label: 'Glute med', short: 'Glute med', region: 'glutes' },
+  quads: { label: 'Quads', short: 'Quads', region: 'quads' },
+  adductors: { label: 'Adductors', short: 'Adductors', region: 'quads' },
+  hamstrings: { label: 'Hamstrings', short: 'Hams', region: 'hamstrings' },
+  calves: { label: 'Calves', short: 'Calves', region: 'calves' },
+  tibialis: { label: 'Tibialis', short: 'Tibialis', region: 'calves' },
+} as const satisfies Record<string, { label: string; short: string; region: keyof typeof MUSCLE_REGIONS }>;
+
+// Region → muscle split (decision D4). Used ONLY where a weight exists at region
+// level and nothing finer: a stored region-only override, and any profile not
+// yet re-authored in muscles. Muscles filled from here render as ESTIMATED.
+// Each entry sums to 1 and names only that region's own muscles (asserted).
+export const MUSCLE_DEFAULT_SPLIT: Record<RegionKey, MuscleWeights> = {
+  chest: { pecs: 1 },
+  shoulders: { frontDelts: 0.4, sideDelts: 0.35, rearDelts: 0.25 },
+  arms: { biceps: 0.4, triceps: 0.4, forearms: 0.2 },
+  back: { lats: 0.4, upperBack: 0.25, traps: 0.2, lowerBack: 0.15 },
+  core: { abs: 0.5, obliques: 0.35, hipFlexors: 0.15 },
+  glutes: { gluteMax: 0.8, gluteMed: 0.2 },
+  quads: { quads: 0.9, adductors: 0.1 },
+  hamstrings: { hamstrings: 1 },
+  calves: { calves: 0.85, tibialis: 0.15 },
+};
+
 // How the work was performed. `mobility` and `isometric` are separate from
 // `resistance` because ~9 logged entries are pure prep/stretch work and would
 // otherwise inflate resistance and skew the load metric; and because Pallof
@@ -1213,6 +1257,7 @@ export type ActivityTagKey = keyof typeof ACTIVITY_TAGS;
 export type AspectKey = (typeof FITNESS_ASPECTS)[number]['key'];
 export type AspectWindowKey = (typeof ASPECT_WINDOWS)[number]['key'];
 export type RegionKey = keyof typeof MUSCLE_REGIONS;
+export type MuscleKey = keyof typeof MUSCLES;
 export type SoreAreaKey = keyof typeof SORE_AREAS;
 export type ModalityKey = keyof typeof MOVEMENT_MODALITIES;
 export type PlaneKey = keyof typeof MOVEMENT_PLANES;
@@ -1242,6 +1287,7 @@ export function isExperienceKey(v: unknown): v is ExperienceKey {
 export const DISCIPLINE_KEYS = DISCIPLINES.map((d) => d.key) as DisciplineKey[];
 
 export const MUSCLE_REGION_KEYS = Object.keys(MUSCLE_REGIONS) as RegionKey[];
+export const MUSCLE_KEYS = Object.keys(MUSCLES) as MuscleKey[];
 export const MODALITY_KEYS = Object.keys(MOVEMENT_MODALITIES) as ModalityKey[];
 export const PLANE_KEYS = Object.keys(MOVEMENT_PLANES) as PlaneKey[];
 
@@ -1278,9 +1324,27 @@ export function isMealSourceKey(v: unknown): v is MealSourceKey {
 // distributes across regions rather than double-counting.
 export type RegionWeights = Partial<Record<RegionKey, number>>;
 export type PlaneWeights = Partial<Record<PlaneKey, number>>;
+export type MuscleWeights = Partial<Record<MuscleKey, number>>;
 
 export interface MovementProfile {
+  /**
+   * Region weights. Every existing reader (the coach, hardSetsByRegion, the
+   * 9-region map) keeps reading these. For an `authored` profile they are
+   * DERIVED from `muscles` by summing each muscle into its parent; for a
+   * `split` profile they are the authored region weights, untouched.
+   */
   regions: RegionWeights;
+  /**
+   * Muscle weights, summing to 1 like `regions`, and summing per parent to
+   * exactly `regions` (asserted for every entry).
+   */
+  muscles: MuscleWeights;
+  /**
+   * `authored` — muscles were written by hand (pm() / a muscle override).
+   * `split` — muscles were expanded from region weights via
+   * MUSCLE_DEFAULT_SPLIT, so the map should mark them estimated.
+   */
+  muscleSource: 'authored' | 'split';
   modality: ModalityKey | null;
   planes: PlaneWeights;
   rotary: RotaryRole | null;

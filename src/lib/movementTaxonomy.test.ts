@@ -4,11 +4,26 @@ import {
   RULES,
   classifyMovement,
   isClassified,
+  musclesFromRegions,
   normalizeMovementName,
+  pm,
+  regionsFromMuscles,
   splitCompound,
 } from '@/lib/movementTaxonomy';
 import { familyOf } from '@/lib/stats';
-import { ACTIVITY_TYPES, BODY_LENSES, MUSCLE_REGION_KEYS, PLANE_KEYS } from '@/app.config';
+import {
+  ACTIVITY_TYPES,
+  BODY_LENSES,
+  MUSCLES,
+  MUSCLE_DEFAULT_SPLIT,
+  MUSCLE_KEYS,
+  MUSCLE_REGIONS,
+  MUSCLE_REGION_KEYS,
+  PLANE_KEYS,
+  type MovementProfile,
+  type MuscleWeights,
+  type RegionWeights,
+} from '@/app.config';
 
 // The real production vocabulary, verbatim from the user's 46 logs. This list
 // is the ratchet: every name here must classify, or the suite fails.
@@ -845,5 +860,144 @@ describe('bodyweight load (bwLoad)', () => {
   // zero, or one unestimated half of a compound would halve the other.
   it('averages a compound over the atoms that carry an estimate', () => {
     expect(bw('Pull-up + Dip')).toBeCloseTo(0.95, 5);
+  });
+});
+
+// ---- muscles (docs/MUSCLE_MAP_PLAN.md, Phase C1) ---------------------------
+
+const sumOf = (w: Record<string, number | undefined>) =>
+  Object.values(w).reduce((a: number, b) => a + (b ?? 0), 0);
+
+// Derived regions equal the profile's regions key-for-key within 1e-9 — the
+// tolerance is tight on purpose: p() keeps region weights as authored and the
+// split must round-trip them, not merely approximate them.
+function expectRegionsConsistent(profile: MovementProfile) {
+  const derived = regionsFromMuscles(profile.muscles);
+  const keys = new Set([...Object.keys(derived), ...Object.keys(profile.regions)]);
+  for (const k of keys) {
+    const want = profile.regions[k as keyof RegionWeights] ?? 0;
+    const got = derived[k as keyof RegionWeights] ?? 0;
+    expect(Math.abs(got - want), k).toBeLessThan(1e-9);
+  }
+}
+
+describe('the muscle vocabulary', () => {
+  it('has exactly the 21 muscles of decision D1', () => {
+    expect(MUSCLE_KEYS).toHaveLength(21);
+  });
+
+  it('gives every muscle a parent region that exists', () => {
+    for (const m of MUSCLE_KEYS) {
+      expect(MUSCLE_REGION_KEYS, m).toContain(MUSCLES[m].region);
+    }
+  });
+
+  it('gives every region at least one muscle', () => {
+    for (const r of MUSCLE_REGION_KEYS) {
+      expect(MUSCLE_KEYS.some((m) => MUSCLES[m].region === r), r).toBe(true);
+    }
+  });
+
+  it('has a default split for every region, summing to 1 over its own children only', () => {
+    expect(Object.keys(MUSCLE_DEFAULT_SPLIT).sort()).toEqual(Object.keys(MUSCLE_REGIONS).sort());
+    for (const r of MUSCLE_REGION_KEYS) {
+      const split = MUSCLE_DEFAULT_SPLIT[r];
+      expect(sumOf(split), r).toBeCloseTo(1, 12);
+      for (const m of Object.keys(split)) {
+        expect(MUSCLES[m as keyof typeof MUSCLES]?.region, `${r}.${m}`).toBe(r);
+      }
+    }
+  });
+});
+
+describe('every profile carries muscles consistent with its regions', () => {
+  const entries: [string, MovementProfile][] = [
+    ...Object.entries(EXACT),
+    ...RULES.map((r): [string, MovementProfile] => ['rule:' + r.id, r.profile]),
+  ];
+
+  it.each(entries)('%s', (_id, profile) => {
+    expect(sumOf(profile.muscles)).toBeCloseTo(1, 3);
+    expectRegionsConsistent(profile);
+    // Nothing is authored at muscle level until Phase C2 converts the tables.
+    expect(profile.muscleSource).toBe('split');
+  });
+
+  it('expands a region weight through the default split', () => {
+    expect(musclesFromRegions({ glutes: 0.5, chest: 0.5 })).toEqual({
+      gluteMax: 0.4,
+      gluteMed: 0.1,
+      pecs: 0.5,
+    });
+  });
+
+  it('pm() derives regions by summing muscles into their parents', () => {
+    const muscles: MuscleWeights = { quads: 0.65, gluteMax: 0.15, abs: 0.15, forearms: 0.05 };
+    const prof = pm(muscles, 'resistance', 'sagittal');
+    expect(prof.muscleSource).toBe('authored');
+    expect(prof.muscles).toEqual(muscles);
+    expect(prof.regions).toEqual({ quads: 0.65, glutes: 0.15, core: 0.15, arms: 0.05 });
+  });
+
+  it('keeps consistent muscles through a compound merge', () => {
+    for (const name of ['Hip Flow + KB Halos', 'Cable Fly/Machine Press', 'Deficit/Back Squat']) {
+      const c = classifyMovement(name);
+      expect(sumOf(c.profile.muscles), name).toBeCloseTo(1, 9);
+      expectRegionsConsistent(c.profile);
+    }
+  });
+});
+
+describe('overrides at muscle level', () => {
+  it('expands a region-only override through the default split', () => {
+    const c = classifyMovement('Wtd', {
+      overrides: { weighted: { regions: { back: 0.7, arms: 0.3 }, modality: 'resistance' } },
+    });
+    expect(c.profile.regions).toEqual({ back: 0.7, arms: 0.3 });
+    expect(c.profile.muscles).toEqual(musclesFromRegions({ back: 0.7, arms: 0.3 }));
+    expect(c.profile.muscleSource).toBe('split');
+    expectRegionsConsistent(c.profile);
+  });
+
+  it('derives regions from a muscle override, which wins over stored regions', () => {
+    const c = classifyMovement('Back Squat', {
+      overrides: {
+        'back squat': {
+          muscles: { quads: 0.6, gluteMax: 0.3, adductors: 0.1 },
+          regions: { chest: 1 },
+        },
+      },
+    });
+    expect(c.source).toBe('override');
+    expect(c.profile.muscleSource).toBe('authored');
+    expect(c.profile.regions.quads).toBeCloseTo(0.7, 12);
+    expect(c.profile.regions.glutes).toBeCloseTo(0.3, 12);
+    expect(c.profile.regions.chest).toBeUndefined();
+  });
+
+  it('keeps the matched muscles when the override sets neither weight map', () => {
+    const c = classifyMovement('Back Squat', {
+      overrides: { 'back squat': { modality: 'plyometric' } },
+    });
+    expect(c.profile.muscles).toEqual(classifyMovement('Back Squat').profile.muscles);
+    expectRegionsConsistent(c.profile);
+  });
+
+  it('applies a per-atom override inside a compound consistently', () => {
+    const c = classifyMovement('Hip Flow + KB Halos', {
+      overrides: { 'kettlebell halo': { muscles: { sideDelts: 0.5, traps: 0.5 } } },
+    });
+    expect(c.source).toBe('override');
+    expectRegionsConsistent(c.profile);
+    // One atom authored, one still split: the merged profile is estimated.
+    expect(c.profile.muscleSource).toBe('split');
+  });
+
+  it('drops unknown muscle ids from a stored override rather than inventing a parent', () => {
+    const c = classifyMovement('Wtd', {
+      overrides: { weighted: { muscles: { lats: 1, notAMuscle: 2 } as MuscleWeights } },
+    });
+    expect(c.profile.muscles).toEqual({ lats: 1 });
+    expect(c.profile.regions).toEqual({ back: 1 });
   });
 });

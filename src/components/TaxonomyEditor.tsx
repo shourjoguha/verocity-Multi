@@ -15,6 +15,7 @@ import {
   type RegionKey,
   type RotaryRole,
 } from '@/app.config';
+import type { MovementTaxonomyOverride } from '@/lib/types';
 
 // Corrects what the static rules in lib/movementTaxonomy.ts got wrong — or
 // could not get at all, as with the truncated "Wtd". The user picks regions,
@@ -60,7 +61,7 @@ export function draftFromProfile(p?: Partial<MovementProfile> | null): TaxonomyD
   };
 }
 
-export function profileFromDraft(d: TaxonomyDraft): MovementProfile | null {
+export function profileFromDraft(d: TaxonomyDraft): MovementTaxonomyOverride | null {
   if (!d.primary) return null;
   const regions =
     d.secondary && d.secondary !== d.primary
@@ -87,7 +88,7 @@ export function TaxonomyEditor({
   movementName: string;
   initial?: Partial<MovementProfile> | null;
   busy?: boolean;
-  onSave: (profile: MovementProfile) => void;
+  onSave: (profile: MovementTaxonomyOverride) => void;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<TaxonomyDraft>(() => draftFromProfile(initial));
