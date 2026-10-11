@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   EXACT,
@@ -115,6 +116,21 @@ const VOCABULARY = [
   'Nordic Curl',
   // A curtsy squat, spelled as the real log spells it.
   'Kirsty squat',
+  // Phase C2: the logged names the review CSV (docs/muscle-map-review.csv)
+  // re-homed, plus four library movements that were unknown.
+  'Toes-to-Bar',
+  'Dumbbell Snatch',
+  'Overhead Squat',
+  'Kneeling landmine press',
+  'Shoulder Stretch',
+  'Tricep Pushdown',
+  'Skull crusher',
+  'Romanian Deadlift',
+  'Single-leg RDL',
+  'Deficit Trap Bar DL',
+  'Devil Press',
+  'Burpee Box Step-Over',
+  'Pull-to-Stand',
 ];
 
 // Names the lateral and court-sport rules were added for, plus the neighbours
@@ -300,7 +316,9 @@ describe('the misfires this taxonomy exists to avoid', () => {
     const c = classifyMovement('Ski-Erg Intervals');
     expect(c.profile.modality).toBe('endurance');
     expect(c.profile.regions.back).toBeGreaterThan(0);
-    expect(c.profile.regions.quads).toBeUndefined();
+    // The reviewed muscles give it a small hip-hinge share (quads 0 -> 0.04 in
+    // docs/muscle-map-review.csv, row 'ski erg interval'): still not a leg movement.
+    expect(c.profile.regions.quads ?? 0).toBeLessThan(0.1);
   });
 
   it('classifies Box Jump as plyometric', () => {
@@ -357,12 +375,13 @@ describe('CrossFit/Hyrox movements added from the exercise dataset', () => {
   });
 
   // Guard: the EXACT burpee entry must NOT swallow the burpee combos, which
-  // keep matching their box-jump/broad-jump anatomy by longest fragment.
-  it('leaves the burpee combos on their existing plyometric classification', () => {
+  // now go to rule:burpee (conditioning, with the floor push) instead of the
+  // jump rule they used to fall to by longest fragment (review CSV, rule:burpee).
+  it('sends the burpee combos to the burpee rule, not the jump rule', () => {
     for (const name of ['Burpee Box Jump-Over', 'Burpee Broad Jump']) {
       const c = classifyMovement(name);
-      expect(c.matchedIds, name).toContain('jump-plyo');
-      expect(c.profile.modality, name).toBe('plyometric');
+      expect(c.matchedIds, name).toEqual(['burpee']);
+      expect(c.profile.modality, name).toBe('endurance');
     }
   });
 });
@@ -391,8 +410,11 @@ describe('squat patterns are anterior-leg dominant', () => {
   it('reads the heel-elevated back squat as quad-dominant like the front squat', () => {
     const c = classifyMovement('Heel Elevated Back Squat');
     expect(c.source).toBe('exact');
-    expect(c.profile.regions.quads).toBeCloseTo(0.65, 3);
-    expect(c.profile.regions.glutes).toBeCloseTo(0.35, 3);
+    // Reviewed muscles (docs/muscle-map-review.csv): quads 0.70, gluteMax 0.15,
+    // abs 0.10, obliques 0.05 -- no hamstring share.
+    expect(c.profile.regions.quads).toBeCloseTo(0.7, 3);
+    expect(c.profile.regions.glutes).toBeCloseTo(0.15, 3);
+    expect(c.profile.regions.core).toBeCloseTo(0.15, 3);
     expect(c.profile.regions.hamstrings ?? 0).toBe(0);
   });
 
@@ -598,10 +620,23 @@ describe('lateral patterns carry frontal-plane weight', () => {
     expect(c.profile.regions.core ?? 0).toBeGreaterThan(0);
   });
 
+  // Muscle-authored regions are sums of different addends, so equal-by-design
+  // regions agree to floating point rather than bit-for-bit.
+  const expectRegionsClose = (a: RegionWeights, b: RegionWeights) => {
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      expect(a[k as keyof RegionWeights] ?? 0, k).toBeCloseTo(b[k as keyof RegionWeights] ?? 0, 9);
+    }
+  };
+
   it('keeps each lateral variant on its family anatomy — only the plane moved', () => {
-    expect(regionsOf('Lateral Lunge')).toEqual(regionsOf('Walking Lunge'));
-    expect(regionsOf('Kirsty squat')).toEqual(regionsOf('Walking Lunge'));
-    expect(regionsOf('Skater Jump')).toEqual(regionsOf('Box Jump'));
+    expectRegionsClose(regionsOf('Lateral Lunge'), regionsOf('Walking Lunge'));
+    expectRegionsClose(regionsOf('Kirsty squat'), regionsOf('Walking Lunge'));
+    // Skater Jump is no longer region-for-region Box Jump: the review gave
+    // rule:lateral-plyo adductors and gluteMed (hamstrings 0.20 -> 0.10, core
+    // 0 -> 0.05, glutes 0.20 -> 0.24, calves 0.10 -> 0.13). Still quad-led.
+    const top = (r: RegionWeights) => Object.entries(r).sort((a, b) => b[1]! - a[1]!)[0]?.[0];
+    expect(top(regionsOf('Skater Jump'))).toBe('quads');
+    expect(top(regionsOf('Box Jump'))).toBe('quads');
   });
 
   // The neighbours the new fragments must NOT capture.
@@ -610,7 +645,8 @@ describe('lateral patterns carry frontal-plane weight', () => {
     expect(classifyMovement('Skater Squat').matchedIds).toEqual(['squat-pattern']);
     expect(classifyMovement('Walking Lunge').matchedIds).toEqual(['lunge-pattern']);
     expect(classifyMovement('Step-Up').matchedIds).toEqual(['lunge-pattern']);
-    expect(classifyMovement('Lateral Raise').matchedIds).toEqual(['delt-isolation']);
+    // Lateral raise left delt-isolation for rule:side-raise (review CSV).
+    expect(classifyMovement('Lateral Raise').matchedIds).toEqual(['side-raise']);
     expect(classifyMovement('Iso-Lateral Row').matchedIds).toEqual(['exact:iso lateral row']);
     expect(classifyMovement('Side Plank').matchedIds).toEqual(['exact:side plank']);
     expect(planesOf('Reverse Lunge')).toEqual({ sagittal: 1 });
@@ -641,7 +677,8 @@ describe('named mobility drills land on their joint', () => {
     ['Cat-Cow Mobility', 'back'],
     ['Shin Box Mobility (90/90)', 'glutes'],
     ['Pigeon Mobility', 'glutes'],
-    ['Couch Stretch Mobility', 'quads'],
+    // Hip flexors (0.55) now lead quads (0.45): region core, per rule:hip-flexor-mobility.
+    ['Couch Stretch Mobility', 'core'],
     ['Ankle Mobility', 'calves'],
     ['Hamstring Mobility', 'hamstrings'],
     ['Jefferson Curl Mobility', 'hamstrings'],
@@ -910,6 +947,10 @@ describe('the muscle vocabulary', () => {
   });
 });
 
+// Phase C2 moved every entry to muscle-level authoring. An entry with no row in
+// docs/muscle-map-review.csv would be named here and stay `split`; there are none.
+const SPLIT_EXCEPTIONS: string[] = [];
+
 describe('every profile carries muscles consistent with its regions', () => {
   const entries: [string, MovementProfile][] = [
     ...Object.entries(EXACT),
@@ -919,8 +960,8 @@ describe('every profile carries muscles consistent with its regions', () => {
   it.each(entries)('%s', (_id, profile) => {
     expect(sumOf(profile.muscles)).toBeCloseTo(1, 3);
     expectRegionsConsistent(profile);
-    // Nothing is authored at muscle level until Phase C2 converts the tables.
-    expect(profile.muscleSource).toBe('split');
+    if (SPLIT_EXCEPTIONS.includes(_id)) expect(profile.muscleSource).toBe('split');
+    else expect(profile.muscleSource).toBe('authored');
   });
 
   it('expands a region weight through the default split', () => {
@@ -989,7 +1030,18 @@ describe('overrides at muscle level', () => {
     });
     expect(c.source).toBe('override');
     expectRegionsConsistent(c.profile);
-    // One atom authored, one still split: the merged profile is estimated.
+    // Both atoms are authored now (Phase C2), and so is a muscle override.
+    expect(c.profile.muscleSource).toBe('authored');
+  });
+
+  it('marks a compound estimated when one atom carries only a region override', () => {
+    // Every built-in is authored after C2, so the estimated half has to come
+    // from a region-only override, which expands through the default split.
+    const c = classifyMovement('Hip Flow + KB Halos', {
+      overrides: { 'kettlebell halo': { regions: { shoulders: 1 } } },
+    });
+    expect(c.source).toBe('override');
+    expectRegionsConsistent(c.profile);
     expect(c.profile.muscleSource).toBe('split');
   });
 
@@ -999,5 +1051,261 @@ describe('overrides at muscle level', () => {
     });
     expect(c.profile.muscles).toEqual({ lats: 1 });
     expect(c.profile.regions).toEqual({ back: 1 });
+  });
+});
+
+// ---- Phase C2: the reviewed CSV is the source of truth ----------------------
+
+// Minimal quoted-CSV reader: the file is fully quoted, with "" for a literal
+// quote and newlines possible inside a field. No dependency.
+function parseCsv(text: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (c === '"') quoted = false;
+      else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') {
+      row.push(field);
+      field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field);
+      field = '';
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  if (field !== '' || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  const [head, ...body] = rows;
+  return body.map((r) => Object.fromEntries(head!.map((h, i) => [h, r[i] ?? ''])));
+}
+
+const REVIEW = parseCsv(readFileSync('docs/muscle-map-review.csv', 'utf8'));
+
+const csvMuscles = (r: Record<string, string>): MuscleWeights =>
+  Object.fromEntries(
+    (r.your_muscles || r.proposed_muscles)
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((t) => {
+        const [k, v] = t.split(':');
+        return [k, Number(v)];
+      }),
+  ) as MuscleWeights;
+
+describe('the review CSV is transcribed exactly (golden)', () => {
+  const entryFor = (r: Record<string, string>): MovementProfile | undefined => {
+    if (r.source === 'RULE' || r.source === 'NEW_RULE') {
+      return RULES.find((x) => 'rule:' + x.id === r.key)?.profile;
+    }
+    if (r.source === 'EXACT' || r.source === 'NEW_EXACT') return EXACT[r.key];
+    // An INVENTORY row with owner muscles became an EXACT keyed by its name.
+    if (r.source === 'INVENTORY' && r.your_muscles) return EXACT[normalizeMovementName(r.key)];
+    return undefined;
+  };
+  const rows = REVIEW.filter(
+    (r) =>
+      ['EXACT', 'RULE', 'NEW_RULE', 'NEW_EXACT'].includes(r.source) ||
+      (r.source === 'INVENTORY' && r.your_muscles),
+  );
+
+  it('reads the CSV', () => {
+    expect(rows.length).toBeGreaterThan(100);
+  });
+
+  it.each(rows.map((r) => [r.key, r] as const))('%s', (_key, r) => {
+    const profile = entryFor(r);
+    expect(profile, 'entry exists').toBeDefined();
+    const want = csvMuscles(r);
+    for (const k of new Set([...Object.keys(want), ...Object.keys(profile!.muscles)])) {
+      expect(profile!.muscles[k as keyof MuscleWeights] ?? 0, k).toBeCloseTo(
+        want[k as keyof MuscleWeights] ?? 0,
+        2,
+      );
+    }
+    const wantRegions = regionsFromMuscles(want);
+    for (const k of new Set([...Object.keys(wantRegions), ...Object.keys(profile!.regions)])) {
+      expect(Math.abs((profile!.regions[k as keyof RegionWeights] ?? 0) - (wantRegions[k as keyof RegionWeights] ?? 0)), k).toBeLessThan(0.005);
+    }
+    if (r.modality) expect(profile!.modality).toBe(r.modality);
+    expect(profile!.muscleSource).toBe('authored');
+  });
+
+  it('carries the CSV match and not fragments for every rule', () => {
+    // Treadmill and elliptical are in the CSV's locomotion match, but sit in
+    // rule:machine-locomotion so they keep bwLoad 0 (tested below).
+    const MOVED: Record<string, string[]> = { 'rule:locomotion-endurance': ['treadmill', 'elliptical'] };
+    for (const r of REVIEW.filter((x) => x.source === 'RULE' || x.source === 'NEW_RULE')) {
+      const rule = RULES.find((x) => 'rule:' + x.id === r.key)!;
+      const moved = MOVED[r.key] ?? [];
+      expect(rule.match, r.key).toEqual(r.match.split('|').filter((f) => !moved.includes(f)));
+      expect(rule.not ?? [], r.key).toEqual(r.not ? r.not.split('|') : []);
+    }
+  });
+});
+
+// "must match / must not match" names from the CSV rationale, for every new rule
+// and every rule whose fragments changed. A name that is an EXACT entry is
+// asserted as `exact:<key>` in the comment, not here.
+describe('rules split or changed by the review catch what their rationale says', () => {
+  const CASES: [id: string, match: string[], notMatch: string[]][] = [
+    ['erg-endurance', ['Row Erg', 'Concept2 Rower'], ['Ski Erg', 'Treadmill', 'Bike Erg']],
+    [
+      'locomotion-endurance',
+      ['Walk', 'Incline walk', 'Reverse incline walk'],
+      ['Zone 2 (row/bike/walk)', 'Treadmill', 'Elliptical'],
+    ],
+    ['machine-locomotion', ['Treadmill', 'Elliptical'], ['Walk', 'Ski Erg']],
+    ['ski-erg', ['Ski Erg'], ['Rower Intervals', 'Row']],
+    [
+      'jump-plyo',
+      ['Broad Jump', 'Tuck Jump', 'Single-leg Hop'],
+      ['Med-Ball Throw', 'Clean', 'Push Jerk', 'Lateral Bound', 'Jumping Pull-up', 'Burpee Box Jump-Over', 'Jump Squat'],
+    ],
+    ['throw-slam', ['Ball Slam', 'Chest Pass'], ['Med-Ball Push-up', 'Row']],
+    [
+      'olympic-clean',
+      ['Clean', 'Power Clean', 'Squat Clean', 'Dumbbell Hang Power Clean', 'Clean and Jerk'],
+      ['Front Squat', 'Thruster'],
+    ],
+    [
+      'olympic-snatch',
+      ['Power Snatch', 'Hang Power Snatch', 'Low-Hang Squat Snatch', 'Dumbbell Hang Snatch', 'Dumbbell Snatch'],
+      ['KB Snatch', 'Overhead Squat'],
+    ],
+    ['jerk', ['Push Jerk', 'Split Jerk', 'Clean and Jerk'], ['Push Press']],
+    ['overhead-squat', ['Overhead Squat'], ['Back Squat', 'Air Squat']],
+    [
+      'squat-pattern',
+      ['Air Squat'],
+      ['Overhead Squat', 'Squat Clean', 'Low-Hang Squat Snatch', 'Deep Squat Mobility'],
+    ],
+    ['handstand-push-up', ['Pike Push-up', 'Wall Handstand Push-up'], ['Push-up', 'Knee Push-up']],
+    [
+      'push-up',
+      ['Knee Push-up', 'Hand-Release Push-up', 'Med-Ball Push-up', 'Walkout to Push-up'],
+      ['Pike Push-up', 'Handstand Push-up'],
+    ],
+    ['deadlift', ['Deadlift', 'Deficit Trap Bar DL', 'Sumo Deadlift'], ['Romanian Deadlift', 'Single-leg RDL', 'Stiff-Leg Deadlift']],
+    ['romanian-deadlift', ['Romanian Deadlift', 'Stiff-Leg Deadlift', 'DB RDL'], ['Deadlift', 'Trap Bar DL']],
+    ['swing', ['Russian Kettlebell Swing', 'Dumbbell Swing'], ['KB swing']],
+    [
+      'hinge-pattern',
+      ['Good Morning'],
+      ['Glute Bridge', 'Deadlift', 'Romanian Deadlift', 'KB swing', 'Hip Thrust Machine'],
+    ],
+    // 'Banded Hip Thrust' is an EXACT entry, so it never reaches the rule.
+    [
+      'hip-thrust',
+      ['Hip Thrust', 'Single-leg Hip Thrust', 'Glute Bridge'],
+      ['Hip Thrust Machine', 'Romanian Deadlift', 'Good Morning'],
+    ],
+    ['landmine-press', ['Half-kneeling Landmine Press'], ['Landmine Twist', 'Landmine Row']],
+    [
+      'vertical-push',
+      ['Push Press', 'Shoulder Press', 'Dumbbell Push Press'],
+      ['Half-kneeling Landmine Press', 'Push Jerk'],
+    ],
+    ['front-raise', ['Front Raise', 'Plate Front Raise'], ['Lateral Raise', 'Shoulder raise']],
+    ['side-raise', ['Lateral Raise', 'Side Raise', 'Cable Lateral Raise'], ['Lateral Lunge', 'Front Raise']],
+    ['rear-delt', ['Rear Delt Raise', 'Rear Delt Fly'], ['Reverse Fly', 'Face Pull']],
+    [
+      'delt-isolation',
+      ['Dumbbell Shoulder Raise'],
+      ['Lateral Raise', 'Front Raise', 'Rear Delt Fly'],
+    ],
+    ['upper-back-prehab', ['Reverse Fly'], ['Rear Delt Raise']],
+    ['triceps-isolation', ['Tricep Pushdown', 'Skull crusher', 'Tricep Extension'], ['Bicep Curl', 'Overhead Triceps']],
+    ['arm-isolation', ['Bicep Curl', 'Hammer Curl'], ['Leg Curl', 'Nordic', 'Tricep Pushdown']],
+    ['ab-rollout', ['Ab Wheel', 'Barbell Rollout'], ['Crunch']],
+    ['hanging-raise', ['Toes-to-Bar', 'Hanging Leg Raise', 'Knees-to-Elbows'], ['Lying Leg Raise']],
+    ['leg-raise', ['Lying Leg Raise', "Captain's Chair Knee Raise"], ['Hanging Leg Raise', 'Toes-to-Bar']],
+    ['sit-up', ['Sit-up', 'GHD Sit-up'], ['V-Up', 'Crunch']],
+    ['core-dynamic', ['Crunch', 'Cable Crunch'], ['Ab Wheel Rollout', 'Hanging Leg Raise', 'Sit-up']],
+    ['suitcase-carry', ['Suitcase Carry', 'Single-arm Suitcase Carry'], ['Farmer carry']],
+    ['carry', ['Dumbbell Farmers Carry'], ['Suitcase Carry']],
+    [
+      'burpee',
+      ['Burpee Box Jump-Over', 'Burpee Broad Jump', 'Bar-Facing Burpee'],
+      ['Burpee', 'Burpee Box Step-Over', 'Box Jump'],
+    ],
+    [
+      'shoulder-mobility',
+      ['Shoulder Mobility Prep', 'Shoulder Stretch', 'Wall Slides'],
+      ['Shoulder Prep', 'Band Pull-apart Mobility'],
+    ],
+    ['mobility', ['Yoga', 'Dynamic Flow', 'General Stretch on Mat', "World's greatest stretch"], ['Shoulder Stretch']],
+  ];
+
+  const flat = CASES.flatMap(([id, yes, no]) => [
+    ...yes.map((n) => [id, n, true] as const),
+    ...no.map((n) => [id, n, false] as const),
+  ]);
+
+  it.each(flat)('%s: %s -> %s', (id, name, shouldMatch) => {
+    const ids = classifyMovement(name).matchedIds;
+    if (shouldMatch) expect(ids).toContain(id);
+    else expect(ids).not.toContain(id);
+  });
+
+  it('keeps the reviewed exact names on their entries, not their sibling rules', () => {
+    expect(classifyMovement('Kneeling landmine press').matchedIds).toEqual(['exact:kneeling landmine press']);
+    expect(classifyMovement('Single-leg RDL').matchedIds).toEqual(['exact:single leg romanian deadlift']);
+    expect(classifyMovement('Banded Hip Thrust').matchedIds).toEqual(['exact:banded hip thrust']);
+    expect(classifyMovement('Devil Press').matchedIds).toEqual(['exact:devil press']);
+    expect(classifyMovement('Burpee Box Step-Over').matchedIds).toEqual(['exact:burpee box step over']);
+    expect(classifyMovement('Pull-to-Stand').matchedIds).toEqual(['exact:pull to stand']);
+    expect(classifyMovement('Kettlebell Press').matchedIds).toEqual(['exact:kettlebell press']);
+  });
+});
+
+describe('machine locomotion keeps the erg-style estimates', () => {
+  it('has the locomotion muscles but the old erg-endurance options', () => {
+    const machine = classifyMovement('Treadmill').profile;
+    const walk = classifyMovement('Walk').profile;
+    expect(machine.muscles).toEqual(walk.muscles);
+    expect(machine.bwLoad).toBe(0);
+    expect(walk.bwLoad).toBe(0.5);
+    expect(machine.forceFactor).toBe(0.4);
+    expect(machine.calMetres).toBe(15);
+    expect(classifyMovement('Elliptical').profile).toEqual(machine);
+  });
+});
+
+describe('split rules and new entries price like the entry they were copied from', () => {
+  const est = (n: string) => {
+    const p = classifyMovement(n).profile;
+    return [p.bwLoad, p.forceFactor, p.horizFactor, p.calMetres, p.rom];
+  };
+  it('rule:ski-erg = ski erg interval', () => {
+    expect(est('Ski Erg')).toEqual(est('Ski-Erg Intervals'));
+  });
+  it('rule:burpee = burpee', () => {
+    expect(est('Bar-Facing Burpee')).toEqual(est('Burpee'));
+  });
+  it('rule:handstand-push-up = handstand push up', () => {
+    expect(est('Pike Push-up')).toEqual(est('Handstand Push-up'));
+  });
+  it.each([
+    ['Devil Press', 'Burpee'],
+    ['Burpee Box Step-Over', 'Burpee'],
+    ['Pull-to-Stand', 'Rope Climb'],
+    ['Single-leg RDL', 'Romanian Deadlift'],
+    ['Kettlebell Press', 'Overhead Press'],
+    ['Kneeling landmine press', 'Landmine Press'],
+  ])('%s carries the bwLoad of %s', (a, b) => {
+    expect(classifyMovement(a).profile.bwLoad).toBe(classifyMovement(b).profile.bwLoad);
+    expect(classifyMovement(a).profile.bwLoad).toBeDefined();
   });
 });

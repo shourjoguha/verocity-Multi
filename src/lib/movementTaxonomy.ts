@@ -213,22 +213,9 @@ export function applyOverride(base: MovementProfile, ov: TaxonomyOverride): Move
 
 type ProfileOpts = { rotary?: RotaryRole; systemic?: boolean; rom?: number; bwLoad?: number };
 
-// Region-level authoring. The region weights are kept EXACTLY as written — never
-// recomputed from the split muscles — so no existing number drifts by floating
-// point; the muscles are expanded through MUSCLE_DEFAULT_SPLIT and marked
-// `split`. Phase C2 moves entries to pm().
-function p(
-  regions: RegionWeights,
-  modality: ModalityKey,
-  plane: PlaneKey | PlaneWeights,
-  opts: ProfileOpts = {},
-): MovementProfile {
-  return makeProfile(regions, musclesFromRegions(regions), 'split', modality, plane, opts);
-}
-
 // Muscle-level authoring (ground rule 2: author once, at muscle level). Regions
-// are derived by summing each muscle into its parent.
-// Exported for tests until Phase C2 converts the tables to it.
+// are derived by summing each muscle into its parent. Every EXACT entry and rule
+// is authored this way.
 export function pm(
   muscles: MuscleWeights,
   modality: ModalityKey,
@@ -275,29 +262,20 @@ function makeProfile(
 // resolve to `unknown` and surface in the unmapped list. NOTE: no rule fragment
 // may be a bare 'weighted', or it would swallow the real weighted entries.
 
-const PUSH_HORIZONTAL: RegionWeights = { chest: 0.6, shoulders: 0.25, arms: 0.15 };
-const DIP: RegionWeights = { chest: 0.45, arms: 0.35, shoulders: 0.2 };
-const ROW: RegionWeights = { back: 0.7, arms: 0.3 };
-const VERTICAL_PULL: RegionWeights = { back: 0.7, arms: 0.3 };
-// Shared so a lateral variant cannot drift from its sagittal family: the
-// lateral rules below change the PLANE of a lunge or a jump, not its anatomy.
-const LUNGE: RegionWeights = { quads: 0.5, hamstrings: 0.16, glutes: 0.24, core: 0.1 };
-const BW_JUMP: RegionWeights = { quads: 0.5, hamstrings: 0.2, glutes: 0.2, calves: 0.1 };
-
 const RAW_EXACT: Record<string, MovementProfile> = {
   // --- lower, knee-dominant
   // Bilateral squats are anterior-leg dominant. A heel-elevated front or back
   // squat most of all: the raised heels drive the knees forward and shift the
   // hip-extension load off the posterior chain and onto the quads, so those two
-  // carry the flat 0.65 quad / 0.35 glute ratio with no hamstring share.
-  'back squat': p(
-    { quads: 0.6, hamstrings: 0.098, glutes: 0.182, core: 0.12 },
+  // carry no hamstring share.
+  'back squat': pm(
+    { quads: 0.5, gluteMax: 0.18, adductors: 0.1, hamstrings: 0.1, abs: 0.07, obliques: 0.05 },
     'resistance',
     'sagittal',
     { rom: ROM.squat },
   ),
-  'front squat': p(
-    { quads: 0.65, glutes: 0.35 },
+  'front squat': pm(
+    { quads: 0.65, abs: 0.15, gluteMax: 0.15, forearms: 0.05 },
     'resistance',
     'sagittal',
     { rom: ROM.squat },
@@ -306,33 +284,42 @@ const RAW_EXACT: Record<string, MovementProfile> = {
   // like the front squat. The `(v)` variant marker is a PER-SET notation the
   // name-based classifier never sees, so this is reachable only by naming the
   // variant explicitly; a marker-driven path would be a separate mechanism.
-  'heel elevated back squat': p(
-    { quads: 0.65, glutes: 0.35 },
+  'heel elevated back squat': pm(
+    { quads: 0.7, gluteMax: 0.15, abs: 0.1, obliques: 0.05 },
     'resistance',
     'sagittal',
     { rom: ROM.squat },
   ),
-  'leg extension': p({ quads: 1 }, 'resistance', 'sagittal', { rom: ROM.kneeIsolation }),
-  'leg press': p(
-    { quads: 0.65, hamstrings: 0.1225, glutes: 0.2275 },
+  'leg extension': pm({ quads: 1 }, 'resistance', 'sagittal', { rom: ROM.kneeIsolation }),
+  'leg press': pm(
+    { quads: 0.58, gluteMax: 0.23, hamstrings: 0.12, adductors: 0.07 },
     'resistance',
     'sagittal',
     { rom: ROM.squat },
   ),
-  pistol: p(
-    { quads: 0.6, hamstrings: 0.105, glutes: 0.195, core: 0.1 },
+  pistol: pm(
+    {
+      quads: 0.55, gluteMax: 0.14, hamstrings: 0.1, gluteMed: 0.06, abs: 0.05, adductors: 0.05,
+      hipFlexors: 0.05,
+    },
     'resistance',
     'sagittal',
     { rom: ROM.squat },
   ),
-  'reverse lunge': p(
-    { quads: 0.5, hamstrings: 0.16, glutes: 0.24, core: 0.1 },
+  'reverse lunge': pm(
+    {
+      quads: 0.44, gluteMax: 0.19, hamstrings: 0.16, adductors: 0.06, abs: 0.05, gluteMed: 0.05,
+      obliques: 0.05,
+    },
     'resistance',
     'sagittal',
     { rom: ROM.lunge },
   ),
-  'bulgarian split squat': p(
-    { quads: 0.45, hamstrings: 0.18, glutes: 0.27, core: 0.1 },
+  'bulgarian split squat': pm(
+    {
+      quads: 0.4, gluteMax: 0.21, hamstrings: 0.18, gluteMed: 0.06, abs: 0.05, adductors: 0.05,
+      obliques: 0.05,
+    },
     'resistance',
     'sagittal',
     { rom: ROM.lunge },
@@ -340,186 +327,227 @@ const RAW_EXACT: Record<string, MovementProfile> = {
   // Cossack: the loaded leg is deep-flexed quad work and the trailing leg is
   // adductor — and adductors fold into `quads` at this granularity, so it is
   // strongly anterior despite the lateral shape.
-  'cossack squat': p(
-    { quads: 0.75, hamstrings: 0.0525, glutes: 0.0975, core: 0.1 },
+  'cossack squat': pm(
+    {
+      quads: 0.38, adductors: 0.3, gluteMax: 0.1, gluteMed: 0.1, hamstrings: 0.05, obliques: 0.04,
+      abs: 0.03,
+    },
     'resistance',
     { frontal: 0.7, sagittal: 0.3 },
     { rom: ROM.squat },
   ),
 
   // --- lower, hip-dominant
-  'leg curl': p({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
-  'nordic leg curl': p({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
-  nordic: p({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+  'leg curl': pm({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+  'nordic leg curl': pm({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+  nordic: pm({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
   // The everyday spelling. Without it "Nordic Curl" normalises to an atom that is
   // in neither EXACT key and falls to rule:hamstring-isolation -- which is there
   // for MACHINE leg curls (bwLoad 0) and would price a nordic at zero.
-  'nordic curl': p({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
-  'hip thrust machine': p(
-    { hamstrings: 0.2, glutes: 0.8 },
+  'nordic curl': pm({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+  'hip thrust machine': pm(
+    { gluteMax: 0.7, hamstrings: 0.2, gluteMed: 0.1 },
     'resistance',
     'sagittal',
     { rom: ROM.hipIsolation },
   ),
-  'banded hip thrust': p(
-    { hamstrings: 0.2, glutes: 0.8 },
+  'banded hip thrust': pm(
+    { gluteMax: 0.62, hamstrings: 0.2, gluteMed: 0.18 },
     'resistance',
     'sagittal',
     { rom: ROM.hipIsolation },
   ),
-  'split stance romanian deadlift': p(
-    { hamstrings: 0.45, glutes: 0.3, core: 0.15, quads: 0.1 },
+  'split stance romanian deadlift': pm(
+    {
+      hamstrings: 0.45, gluteMax: 0.22, lowerBack: 0.1, gluteMed: 0.08, adductors: 0.05,
+      obliques: 0.05, quads: 0.05,
+    },
     'resistance',
     'sagittal',
     { rom: ROM.hinge },
   ),
-  'trap bar deadlift': p(
-    { hamstrings: 0.225, glutes: 0.275, quads: 0.35, back: 0.15 },
+  'trap bar deadlift': pm(
+    {
+      quads: 0.3, gluteMax: 0.27, hamstrings: 0.22, lowerBack: 0.1, adductors: 0.05, forearms: 0.03,
+      traps: 0.03,
+    },
     'resistance',
     'sagittal',
     { rom: ROM.hinge },
   ),
-  'kettlebell swing': p(
-    { hamstrings: 0.315, glutes: 0.385, core: 0.2, shoulders: 0.1 },
+  'kettlebell swing': pm(
+    {
+      gluteMax: 0.38, hamstrings: 0.2, lowerBack: 0.12, abs: 0.1, forearms: 0.08, frontDelts: 0.07,
+      obliques: 0.05,
+    },
     'plyometric',
     'sagittal',
     { systemic: true, rom: ROM.hinge },
   ),
-  'kettlebell snatch': p(
-    { hamstrings: 0.18, glutes: 0.22, shoulders: 0.3, core: 0.2, back: 0.1 },
+  'kettlebell snatch': pm(
+    {
+      gluteMax: 0.24, hamstrings: 0.16, frontDelts: 0.12, abs: 0.08, sideDelts: 0.08,
+      lowerBack: 0.07, obliques: 0.07, rearDelts: 0.06, forearms: 0.05, traps: 0.04,
+      upperBack: 0.03,
+    },
     'plyometric',
     'sagittal',
     { systemic: true, rom: ROM.jump },
   ),
 
   // --- calves
-  'calf raise': p({ calves: 1 }, 'resistance', 'sagittal', { rom: ROM.calf }),
-  'standing calf raise': p({ calves: 1 }, 'resistance', 'sagittal', { rom: ROM.calf }),
+  'calf raise': pm({ calves: 1 }, 'resistance', 'sagittal', { rom: ROM.calf }),
+  'standing calf raise': pm({ calves: 1 }, 'resistance', 'sagittal', { rom: ROM.calf }),
 
   // --- push
-  'incline dumbbell bench': p(
-    PUSH_HORIZONTAL,
+  'incline dumbbell bench': pm(
+    { pecs: 0.58, frontDelts: 0.27, triceps: 0.15 },
     'resistance',
     'sagittal',
     { rom: ROM.pushHorizontal },
   ),
-  'machine press': p(PUSH_HORIZONTAL, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
-  'cable fly': p(
-    { chest: 0.85, shoulders: 0.15 },
+  'machine press': pm({ pecs: 0.6, frontDelts: 0.25, triceps: 0.15 }, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
+  'cable fly': pm(
+    { pecs: 0.85, frontDelts: 0.15 },
     'resistance',
     'transverse',
     { rom: ROM.pushHorizontal },
   ),
-  'bench press': p(PUSH_HORIZONTAL, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
+  'bench press': pm({ pecs: 0.6, frontDelts: 0.25, triceps: 0.15 }, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
   // Its own entry, not left to the horizontal-push RULE: that rule exists for
   // bench/machine/fly, which bear none of the athlete, while a push-up carries
   // ~65% of them. Same anatomy, opposite bwLoad -- so the rule cannot serve both.
-  'push up': p(PUSH_HORIZONTAL, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
-  dip: p(DIP, 'resistance', 'sagittal', { rom: ROM.dip }),
-  'weighted dip': p(DIP, 'resistance', 'sagittal', { rom: ROM.dip }),
-  'landmine press': p(
-    { shoulders: 0.6, chest: 0.25, arms: 0.15 },
+  'push up': pm({ pecs: 0.6, frontDelts: 0.25, triceps: 0.15 }, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
+  dip: pm({ pecs: 0.45, triceps: 0.35, frontDelts: 0.2 }, 'resistance', 'sagittal', { rom: ROM.dip }),
+  'weighted dip': pm({ pecs: 0.45, triceps: 0.35, frontDelts: 0.2 }, 'resistance', 'sagittal', { rom: ROM.dip }),
+  'landmine press': pm(
+    { frontDelts: 0.5, pecs: 0.25, triceps: 0.15, sideDelts: 0.1 },
     'resistance',
     'sagittal',
     { rom: ROM.pushVertical },
   ),
-  'standing barbell military press': p(
-    { shoulders: 0.6, arms: 0.25, core: 0.15 },
+  'standing barbell military press': pm(
+    { frontDelts: 0.42, triceps: 0.25, sideDelts: 0.18, abs: 0.09, obliques: 0.06 },
     'resistance',
     'sagittal',
     { rom: ROM.pushVertical },
   ),
-  'overhead press': p(
-    { shoulders: 0.6, arms: 0.25, core: 0.15 },
+  'overhead press': pm(
+    { frontDelts: 0.42, triceps: 0.25, sideDelts: 0.18, abs: 0.09, obliques: 0.06 },
     'resistance',
     'sagittal',
     { rom: ROM.pushVertical },
   ),
-  'shoulder raise': p({ shoulders: 1 }, 'resistance', 'frontal', { rom: ROM.deltIsolation }),
-  'overhead tricep': p({ arms: 1 }, 'resistance', 'sagittal', { rom: ROM.armIsolation }),
+  'shoulder raise': pm({ frontDelts: 0.5, sideDelts: 0.5 }, 'resistance', 'frontal', { rom: ROM.deltIsolation }),
+  'overhead tricep': pm({ triceps: 1 }, 'resistance', 'sagittal', { rom: ROM.armIsolation }),
 
   // --- pull
-  'pull up': p(VERTICAL_PULL, 'resistance', 'frontal', { rom: ROM.pullVertical }),
-  'weighted pull up': p(VERTICAL_PULL, 'resistance', 'frontal', { rom: ROM.pullVertical }),
-  'chin up': p({ back: 0.6, arms: 0.4 }, 'resistance', 'frontal', { rom: ROM.pullVertical }),
-  'dumbbell row': p(ROW, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
-  'iso lateral row': p(ROW, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
-  'gorilla row': p(ROW, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
+  'pull up': pm({ lats: 0.48, biceps: 0.2, upperBack: 0.15, forearms: 0.1, traps: 0.07 }, 'resistance', 'frontal', { rom: ROM.pullVertical }),
+  'weighted pull up': pm({ lats: 0.48, biceps: 0.2, upperBack: 0.15, forearms: 0.1, traps: 0.07 }, 'resistance', 'frontal', { rom: ROM.pullVertical }),
+  'chin up': pm({ lats: 0.42, biceps: 0.3, upperBack: 0.12, forearms: 0.1, traps: 0.06 }, 'resistance', 'frontal', { rom: ROM.pullVertical }),
+  'dumbbell row': pm({ lats: 0.32, upperBack: 0.26, biceps: 0.2, traps: 0.12, forearms: 0.1 }, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
+  'iso lateral row': pm({ lats: 0.32, upperBack: 0.26, biceps: 0.2, traps: 0.12, forearms: 0.1 }, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
+  'gorilla row': pm({ lats: 0.32, upperBack: 0.26, biceps: 0.2, traps: 0.12, forearms: 0.1 }, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
   // As with 'push up': the horizontal-pull RULE covers bent and machine rows,
   // which bear none of the athlete; an inverted row hangs off their own mass.
-  'inverted row': p(ROW, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
-  'face pull': p({ back: 0.6, shoulders: 0.4 }, 'resistance', 'transverse', { rom: ROM.prehab }),
-  'band pull apart': p(
-    { back: 0.6, shoulders: 0.4 },
+  'inverted row': pm({ lats: 0.32, upperBack: 0.26, biceps: 0.2, traps: 0.12, forearms: 0.1 }, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
+  'face pull': pm({ upperBack: 0.45, rearDelts: 0.4, traps: 0.15 }, 'resistance', 'transverse', { rom: ROM.prehab }),
+  'band pull apart': pm(
+    { upperBack: 0.43, rearDelts: 0.42, traps: 0.15 },
     'resistance',
     'transverse',
     { rom: ROM.prehab },
   ),
 
   // --- trunk
-  'dead bug': p({ core: 1 }, 'isometric', 'sagittal', { rotary: 'antiRotational' }),
-  'side plank': p({ core: 1 }, 'isometric', 'frontal'),
-  plank: p({ core: 1 }, 'isometric', 'sagittal'),
-  'pallof press': p({ core: 1 }, 'isometric', 'transverse', { rotary: 'antiRotational' }),
-  'landmine twist': p({ core: 0.7, shoulders: 0.2, back: 0.1 }, 'resistance', 'transverse', {
+  'dead bug': pm({ abs: 0.7, hipFlexors: 0.15, obliques: 0.15 }, 'isometric', 'sagittal', { rotary: 'antiRotational' }),
+  'side plank': pm({ obliques: 0.65, abs: 0.25, gluteMed: 0.1 }, 'isometric', 'frontal'),
+  plank: pm({ abs: 0.65, obliques: 0.25, hipFlexors: 0.1 }, 'isometric', 'sagittal'),
+  'pallof press': pm({ obliques: 0.65, abs: 0.35 }, 'isometric', 'transverse', { rotary: 'antiRotational' }),
+  'landmine twist': pm({
+                         obliques: 0.5, abs: 0.2, frontDelts: 0.15, lats: 0.05, lowerBack: 0.05,
+                         sideDelts: 0.05,
+                       }, 'resistance', 'transverse', {
     rotary: 'rotational',
   }),
-  'hanging knee raise': p({ core: 1 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
-  'ab wheel roller': p({ core: 1 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
-  'ab wheel rollout': p({ core: 1 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
-  'machine crunch': p({ core: 1 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
-  'ab routine': p({ core: 1 }, 'resistance', 'sagittal'),
+  'hanging knee raise': pm({ hipFlexors: 0.45, abs: 0.37, forearms: 0.1, obliques: 0.08 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
+  'ab wheel roller': pm({ abs: 0.85, obliques: 0.1, hipFlexors: 0.05 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
+  'ab wheel rollout': pm({ abs: 0.85, obliques: 0.1, hipFlexors: 0.05 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
+  'machine crunch': pm({ abs: 0.85, obliques: 0.15 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
+  'ab routine': pm({ abs: 0.5, obliques: 0.35, hipFlexors: 0.15 }, 'resistance', 'sagittal'),
 
   // A front squat into an overhead throw. Logged in reps, so the work model
   // reads its `rom` as the ball's whole path, not the squat alone.
-  'wall ball': p(
-    { quads: 0.4, glutes: 0.15, shoulders: 0.25, core: 0.1, arms: 0.1 },
+  'wall ball': pm(
+    {
+      quads: 0.36, frontDelts: 0.17, gluteMax: 0.15, abs: 0.1, triceps: 0.1, sideDelts: 0.08,
+      adductors: 0.04,
+    },
     'resistance',
     'sagittal',
     { systemic: true, rom: ROM.wallBall },
   ),
 
   // --- carries / sled
-  'farmer carry': p(
-    { core: 0.35, arms: 0.25, shoulders: 0.2, hamstrings: 0.08, glutes: 0.12 },
+  'farmer carry': pm(
+    {
+      obliques: 0.35, forearms: 0.25, gluteMed: 0.12, traps: 0.12, abs: 0.06, gluteMax: 0.05,
+      lowerBack: 0.05,
+    },
     'endurance',
     'frontal',
     { systemic: true },
   ),
-  'sled push': p(
-    { quads: 0.5, hamstrings: 0.125, glutes: 0.125, calves: 0.15, chest: 0.1 },
+  'sled push': pm(
+    { quads: 0.45, calves: 0.15, gluteMax: 0.13, hamstrings: 0.12, pecs: 0.1, adductors: 0.05 },
     'resistance',
     'sagittal',
     { systemic: true },
   ),
-  'sled drag': p(
-    { quads: 0.45, hamstrings: 0.15, glutes: 0.15, calves: 0.15, core: 0.1 },
+  'sled drag': pm(
+    {
+      quads: 0.4, calves: 0.15, gluteMax: 0.15, hamstrings: 0.15, abs: 0.05, adductors: 0.05,
+      obliques: 0.05,
+    },
     'resistance',
     'sagittal',
     { systemic: true },
   ),
 
   // --- plyometric
-  'box jump': p(BW_JUMP, 'plyometric', 'sagittal', { systemic: true, rom: ROM.jump }),
-  'med ball throw': p(
-    { core: 0.4, chest: 0.25, shoulders: 0.25, back: 0.1 },
+  'box jump': pm({ quads: 0.45, gluteMax: 0.2, calves: 0.15, hamstrings: 0.12, hipFlexors: 0.08 }, 'plyometric', 'sagittal', { systemic: true, rom: ROM.jump }),
+  'med ball throw': pm(
+    {
+      obliques: 0.25, abs: 0.15, frontDelts: 0.15, lats: 0.12, pecs: 0.1, triceps: 0.1,
+      gluteMax: 0.08, quads: 0.05,
+    },
     'plyometric',
     'transverse',
     { rotary: 'rotational', systemic: true, rom: ROM.jump },
   ),
 
   // --- endurance
-  'ski erg interval': p({ back: 0.5, arms: 0.3, core: 0.2 }, 'endurance', 'sagittal', {
+  'ski erg interval': pm({
+                           lats: 0.3, abs: 0.15, triceps: 0.15, gluteMax: 0.08, hamstrings: 0.05,
+                           hipFlexors: 0.05, obliques: 0.05, pecs: 0.05, upperBack: 0.05,
+                           quads: 0.04, forearms: 0.03,
+                         }, 'endurance', 'sagittal', {
     systemic: true,
   }),
-  'rower interval': p(
-    { back: 0.4, quads: 0.3, hamstrings: 0.09, glutes: 0.11, arms: 0.1 },
+  'rower interval': pm(
+    {
+      quads: 0.3, gluteMax: 0.15, hamstrings: 0.12, lats: 0.09, abs: 0.08, lowerBack: 0.08,
+      upperBack: 0.05, biceps: 0.04, obliques: 0.04, calves: 0.03, forearms: 0.02,
+    },
     'endurance',
     'sagittal',
     { systemic: true },
   ),
-  'row erg interval': p(
-    { back: 0.4, quads: 0.3, hamstrings: 0.09, glutes: 0.11, arms: 0.1 },
+  'row erg interval': pm(
+    {
+      quads: 0.3, gluteMax: 0.15, hamstrings: 0.12, lats: 0.09, abs: 0.08, lowerBack: 0.08,
+      upperBack: 0.05, biceps: 0.04, obliques: 0.04, calves: 0.03, forearms: 0.02,
+    },
     'endurance',
     'sagittal',
     { systemic: true },
@@ -532,53 +560,74 @@ const RAW_EXACT: Record<string, MovementProfile> = {
   // every qualified name still reaches rule:horizontal-pull. That rule used to
   // take this one too: 30 minutes of rowing read as back/arms lifting, and with
   // its bwLoad of 0 and no forceFactor, priced at zero work.
-  row: p(
-    { back: 0.4, quads: 0.3, hamstrings: 0.09, glutes: 0.11, arms: 0.1 },
+  row: pm(
+    {
+      quads: 0.3, gluteMax: 0.15, hamstrings: 0.12, lats: 0.09, abs: 0.08, lowerBack: 0.08,
+      upperBack: 0.05, biceps: 0.04, obliques: 0.04, calves: 0.03, forearms: 0.02,
+    },
     'endurance',
     'sagittal',
     { systemic: true },
   ),
-  zone: p(
-    { quads: 0.35, hamstrings: 0.1575, glutes: 0.1925, calves: 0.15, back: 0.15 },
+  zone: pm(
+    {
+      quads: 0.35, gluteMax: 0.19, hamstrings: 0.16, calves: 0.15, lats: 0.08, upperBack: 0.04,
+      lowerBack: 0.03,
+    },
     'endurance',
     'sagittal',
     { systemic: true },
   ),
-  run: p(
-    { hamstrings: 0.175, glutes: 0.175, quads: 0.3, calves: 0.25, core: 0.1 },
+  run: pm(
+    {
+      quads: 0.27, calves: 0.22, hamstrings: 0.17, gluteMax: 0.13, hipFlexors: 0.06, gluteMed: 0.05,
+      adductors: 0.03, tibialis: 0.03, abs: 0.02, obliques: 0.02,
+    },
     'endurance',
     'sagittal',
     { systemic: true },
   ),
-  cycle: p({ quads: 0.5, hamstrings: 0.12, glutes: 0.18, calves: 0.2 }, 'endurance', 'sagittal', {
+  cycle: pm({ quads: 0.5, gluteMax: 0.18, calves: 0.17, hamstrings: 0.12, tibialis: 0.03 }, 'endurance', 'sagittal', {
     systemic: true,
   }),
-  stairmaster: p({ quads: 0.4, hamstrings: 0.1225, glutes: 0.2275, calves: 0.25 }, 'endurance', 'sagittal', {
+  stairmaster: pm({
+                    quads: 0.37, calves: 0.22, gluteMax: 0.2, hamstrings: 0.12, adductors: 0.03,
+                    gluteMed: 0.03, tibialis: 0.03,
+                  }, 'endurance', 'sagittal', {
     systemic: true,
   }),
 
   // --- mobility / prep
-  'hip mobility flow': p(
-    { quads: 0.4, hamstrings: 0.16, glutes: 0.24, core: 0.2 },
+  'hip mobility flow': pm(
+    {
+      quads: 0.25, hamstrings: 0.16, adductors: 0.15, hipFlexors: 0.15, gluteMax: 0.14,
+      gluteMed: 0.1, obliques: 0.05,
+    },
     'mobility',
     { sagittal: 0.4, frontal: 0.3, transverse: 0.3 },
   ),
-  'hip flow': p(
-    { quads: 0.4, hamstrings: 0.16, glutes: 0.24, core: 0.2 },
+  'hip flow': pm(
+    {
+      quads: 0.25, hamstrings: 0.16, adductors: 0.15, hipFlexors: 0.15, gluteMax: 0.14,
+      gluteMed: 0.1, obliques: 0.05,
+    },
     'mobility',
     { sagittal: 0.4, frontal: 0.3, transverse: 0.3 },
   ),
-  'couch stretch': p({ quads: 1 }, 'mobility', 'sagittal'),
-  'hip stretch': p({ quads: 0.5, hamstrings: 0.25, glutes: 0.25 }, 'mobility', 'sagittal'),
-  pigeon: p({ hamstrings: 0.18, glutes: 0.42, quads: 0.4 }, 'mobility', { frontal: 0.5, transverse: 0.5 }),
-  'kettlebell halo': p({ shoulders: 0.6, core: 0.4 }, 'mobility', 'transverse'),
-  halo: p({ shoulders: 0.6, core: 0.4 }, 'mobility', 'transverse'),
-  'shoulder prep': p({ shoulders: 1 }, 'mobility', {
+  'couch stretch': pm({ hipFlexors: 0.55, quads: 0.45 }, 'mobility', 'sagittal'),
+  'hip stretch': pm({ hipFlexors: 0.3, gluteMax: 0.25, hamstrings: 0.25, adductors: 0.2 }, 'mobility', 'sagittal'),
+  pigeon: pm({ gluteMax: 0.3, hipFlexors: 0.25, hamstrings: 0.18, quads: 0.15, gluteMed: 0.12 }, 'mobility', { frontal: 0.5, transverse: 0.5 }),
+  'kettlebell halo': pm({
+                          frontDelts: 0.22, abs: 0.2, obliques: 0.2, sideDelts: 0.2,
+                          rearDelts: 0.18,
+                        }, 'mobility', 'transverse'),
+  halo: pm({ frontDelts: 0.22, abs: 0.2, obliques: 0.2, sideDelts: 0.2, rearDelts: 0.18 }, 'mobility', 'transverse'),
+  'shoulder prep': pm({ frontDelts: 0.4, sideDelts: 0.35, rearDelts: 0.25 }, 'mobility', {
     frontal: 0.4,
     transverse: 0.4,
     sagittal: 0.2,
   }),
-  'adductor work': p({ quads: 1 }, 'mobility', 'frontal'),
+  'adductor work': pm({ adductors: 1 }, 'mobility', 'frontal'),
 
   // --- CrossFit / Hyrox movements the rules leave unknown. Added deliberately,
   // one anatomy at a time, after cross-checking each primary mover against an
@@ -588,52 +637,64 @@ const RAW_EXACT: Record<string, MovementProfile> = {
   //
   // Front squat into an overhead press: anterior legs and shoulders lead, with
   // the trunk bracing the rack-to-lockout path. Full-body, so systemic.
-  thruster: p(
-    { quads: 0.35, shoulders: 0.35, hamstrings: 0.06, glutes: 0.09, core: 0.15 },
+  thruster: pm(
+    {
+      quads: 0.32, frontDelts: 0.24, sideDelts: 0.11, abs: 0.1, gluteMax: 0.09, hamstrings: 0.06,
+      obliques: 0.05, adductors: 0.03,
+    },
     'resistance',
     'sagittal',
     { systemic: true, rom: ROM.squat },
   ),
   // A vertical pull that finishes as a dip — back and arms lead, the plane
   // starts frontal (pull) and turns sagittal (press over the bar).
-  'muscle up': p(
-    { back: 0.45, arms: 0.3, chest: 0.15, shoulders: 0.1 },
+  'muscle up': pm(
+    {
+      lats: 0.35, pecs: 0.15, triceps: 0.13, biceps: 0.12, frontDelts: 0.1, forearms: 0.05,
+      traps: 0.05, upperBack: 0.05,
+    },
     'resistance',
     { frontal: 0.6, sagittal: 0.4 },
     { systemic: true, rom: ROM.pullVertical },
   ),
   // Bodyweight vertical pull carried by grip; legs assist but back/arms move it.
-  'rope climb': p(
-    { back: 0.5, arms: 0.4, core: 0.1 },
+  'rope climb': pm(
+    { lats: 0.4, biceps: 0.22, forearms: 0.18, upperBack: 0.1, abs: 0.05, hipFlexors: 0.05 },
     'resistance',
     'frontal',
     { systemic: true, rom: ROM.pullVertical },
   ),
   // Dynamic trunk flexion, same shape as the hanging knee raise / ab wheel.
-  'v up': p({ core: 1 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
+  'v up': pm({ abs: 0.55, hipFlexors: 0.35, obliques: 0.1 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
   // Jump-rope conditioning: calf/ankle dominant, sustained — endurance, systemic.
-  'double under': p(
-    { calves: 0.55, quads: 0.25, core: 0.2 },
+  'double under': pm(
+    { calves: 0.5, quads: 0.25, abs: 0.1, hipFlexors: 0.05, obliques: 0.05, tibialis: 0.05 },
     'endurance',
     'sagittal',
     { systemic: true, rom: ROM.skip },
   ),
-  'single under': p(
-    { calves: 0.55, quads: 0.25, core: 0.2 },
+  'single under': pm(
+    { calves: 0.5, quads: 0.25, abs: 0.1, hipFlexors: 0.05, obliques: 0.05, tibialis: 0.05 },
     'endurance',
     'sagittal',
     { systemic: true, rom: ROM.skip },
   ),
   // Squat-thrust-jump-pushup: whole-body conditioning spanning legs, chest and
   // trunk. The dumbbell-facing variant loads the same pattern.
-  burpee: p(
-    { quads: 0.3, chest: 0.2, hamstrings: 0.1, glutes: 0.1, shoulders: 0.15, core: 0.15 },
+  burpee: pm(
+    {
+      quads: 0.25, pecs: 0.22, calves: 0.1, frontDelts: 0.1, gluteMax: 0.1, triceps: 0.08,
+      abs: 0.07, hamstrings: 0.05, hipFlexors: 0.03,
+    },
     'endurance',
     'sagittal',
     { systemic: true, rom: ROM.burpee },
   ),
-  'dumbbell facing burpee': p(
-    { quads: 0.3, chest: 0.2, hamstrings: 0.1, glutes: 0.1, shoulders: 0.15, core: 0.15 },
+  'dumbbell facing burpee': pm(
+    {
+      quads: 0.25, pecs: 0.22, calves: 0.1, frontDelts: 0.1, gluteMax: 0.1, triceps: 0.08,
+      abs: 0.07, hamstrings: 0.05, hipFlexors: 0.03,
+    },
     'endurance',
     'sagittal',
     { systemic: true, rom: ROM.burpee },
@@ -643,8 +704,65 @@ const RAW_EXACT: Record<string, MovementProfile> = {
   // but "push up" is a fragment of the horizontal-push rule, which was filing it
   // under chest. EXACT beats RULES, so this pins the right anatomy. Not systemic
   // — it's a strict strength movement, not conditioning.
-  'handstand push up': p(
-    { shoulders: 0.55, arms: 0.3, core: 0.15 },
+  'handstand push up': pm(
+    { frontDelts: 0.4, triceps: 0.3, sideDelts: 0.15, abs: 0.1, obliques: 0.05 },
+    'resistance',
+    'sagittal',
+    { rom: ROM.pushVertical },
+  ),
+
+  // Dumbbell burpee into a double-dumbbell swing to overhead. Loaded, so resistance like
+  // thruster; plane and ROM copied from burpee.
+  'devil press': pm(
+    {
+      gluteMax: 0.17, frontDelts: 0.12, pecs: 0.12, hamstrings: 0.11, quads: 0.1, abs: 0.07,
+      triceps: 0.07, traps: 0.06, lowerBack: 0.05, lats: 0.04, obliques: 0.04, sideDelts: 0.03,
+      forearms: 0.02,
+    },
+    'resistance',
+    'sagittal',
+    { systemic: true, rom: ROM.burpee },
+  ),
+  // Chest off the ground, glutes and quads for the step-over. Conditioning, so endurance like
+  // burpee.
+  'burpee box step over': pm(
+    {
+      quads: 0.28, gluteMax: 0.18, pecs: 0.18, frontDelts: 0.08, abs: 0.06, calves: 0.06,
+      hamstrings: 0.06, triceps: 0.06, adductors: 0.02, hipFlexors: 0.02,
+    },
+    'endurance',
+    'sagittal',
+    { systemic: true, rom: ROM.burpee },
+  ),
+  // Rope-climb scaling: lying, hand over hand to standing. Plane and ROM copied from rope
+  // climb.
+  'pull to stand': pm(
+    { lats: 0.45, biceps: 0.22, forearms: 0.18, upperBack: 0.1, abs: 0.05 },
+    'resistance',
+    'frontal',
+    { systemic: true, rom: ROM.pullVertical },
+  ),
+  // RDL plus gluteMed and obliques for single-leg balance.
+  'single leg romanian deadlift': pm(
+    {
+      hamstrings: 0.42, gluteMax: 0.22, gluteMed: 0.1, lowerBack: 0.1, obliques: 0.05,
+      adductors: 0.04, forearms: 0.03, abs: 0.02, calves: 0.02,
+    },
+    'resistance',
+    'sagittal',
+    { rom: ROM.hinge },
+  ),
+  // Same as overhead press; reachable before only through a saved override.
+  'kettlebell press': pm(
+    { frontDelts: 0.42, triceps: 0.25, sideDelts: 0.18, abs: 0.09, obliques: 0.06 },
+    'resistance',
+    'sagittal',
+    { rom: ROM.pushVertical },
+  ),
+  // Owner-reviewed muscles: kneeling takes the legs out, so obliques share the brace. An EXACT
+  // so it stops falling to rule:landmine-press.
+  'kneeling landmine press': pm(
+    { frontDelts: 0.4, pecs: 0.2, obliques: 0.2, triceps: 0.12, sideDelts: 0.08 },
     'resistance',
     'sagittal',
     { rom: ROM.pushVertical },
@@ -659,8 +777,12 @@ const RAW_EXACT: Record<string, MovementProfile> = {
 const RAW_RULES: MovementRule[] = [
   {
     id: 'erg-endurance',
-    match: ['ski erg', 'row erg', 'rower', 'erg', 'treadmill', 'stairmaster', 'elliptical'],
-    profile: p({ back: 0.4, quads: 0.3, hamstrings: 0.09, glutes: 0.11, arms: 0.1 }, 'endurance', 'sagittal', {
+    match: ['rower', 'row erg', 'erg'],
+    profile: pm({
+                  quads: 0.3, gluteMax: 0.15, hamstrings: 0.12, lats: 0.09, abs: 0.08,
+                  lowerBack: 0.08, upperBack: 0.05, biceps: 0.04, obliques: 0.04, calves: 0.03,
+                  forearms: 0.02,
+                }, 'endurance', 'sagittal', {
       systemic: true,
     }),
   },
@@ -669,9 +791,28 @@ const RAW_RULES: MovementRule[] = [
     // `bike` and `cycling` USED to live here, which made every ride resolve to
     // the running profile — the same bwLoad and the same cost per metre, over
     // distances four to six times longer. They have their own rules below.
-    match: ['jog', 'sprint', 'swim', 'walk', 'hike', 'ruck'],
-    profile: p(
-      { hamstrings: 0.175, glutes: 0.175, quads: 0.3, calves: 0.25, core: 0.1 },
+    match: ['jog', 'sprint', 'swim', 'walk', 'hike', 'ruck', 'stairmaster'],
+    profile: pm(
+      {
+        quads: 0.27, calves: 0.22, hamstrings: 0.17, gluteMax: 0.13, hipFlexors: 0.06,
+        gluteMed: 0.05, adductors: 0.03, tibialis: 0.03, abs: 0.02, obliques: 0.02,
+      },
+      'endurance',
+      'sagittal',
+      { systemic: true },
+    ),
+  },
+  {
+    // Treadmill and elliptical keep the old erg-endurance estimates (bwLoad 0, the
+    // erg force and calorie factors) when the review moved them to locomotion,
+    // which would have priced them at bwLoad 0.5. Same muscles as locomotion.
+    id: 'machine-locomotion',
+    match: ['treadmill', 'elliptical'],
+    profile: pm(
+      {
+        quads: 0.27, calves: 0.22, hamstrings: 0.17, gluteMax: 0.13, hipFlexors: 0.06,
+        gluteMed: 0.05, adductors: 0.03, tibialis: 0.03, abs: 0.02, obliques: 0.02,
+      },
       'endurance',
       'sagittal',
       { systemic: true },
@@ -683,7 +824,7 @@ const RAW_RULES: MovementRule[] = [
     id: 'cycling',
     match: ['bike', 'cycling'],
     not: ['assault', 'air bike', 'echo', 'fan bike'],
-    profile: p({ quads: 0.5, hamstrings: 0.12, glutes: 0.18, calves: 0.2 }, 'endurance', 'sagittal', {
+    profile: pm({ quads: 0.5, gluteMax: 0.18, calves: 0.17, hamstrings: 0.12, tibialis: 0.03 }, 'endurance', 'sagittal', {
       systemic: true,
     }),
   },
@@ -693,8 +834,11 @@ const RAW_RULES: MovementRule[] = [
     // just above a rower's — where a road bike's sits far below.
     id: 'air-bike',
     match: ['assault bike', 'air bike', 'echo bike', 'fan bike'],
-    profile: p(
-      { quads: 0.3, back: 0.2, arms: 0.2, hamstrings: 0.1, glutes: 0.1, core: 0.1 },
+    profile: pm(
+      {
+        quads: 0.3, lats: 0.12, gluteMax: 0.1, hamstrings: 0.1, biceps: 0.08, triceps: 0.08,
+        upperBack: 0.08, abs: 0.05, obliques: 0.05, forearms: 0.04,
+      },
       'endurance',
       'sagittal',
       { systemic: true },
@@ -716,8 +860,12 @@ const RAW_RULES: MovementRule[] = [
     match: ['padel', 'tennis', 'squash', 'pickleball', 'badminton', 'racquetball'],
     // A different sport, a ball used as a tool, and an injury used as a name.
     not: ['table tennis', 'tennis ball', 'tennis elbow'],
-    profile: p(
-      { quads: 0.25, glutes: 0.15, hamstrings: 0.1, calves: 0.15, core: 0.15, shoulders: 0.12, arms: 0.08 },
+    profile: pm(
+      {
+        quads: 0.2, calves: 0.15, gluteMax: 0.1, hamstrings: 0.1, obliques: 0.1, abs: 0.05,
+        adductors: 0.05, forearms: 0.05, frontDelts: 0.05, gluteMed: 0.05, rearDelts: 0.04,
+        sideDelts: 0.03, triceps: 0.03,
+      },
       'endurance',
       { frontal: 0.4, transverse: 0.35, sagittal: 0.25 },
       { systemic: true },
@@ -725,8 +873,8 @@ const RAW_RULES: MovementRule[] = [
   },
   {
     id: 'jump-plyo',
-    match: ['jump', 'hop', 'bound', 'throw', 'slam', 'clean', 'snatch', 'jerk'],
-    profile: p({ quads: 0.4, hamstrings: 0.175, glutes: 0.175, core: 0.25 }, 'plyometric', 'sagittal', {
+    match: ['jump', 'hop', 'bound'],
+    profile: pm({ quads: 0.45, gluteMax: 0.2, calves: 0.15, hamstrings: 0.12, hipFlexors: 0.08 }, 'plyometric', 'sagittal', {
       systemic: true, rom: ROM.jump },
   ),
   },
@@ -738,7 +886,10 @@ const RAW_RULES: MovementRule[] = [
     // squat, and 'skater' would outlength 'squat' and turn it into a jump.
     id: 'lateral-plyo',
     match: ['lateral bound', 'lateral jump', 'lateral hop', 'skater jump', 'skater bound', 'skater hop'],
-    profile: p(BW_JUMP, 'plyometric', { frontal: 0.7, sagittal: 0.3 }, { systemic: true, rom: ROM.jump }),
+    profile: pm({
+                  quads: 0.38, gluteMax: 0.14, calves: 0.13, adductors: 0.1, gluteMed: 0.1,
+                  hamstrings: 0.1, obliques: 0.05,
+                }, 'plyometric', { frontal: 0.7, sagittal: 0.3 }, { systemic: true, rom: ROM.jump }),
   },
   {
     id: 'squat-pattern',
@@ -746,8 +897,8 @@ const RAW_RULES: MovementRule[] = [
     // patterns are a separate rule below with a more posterior split, and
     // longest-fragment-wins routes 'split squat' there without any ordering.
     match: ['squat', 'leg press'],
-    profile: p(
-      { quads: 0.6, hamstrings: 0.098, glutes: 0.182, core: 0.12 },
+    profile: pm(
+      { quads: 0.5, gluteMax: 0.18, adductors: 0.1, hamstrings: 0.1, abs: 0.07, obliques: 0.05 },
       'resistance',
       'sagittal',
       { rom: ROM.squat },
@@ -756,7 +907,10 @@ const RAW_RULES: MovementRule[] = [
   {
     id: 'lunge-pattern',
     match: ['lunge', 'split squat', 'step up'],
-    profile: p(LUNGE, 'resistance', 'sagittal', { rom: ROM.lunge }),
+    profile: pm({
+                  quads: 0.44, gluteMax: 0.19, hamstrings: 0.16, adductors: 0.06, abs: 0.05,
+                  gluteMed: 0.05, obliques: 0.05,
+                }, 'resistance', 'sagittal', { rom: ROM.lunge }),
   },
   {
     // A lunge stepped out to the side. Same anatomy as the lunge family, and the
@@ -765,7 +919,10 @@ const RAW_RULES: MovementRule[] = [
     // Every fragment outlengthens 'lunge' / 'step up', so no ordering is needed.
     id: 'lateral-lunge',
     match: ['lateral lunge', 'side lunge', 'lateral step up'],
-    profile: p(LUNGE, 'resistance', { frontal: 0.7, sagittal: 0.3 }, { rom: ROM.lunge }),
+    profile: pm({
+                  quads: 0.3, adductors: 0.2, hamstrings: 0.16, gluteMax: 0.14, gluteMed: 0.1,
+                  abs: 0.05, obliques: 0.05,
+                }, 'resistance', { frontal: 0.7, sagittal: 0.3 }, { rom: ROM.lunge }),
   },
   {
     // The rear leg crosses BEHIND the front one. The descent is still a lunge —
@@ -775,8 +932,11 @@ const RAW_RULES: MovementRule[] = [
     // posterior share and everything it did off the sagittal plane.
     id: 'curtsy-lunge',
     match: ['curtsy lunge', 'curtsy squat'],
-    profile: p(
-      LUNGE,
+    profile: pm(
+      {
+        quads: 0.42, hamstrings: 0.16, gluteMax: 0.14, gluteMed: 0.1, adductors: 0.08, abs: 0.05,
+        obliques: 0.05,
+      },
       'resistance',
       { sagittal: 0.4, frontal: 0.3, transverse: 0.3 },
       { rom: ROM.lunge },
@@ -784,9 +944,9 @@ const RAW_RULES: MovementRule[] = [
   },
   {
     id: 'hinge-pattern',
-    match: ['deadlift', 'romanian deadlift', 'good morning', 'hip thrust', 'glute bridge', 'swing'],
-    profile: p(
-      { hamstrings: 0.4125, glutes: 0.3375, core: 0.15, back: 0.1 },
+    match: ['good morning'],
+    profile: pm(
+      { hamstrings: 0.41, gluteMax: 0.3, lowerBack: 0.1, abs: 0.08, obliques: 0.07, gluteMed: 0.04 },
       'resistance',
       'sagittal',
       { rom: ROM.hinge },
@@ -795,22 +955,22 @@ const RAW_RULES: MovementRule[] = [
   {
     id: 'hamstring-isolation',
     match: ['leg curl', 'nordic', 'ham curl'],
-    profile: p({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
+    profile: pm({ hamstrings: 1 }, 'resistance', 'sagittal', { rom: ROM.hipIsolation }),
   },
   {
     id: 'quad-isolation',
     match: ['leg extension', 'knee extension'],
-    profile: p({ quads: 1 }, 'resistance', 'sagittal', { rom: ROM.kneeIsolation }),
+    profile: pm({ quads: 1 }, 'resistance', 'sagittal', { rom: ROM.kneeIsolation }),
   },
   {
     id: 'calf',
     match: ['calf raise', 'calf'],
-    profile: p({ calves: 1 }, 'resistance', 'sagittal', { rom: ROM.calf }),
+    profile: pm({ calves: 1 }, 'resistance', 'sagittal', { rom: ROM.calf }),
   },
   {
     id: 'horizontal-push',
     match: ['bench', 'chest press', 'machine press', 'fly'],
-    profile: p(PUSH_HORIZONTAL, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
+    profile: pm({ pecs: 0.6, frontDelts: 0.25, triceps: 0.15 }, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
   },
   // Every push-up VARIANT (med-ball, deficit, decline, banded...) bears the
   // athlete, exactly like the EXACT 'push up'. It used to be a fragment of
@@ -820,18 +980,18 @@ const RAW_RULES: MovementRule[] = [
   {
     id: 'push-up',
     match: ['push up'],
-    profile: p(PUSH_HORIZONTAL, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
+    profile: pm({ pecs: 0.6, frontDelts: 0.25, triceps: 0.15 }, 'resistance', 'sagittal', { rom: ROM.pushHorizontal }),
   },
   {
     id: 'dip',
     match: ['dip'],
-    profile: p(DIP, 'resistance', 'sagittal', { rom: ROM.dip }),
+    profile: pm({ pecs: 0.45, triceps: 0.35, frontDelts: 0.2 }, 'resistance', 'sagittal', { rom: ROM.dip }),
   },
   {
     id: 'vertical-push',
-    match: ['overhead press', 'military press', 'shoulder press', 'push press', 'landmine press'],
-    profile: p(
-      { shoulders: 0.6, arms: 0.25, core: 0.15 },
+    match: ['overhead press', 'military press', 'shoulder press', 'push press'],
+    profile: pm(
+      { frontDelts: 0.42, triceps: 0.25, sideDelts: 0.18, abs: 0.09, obliques: 0.06 },
       'resistance',
       'sagittal',
       { rom: ROM.pushVertical },
@@ -839,13 +999,13 @@ const RAW_RULES: MovementRule[] = [
   },
   {
     id: 'delt-isolation',
-    match: ['lateral raise', 'shoulder raise', 'front raise', 'rear delt'],
-    profile: p({ shoulders: 1 }, 'resistance', 'frontal', { rom: ROM.deltIsolation }),
+    match: ['shoulder raise'],
+    profile: pm({ frontDelts: 0.5, sideDelts: 0.5 }, 'resistance', 'frontal', { rom: ROM.deltIsolation }),
   },
   {
     id: 'vertical-pull',
     match: ['pull up', 'chin up', 'lat pulldown', 'pulldown'],
-    profile: p(VERTICAL_PULL, 'resistance', 'frontal', { rom: ROM.pullVertical }),
+    profile: pm({ lats: 0.48, biceps: 0.2, upperBack: 0.15, forearms: 0.1, traps: 0.07 }, 'resistance', 'frontal', { rom: ROM.pullVertical }),
   },
   {
     id: 'horizontal-pull',
@@ -853,12 +1013,12 @@ const RAW_RULES: MovementRule[] = [
     // 'rower'/'row erg' win on fragment length. 'throw' is vetoed explicitly.
     match: ['row', 'seal row', 'inverted row'],
     not: ['throw', 'rower', 'erg'],
-    profile: p(ROW, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
+    profile: pm({ lats: 0.32, upperBack: 0.26, biceps: 0.2, traps: 0.12, forearms: 0.1 }, 'resistance', 'sagittal', { rom: ROM.pullHorizontal }),
   },
   {
     id: 'upper-back-prehab',
     match: ['face pull', 'pull apart', 'reverse fly'],
-    profile: p({ back: 0.6, shoulders: 0.4 }, 'resistance', 'transverse', { rom: ROM.prehab }),
+    profile: pm({ upperBack: 0.45, rearDelts: 0.4, traps: 0.15 }, 'resistance', 'transverse', { rom: ROM.prehab }),
   },
   {
     id: 'arm-isolation',
@@ -867,24 +1027,24 @@ const RAW_RULES: MovementRule[] = [
     // not a small loss: it leaves the sets out of every region count AND drags
     // `coverage` down, which is the gate hypertrophyVolumeShort refuses to
     // speak below.
-    match: ['curl', 'tricep', 'bicep', 'pushdown', 'skullcrusher', 'skull crusher'],
+    match: ['curl', 'bicep'],
     not: ['leg curl', 'ham curl', 'nordic'],
-    profile: p({ arms: 1 }, 'resistance', 'sagittal', { rom: ROM.armIsolation }),
+    profile: pm({ biceps: 0.85, forearms: 0.15 }, 'resistance', 'sagittal', { rom: ROM.armIsolation }),
   },
   {
     id: 'anti-rotation',
     match: ['pallof', 'anti rotation', 'anti rotational'],
-    profile: p({ core: 1 }, 'isometric', 'transverse', { rotary: 'antiRotational' }),
+    profile: pm({ obliques: 0.65, abs: 0.35 }, 'isometric', 'transverse', { rotary: 'antiRotational' }),
   },
   {
     id: 'rotation',
     match: ['twist', 'russian twist', 'wood chop', 'chop', 'rotation'],
-    profile: p({ core: 0.8, shoulders: 0.2 }, 'resistance', 'transverse', { rotary: 'rotational' }),
+    profile: pm({ obliques: 0.55, abs: 0.25, frontDelts: 0.1, rearDelts: 0.05, sideDelts: 0.05 }, 'resistance', 'transverse', { rotary: 'rotational' }),
   },
   {
     id: 'core-isometric',
     match: ['plank', 'hollow hold', 'dead bug', 'bird dog'],
-    profile: p({ core: 1 }, 'isometric', 'sagittal'),
+    profile: pm({ abs: 0.6, obliques: 0.25, hipFlexors: 0.15 }, 'isometric', 'sagittal'),
   },
   {
     // A side plank held up by the top leg's adductors — which fold into `quads`
@@ -894,18 +1054,21 @@ const RAW_RULES: MovementRule[] = [
     // interchangeably, so both land here. 'copenhagen' outlengthens 'plank'.
     id: 'copenhagen',
     match: ['copenhagen'],
-    profile: p({ quads: 0.6, core: 0.4 }, 'isometric', 'frontal'),
+    profile: pm({ adductors: 0.6, obliques: 0.4 }, 'isometric', 'frontal'),
   },
   {
     id: 'core-dynamic',
-    match: ['crunch', 'sit up', 'knee raise', 'leg raise', 'ab wheel', 'rollout', 'ab routine'],
-    profile: p({ core: 1 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
+    match: ['crunch', 'ab routine'],
+    profile: pm({ abs: 0.8, obliques: 0.2 }, 'resistance', 'sagittal', { rom: ROM.coreDynamic }),
   },
   {
     id: 'carry',
-    match: ['carry', 'farmer', 'suitcase carry'],
-    profile: p(
-      { core: 0.35, arms: 0.25, shoulders: 0.2, hamstrings: 0.08, glutes: 0.12 },
+    match: ['carry', 'farmer'],
+    profile: pm(
+      {
+        obliques: 0.35, forearms: 0.25, gluteMed: 0.12, traps: 0.12, abs: 0.06, gluteMax: 0.05,
+        lowerBack: 0.05,
+      },
       'endurance',
       'frontal',
       { systemic: true },
@@ -914,8 +1077,11 @@ const RAW_RULES: MovementRule[] = [
   {
     id: 'sled',
     match: ['sled'],
-    profile: p(
-      { quads: 0.5, hamstrings: 0.125, glutes: 0.125, calves: 0.15, core: 0.1 },
+    profile: pm(
+      {
+        quads: 0.45, calves: 0.15, gluteMax: 0.13, hamstrings: 0.12, abs: 0.05, adductors: 0.05,
+        obliques: 0.05,
+      },
       'resistance',
       'sagittal',
       { systemic: true },
@@ -930,15 +1096,15 @@ const RAW_RULES: MovementRule[] = [
   // so no ordering is needed.
   {
     id: 'shoulder-mobility',
-    match: ['shoulder mobility', 'shoulder car', 'wall slide', 'shoulder dislocate'],
-    profile: p({ shoulders: 0.7, back: 0.3 }, 'mobility', { frontal: 0.4, transverse: 0.4, sagittal: 0.2 }),
+    match: ['shoulder mobility', 'shoulder car', 'wall slide', 'shoulder dislocate', 'shoulder stretch'],
+    profile: pm({ frontDelts: 0.25, rearDelts: 0.25, sideDelts: 0.2, upperBack: 0.2, lats: 0.1 }, 'mobility', { frontal: 0.4, transverse: 0.4, sagittal: 0.2 }),
   },
   {
     // Band pull-aparts done as warm-up prep. Bare, they stay upper-back-prehab
     // resistance, which is how the logs already hold them.
     id: 'scapular-mobility',
     match: ['pull apart mobility', 'scap mobility', 'scapular mobility'],
-    profile: p({ back: 0.6, shoulders: 0.4 }, 'mobility', 'transverse'),
+    profile: pm({ upperBack: 0.4, rearDelts: 0.3, traps: 0.2, sideDelts: 0.1 }, 'mobility', 'transverse'),
   },
   {
     // Upper-back rotation and segmental flexion/extension. 'thoracic rotation'
@@ -949,7 +1115,10 @@ const RAW_RULES: MovementRule[] = [
       'thoracic mobility', 'thoracic spine', 'thoracic rotation', 'spine mobility',
       'open book', 'thread the needle', 'cat cow', 'cat cow mobility',
     ],
-    profile: p({ back: 0.5, core: 0.3, shoulders: 0.2 }, 'mobility', { transverse: 0.5, sagittal: 0.5 }),
+    profile: pm({
+                  upperBack: 0.3, obliques: 0.2, abs: 0.1, frontDelts: 0.1, lats: 0.1,
+                  lowerBack: 0.1, rearDelts: 0.1,
+                }, 'mobility', { transverse: 0.5, sagittal: 0.5 }),
   },
   {
     // Hip rotation: the 90/90 (written "Shin Box", because the numbers are
@@ -959,52 +1128,347 @@ const RAW_RULES: MovementRule[] = [
       'shin box', 'shin box mobility', 'hip car', 'hip car mobility', 'pigeon mobility',
       'hip rotation mobility', 'hip internal rotation', 'hip external rotation',
     ],
-    profile: p({ glutes: 0.45, quads: 0.35, hamstrings: 0.2 }, 'mobility', { transverse: 0.6, frontal: 0.4 }),
+    profile: pm({
+                  gluteMed: 0.25, adductors: 0.2, gluteMax: 0.2, hamstrings: 0.2, hipFlexors: 0.1,
+                  quads: 0.05,
+                }, 'mobility', { transverse: 0.6, frontal: 0.4 }),
   },
   {
     // Hip-flexor length — rectus femoris folds into `quads`, as in 'couch stretch'.
     id: 'hip-flexor-mobility',
     match: ['couch stretch', 'hip flexor'],
-    profile: p({ quads: 1 }, 'mobility', 'sagittal'),
+    profile: pm({ hipFlexors: 0.55, quads: 0.45 }, 'mobility', 'sagittal'),
   },
   {
     id: 'ankle-mobility',
     match: ['ankle mobility', 'ankle rock', 'knee to wall'],
-    profile: p({ calves: 1 }, 'mobility', 'sagittal'),
+    profile: pm({ calves: 0.85, tibialis: 0.15 }, 'mobility', 'sagittal'),
   },
   {
     // 'jefferson curl' outlengthens rule:arm-isolation's 'curl', which read a
     // loaded spinal-flexion drill as a biceps curl.
     id: 'hamstring-mobility',
     match: ['hamstring mobility', 'hamstring floss', 'jefferson curl'],
-    profile: p({ hamstrings: 0.6, back: 0.4 }, 'mobility', 'sagittal'),
+    profile: pm({ hamstrings: 0.6, lowerBack: 0.4 }, 'mobility', 'sagittal'),
   },
   {
     id: 'adductor-mobility',
     match: ['adductor mobility', 'adductor rock', 'frog stretch', 'frog mobility'],
-    profile: p({ quads: 1 }, 'mobility', 'frontal'),
+    profile: pm({ adductors: 1 }, 'mobility', 'frontal'),
   },
   {
     // A held deep squat is a position, not a set: 'squat hold' outlengthens
     // rule:squat-pattern's 'squat'.
     id: 'squat-mobility',
     match: ['squat mobility', 'deep squat hold'],
-    profile: p({ quads: 0.35, glutes: 0.3, calves: 0.2, hamstrings: 0.15 }, 'mobility', 'sagittal'),
+    profile: pm({
+                  gluteMax: 0.2, quads: 0.2, adductors: 0.15, calves: 0.15, hamstrings: 0.15,
+                  gluteMed: 0.1, tibialis: 0.05,
+                }, 'mobility', 'sagittal'),
   },
   {
     // Tibialis anterior folds into `calves`, the only lower-leg region.
     id: 'tibialis',
     match: ['tibialis', 'tib raise', 'tib bar'],
-    profile: p({ calves: 1 }, 'resistance', 'sagittal', { rom: ROM.calf }),
+    profile: pm({ tibialis: 1 }, 'resistance', 'sagittal', { rom: ROM.calf }),
   },
   {
     id: 'mobility',
     match: ['stretch', 'mobility', 'flow', 'halo', 'prep', 'foam roll', 'pigeon', 'yoga'],
-    profile: p({ core: 0.34, quads: 0.33, hamstrings: 0.1485, glutes: 0.1815 }, 'mobility', {
+    profile: pm({
+                  quads: 0.25, hamstrings: 0.15, abs: 0.14, gluteMax: 0.12, hipFlexors: 0.1,
+                  obliques: 0.1, adductors: 0.08, gluteMed: 0.06,
+                }, 'mobility', {
       sagittal: 0.4,
       frontal: 0.3,
       transverse: 0.3,
     }),
+  },
+  {
+    // SkiErg split out of erg-endurance (Q4): lats/triceps/abs-led with a hip-hinge share.
+    // Plane, systemic and work
+    // factors follow the EXACT ski erg interval.
+    id: 'ski-erg',
+    match: ['ski erg', 'skierg'],
+    profile: pm(
+      {
+        lats: 0.3, abs: 0.15, triceps: 0.15, gluteMax: 0.08, hamstrings: 0.05, hipFlexors: 0.05,
+        obliques: 0.05, pecs: 0.05, upperBack: 0.05, quads: 0.04, forearms: 0.03,
+      },
+      'endurance',
+      'sagittal',
+      { systemic: true },
+    ),
+  },
+  {
+    // Split out of jump-plyo; the med ball throw profile. No bare 'med ball' fragment, or Med-
+    // Ball Push-up would be captured.
+    id: 'throw-slam',
+    match: ['throw', 'slam', 'chest pass', 'toss'],
+    profile: pm(
+      {
+        obliques: 0.25, abs: 0.15, frontDelts: 0.15, lats: 0.12, pecs: 0.1, triceps: 0.1,
+        gluteMax: 0.08, quads: 0.05,
+      },
+      'plyometric',
+      'sagittal',
+      { systemic: true, rom: ROM.jump },
+    ),
+  },
+  {
+    // Split out of jump-plyo. 'squat clean' outlengthens rule:squat-pattern's 'squat'.
+    id: 'olympic-clean',
+    match: ['clean', 'squat clean'],
+    profile: pm(
+      {
+        gluteMax: 0.24, hamstrings: 0.18, quads: 0.18, traps: 0.12, lowerBack: 0.1, abs: 0.05,
+        forearms: 0.04, upperBack: 0.04, calves: 0.03, adductors: 0.02,
+      },
+      'plyometric',
+      'sagittal',
+      { systemic: true, rom: ROM.jump },
+    ),
+  },
+  {
+    // Split out of jump-plyo: the clean plus delts and upper back for the overhead catch.
+    // 'squat snatch' outlengthens 'squat'.
+    id: 'olympic-snatch',
+    match: ['snatch', 'squat snatch'],
+    profile: pm(
+      {
+        gluteMax: 0.2, hamstrings: 0.15, quads: 0.15, traps: 0.1, lowerBack: 0.08, upperBack: 0.08,
+        frontDelts: 0.06, abs: 0.04, sideDelts: 0.04, forearms: 0.03, triceps: 0.03,
+        adductors: 0.02, rearDelts: 0.02,
+      },
+      'plyometric',
+      'sagittal',
+      { systemic: true, rom: ROM.jump },
+    ),
+  },
+  {
+    // Split out of jump-plyo (Q5): quad-led dip-drive plus front delts and triceps.
+    id: 'jerk',
+    match: ['jerk', 'push jerk', 'split jerk'],
+    profile: pm(
+      {
+        quads: 0.3, frontDelts: 0.18, triceps: 0.15, gluteMax: 0.12, sideDelts: 0.07, abs: 0.06,
+        traps: 0.05, calves: 0.04, adductors: 0.03,
+      },
+      'plyometric',
+      'sagittal',
+      { systemic: true, rom: ROM.jump },
+    ),
+  },
+  {
+    // Split out of squat-pattern: the overhead hold adds shoulders and upper back. 'overhead
+    // squat' outlengthens 'squat'.
+    id: 'overhead-squat',
+    match: ['overhead squat'],
+    profile: pm(
+      {
+        quads: 0.42, gluteMax: 0.15, abs: 0.07, frontDelts: 0.06, hamstrings: 0.06, upperBack: 0.06,
+        adductors: 0.05, obliques: 0.05, sideDelts: 0.04, traps: 0.04,
+      },
+      'resistance',
+      'sagittal',
+      { rom: ROM.squat },
+    ),
+  },
+  {
+    // Split out of push-up so Pike Push-up reads shoulder-led. Plane, ROM and
+    // bwLoad follow the EXACT handstand push up.
+    id: 'handstand-push-up',
+    match: ['handstand push up', 'pike push up'],
+    profile: pm(
+      { frontDelts: 0.4, triceps: 0.3, sideDelts: 0.15, abs: 0.1, obliques: 0.05 },
+      'resistance',
+      'sagittal',
+      { rom: ROM.pushVertical },
+    ),
+  },
+  {
+    // Split out of hinge-pattern: glutes lead hamstrings, with erectors and quads. 'romanian
+    // deadlift' and its siblings outlength it.
+    id: 'deadlift',
+    match: ['deadlift'],
+    profile: pm(
+      {
+        gluteMax: 0.28, hamstrings: 0.22, lowerBack: 0.15, quads: 0.15, adductors: 0.05,
+        forearms: 0.05, traps: 0.05, abs: 0.03, upperBack: 0.02,
+      },
+      'resistance',
+      'sagittal',
+      { rom: ROM.hinge },
+    ),
+  },
+  {
+    // Split out of hinge-pattern: hamstrings lead glutes.
+    id: 'romanian-deadlift',
+    match: ['romanian deadlift', 'stiff leg deadlift', 'single leg deadlift'],
+    profile: pm(
+      {
+        hamstrings: 0.45, gluteMax: 0.25, lowerBack: 0.12, abs: 0.05, adductors: 0.05,
+        forearms: 0.05, gluteMed: 0.03,
+      },
+      'resistance',
+      'sagittal',
+      { rom: ROM.hinge },
+    ),
+  },
+  {
+    // Split out of hinge-pattern; the kettlebell swing profile, plyometric like it.
+    id: 'swing',
+    match: ['swing'],
+    profile: pm(
+      {
+        gluteMax: 0.38, hamstrings: 0.2, lowerBack: 0.12, abs: 0.1, forearms: 0.08,
+        frontDelts: 0.07, obliques: 0.05,
+      },
+      'plyometric',
+      'sagittal',
+      { rom: ROM.hinge },
+    ),
+  },
+  {
+    // Split out of vertical-push so variants read like the landmine press entry, with a chest
+    // share.
+    id: 'landmine-press',
+    match: ['landmine press'],
+    profile: pm(
+      { frontDelts: 0.5, pecs: 0.25, triceps: 0.15, sideDelts: 0.1 },
+      'resistance',
+      'sagittal',
+      { rom: ROM.pushVertical },
+    ),
+  },
+  {
+    // Split out of delt-isolation.
+    id: 'front-raise',
+    match: ['front raise'],
+    profile: pm(
+      { frontDelts: 0.9, sideDelts: 0.1 },
+      'resistance',
+      'frontal',
+      { rom: ROM.deltIsolation },
+    ),
+  },
+  {
+    // Split out of delt-isolation.
+    id: 'side-raise',
+    match: ['lateral raise', 'side raise', 'lateral delt'],
+    profile: pm(
+      { sideDelts: 0.9, frontDelts: 0.1 },
+      'resistance',
+      'frontal',
+      { rom: ROM.deltIsolation },
+    ),
+  },
+  {
+    // Split out of delt-isolation: rear delts with some upper back.
+    id: 'rear-delt',
+    match: ['rear delt'],
+    profile: pm(
+      { rearDelts: 0.85, upperBack: 0.15 },
+      'resistance',
+      'frontal',
+      { rom: ROM.deltIsolation },
+    ),
+  },
+  {
+    // Split out of arm-isolation so triceps work does not expand to biceps and forearms.
+    id: 'triceps-isolation',
+    match: ['tricep', 'pushdown', 'skullcrusher', 'skull crusher'],
+    profile: pm(
+      { triceps: 1 },
+      'resistance',
+      'sagittal',
+      { rom: ROM.armIsolation },
+    ),
+  },
+  {
+    // Split out of core-dynamic: ab wheel and rollout are abs.
+    id: 'ab-rollout',
+    match: ['ab wheel', 'rollout'],
+    profile: pm(
+      { abs: 0.85, obliques: 0.1, hipFlexors: 0.05 },
+      'resistance',
+      'sagittal',
+      { rom: ROM.coreDynamic },
+    ),
+  },
+  {
+    // Split out of core-dynamic: hip flexors and abs, forearms for the hang.
+    id: 'hanging-raise',
+    match: ['hanging knee raise', 'hanging leg raise', 'toe to bar', 'knee to elbow'],
+    profile: pm(
+      { hipFlexors: 0.45, abs: 0.37, forearms: 0.1, obliques: 0.08 },
+      'resistance',
+      'sagittal',
+      { rom: ROM.coreDynamic },
+    ),
+  },
+  {
+    // Split out of core-dynamic: floor and bench raises, no hang, so no forearms.
+    id: 'leg-raise',
+    match: ['knee raise', 'leg raise'],
+    profile: pm(
+      { hipFlexors: 0.5, abs: 0.42, obliques: 0.08 },
+      'resistance',
+      'sagittal',
+      { rom: ROM.coreDynamic },
+    ),
+  },
+  {
+    // Split out of core-dynamic: part hip flexor, part abs.
+    id: 'sit-up',
+    match: ['sit up'],
+    profile: pm(
+      { abs: 0.55, hipFlexors: 0.35, obliques: 0.1 },
+      'resistance',
+      'sagittal',
+      { rom: ROM.coreDynamic },
+    ),
+  },
+  {
+    // Split out of carry: a one-sided carry shifts to obliques.
+    id: 'suitcase-carry',
+    match: ['suitcase carry', 'suitcase'],
+    profile: pm(
+      {
+        obliques: 0.35, forearms: 0.25, gluteMed: 0.12, traps: 0.12, abs: 0.06, gluteMax: 0.05,
+        lowerBack: 0.05,
+      },
+      'endurance',
+      'frontal',
+      { systemic: true },
+    ),
+  },
+  {
+    // Split out of jump-plyo so burpee variants keep the floor push. Plane, ROM and
+    // bwLoad follow the EXACT burpee.
+    id: 'burpee',
+    match: ['burpee'],
+    profile: pm(
+      {
+        quads: 0.28, pecs: 0.18, gluteMax: 0.14, calves: 0.12, frontDelts: 0.08, hamstrings: 0.06,
+        triceps: 0.06, abs: 0.05, hipFlexors: 0.03,
+      },
+      'endurance',
+      'sagittal',
+      { systemic: true, rom: ROM.burpee },
+    ),
+  },
+  {
+    // Split out of hinge-pattern: every hip thrust variation is glute-led, matching the Hip
+    // Thrust Machine entry. Glute bridge included as the floor version.
+    id: 'hip-thrust',
+    match: ['hip thrust', 'glute bridge', 'single leg hip thrust', 'single leg glute bridge'],
+    profile: pm(
+      { gluteMax: 0.7, hamstrings: 0.2, gluteMed: 0.1 },
+      'resistance',
+      'sagittal',
+      { rom: ROM.hinge },
+    ),
   },
 ];
 
@@ -1013,7 +1477,7 @@ const RAW_RULES: MovementRule[] = [
 // `bwLoad` is the fraction of the athlete's own bodyweight a movement makes them
 // lift, which `setVolume` ADDS to any external weight so that weighted is always
 // >= bodyweight for the same movement. Kept as ONE table rather than an argument
-// on 100+ `p()` calls because these are ESTIMATES that were reviewed as a set:
+// on 100+ `pm()` calls because these are ESTIMATES that were reviewed as a set:
 // docs/bwload-review.csv is the round-tripped record, and this block is meant to
 // be diffed against it. Keys are the normalised EXACT name, or `rule:<id>`.
 //
@@ -1025,6 +1489,7 @@ const BW_LOAD: Record<string, number> = {
   'muscle up'                         : 1.0,
   'pull up'                           : 1.0,
   'rope climb'                        : 1.0,
+  'pull to stand'                     : 1.0,
   'weighted pull up'                  : 1.0,
   'dip'                               : 0.9,
   'handstand push up'                 : 0.9,
@@ -1038,9 +1503,16 @@ const BW_LOAD: Record<string, number> = {
   'farmer carry'                      : 0.8,
   'front squat'                       : 0.8,
   'rule:carry'                        : 0.8,
+  'rule:suitcase-carry'               : 0.8,
   'rule:hinge-pattern'                : 0.8,
+  'rule:hip-thrust'                   : 0.8,
+  'rule:swing'                        : 0.8,
+  'rule:romanian-deadlift'            : 0.8,
+  'single leg romanian deadlift'      : 0.8,
+  'rule:deadlift'                     : 0.8,
   'rule:sled'                         : 0.8,
   'rule:squat-pattern'                : 0.8,
+  'rule:overhead-squat'               : 0.8,
   'sled drag'                         : 0.8,
   'sled push'                         : 0.8,
   'stairmaster'                       : 0.8,
@@ -1053,6 +1525,8 @@ const BW_LOAD: Record<string, number> = {
   'rule:lateral-lunge'                : 0.75,
   'rule:lunge-pattern'                : 0.75,
   'burpee'                            : 0.65,
+  'burpee box step over'              : 0.65,
+  'devil press'                       : 0.65,
   'wall ball'                         : 0.8,
   'double under'                      : 0.65,
   'dumbbell facing burpee'            : 0.65,
@@ -1061,6 +1535,7 @@ const BW_LOAD: Record<string, number> = {
   'nordic curl'                       : 0.65,
   'push up'                           : 0.65,
   'rule:push-up'                      : 0.65,
+  'rule:handstand-push-up'            : 0.9,
   'run'                               : 0.65,
   'single under'                      : 0.65,
   'zone'                              : 0.65,
@@ -1080,7 +1555,16 @@ const BW_LOAD: Record<string, number> = {
   'dead bug'                          : 0.3,
   'hanging knee raise'                : 0.3,
   'rule:core-dynamic'                 : 0.3,
+  'rule:sit-up'                       : 0.3,
+  'rule:leg-raise'                    : 0.3,
+  'rule:hanging-raise'                : 0.3,
+  'rule:ab-rollout'                   : 0.3,
   'rule:jump-plyo'                    : 0.3,
+  'rule:burpee'                       : 0.65,
+  'rule:jerk'                         : 0.3,
+  'rule:olympic-snatch'               : 0.3,
+  'rule:olympic-clean'                : 0.3,
+  'rule:throw-slam'                   : 0.3,
   'v up'                              : 0.3,
   'pallof press'                      : 0.2,
   'rule:anti-rotation'                : 0.2,
@@ -1098,6 +1582,7 @@ const BW_LOAD: Record<string, number> = {
   'incline dumbbell bench'            : 0.0,
   'iso lateral row'                   : 0.0,
   'landmine press'                    : 0.0,
+  'kneeling landmine press'           : 0.0,
   'landmine twist'                    : 0.0,
   'leg curl'                          : 0.0,
   'leg extension'                     : 0.0,
@@ -1106,13 +1591,20 @@ const BW_LOAD: Record<string, number> = {
   'machine press'                     : 0.0,
   'med ball throw'                    : 0.0,
   'overhead press'                    : 0.0,
+  'kettlebell press'                  : 0.0,
   'overhead tricep'                   : 0.0,
   'row'                               : 0.0,
   'row erg interval'                  : 0.0,
   'rower interval'                    : 0.0,
   'rule:arm-isolation'                : 0.0,
+  'rule:triceps-isolation'            : 0.0,
   'rule:delt-isolation'               : 0.0,
+  'rule:rear-delt'                    : 0.0,
+  'rule:side-raise'                   : 0.0,
+  'rule:front-raise'                  : 0.0,
   'rule:erg-endurance'                : 0.0,
+  'rule:machine-locomotion'           : 0.0,
+  'rule:ski-erg'                      : 0.0,
   'rule:hamstring-isolation'          : 0.0,
   'rule:horizontal-pull'              : 0.0,
   'rule:horizontal-push'              : 0.0,
@@ -1120,6 +1612,7 @@ const BW_LOAD: Record<string, number> = {
   'rule:upper-back-prehab'            : 0.0,
   'rule:vertical-pull'                : 0.0,
   'rule:vertical-push'                : 0.0,
+  'rule:landmine-press'               : 0.0,
   'shoulder raise'                    : 0.0,
   'ski erg interval'                  : 0.0,
   'split stance romanian deadlift'    : 0.8,
@@ -1148,6 +1641,8 @@ const FORCE_FACTOR: Record<string, number> = {
   // bicycle. Set just above the rower's 0.45, per the same reading.
   'rule:air-bike'                     : 0.5,
   'rule:erg-endurance'                : 0.4,
+  'rule:machine-locomotion'           : 0.4,
+  'rule:ski-erg'                      : 0.3,
 };
 
 // How many vertical metres one horizontal metre of this movement costs
@@ -1167,12 +1662,15 @@ const HORIZ_FACTOR: Record<string, number> = {
   'zone'                              : 0.1,
   'farmer carry'                      : 0.1,
   'rule:carry'                        : 0.1,
+  'rule:suitcase-carry'               : 0.1,
   'rule:locomotion-endurance'         : 0.1,
   'row erg interval'                  : 0.1,
   'rower interval'                    : 0.1,
   'row'                               : 0.1,
   'ski erg interval'                  : 0.1,
   'rule:erg-endurance'                : 0.1,
+  'rule:machine-locomotion'           : 0.1,
+  'rule:ski-erg'                      : 0.1,
   // An air bike is priced as a rower, not as a bicycle — see rule:air-bike.
   'rule:air-bike'                     : 0.1,
   // A bike converts effort into distance far more efficiently than legs do:
@@ -1209,6 +1707,8 @@ const CAL_METRES: Record<string, number> = {
   'rule:air-bike'                     : 15,
   'stairmaster'                       : 10,
   'rule:erg-endurance'                : 15,
+  'rule:machine-locomotion'           : 15,
+  'rule:ski-erg'                      : 22.5,
 };
 
 const withEstimates = (key: string, profile: MovementProfile): MovementProfile => ({

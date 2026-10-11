@@ -276,9 +276,10 @@ describe('summarizeBodyLoad', () => {
   it('gives endurance work real load despite zero tonnage', () => {
     const s = summarizeBodyLoad([mixed]);
     // Ski-Erg logged real time, so its conditioning block claims exactly that:
-    // 10 minutes, split back .5 / arms .3 / core .2.
+    // 10 minutes; back is lats 0.30 + upperBack 0.05 = 0.35 (docs/muscle-map-review.csv,
+    // row 'ski erg interval', back 0.50 -> 0.35).
     expect(s.modalityMinutes.endurance).toBeCloseTo(10, 3);
-    expect(s.regionMinutes.back).toBeCloseTo(10 * 0.5, 3);
+    expect(s.regionMinutes.back).toBeCloseTo(10 * 0.35, 3);
     // ...and contributes nothing to the resistance-only tonnage readout.
     expect(s.resistanceTonnage.back).toBe(0);
   });
@@ -599,7 +600,16 @@ describe('regionVolume', () => {
       1,
       bwLoadFactor(squat),
     );
-    expect(s.regionVolume.quads).toBeCloseTo(base * romFactor(squat) * wQuads, 3);
+    // The Ski-Erg block now reaches quads too (0.04, row 'ski erg interval'), so
+    // its share is added: read it from a log of the erg block alone.
+    const ergOnly = summarizeBodyLoad([
+      log([{ key: 'conditioning', items: [item('Ski-Erg Intervals', 'time', [set({ time: 300 })])] }]),
+    ]);
+    expect(ergOnly.regionVolume.quads).toBeCloseTo(160, 3);
+    expect(s.regionVolume.quads).toBeCloseTo(
+      base * romFactor(squat) * wQuads + ergOnly.regionVolume.quads,
+      3,
+    );
   });
 
   it('is non-zero for the erg work that reads as zero tonnage', () => {
@@ -922,16 +932,19 @@ describe('per-muscle twins', () => {
 
   it('cutoff worked examples match the comment on MUSCLE_SHARE_FLOOR', () => {
     const squat = classifyMovement('Back Squat').profile;
-    expect(meaningfulMuscleShare(squat.muscles)).toBeCloseTo(0.135, 9);
+    // Top muscle is now quads 0.50 (row 'back squat'), so 0.25 x 0.5.
+    expect(meaningfulMuscleShare(squat.muscles)).toBeCloseTo(0.125, 9);
     expect(meaningfulRegionShare(squat.regions)).toBeCloseTo(0.15, 9);
 
     const carry = classifyMovement('Farmer Carry').profile;
-    expect(meaningfulMuscleShare(carry.muscles)).toBe(MUSCLE_SHARE_FLOOR);
+    // Row 'farmer carry': obliques 0.35 now leads, so the ratio (0.0875) beats the floor.
+    expect(meaningfulMuscleShare(carry.muscles)).toBeCloseTo(0.25 * 0.35, 9);
+    expect(0.25 * 0.35).toBeGreaterThan(MUSCLE_SHARE_FLOOR);
     const counted = (Object.keys(carry.muscles) as MuscleKey[])
-      .filter((m) => (carry.muscles[m] ?? 0) >= MUSCLE_SHARE_FLOOR)
+      .filter((m) => (carry.muscles[m] ?? 0) >= meaningfulMuscleShare(carry.muscles))
       .sort();
     expect(counted).toEqual(
-      ['abs', 'biceps', 'forearms', 'frontDelts', 'gluteMax', 'hamstrings', 'hipFlexors', 'obliques', 'rearDelts', 'sideDelts', 'triceps'],
+      ['forearms', 'gluteMed', 'obliques', 'traps'],
     );
   });
 
@@ -939,26 +952,46 @@ describe('per-muscle twins', () => {
     const s = summarizeBodyLoad([
       log([{ key: 'conditioning', items: [item('Farmer Carry', 'distance', [set({ weight: 32, distance: 40 })])] }]),
     ]);
+    // Row 'farmer carry': forearms 0.25 and gluteMed 0.12 both clear the 0.0875
+    // cutoff; abs (0.06) and gluteMax (0.05) do not.
     expect(s.hardSetsByMuscle.forearms).toBe(1);
-    expect(s.hardSetsByMuscle.gluteMed).toBe(0);
+    expect(s.hardSetsByMuscle.gluteMed).toBe(1);
+    expect(s.hardSetsByMuscle.abs).toBe(0);
     expect(Object.values(s.resistanceSetsByMuscle).every((v) => v === 0)).toBe(true);
   });
 
-  it('coverage is 0 when every profile is split', () => {
+  // Phase C2 authored every built-in, so the estimated case is made with region-only
+  // overrides, which expand through the default split and come back `split`.
+  const FIXTURE_NAMES = [
+    'band pull apart', 'back squat', 'cable fly', 'machine press', 'pull up', 'farmer carry',
+    'pigeon', 'hip stretch', 'goblet squat', 'ski erg interval',
+  ];
+
+  it('coverage is 1 for the built-in profiles, which are all authored', () => {
     const s = summarizeBodyLoad(week);
+    expect(s.muscleCoverage).toEqual({ minutes: 1, volume: 1, resistanceSets: 1, hardSets: 1 });
+  });
+
+  it('coverage is 0 when every profile is split', () => {
+    const split: OverrideMap = {};
+    for (const name of FIXTURE_NAMES) split[name] = { regions: classifyMovement(name).profile.regions };
+    for (const name of FIXTURE_NAMES) {
+      expect(classifyMovement(name, { overrides: split }).profile.muscleSource).toBe('split');
+    }
+    const s = summarizeBodyLoad(week, split);
     expect(s.muscleCoverage).toEqual({ minutes: 0, volume: 0, resistanceSets: 0, hardSets: 0 });
     expect(Object.values(s.muscleAuthored.minutes).every((v) => v === 0)).toBe(true);
   });
 
   it('coverage is 1 when every profile is authored', () => {
     // Re-author every movement in the fixture at muscle level via pm().
+    // Start from the all-split overrides so the muscle overrides are what flips them.
     const authored: OverrideMap = {};
-    for (const name of [
-      'band pull apart', 'back squat', 'cable fly', 'machine press', 'pull up', 'farmer carry',
-      'pigeon', 'hip stretch', 'goblet squat', 'ski erg interval',
-    ]) {
+    for (const name of FIXTURE_NAMES) {
       const base = classifyMovement(name).profile;
-      expect(base.muscleSource).toBe('split');
+      expect(
+        classifyMovement(name, { overrides: { [name]: { regions: base.regions } } }).profile.muscleSource,
+      ).toBe('split');
       authored[name] = { muscles: pm(base.muscles, base.modality ?? 'resistance', base.planes).muscles };
     }
     for (const name of Object.keys(authored)) {

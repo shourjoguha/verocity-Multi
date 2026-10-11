@@ -229,28 +229,24 @@ export function meaningfulRegionShare(regions: Partial<Record<string, number>>):
  * THE FLOOR DOES NOT (0.1 -> 0.05). The region floor sits just under a flat
  * 9-way share (1/9 = 0.11); the same intent at 21 muscles is ~0.05 (1/21 =
  * 0.048). Kept at 0.1 it would silently drop most of a carry. Worked on the
- * current (split) profiles:
+ * authored profiles (docs/muscle-map-review.csv):
  *
- *   Back Squat — quads 0.54, gluteMax 0.146, hamstrings 0.098, adductors 0.06,
- *   abs 0.06, obliques 0.042, gluteMed 0.036, hipFlexors 0.018.
- *   Cutoff max(0.05, 0.25 x 0.54) = 0.135: quads and gluteMax count, the same
- *   two muscles behind the two regions the region cutoff (0.15) counts. The
- *   floor is not in play; the ratio does the work, as it does for regions.
+ *   Back Squat — quads 0.50, gluteMax 0.18, adductors 0.10, hamstrings 0.10,
+ *   abs 0.07, obliques 0.05.
+ *   Cutoff max(0.05, 0.25 x 0.50) = 0.125: quads and gluteMax count, the
+ *   same two muscles behind the two regions the region cutoff (0.15) counts.
+ *   The floor is not in play; the ratio does the work, as it does for regions.
  *
- *   Farmer Carry — abs 0.175, obliques 0.1225, biceps 0.1, triceps 0.1,
- *   gluteMax 0.096, frontDelts 0.08, hamstrings 0.08, sideDelts 0.07,
- *   hipFlexors 0.0525, forearms 0.05, rearDelts 0.05, gluteMed 0.024.
- *   0.25 x 0.175 = 0.044, so the floor decides: 0.05. Eleven muscles count —
- *   everything but gluteMed — which is what a loaded carry is. With the region
- *   floor of 0.1 only abs, obliques, biceps and triceps would, losing the
- *   shoulders, the glutes and (absurdly, for a grip event) the forearms.
- *   One honest asymmetry: hamstrings (0.08) count here and not at region
- *   level (0.08 < 0.1), because hamstrings is a one-muscle region and its
- *   share is the same number judged against a lower floor. The coach reads
- *   regions, so this moves no coach number.
+ *   Farmer Carry — obliques 0.35, forearms 0.25, gluteMed 0.12, traps 0.12,
+ *   abs 0.06, gluteMax 0.05, lowerBack 0.05.
+ *   0.25 x 0.35 = 0.0875, above the floor, so the ratio decides: four muscles
+ *   count — obliques, forearms (the grip event), gluteMed and traps. The
+ *   flatter split-profile carry this floor was tuned on had eleven; the
+ *   authored one is a sharper claim, and the floor now only guards a
+ *   profile whose top muscle is below 0.2.
  *
- * Forearms and rear delts land EXACTLY on the floor (0.25 x 0.2 in both
- * cases) and count, because the comparison is `>=`, as it is for regions.
+ * A muscle exactly on the cutoff counts, because the comparison is `>=`, as it
+ * is for regions.
  * Editorial judgement, like the region pair — which is why they live here.
  */
 export const MUSCLE_SHARE_OF_PRIMARY = REGION_SHARE_OF_PRIMARY;
