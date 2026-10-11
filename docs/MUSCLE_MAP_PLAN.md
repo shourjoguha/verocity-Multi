@@ -222,7 +222,7 @@ data-only, `mirrorX` structure. Changes from the mock-up:
   stand-in). The mock-up has none.
 - **Merge serratus into the obliques plate** (serratus isn't a muscle id).
 - The three quad heads stay three shapes, all with id `quads`.
-- `BODY_SILHOUETTE` stays one outline (the 3D slab's ribs use it).
+- `BODY_MUSCLE_SILHOUETTE` stays one outline (the 3D slab's ribs use it). Shipped in F2, which removed the old region exports.
 
 **Acceptance:** `bodyRegions.test.ts` asserts muscle ids ↔ paths both ways.
 

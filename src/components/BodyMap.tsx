@@ -1,17 +1,28 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import {
-  BODY_REGION_SHAPES,
-  BODY_SILHOUETTE,
+  ABS_DIVIDERS,
+  BODY_MUSCLE_SHAPES,
+  BODY_MUSCLE_SILHOUETTE,
   BODY_VIEWBOX,
   type BodyFace,
   type RegionShape,
 } from '@/lib/bodyRegions';
-import { MUSCLE_REGIONS, MUSCLE_REGION_KEYS, type RegionKey } from '@/app.config';
+import {
+  MUSCLES,
+  MUSCLE_KEYS,
+  MUSCLE_REGION_KEYS,
+  type MuscleKey,
+  type RegionKey,
+} from '@/app.config';
 import { EASE } from '@/components/anim';
 
 // Presentational only — no data loading, no query imports. See the CSS block
 // "Body map slab" in global.css for the 3D contract and the flattening trap.
+// Everything below draws INSIDE a face's <svg>: SVG attributes (fill-opacity,
+// stroke-dasharray, the mirror transform) are safe there. Nothing may add
+// opacity/filter/clip/mask/overflow to an HTML element between the stage and
+// the faces.
 
 // Extrusion ribs between the two faces. Closely spaced so the edge reads as a
 // continuous solid rather than a stack of cards — the Echo Stack wants to look
@@ -28,59 +39,25 @@ function spinFor(face: BodyFace): number {
   return face === 'back' ? 180 + REST_TILT : -REST_TILT;
 }
 
-const FILL_FLOOR = 0.1; // an unused region still reads as part of a body
+const FILL_FLOOR = 0.1; // an untrained muscle still reads as part of a body
 const FILL_RANGE = 0.65; // ceiling 0.75, so labels stay legible over it
+
+// Plates: the gaps between muscles are drawn in the card's surface colour, so
+// they read as cuts through the ink rather than as outlines. User units (not
+// non-scaling) so the gap scales with the figure, as in the mock-up.
+const GAP_WIDTH = 0.8;
+const ABS_GAP_WIDTH = 0.6;
 
 function fillOpacity(intensity: number): number {
   return FILL_FLOOR + Math.max(0, Math.min(1, intensity)) * FILL_RANGE;
 }
 
-function ShapePath({
-  shape,
-  intensity,
-  selected,
-  reduce,
-  index,
-}: {
-  shape: RegionShape;
-  intensity: number;
-  selected: boolean;
-  reduce: boolean;
-  index: number;
-}) {
-  const target = fillOpacity(intensity);
-  const common = {
-    d: shape.d,
-    fill: 'var(--color-fg)',
-    stroke: 'var(--color-fg)',
-    // Selection is a stroke change, never a colour change — the palette is
-    // monochrome by house rule and dark mode is token overrides only.
-    strokeOpacity: selected ? 0.55 : 0.12,
-    strokeWidth: selected ? 1.2 : 0.5,
-    vectorEffect: 'non-scaling-stroke' as const,
-  };
+// Emit a shape, plus its mirrored twin when the data asks for one.
+function Mirrored({ shape, children }: { shape: RegionShape; children: (d: string) => React.ReactNode }) {
   return (
     <>
-      {/* animate, not whileInView — a whileInView chart can get stuck hidden
-          if the observer never fires (same note as RadarChart). */}
-      <motion.path
-        {...common}
-        initial={reduce ? false : { fillOpacity: 0 }}
-        animate={reduce ? { fillOpacity: target } : { fillOpacity: target }}
-        transition={reduce ? { duration: 0 } : { duration: 0.6, ease: EASE, delay: index * 0.04 }}
-      />
-      {shape.mirrorX ? (
-        <motion.g transform="translate(100,0) scale(-1,1)">
-          <motion.path
-            {...common}
-            initial={reduce ? false : { fillOpacity: 0 }}
-            animate={{ fillOpacity: target }}
-            transition={
-              reduce ? { duration: 0 } : { duration: 0.6, ease: EASE, delay: index * 0.04 }
-            }
-          />
-        </motion.g>
-      ) : null}
+      {children(shape.d)}
+      {shape.mirrorX ? <g transform="translate(100,0) scale(-1,1)">{children(shape.d)}</g> : null}
     </>
   );
 }
@@ -88,22 +65,25 @@ function ShapePath({
 function Face({
   face,
   intensity,
+  estimated,
   selected,
   systemic,
   reduce,
 }: {
   face: BodyFace;
-  intensity: Record<RegionKey, number>;
+  intensity: Record<MuscleKey, number>;
+  estimated: Record<MuscleKey, boolean>;
   selected: RegionKey | null;
   systemic: number;
   reduce: boolean;
 }) {
-  const shapes = BODY_REGION_SHAPES[face];
+  const shapes = BODY_MUSCLE_SHAPES[face];
+  const pieces = MUSCLE_KEYS.flatMap((m) => (shapes[m] ?? []).map((shape, j) => ({ m, j, shape })));
   return (
     <svg className="bodymap-face" data-face={face} viewBox={BODY_VIEWBOX} aria-hidden="true">
       {/* base silhouette */}
       <path
-        d={BODY_SILHOUETTE[face]}
+        d={BODY_MUSCLE_SILHOUETTE[face]}
         fill="var(--color-fg)"
         fillOpacity={0.06}
         stroke="var(--color-fg)"
@@ -111,23 +91,87 @@ function Face({
         strokeWidth={0.6}
         vectorEffect="non-scaling-stroke"
       />
-      {MUSCLE_REGION_KEYS.map((region, i) =>
-        (shapes[region] ?? []).map((shape, j) => (
-          <ShapePath
-            key={`${region}-${j}`}
-            shape={shape}
-            intensity={intensity[region] ?? 0}
-            selected={selected === region}
-            reduce={reduce}
-            index={i}
+      {/* Plates: one fill per muscle piece, gap stroke in the surface colour. */}
+      {pieces.map(({ m, j, shape }) => {
+        const target = fillOpacity(intensity[m] ?? 0);
+        const delay = MUSCLE_REGION_KEYS.indexOf(MUSCLES[m].region) * 0.04;
+        return (
+          <Mirrored key={`${m}-${j}`} shape={shape}>
+            {(d) => (
+              // animate, not whileInView — a whileInView chart can get stuck
+              // hidden if the observer never fires (same note as RadarChart).
+              <motion.path
+                d={d}
+                fill="var(--color-fg)"
+                stroke="var(--color-surface)"
+                strokeWidth={GAP_WIDTH}
+                strokeLinejoin="round"
+                initial={reduce ? false : { fillOpacity: 0 }}
+                animate={{ fillOpacity: target }}
+                transition={reduce ? { duration: 0 } : { duration: 0.6, ease: EASE, delay }}
+              />
+            )}
+          </Mirrored>
+        );
+      })}
+      {face === 'front' ? (
+        <g stroke="var(--color-surface)" strokeWidth={ABS_GAP_WIDTH}>
+          {ABS_DIVIDERS.lines.map((l) => (
+            <line key={l.y} x1={l.x1} x2={l.x2} y1={l.y} y2={l.y} />
+          ))}
+          <line
+            x1={ABS_DIVIDERS.midline.x}
+            x2={ABS_DIVIDERS.midline.x}
+            y1={ABS_DIVIDERS.midline.y1}
+            y2={ABS_DIVIDERS.midline.y2}
           />
-        )),
-      )}
+        </g>
+      ) : null}
+      {/* Estimated muscles (decision D4): minutes that came wholly or partly
+          from the default region split get a fine dashed outline. */}
+      {pieces
+        .filter(({ m }) => estimated[m])
+        .map(({ m, j, shape }) => (
+          <Mirrored key={`est-${m}-${j}`} shape={shape}>
+            {(d) => (
+              <path
+                d={d}
+                fill="none"
+                stroke="var(--color-fg)"
+                strokeOpacity={0.3}
+                strokeWidth={0.6}
+                strokeDasharray="2 2"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+          </Mirrored>
+        ))}
+      {/* Selection is a stroke change, never a colour change — the palette is
+          monochrome by house rule and dark mode is token overrides only. Drawn
+          last so a selected region's muscles sit over every other stroke. */}
+      {selected
+        ? pieces
+            .filter(({ m }) => MUSCLES[m].region === selected)
+            .map(({ m, j, shape }) => (
+              <Mirrored key={`sel-${m}-${j}`} shape={shape}>
+                {(d) => (
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke="var(--color-fg)"
+                    strokeOpacity={0.85}
+                    strokeWidth={1.2}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
+              </Mirrored>
+            ))
+        : null}
       {/* Systemic work is the one genuinely whole-body quantity, so it reads
-          as an aura around the whole figure rather than as a region. */}
+          as an aura around the whole figure rather than as a muscle. */}
       {systemic > 0 ? (
         <path
-          d={BODY_SILHOUETTE[face]}
+          d={BODY_MUSCLE_SILHOUETTE[face]}
           fill="none"
           stroke="var(--color-fg)"
           strokeOpacity={0.15 + Math.min(1, systemic) * 0.45}
@@ -141,12 +185,16 @@ function Face({
 
 export function BodyMap({
   intensity,
+  estimated,
   systemic,
   face,
   onFaceChange,
   selected,
 }: {
-  intensity: Record<RegionKey, number>;
+  // Per MUSCLE, 0..1 against the busiest muscle (muscleIntensities).
+  intensity: Record<MuscleKey, number>;
+  // Muscles whose minutes came wholly or partly from the default split (D4).
+  estimated: Record<MuscleKey, boolean>;
   // 0..1 share of minutes that were systemic
   systemic: number;
   face: BodyFace;
@@ -207,10 +255,10 @@ export function BodyMap({
     settle();
   };
 
-  const top = MUSCLE_REGION_KEYS.filter((k) => (intensity[k] ?? 0) > 0)
+  const top = MUSCLE_KEYS.filter((k) => (intensity[k] ?? 0) > 0)
     .sort((a, b) => (intensity[b] ?? 0) - (intensity[a] ?? 0))
     .slice(0, 3)
-    .map((k) => MUSCLE_REGIONS[k].label);
+    .map((k) => MUSCLES[k].label);
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -223,7 +271,7 @@ export function BodyMap({
         role="img"
         aria-label={
           top.length > 0
-            ? `Body map, ${face} view. Most-worked regions: ${top.join(', ')}.`
+            ? `Body map, ${face} view. Most-worked muscles: ${top.join(', ')}.`
             : `Body map, ${face} view. No work logged in this window.`
         }
       >
@@ -234,6 +282,7 @@ export function BodyMap({
           <Face
             face="front"
             intensity={intensity}
+            estimated={estimated}
             selected={selected}
             systemic={systemic}
             reduce={reduce}
@@ -246,12 +295,13 @@ export function BodyMap({
               aria-hidden="true"
               style={{ transform: `translateZ(${z}px)` }}
             >
-              <path d={BODY_SILHOUETTE.front} fill="var(--color-fg)" fillOpacity={0.055} />
+              <path d={BODY_MUSCLE_SILHOUETTE.front} fill="var(--color-fg)" fillOpacity={0.055} />
             </svg>
           ))}
           <Face
             face="back"
             intensity={intensity}
+            estimated={estimated}
             selected={selected}
             systemic={systemic}
             reduce={reduce}

@@ -2,20 +2,22 @@
 // ExtrudeGeometry) can consume exactly these paths without touching the
 // component layer.
 //
-// Coarse hand-authored polygons on a 100×220 grid, deliberately not a traced
-// anatomical asset: the taxonomy is region-level, so region-level shapes are
-// the honest granularity, and there is no third-party licence to worry about.
+// Hand-authored muscle plates on a 100×220 grid, deliberately not a traced
+// anatomical asset, so there is no third-party licence to worry about. Regions
+// own no geometry: a region is drawn as the union of its muscles (MUSCLES[m]
+// .region), which is what the Plates renderer highlights on selection.
 //
 // LIMBS ARE AUTHORED ONCE. `mirrorX` makes the component emit a second copy
 // under `translate(100,0) scale(-1,1)`, which halves the data and makes
 // left/right symmetry structural rather than something to keep in sync.
 //
-// REGION IDS ARE THE TAXONOMY KEYS. bodyRegions.test.ts asserts the two sets
-// match in BOTH directions — a region with no geometry is a hole in the
-// silhouette, and geometry with no region is a dead path. Neither throws at
-// runtime, which is why the check is mechanical.
+// SHAPE IDS ARE THE MUSCLE KEYS. bodyRegions.test.ts asserts the two sets
+// match in BOTH directions, and that every region has at least one drawn
+// muscle — a muscle with no geometry is a hole in the silhouette, and geometry
+// with no muscle is a dead path. Neither throws at runtime, which is why the
+// check is mechanical.
 
-import type { MuscleKey, RegionKey } from '@/app.config';
+import type { MuscleKey } from '@/app.config';
 
 export const BODY_VIEWBOX = '0 0 100 220';
 
@@ -31,54 +33,6 @@ export interface RegionShape {
   angle?: number;
 }
 
-// One union outline per face. Used by the base layer AND by every extrusion
-// rib, so the slab's edge always matches the figure exactly.
-const OUTLINE =
-  'M50 3.5a13.5 13.5 0 1 0 0.01 0z ' +
-  'M44 29L43 37L28 41L21 50L18 74L15 110L13 133L21 134L24 110L27 76L32 56' +
-  'L33 80L31 102L30 116L32 150L34 172L33 200L34 212L44 213L44 175L45 150L47 124' +
-  'L50 126L53 124L55 150L56 175L56 213L66 212L67 200L66 172L68 150L70 116L69 102' +
-  'L67 80L68 56L73 76L76 110L79 134L87 133L85 110L82 74L79 50L72 41L57 37L56 29Z';
-
-export const BODY_SILHOUETTE: Record<BodyFace, string> = {
-  front: OUTLINE,
-  back: OUTLINE,
-};
-
-// Shapes track the silhouette edges rather than being axis-aligned boxes —
-// a rectangle over a tapered limb reads as a mannequin, not a body.
-const DELT: RegionShape = { d: 'M33 39L28 41L22 48L20 57L26 60L31 52L34 47Z', mirrorX: true };
-const ARM: RegionShape = {
-  d: 'M20 58L27 62L25 90L24 110L22 131L14 130L16 108L18 82Z',
-  mirrorX: true,
-};
-
-export const BODY_REGION_SHAPES: Record<BodyFace, Partial<Record<RegionKey, RegionShape[]>>> = {
-  front: {
-    shoulders: [DELT],
-    chest: [{ d: 'M34 48L50 47L50 71L37 69L33 62L32 54Z', mirrorX: true }],
-    arms: [ARM],
-    core: [{ d: 'M34 72L50 73L50 117L34 113L32 100L33 86Z', mirrorX: true }],
-    quads: [{ d: 'M31 120L46 123L45 150L44 168L34 167L32 148Z', mirrorX: true }],
-  },
-  back: {
-    shoulders: [DELT],
-    back: [{ d: 'M34 38L50 38L50 95L34 91L31 72L32 55Z', mirrorX: true }],
-    arms: [ARM],
-    // The posterior chain, split into the upper (glute) and lower (hamstring)
-    // halves of the same silhouette, divided at y≈136.
-    glutes: [{ d: 'M30 110L47 113L46.2 136L31.8 136Z', mirrorX: true }],
-    hamstrings: [{ d: 'M31.8 136L46.2 136L45 167L34 166L32 140Z', mirrorX: true }],
-    calves: [{ d: 'M35 171L45 171L44 190L43 205L36 204L34 188Z', mirrorX: true }],
-  },
-};
-
-// Which face a region is drawn on. Derived, never hand-maintained — a region
-// added to BODY_REGION_SHAPES shows up here automatically.
-export function facesForRegion(region: RegionKey): BodyFace[] {
-  return BODY_FACES.filter((f) => (BODY_REGION_SHAPES[f][region]?.length ?? 0) > 0);
-}
-
 // ---------------------------------------------------------------------------
 // MUSCLE GEOMETRY (Phase F1). Ported from the Plates mock-up: authored on a
 // 200×440 grid, halved onto this 100×220 grid, smoothed (closed Catmull-Rom to
@@ -91,6 +45,9 @@ export function facesForRegion(region: RegionKey): BodyFace[] {
 // hipFlexors is new (front only) and sits in the crease beside the rectus
 // femoris. The two delt pairs overlap by ~10 sq units where the smoothed curves
 // bulge across the shared edge; the surface-coloured gap stroke hides it.
+// On the BACK face rearDelts covers the inner ~two-thirds of the posterior
+// shoulder cap and sideDelts only the outer edge (Phase F2 rebalance; the F1
+// port had rearDelts as a sliver).
 // ---------------------------------------------------------------------------
 
 // Full outline (left half + mirrored right half) plus the head ellipse.
@@ -152,10 +109,10 @@ export const BODY_MUSCLE_SHAPES: Record<BodyFace, Partial<Record<MuscleKey, Regi
       { d: 'M50 25C49.33 18 47.5 26.83 46 28C44.5 29.17 42.83 30.67 41 32C39.17 33.33 35.17 34.67 35 36C34.83 37.33 38.33 38 40 40C41.67 42 43.67 44.67 45 48C46.33 51.33 47.17 56.33 48 60C48.83 63.67 49.67 75.83 50 70C50 64.17 50 32 50 25Z', mirrorX: true, angle: 35 },
     ],
     rearDelts: [
-      { d: 'M35 36C34.17 35 31.92 35.08 31 36C30.08 36.92 29.83 39.58 29.5 41.5C29.17 43.42 28.92 46.08 29 47.5C29.08 48.92 29.5 50.25 30 50C30.5 49.75 31 47.33 32 46C33 44.67 35.5 43.67 36 42C36.5 40.33 35.83 37 35 36Z', mirrorX: true, angle: 20 },
+      { d: 'M35 36C33.83 35 30.25 35.75 29 36C27.75 36.25 28 36.17 27.5 37.5C27 38.83 26.33 41.92 26 44C25.67 46.08 25.5 48 25.5 50C25.5 52 25.5 55.67 26 56C26.5 56.33 27.5 53.67 28.5 52C29.5 50.33 30.75 47.67 32 46C33.25 44.33 35.5 43.67 36 42C36.5 40.33 36.17 37 35 36Z', mirrorX: true, angle: 20 },
     ],
     sideDelts: [
-      { d: 'M31 36C30.25 35.75 26.33 38.17 25 40C23.67 41.83 23.25 44.83 23 47C22.75 49.17 23.08 51.17 23.5 53C23.92 54.83 24.75 58 25.5 58C26.25 58 27.25 54.33 28 53C28.75 51.67 29.83 50.92 30 50C30.17 49.08 29.08 48.92 29 47.5C28.92 46.08 29.17 43.42 29.5 41.5C29.83 39.58 31.75 36.25 31 36Z', mirrorX: true, angle: 70 },
+      { d: 'M27.5 37.5C27.33 36.83 25.75 38.42 25 40C24.25 41.58 23.25 44.83 23 47C22.75 49.17 23.17 51.33 23.5 53C23.83 54.67 24.58 56.5 25 57C25.42 57.5 25.92 57.17 26 56C26.08 54.83 25.5 52 25.5 50C25.5 48 25.67 46.08 26 44C26.33 41.92 27.67 38.17 27.5 37.5Z', mirrorX: true, angle: 70 },
     ],
     upperBack: [
       { d: 'M39 42C37.67 41.83 36 43.58 35 45C34 46.42 33.17 48.67 33 50.5C32.83 52.33 33 54.92 34 56C35 57.08 37.33 57.67 39 57C40.67 56.33 43.33 53.83 44 52C44.67 50.17 43.83 47.67 43 46C42.17 44.33 40.33 42.17 39 42Z', mirrorX: true, angle: 20 },
