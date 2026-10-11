@@ -803,6 +803,24 @@ const RAW_RULES: MovementRule[] = [
     ),
   },
   {
+    // "Easy Run", "Zone 2 Run" (→ "zone run"), "Running": only the bare "Run"
+    // was EXACT. Matching is substring-based, so a bare 'run' fragment would
+    // swallow trunk/brunch/prune; ' run' (leading space) needs a word before it.
+    // Same muscles as `run`; the `not` list vetoes running-named non-running.
+    id: 'run-named',
+    match: ['running', ' run', 'treadmill run'],
+    not: ['lunge', 'squat', 'man', 'jack', 'knee', 'step', 'drill', 'start', ' up'],
+    profile: pm(
+      {
+        quads: 0.27, calves: 0.22, hamstrings: 0.17, gluteMax: 0.13, hipFlexors: 0.06,
+        gluteMed: 0.05, adductors: 0.03, tibialis: 0.03, abs: 0.02, obliques: 0.02,
+      },
+      'endurance',
+      'sagittal',
+      { systemic: true },
+    ),
+  },
+  {
     // Treadmill and elliptical keep the old erg-endurance estimates (bwLoad 0, the
     // erg force and calorie factors) when the review moved them to locomotion,
     // which would have priced them at bwLoad 0.5. Same muscles as locomotion.
@@ -1540,6 +1558,7 @@ const BW_LOAD: Record<string, number> = {
   'rule:push-up'                      : 0.65,
   'rule:handstand-push-up'            : 0.9,
   'run'                               : 0.65,
+  'rule:run-named'                    : 0.65,
   'single under'                      : 0.65,
   'zone'                              : 0.65,
   'inverted row'                      : 0.6,
@@ -1662,6 +1681,7 @@ const HORIZ_FACTOR: Record<string, number> = {
   // vertical, so a stairmaster metre costs far more than a running one.
   'stairmaster'                       : 0.5,
   'run'                               : 0.1,
+  'rule:run-named'                    : 0.1,
   'zone'                              : 0.1,
   'farmer carry'                      : 0.1,
   'rule:carry'                        : 0.1,
