@@ -34,7 +34,14 @@ export function useBodyMapStyle(): BodyMapStyle {
   const [style, setStyle] = useState<BodyMapStyle>(BODY_MAP_DEFAULT);
   useEffect(() => {
     setStyle(getBodyMapStyle());
-    const on = () => setStyle(getBodyMapStyle());
+    // Prefer the event's detail: when storage is blocked, re-reading it would
+    // fall back to the default and the picked style would never apply.
+    const on = (e: Event) => {
+      const next = (e as CustomEvent<unknown>).detail;
+      setStyle(
+        (BODY_MAP_STYLES as readonly unknown[]).includes(next) ? (next as BodyMapStyle) : getBodyMapStyle(),
+      );
+    };
     window.addEventListener(BODY_MAP_EVENT, on);
     return () => window.removeEventListener(BODY_MAP_EVENT, on);
   }, []);

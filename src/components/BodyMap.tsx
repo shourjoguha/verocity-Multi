@@ -209,10 +209,12 @@ function Face({
                     patternUnits="userSpaceOnUse"
                     patternTransform={`rotate(${(shape.angle ?? DEFAULT_ANGLE) - 90})`}
                   >
+                    {/* Centred in the tile: at x=0 half the stroke is clipped by
+                        the tile edge and every weight draws at half width. */}
                     <line
-                      x1={0}
+                      x1={HATCH_PITCH / 2}
                       y1={0}
-                      x2={0}
+                      x2={HATCH_PITCH / 2}
                       y2={HATCH_PITCH}
                       stroke="var(--color-fg)"
                       strokeWidth={HATCH_W_FLOOR + i * HATCH_W_RANGE}
@@ -226,7 +228,9 @@ function Face({
                       d={d}
                       fill={`url(#${pid})`}
                       stroke="var(--color-fg)"
-                      strokeOpacity={0.45}
+                      // An estimated muscle drops its solid outline so the
+                      // dashed estimate outline drawn later stays visible.
+                      strokeOpacity={estimated[m] ? 0 : 0.45}
                       strokeWidth={0.5}
                       vectorEffect="non-scaling-stroke"
                     />
