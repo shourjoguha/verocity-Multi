@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useId, useRef } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import {
   ABS_DIVIDERS,
@@ -16,6 +16,7 @@ import {
   type RegionKey,
 } from '@/app.config';
 import { EASE } from '@/components/anim';
+import type { BodyMapStyle } from '@/lib/bodyMapPrefs';
 
 // Presentational only — no data loading, no query imports. See the CSS block
 // "Body map slab" in global.css for the 3D contract and the flattening trap.
@@ -48,6 +49,20 @@ const FILL_RANGE = 0.65; // ceiling 0.75, so labels stay legible over it
 const GAP_WIDTH = 0.8;
 const ABS_GAP_WIDTH = 0.6;
 
+// Engraved: a hatch per muscle piece, rotated to the fibre direction. Spacing
+// stays >= 1.5 units so it still reads at 375px; weight and opacity carry the
+// intensity, with a floor so an untrained muscle still reads as anatomy.
+const HATCH_PITCH = 2;
+const HATCH_W_FLOOR = 0.2;
+const HATCH_W_RANGE = 0.9;
+const HATCH_O_FLOOR = 0.4;
+const HATCH_O_RANGE = 0.6;
+const DEFAULT_ANGLE = 90;
+
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
 function fillOpacity(intensity: number): number {
   return FILL_FLOOR + Math.max(0, Math.min(1, intensity)) * FILL_RANGE;
 }
@@ -69,7 +84,9 @@ function Face({
   selected,
   systemic,
   reduce,
+  variant,
 }: {
+  variant: BodyMapStyle;
   face: BodyFace;
   intensity: Record<MuscleKey, number>;
   estimated: Record<MuscleKey, boolean>;
@@ -79,20 +96,67 @@ function Face({
 }) {
   const shapes = BODY_MUSCLE_SHAPES[face];
   const pieces = MUSCLE_KEYS.flatMap((m) => (shapes[m] ?? []).map((shape, j) => ({ m, j, shape })));
+  // Unique per BodyMap instance and face; the piece suffix is appended below.
+  const uid = useId().replace(/:/g, '');
+  const engraved = variant === 'engraved';
   return (
     <svg className="bodymap-face" data-face={face} viewBox={BODY_VIEWBOX} aria-hidden="true">
       {/* base silhouette */}
       <path
         d={BODY_MUSCLE_SILHOUETTE[face]}
-        fill="var(--color-fg)"
-        fillOpacity={0.06}
+        fill={engraved ? 'none' : 'var(--color-fg)'}
+        fillOpacity={engraved ? undefined : 0.06}
         stroke="var(--color-fg)"
-        strokeOpacity={0.25}
+        strokeOpacity={engraved ? 0.35 : 0.25}
         strokeWidth={0.6}
         vectorEffect="non-scaling-stroke"
       />
-      {/* Plates: one fill per muscle piece, gap stroke in the surface colour. */}
-      {pieces.map(({ m, j, shape }) => {
+      {/* Engraved: one hatch pattern per piece. The twin of a mirrored piece sits
+          inside the mirror transform, so its pattern mirrors with it. */}
+      {engraved
+        ? pieces.map(({ m, j, shape }) => {
+            const i = clamp01(intensity[m] ?? 0);
+            const pid = `${uid}-${face}-${m}-${j}`;
+            return (
+              <g key={`${m}-${j}`}>
+                <defs>
+                  <pattern
+                    id={pid}
+                    width={HATCH_PITCH}
+                    height={HATCH_PITCH}
+                    patternUnits="userSpaceOnUse"
+                    patternTransform={`rotate(${(shape.angle ?? DEFAULT_ANGLE) - 90})`}
+                  >
+                    <line
+                      x1={0}
+                      y1={0}
+                      x2={0}
+                      y2={HATCH_PITCH}
+                      stroke="var(--color-fg)"
+                      strokeWidth={HATCH_W_FLOOR + i * HATCH_W_RANGE}
+                      strokeOpacity={HATCH_O_FLOOR + i * HATCH_O_RANGE}
+                    />
+                  </pattern>
+                </defs>
+                <Mirrored shape={shape}>
+                  {(d) => (
+                    <path
+                      d={d}
+                      fill={`url(#${pid})`}
+                      stroke="var(--color-fg)"
+                      strokeOpacity={0.45}
+                      strokeWidth={0.5}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )}
+                </Mirrored>
+              </g>
+            );
+          })
+        : null}
+      {/* Plates (and Thermal until its renderer lands): one fill per muscle
+          piece, gap stroke in the surface colour. */}
+      {(engraved ? [] : pieces).map(({ m, j, shape }) => {
         const target = fillOpacity(intensity[m] ?? 0);
         const delay = MUSCLE_REGION_KEYS.indexOf(MUSCLES[m].region) * 0.04;
         return (
@@ -114,7 +178,7 @@ function Face({
           </Mirrored>
         );
       })}
-      {face === 'front' ? (
+      {face === 'front' && !engraved ? (
         <g stroke="var(--color-surface)" strokeWidth={ABS_GAP_WIDTH}>
           {ABS_DIVIDERS.lines.map((l) => (
             <line key={l.y} x1={l.x1} x2={l.x2} y1={l.y} y2={l.y} />
@@ -190,7 +254,10 @@ export function BodyMap({
   face,
   onFaceChange,
   selected,
+  style = 'plates',
 }: {
+  // Thermal has no renderer yet (a later phase); it draws exactly like Plates.
+  style?: BodyMapStyle;
   // Per MUSCLE, 0..1 against the busiest muscle (muscleIntensities).
   intensity: Record<MuscleKey, number>;
   // Muscles whose minutes came wholly or partly from the default split (D4).
@@ -286,6 +353,7 @@ export function BodyMap({
             selected={selected}
             systemic={systemic}
             reduce={reduce}
+            variant={style}
           />
           {RIB_Z.map((z) => (
             <svg
@@ -305,6 +373,7 @@ export function BodyMap({
             selected={selected}
             systemic={systemic}
             reduce={reduce}
+            variant={style}
           />
         </div>
       </div>
