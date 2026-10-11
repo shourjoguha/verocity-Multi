@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
+  addCoachAthleteNote,
   getActivePlan,
+  getCoachAthleteNotes,
   getCoachBriefs,
   getCoachObservations,
   getCoachRuleNotes,
@@ -27,7 +29,13 @@ import {
 } from '@/lib/coach/governor';
 import { impactScore } from '@/lib/coach/impact';
 import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy';
-import type { CoachBrief, CoachRuleNote, Recommendation, RecDisposition } from '@/lib/types';
+import type {
+  CoachAthleteNote,
+  CoachBrief,
+  CoachRuleNote,
+  Recommendation,
+  RecDisposition,
+} from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { isLiveRec, setCoachSeenAt } from '@/lib/coachSignal';
@@ -108,6 +116,8 @@ function partitionOpen(open: Recommendation[]): { lead: Unit[]; rest: Recommenda
   return { lead, rest };
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const inkBtn =
   'hill-btn inline-flex min-h-11 items-center justify-center bg-fg px-3 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85 disabled:opacity-40';
 const ghostBtn =
@@ -118,11 +128,14 @@ function RecRow({
   onClick,
   snoozed,
   muted,
+  noted,
 }: {
   rec: Recommendation;
   onClick: () => void;
   snoozed?: boolean;
   muted?: boolean;
+  /** An athlete note the weekly routine has not read yet. */
+  noted?: boolean;
 }) {
   const aging = rec.status === 'open' && Date.now() - Date.parse(rec.created_at) > 14 * 86_400_000;
   return (
@@ -140,6 +153,7 @@ function RecRow({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1 text-[0.6rem] uppercase tracking-wider text-muted">
           {aging ? <span className="text-fg">Aging</span> : null}
+          {noted ? <span>Noted</span> : null}
           {snoozed && rec.snooze_until ? <span>till {formatDate(rec.snooze_until.slice(0, 10))}</span> : null}
           {rec.status === 'acted' && rec.disposition ? (
             <span>{rec.disposition.replace(/_/g, ' ')}</span>
@@ -262,10 +276,12 @@ function ThemeCard({
   theme,
   rows,
   onOpen,
+  noted,
 }: {
   theme: Theme;
   rows: Recommendation[];
   onOpen: (r: Recommendation) => void;
+  noted: Set<string>;
 }) {
   return (
     <li className="lift overflow-hidden border border-border bg-surface">
@@ -290,6 +306,7 @@ function ThemeCard({
             >
               <span className="text-sm font-medium text-fg">{r.tldr}</span>
               <span className="shrink-0 text-[0.6rem] uppercase tracking-wider text-muted">
+                {noted.has(r.id) ? 'Noted · ' : ''}
                 {r.drift_score != null ? `${Math.round(r.drift_score * 100)}%` : ''}
               </span>
             </button>
@@ -308,6 +325,8 @@ export default function CoachView() {
   const [note, setNote] = useState('');
   const [briefs, setBriefs] = useState<CoachBrief[]>([]);
   const [ruleNotes, setRuleNotes] = useState<CoachRuleNote[]>([]);
+  const [athleteNotes, setAthleteNotes] = useState<CoachAthleteNote[]>([]);
+  const [noting, setNoting] = useState(false);
   const [activeBrief, setActiveBrief] = useState<CoachBrief | null>(null);
   // Null = no filter. Kept apart from the slider position so the default stays
   // "everything" as older rows arrive and the range grows.
@@ -326,14 +345,16 @@ export default function CoachView() {
         window.location.href = '/login';
         return;
       }
-      const [rows, briefRows, noteRows] = await Promise.all([
+      const [rows, briefRows, noteRows, athleteRows] = await Promise.all([
         getRecommendations(),
         getCoachBriefs(),
         getCoachRuleNotes(),
+        getCoachAthleteNotes(),
       ]);
       setRecs(rows);
       setBriefs(briefRows);
       setRuleNotes(noteRows);
+      setAthleteNotes(athleteRows);
       setReady(true);
     });
   }, []);
@@ -452,6 +473,28 @@ export default function CoachView() {
     await refresh();
   }
 
+  /**
+   * "Noted": save the note for the weekly routine and keep the finding open.
+   * Touches nothing on the recommendation row, so no cooldown starts and the
+   * scorecard does not count it as decided.
+   */
+  async function addNote(rec: Recommendation) {
+    if (noting || !note.trim()) return;
+    setNoting(true);
+    try {
+      const row = await addCoachAthleteNote(rec, note);
+      if (!row) {
+        toast('Could not save note — try again', 'error');
+        return;
+      }
+      setAthleteNotes((prev) => [row, ...prev]);
+      setNote('');
+      toast('Noted — the weekly review will read it', 'success');
+    } finally {
+      setNoting(false);
+    }
+  }
+
   async function dismiss(rec: Recommendation) {
     await updateRecommendation(rec.id, { status: 'dismissed' });
     closeDetail();
@@ -531,6 +574,13 @@ export default function CoachView() {
   const decided = windowRecs.filter((r) => r.status === 'acted' || r.status === 'dismissed');
   const snoozedBriefs = windowBriefs.filter((b) => b.status === 'snoozed' && !isBriefLive(b));
   const decidedBriefs = windowBriefs.filter((b) => b.status === 'acted');
+  // Findings carrying a note the routine has not read yet.
+  const noted = new Set(
+    athleteNotes
+      .filter((n) => n.reviewed_at == null && n.recommendation_id)
+      .map((n) => n.recommendation_id as string),
+  );
+  const activeNotes = active ? athleteNotes.filter((n) => n.recommendation_id === active.id) : [];
 
   return (
     <>
@@ -581,9 +631,20 @@ export default function CoachView() {
                 <ul className="flex flex-col gap-2">
                   {lead.map((u) =>
                     u.kind === 'theme' ? (
-                      <ThemeCard key={u.key} theme={u.theme} rows={u.rows} onOpen={setActive} />
+                      <ThemeCard
+                        key={u.key}
+                        theme={u.theme}
+                        rows={u.rows}
+                        onOpen={setActive}
+                        noted={noted}
+                      />
                     ) : (
-                      <RecRow key={u.key} rec={u.row} onClick={() => setActive(u.row)} />
+                      <RecRow
+                        key={u.key}
+                        rec={u.row}
+                        onClick={() => setActive(u.row)}
+                        noted={noted.has(u.row.id)}
+                      />
                     ),
                   )}
                 </ul>
@@ -592,7 +653,7 @@ export default function CoachView() {
                     <Disclosure title={`${rest.length} more`}>
                       <ul className="flex flex-col gap-2 p-4 pt-0">
                         {rest.map((r) => (
-                          <RecRow key={r.id} rec={r} onClick={() => setActive(r)} />
+                          <RecRow key={r.id} rec={r} onClick={() => setActive(r)} noted={noted.has(r.id)} />
                         ))}
                       </ul>
                     </Disclosure>
@@ -612,7 +673,13 @@ export default function CoachView() {
                   <BriefRow key={b.id} brief={b} onClick={() => setActiveBrief(b)} />
                 ))}
                 {snoozed.map((r) => (
-                  <RecRow key={r.id} rec={r} onClick={() => setActive(r)} snoozed />
+                  <RecRow
+                    key={r.id}
+                    rec={r}
+                    onClick={() => setActive(r)}
+                    snoozed
+                    noted={noted.has(r.id)}
+                  />
                 ))}
               </ul>
             </section>
@@ -669,14 +736,49 @@ export default function CoachView() {
                   {active.disposition_note ? ` · ${active.disposition_note}` : ''}
                 </div>
               ) : (
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Note (optional)"
-                  rows={2}
-                  className="mt-4 w-full border border-border bg-bg px-3 py-2 text-sm text-fg outline-none focus:border-subtle"
-                />
+                <>
+                  <textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Note — context for the coach, you don't have to decide yet"
+                    aria-label="Note"
+                    rows={2}
+                    className="mt-4 w-full border border-border bg-bg px-3 py-2 text-sm text-fg outline-none focus:border-subtle"
+                  />
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={() => addNote(active)}
+                      disabled={noting || !note.trim()}
+                      className={ghostBtn}
+                    >
+                      {noting ? 'Saving…' : 'Noted · keep open'}
+                    </button>
+                  </div>
+                </>
               )}
+              {activeNotes.length > 0 ? (
+                <div className="mt-4">
+                  <div className="text-[0.6rem] uppercase tracking-[0.3em] text-subtle">
+                    Notes for weekly review
+                  </div>
+                  <ul className="mt-2 border border-border">
+                    {activeNotes.map((n) => (
+                      <li key={n.id} className="border-t border-border-soft px-3 py-2 first:border-t-0">
+                        <p className="whitespace-pre-line text-sm text-fg">{n.body}</p>
+                        <div className="mt-1 text-[0.65rem] uppercase tracking-wider text-muted">
+                          {formatDate(n.created_at.slice(0, 10))} ·{' '}
+                          {n.reviewed_at
+                            ? `Read ${formatDate(n.reviewed_at.slice(0, 10))}${
+                                // An id points at a brief or rule note; only prose is worth showing.
+                                n.review_ref && !UUID.test(n.review_ref) ? ` · ${n.review_ref}` : ''
+                              }`
+                            : 'Waiting for weekly review'}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <DeepEnrichment recId={active.id} />
             </div>
             {active.status === 'acted' || active.status === 'dismissed' ? null : (

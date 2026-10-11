@@ -820,6 +820,17 @@ navigations rather than more patching of the update path.
 
 ## Testing & tooling
 
+### audit:mobile passes on a page whose islands never hydrated
+`[measured in a cloud session, Oct 2026]`
+`astro dev` in a fresh cloud container answered every island module with
+`Internal server error: Missing field moduleType` (vite/rolldown transform).
+The pages still returned 200 with their SSR shell, so audit:mobile printed "All
+checks passed" while /app/coach sat on LOADING — it measured nothing
+interactive. Check the dev log for `[ERROR]` before trusting a green run, or run
+the audits against `npm run build && npx astro preview` instead. In the same
+container, pass `CHROMIUM_PATH=/opt/pw-browsers/chromium`: the pinned
+Playwright looks for a headless-shell build that is not installed.
+
 ### A touch-scroll probe reports "can't scroll" when the page scrolls fine
 `[measured in headless Chromium]`
 CDP `Input.synthesizeScrollGesture` with `gestureSourceType: 'touch'` does
