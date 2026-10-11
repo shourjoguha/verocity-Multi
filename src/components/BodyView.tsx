@@ -6,7 +6,7 @@ import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { supabasePublic } from '@/lib/supabase';
 import type { Movement, MovementTaxonomyOverride, WorkoutLog } from '@/lib/types';
 import {
-  muscleIntensities,
+  muscleTotals,
   regionTotals,
   summarizeBodyLoad,
   type BodyCurrency,
@@ -26,6 +26,7 @@ import {
   MUSCLE_REGIONS,
   MUSCLE_REGION_KEYS,
   PLANE_KEYS,
+  TRAINING_PERIODS,
   ROTARY_ROLES,
   type ModalityKey,
   type RegionKey,
@@ -33,39 +34,37 @@ import {
 } from '@/app.config';
 import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { TaxonomyEditor } from '@/components/TaxonomyEditor';
-import { formatRound } from '@/lib/format';
 import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { BodyMap } from '@/components/BodyMap';
 import { useBodyMapInk, useBodyMapStyle } from '@/lib/bodyMapPrefs';
+import { setPeriod, usePeriod } from '@/lib/periodPrefs';
 import { EASE, Item, PageStagger } from '@/components/anim';
 
-const WINDOWS = [
-  { key: '4w', label: '4W', days: 28 },
-  { key: '8w', label: '8W', days: 56 },
-  { key: '13w', label: '3M', days: 91 },
-  { key: '26w', label: '6M', days: 182 },
-] as const;
-
-type WindowKey = (typeof WINDOWS)[number]['key'];
-
-// The two readings of the same window. Minutes answers "how long did I work this
-// region", volume answers "how much work landed there" — a 45-minute mobility
-// flow and a 45-minute squat session are the same on the first and nothing alike
-// on the second.
-//
-// They are NOT two spellings of one number and must never be read against each
-// other: minutes are wall clock, volume is load x rep-equivalents. Volume used to
-// collapse onto minutes anyway, because duration converts into rep-equivalents —
-// which is exactly what BODY_LENSES now prevents by keeping the comparison inside
-// one kind of work. Minutes stays the default because it is the currency that
-// survives for every lens.
-const CURRENCIES = [
-  { key: 'minutes', label: 'Minutes' },
+// The page-wide measure. Work is each loaded working set counted once, split
+// across the muscles it trains (so it sums to the number of sets); Volume is the
+// scaled load x reps x range-of-motion index. Time-only training (runs, rides,
+// yoga) has no sets and no volume, so a lens holding only that falls back to
+// minutes for display (see `effective` below) rather than rendering cold.
+// Both read as a % of their own total — the units differ and must never be
+// compared across the toggle.
+const MEASURES = [
+  { key: 'work', label: 'Work' },
   { key: 'volume', label: 'Volume' },
 ] as const satisfies readonly { key: BodyCurrency; label: string }[];
+
+type Measure = (typeof MEASURES)[number]['key'];
+
+const MEASURE_NOUN: Record<BodyCurrency, string> = { work: 'work', volume: 'volume', minutes: 'time' };
+
+// Whole percent, but a real non-zero share never reads as 0%.
+function pctLabel(share: number): string {
+  if (share <= 0) return '0%';
+  const r = Math.round(share * 100);
+  return r === 0 ? '<1%' : `${r}%`;
+}
 
 function ymd(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
@@ -118,7 +117,7 @@ type RegionRowData = {
   label: string;
   total: number;
   minutes: number;
-  sets: number;
+  share: number;
   intensity: number;
 };
 
@@ -127,12 +126,10 @@ type RegionRowData = {
 // the two drift.
 function RegionRow({
   row,
-  currency,
   selected,
   onSelect,
 }: {
   row: RegionRowData;
-  currency: BodyCurrency;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -158,7 +155,7 @@ function RegionRow({
           />
         </span>
         <span className="w-14 shrink-0 text-right tabular-nums text-muted">
-          {currency === 'minutes' ? `${formatRound(row.total, 0)}m` : formatRound(row.total, 0)}
+          {pctLabel(row.share)}
         </span>
       </button>
     </li>
@@ -183,8 +180,9 @@ const CALLOUT_TOP: Record<RegionKey, number> = {
 export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
   const showcase = mode === 'showcase';
   const client = showcase ? supabasePublic : undefined;
-  const [windowKey, setWindowKey] = useState<WindowKey>('8w');
-  const [currency, setCurrency] = useState<BodyCurrency>('minutes');
+  // Shared with Stats and saved on the device (lib/periodPrefs.ts).
+  const periodKey = usePeriod();
+  const [measure, setMeasure] = useState<Measure>('work');
   // Defaults to strength, the lens where "volume" means load moved rather than
   // duration re-spelled. See BODY_LENSES in app.config.ts.
   const [lens, setLens] = useState<BodyLensKey>(DEFAULT_BODY_LENS);
@@ -197,7 +195,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   // Overrides saved in this session, so the map updates without a refetch.
   const [localOverrides, setLocalOverrides] = useState<OverrideMap>({});
 
-  const days = WINDOWS.find((w) => w.key === windowKey)!.days;
+  const days = TRAINING_PERIODS.find((p) => p.key === periodKey)!.days;
   // Real "now" on both surfaces — the showcase is live (migration 0034).
   const today = new Date();
   const from = new Date(
@@ -209,7 +207,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
       showcase
         ? getLogsInRange(ymd(from), ymd(today), client)
         : loadAllLogs().then((all) => logsBetween(all, ymd(from), ymd(today))),
-    { auth: !showcase, key: showcase ? undefined : `body:logs:${windowKey}` },
+    { auth: !showcase, key: showcase ? undefined : `body:logs:${periodKey}` },
   );
   const { data: movements } = useAuthedQuery(() => getMovements(client), {
     auth: !showcase,
@@ -261,74 +259,97 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     () => summarizeBodyLoad(all, overrides, { unweightedKg }),
     [all, overrides, unweightedKg],
   );
-  // Normalised per currency, so the heat map cannot contradict the list beside it.
-  // The list ranks REGIONS and the map shades MUSCLES; each is normalised
-  // against its own busiest entry, so the list's bar keeps its region reading.
-  const intensity = useMemo(
-    () => muscleIntensities(summary, currency, lens),
-    [summary, currency, lens],
-  );
-  // Decision D4: a muscle is ESTIMATED when any of its minutes came from the
-  // default region split rather than an authored muscle profile. The epsilon
-  // only absorbs float noise between two sums of the same minutes.
+  // What the page actually shows. The chosen measure, unless this lens has none
+  // of it in the period but does have minutes — then time, with a note. Decided
+  // per lens so Strength can read Work while Cardio reads time.
+  const effective: BodyCurrency = useMemo(() => {
+    const sum = (c: BodyCurrency) =>
+      Object.values(regionTotals(summary, c, lens)).reduce((a, b) => a + b, 0);
+    if (sum(measure) > 0) return measure;
+    return sum('minutes') > 0 ? 'minutes' : measure;
+  }, [summary, measure, lens]);
+  const fellBack = effective !== measure;
+
+  // The map shades each muscle by its SHARE of the active measure's total, in
+  // fixed bands (bodyMapShade) — not relative to the busiest muscle, so one
+  // dominant muscle cannot wash the rest out, and the legend, callouts and list
+  // all read the same unit. (muscleIntensities, which normalises to the max, is
+  // no longer read here.)
+  const intensity = useMemo(() => {
+    const t = muscleTotals(summary, effective, lens);
+    const sum = Object.values(t).reduce((a, b) => a + b, 0);
+    return Object.fromEntries(
+      MUSCLE_KEYS.map((m) => [m, sum > 0 ? t[m] / sum : 0]),
+    ) as Record<(typeof MUSCLE_KEYS)[number], number>;
+  }, [summary, effective, lens]);
+  // Decision D4: a muscle is ESTIMATED when any of the ACTIVE measure came from
+  // the default region split rather than an authored muscle profile. The epsilon
+  // only absorbs float noise between two sums of the same quantity.
   // Marked only while coverage is PARTIAL: when every muscle is estimated (or
   // none is) the mark distinguishes nothing, dashes every plate and buries the
   // gaps, and the caption below already says it.
+  const coverage = summary.muscleCoverage[effective];
   const estimated = useMemo(
     () => {
-      const partial = summary.muscleCoverage.minutes > 0 && summary.muscleCoverage.minutes < 1;
+      const whole =
+        effective === 'work'
+          ? summary.muscleWork
+          : effective === 'volume'
+            ? summary.muscleVolume
+            : summary.muscleMinutes;
+      const partial = coverage > 0 && coverage < 1;
       return Object.fromEntries(
         MUSCLE_KEYS.map((m) => [
           m,
-          partial && summary.muscleMinutes[m] - summary.muscleAuthored.minutes[m] > 1e-6,
+          partial && whole[m] - summary.muscleAuthored[effective][m] > 1e-6,
         ]),
       ) as Record<(typeof MUSCLE_KEYS)[number], boolean>;
     },
-    [summary],
+    [summary, effective, coverage],
   );
 
   // Wait on stats too, or Volume would paint at the flat constant and then jump
   // once bodyweight lands.
   if (loading || statsLoading) return <LoadingScreen />;
 
-  const totals = regionTotals(summary, currency, lens);
+  const totals = regionTotals(summary, effective, lens);
   const regionMax = Math.max(0, ...Object.values(totals));
-  // Share of this period's muscle minutes that is estimated (D4); 0 hides the line.
-  const estimatedPct = 100 - Math.round(summary.muscleCoverage.minutes * 100);
+  const totalSum = Object.values(totals).reduce((a, b) => a + b, 0);
+  // Share of this period's active measure that is estimated (D4); 0 hides the line.
+  const estimatedPct = 100 - Math.round(coverage * 100);
   // Emptiness is a property of the LENS, not the window — measured on minutes so
-  // the answer does not change when the currency toggle does.
+  // the answer does not change when the measure toggle does.
   const lensTotal = Object.values(regionTotals(summary, 'minutes', lens)).reduce((a, b) => a + b, 0);
   const regionRows = MUSCLE_REGION_KEYS.map((k) => ({
     key: k,
     label: MUSCLE_REGIONS[k].label,
     total: totals[k],
     minutes: summary.regionMinutes[k],
-    sets: summary.resistanceSets[k],
+    share: totalSum > 0 ? totals[k] / totalSum : 0,
     intensity: regionMax > 0 ? totals[k] / regionMax : 0,
   })).sort((a, b) => b.total - a.total);
 
-  // Filter on minutes, not on the active currency: a region with logged work but
-  // zero volume should still appear rather than vanish when the toggle flips.
-  const worked = regionRows.filter((r) => r.minutes > 0);
+  // Regions with any of the ACTIVE measure. (This used to filter on minutes so a
+  // region would not vanish when the toggle flipped; with % of total a 0% row is
+  // noise, and a lens with none of the measure falls back to time above.)
+  const worked = regionRows.filter((r) => r.total > 0);
   const systemicShare =
     summary.totalMinutes > 0 ? summary.systemicMinutes / summary.totalMinutes : 0;
 
   const rotaryTotal = summary.rotaryMinutes.rotational + summary.rotaryMinutes.antiRotational;
 
-  // The four busiest regions, annotated on the figure. Shares are always of
-  // MINUTES regardless of the currency toggle: the callouts sit beside a
-  // silhouette shaded by `intensity`, and a percentage that changed meaning
-  // when a toggle further down the page flipped would be quietly wrong.
+  // The four busiest regions, annotated on the figure, as a share of the TOTAL
+  // of the active measure — the same measure the silhouette is shaded by and the
+  // list beside it ranks by, so the three cannot disagree.
   // Side and final height come from layoutCallouts, which alternates edges
   // going DOWN the figure and then slots each edge apart. Ranking by list
   // position put chest and back — both at 26% — on the same edge at the same
   // height, and nothing enforced a gap between them.
-  const totalWorked = worked.reduce((a, r) => a + r.minutes, 0);
   const callouts = layoutCallouts(
     worked.slice(0, 4).map((r) => ({
       key: r.key,
       label: MUSCLE_REGIONS[r.key].short,
-      pct: totalWorked > 0 ? Math.round((r.minutes / totalWorked) * 100) : 0,
+      pct: Math.round(r.share * 100),
       top: CALLOUT_TOP[r.key],
     })),
   );
@@ -362,20 +383,28 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
 
   return (
     <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
-      {/* The window and the totals it produces share the title row: the
-          minutes and sessions change with 4W/8W/3M/6M and with nothing else on
-          the page, so they sit under the control that moves them. */}
+      {/* The period and the measure drive the whole page, so both sit in the
+          header: the totals under them change with the period and nothing else. */}
       <Item>
         <div className="mb-5 flex items-start justify-between gap-3">
           <EchoText text="BODY" as="h1" className={ECHO_APP_TITLE} />
           <div className="flex shrink-0 flex-col items-end gap-1.5 pt-1">
             <SegmentedTabs
-              tabs={WINDOWS.map((w) => ({ key: w.key, label: w.label }))}
-              active={windowKey}
-              onChange={(k) => setWindowKey(k as WindowKey)}
-              ariaLabel="Time window"
+              tabs={TRAINING_PERIODS.map((p) => ({ key: p.key, label: p.label }))}
+              active={periodKey}
+              onChange={(k) => setPeriod(k as (typeof TRAINING_PERIODS)[number]['key'])}
+              ariaLabel="Time period"
               size="sm"
-              className="w-[13rem]"
+              className="w-[15rem]"
+            />
+            <SegmentedTabs
+              tabs={MEASURES.map((m) => ({ key: m.key, label: m.label }))}
+              active={measure}
+              onChange={(k) => setMeasure(k as Measure)}
+              ariaLabel="Measure muscles by"
+              size="sm"
+              as="radiogroup"
+              className="w-40"
             />
             {summary.totalMinutes > 0 ? (
               <p className="t-label text-muted opacity-75 tabular-nums">
@@ -389,7 +418,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
 
       {summary.totalMinutes === 0 ? (
         <Item>
-          <EmptyState>No completed sessions in this window.</EmptyState>
+          <EmptyState>No completed sessions in this period.</EmptyState>
         </Item>
       ) : (
         <>
@@ -431,6 +460,12 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   ariaLabel="Kind of work"
                   size="sm"
                 />
+                {fellBack && lensTotal > 0 ? (
+                  <p className="mt-2 text-xs text-muted">
+                    No {measure === 'work' ? 'sets' : 'volume'} logged for{' '}
+                    {BODY_LENSES[lens].label.toLowerCase()} — showing time
+                  </p>
+                ) : null}
                 {activeGroup.parts.length > 0 ? (
                   <p className="mt-2 text-xs text-muted tabular-nums">
                     {activeGroup.parts.join(' · ')}
@@ -447,11 +482,11 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   inside, and do not add overflow-hidden here or on the card. */}
               <div className="border-t border-border-soft px-3 pb-2 pt-4">
                 {lensTotal === 0 ? (
-                  /* The window HAS work, this lens does not. Without its own
+                  /* The period HAS work, this lens does not. Without its own
                      message the silhouette just renders cold and reads as
                      broken rather than empty. */
                   <p className="py-8 text-center text-sm text-muted">
-                    No {BODY_LENSES[lens].label.toLowerCase()} work logged in this window.
+                    No {BODY_LENSES[lens].label.toLowerCase()} work logged in this period.
                   </p>
                 ) : (
                   <div className="relative">
@@ -464,6 +499,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                       selected={selected}
                       style={bodyMapStyle}
                       ink={bodyMapInk}
+                      legendCaption={`% of total ${MEASURE_NOUN[effective]}`}
                     />
                     {callouts.map((c) => (
                       <div
@@ -486,7 +522,8 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                 )}
                 {lensTotal > 0 && estimatedPct > 0 ? (
                   <p className="mt-1 text-center text-xs text-muted tabular-nums">
-                    Muscle detail is estimated for {estimatedPct}% of this period
+                    Muscle detail is estimated for {estimatedPct}% of this period's{' '}
+                    {MEASURE_NOUN[effective]}
                   </p>
                 ) : null}
               </div>
@@ -561,34 +598,18 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           {/* Top three, then the rest in the same card. Region selection lives
               on these ROWS, not on the SVG paths: a 12px calf path as a
               role="button" would fail the 44px tap-target audit, and a row
-              gives screen readers real text. The currency toggle sits in the
-              header because it changes the top three too, not only the list
-              it used to be hidden inside. */}
+              gives screen readers real text. The Work/Volume toggle lives in the
+              page header: it drives the whole page, not just this list. */}
           {worked.length > 0 && lensTotal > 0 ? (
             <Item>
               <section className="mb-6">
-                <SectionHeader
-                  action={
-                    <SegmentedTabs
-                      tabs={CURRENCIES.map((c) => ({ key: c.key, label: c.label }))}
-                      active={currency}
-                      onChange={(k) => setCurrency(k as BodyCurrency)}
-                      ariaLabel="Measure regions by"
-                      size="compact"
-                      as="radiogroup"
-                      className="w-40"
-                    />
-                  }
-                >
-                  Most worked
-                </SectionHeader>
+                <SectionHeader>Most worked</SectionHeader>
                 <div className="lift overflow-hidden border border-border bg-surface">
                   <ul className="flex flex-col gap-px bg-border-soft">
                     {worked.slice(0, 3).map((r) => (
                       <RegionRow
                         key={r.key}
                         row={r}
-                        currency={currency}
                         selected={selected === r.key}
                         onSelect={() => setSelected(selected === r.key ? null : r.key)}
                       />
@@ -601,8 +622,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                           <RegionRow
                             key={r.key}
                             row={r}
-                            currency={currency}
-                            selected={selected === r.key}
+                                selected={selected === r.key}
                             onSelect={() => setSelected(selected === r.key ? null : r.key)}
                           />
                         ))}
@@ -610,10 +630,15 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                     </Disclosure>
                   ) : null}
                 </div>
-                {currency === 'volume' ? (
+                {effective === 'volume' ? (
                   <p className="mt-2 text-[0.7rem] text-muted">
                     Scaled volume — load × reps × range of motion, with unloaded work priced
-                    against your bodyweight. A relative index, not kilograms.
+                    against your bodyweight. Shown as a share of the period's total.
+                  </p>
+                ) : effective === 'work' ? (
+                  <p className="mt-2 text-[0.7rem] text-muted">
+                    Work — each loaded set counts once, split across the muscles it trains.
+                    Shown as a share of the period's total.
                   </p>
                 ) : null}
               </section>

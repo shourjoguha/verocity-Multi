@@ -294,7 +294,7 @@ function Face({
           />
         </g>
       ) : null}
-      {/* Estimated muscles (decision D4): minutes that came wholly or partly
+      {/* Estimated muscles (decision D4): work that came wholly or partly
           from the default region split get a fine dashed outline. */}
       {pieces
         .filter(({ m }) => estimated[m])
@@ -359,10 +359,14 @@ export function BodyMap({
   selected,
   style = 'plates',
   ink = 'mono',
+  legendCaption = '% of top muscle',
 }: {
+  // Names the measure the shares are of: '% of total work' etc.
+  legendCaption?: string;
   style?: BodyMapStyle;
   ink?: BodyMapInkPref;
-  // Per MUSCLE, 0..1 against the busiest muscle (muscleIntensities).
+  // Per MUSCLE, share of the period's total of the active measure, 0..1
+  // (NOT relative to the busiest muscle). Banded by bodyMapShade.
   intensity: Record<MuscleKey, number>;
   // Muscles whose minutes came wholly or partly from the default split (D4).
   estimated: Record<MuscleKey, boolean>;
@@ -493,7 +497,7 @@ export function BodyMap({
             />
           </div>
         </div>
-        <ShadeLegend style={style} ink={ink} />
+        <ShadeLegend style={style} ink={ink} caption={legendCaption} />
       </div>
 
       {/* The discrete control ships always: it is the keyboard path, the
@@ -537,7 +541,16 @@ const LEGEND_CELL = 10; // px per band; labels sit on the band edges
 // Thin vertical key beside the figure: one cell per shade band, heaviest on
 // top, each painted with exactly what the map paints for that band in the
 // active style + ink. Static — nothing animates here.
-function ShadeLegend({ style, ink }: { style: BodyMapStyle; ink: BodyMapInkPref }) {
+function ShadeLegend({
+  style,
+  ink,
+  caption,
+}: {
+  style: BodyMapStyle;
+  ink: BodyMapInkPref;
+  caption: string;
+}) {
+  const labels = BODY_SHADE_LABELS;
   const uid = useId().replace(/:/g, '');
   const h = BODY_SHADE_BANDS * LEGEND_CELL;
   const bands = Array.from({ length: BODY_SHADE_BANDS }, (_, k) => BODY_SHADE_BANDS - 1 - k); // top-down
@@ -607,11 +620,11 @@ function ShadeLegend({ style, ink }: { style: BodyMapStyle; ink: BodyMapInkPref 
           })}
         </svg>
         <div className="absolute inset-0 border border-border" />
-        {/* tick labels: BODY_SHADE_LABELS runs 0..100 bottom-up; label k sits on
+        {/* tick labels: the labels run 0..top bottom-up; label k sits on
             the edge below band k+1 (the last one tops the bar). */}
-        {BODY_SHADE_LABELS.map((label, k) => (
+        {labels.map((label, k) => (
           <span
-            key={label}
+            key={k}
             className="absolute left-2 text-[8px] leading-none tabular-nums text-muted"
             style={{ top: h - (k + 1) * LEGEND_CELL - 3 }}
           >
@@ -620,7 +633,7 @@ function ShadeLegend({ style, ink }: { style: BodyMapStyle; ink: BodyMapInkPref 
         ))}
       </div>
       <span className="absolute left-0 w-14 text-[8px] leading-tight text-muted" style={{ top: h + 3 }}>
-        % of top muscle
+        {caption}
       </span>
     </div>
   );

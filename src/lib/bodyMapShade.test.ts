@@ -13,15 +13,16 @@ describe('shadeBand', () => {
   it.each([
     [0, 0],
     [0.0001, 1],
-    [0.0499, 1],
-    [0.05, 2],
-    [0.0999, 2],
-    [0.1, 3],
-    [0.1999, 3],
-    [0.2, 4],
-    [0.4, 5],
-    [0.6999, 5],
-    [0.7, 6],
+    [0.0099, 1],
+    [0.01, 2],
+    [0.0249, 2],
+    [0.025, 3],
+    [0.0499, 3],
+    [0.05, 4],
+    [0.0799, 4],
+    [0.08, 5],
+    [0.1199, 5],
+    [0.12, 6],
     [1, 6],
     [7, 6],
     [-1, 0],
@@ -37,9 +38,9 @@ describe('shadePosition / legend', () => {
     for (let b = 1; b < BODY_SHADE_BANDS; b++) expect(shadePosition(b)).toBeGreaterThan(shadePosition(b - 1));
     expect(shadePosition(6)).toBeLessThanOrEqual(1);
   });
-  it('has one label per band', () => {
-    expect(BODY_SHADE_LABELS).toEqual(['0', '5', '10', '20', '40', '70', '100']);
-    expect(BODY_SHADE_LABELS).toHaveLength(BODY_SHADE_BANDS);
+  it('has one label per edge', () => {
+    expect(BODY_SHADE_LABELS).toEqual(['0', '1', '2.5', '5', '8', '12+']);
+    expect(BODY_SHADE_LABELS).toHaveLength(BODY_SHADE_BANDS - 1);
   });
 });
 
