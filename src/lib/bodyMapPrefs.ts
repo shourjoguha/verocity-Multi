@@ -47,3 +47,45 @@ export function useBodyMapStyle(): BodyMapStyle {
   }, []);
   return style;
 }
+
+// Plates only: what the plates are inked with. Separate from the style so the
+// two prefs stay independent; mono is the monochrome-chrome default.
+export const BODY_MAP_INK_STORAGE_KEY = 'verocity:body-map-ink';
+export const BODY_MAP_INK_EVENT = 'verocity:body-map-ink-change';
+
+export const BODY_MAP_INKS = ['mono', 'colour'] as const;
+export type BodyMapInkPref = (typeof BODY_MAP_INKS)[number];
+export const BODY_MAP_INK_DEFAULT: BodyMapInkPref = 'mono';
+
+export function getBodyMapInk(): BodyMapInkPref {
+  if (typeof window === 'undefined') return BODY_MAP_INK_DEFAULT;
+  try {
+    const raw = window.localStorage.getItem(BODY_MAP_INK_STORAGE_KEY);
+    return (BODY_MAP_INKS as readonly (string | null)[]).includes(raw) ? (raw as BodyMapInkPref) : BODY_MAP_INK_DEFAULT;
+  } catch {
+    return BODY_MAP_INK_DEFAULT;
+  }
+}
+
+export function setBodyMapInk(next: BodyMapInkPref): void {
+  try {
+    window.localStorage.setItem(BODY_MAP_INK_STORAGE_KEY, next);
+  } catch {
+    /* blocked — the event below still updates this page. */
+  }
+  window.dispatchEvent(new CustomEvent(BODY_MAP_INK_EVENT, { detail: next }));
+}
+
+export function useBodyMapInk(): BodyMapInkPref {
+  const [ink, setInk] = useState<BodyMapInkPref>(BODY_MAP_INK_DEFAULT);
+  useEffect(() => {
+    setInk(getBodyMapInk());
+    const on = (e: Event) => {
+      const next = (e as CustomEvent<unknown>).detail;
+      setInk((BODY_MAP_INKS as readonly unknown[]).includes(next) ? (next as BodyMapInkPref) : getBodyMapInk());
+    };
+    window.addEventListener(BODY_MAP_INK_EVENT, on);
+    return () => window.removeEventListener(BODY_MAP_INK_EVENT, on);
+  }, []);
+  return ink;
+}

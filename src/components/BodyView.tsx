@@ -39,7 +39,7 @@ import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { BodyMap } from '@/components/BodyMap';
-import { useBodyMapStyle } from '@/lib/bodyMapPrefs';
+import { useBodyMapInk, useBodyMapStyle } from '@/lib/bodyMapPrefs';
 import { EASE, Item, PageStagger } from '@/components/anim';
 
 const WINDOWS = [
@@ -190,6 +190,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const [lens, setLens] = useState<BodyLensKey>(DEFAULT_BODY_LENS);
   const [face, setFace] = useState<BodyFace>('front');
   const bodyMapStyle = useBodyMapStyle();
+  const bodyMapInk = useBodyMapInk();
   const [selected, setSelected] = useState<RegionKey | null>(null);
   const [mapping, setMapping] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -462,6 +463,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                       onFaceChange={setFace}
                       selected={selected}
                       style={bodyMapStyle}
+                      ink={bodyMapInk}
                     />
                     {callouts.map((c) => (
                       <div

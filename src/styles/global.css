@@ -288,10 +288,16 @@ html[data-theme='dark'] {
 :root {
   --heat-lo: hsl(38 28% 90%);
   --heat-hi: hsl(8 76% 44%);
+  /* Plates "Colour" ink (BodyMap.tsx). DATA colour, legal under "colour only on
+     data". Light is darker than a typical mango so the band steps hold contrast
+     on white; the values are pinned by the contrast test in
+     lib/bodyMapShade.test.ts, which carries a copy — keep them in sync. */
+  --bm-mango: hsl(28 90% 32%);
 }
 html[data-theme='dark'] {
   --heat-lo: hsl(230 10% 16%);
   --heat-hi: hsl(26 95% 58%);
+  --bm-mango: hsl(36 92% 58%);
 }
 
 html,
