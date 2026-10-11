@@ -28,6 +28,7 @@ intent, LESSONS describes what actually happened.
 | **Count sets per muscle, or decide what counts as loaded work**          | `src/lib/bodyLoad.ts` — `meaningfulRegionShare`, `isLoadedSet` |
 | **Measure how much of a plan was followed, or what counts as a swap**    | `src/lib/planAdherence.ts`, `src/lib/movementSimilarity.ts` |
 | **Split training time by kind of work**                                  | `sessionLens` vs `modalityMinutes` — read the LESSONS entry first |
+| **Change the Body page's measure, shading, or the shared period**        | `src/lib/bodyLoad.ts`, `src/lib/bodyMapShade.ts`, `src/lib/periodPrefs.ts`, then the hard rules below |
 | Write coach output from a Claude Code session                            | `src/lib/coach/governor.ts` (the boundary), `supabase/migrations/0043_coach_briefs_notes.sql` |
 | **Run or change the weekly coach-tuning routine**                        | `docs/COACH_TUNING.md` (budget + boundary), `scripts/coach-tuning/scorecard.sql` |
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
@@ -130,7 +131,9 @@ UI audit have both run.
 - **Monochrome chrome; colour only on data.** Buttons, tabs, headers, cards,
   rows and every other piece of chrome stay in the `--color-*` greyscale. Colour
   is legal only where it *carries information*: activity/tone stripes, modality
-  segments, the consistency grid, and `--color-up` / `--color-down` on a delta.
+  segments, the consistency grid, `--color-up` / `--color-down` on a delta, and
+  the body map's Colour ink (`--bm-mango`, opt-in per device, Mono is the
+  default).
   Anything colour-coded must also survive without colour — `Delta` renders an
   arrow and a signed number, not just a hue.
   **One exception, by the owner's decision:** the Home coach icon may render in
@@ -153,7 +156,18 @@ UI audit have both run.
   and derived from the existing `--color-*` tokens. The user toggle is
   `BackgroundPicker.tsx`, rendered in `SettingsView.tsx`.
   The body map has its own per-device style (`plates` default, `engraved`,
-  `thermal`; `src/lib/bodyMapPrefs.ts`), also picked in Settings.
+  `thermal`; `src/lib/bodyMapPrefs.ts`), also picked in Settings. Plates also
+  take an ink pref (`mono` default, `colour`).
+- **Body-map shade is a share of the TOTAL, in seven fixed bands.**
+  `src/lib/bodyMapShade.ts`: untrained plus six worked bands with edges at
+  1 / 2.5 / 5 / 8 / 12 % of the active measure's total, never relative to the
+  busiest muscle. Map, vertical legend, callouts and list read the same unit.
+  Plate faces are opaque (the extrusion ribs, ~6% cumulative, never show through
+  them), and the silhouette outline is dotted so it stays distinct from the
+  muscle outlines. The band opacities are guarded by a WCAG contrast test in
+  `bodyMapShade.test.ts` whose token values (`--color-surface`, `--color-fg`,
+  `--bm-mango`, both themes) are **copied from `global.css` by hand** — change
+  a token and you must change the test, or it passes against stale colours.
 - **Default backdrop is device-gated.** Base.astro's pre-paint script picks
   `aurora` only when `(min-width: 768px) and (pointer: fine)` AND no
   `prefers-reduced-motion`. Touch / narrow / reduced-motion devices default
@@ -270,14 +284,30 @@ UI audit have both run.
   AND a set for glutes. Reading the fractional field against that floor
   understated every region by roughly the number of muscles a movement touches,
   and shipped "No muscle group reaches 10 sets/week" to an athlete for whom
-  three did. The coach reads `hardSetsByRegion`; the body map keeps
-  `resistanceSets`. **Never total `hardSetsByRegion`** — a squat counts twice on
+  three did. The coach reads `hardSetsByRegion`; `resistanceSets` stays as the
+  fractional field and no longer drives the map. **Never total `hardSetsByRegion`** — a squat counts twice on
   purpose — and `hardSetsByMuscle` follows the same whole-set rule and must not be summed into
   a region figure; never gate loaded volume on `modality === 'resistance'`: a
   loaded carry is `endurance` by modality and still weight moved by muscle
   (`isLoadedSet`). A region's cutoff is **relative to that movement's own
   primary region**, because a flat one drops Back Squat's glutes (0.18) and a
   carry's whole profile (top region 0.35).
+- **The body map's Work measure is a third count, not either of those.**
+  `regionWork` / `muscleWork` / `byLens.work` in `src/lib/bodyLoad.ts`: each
+  `isLoadedSet` working set (prep excluded) is ONE unit, split by the movement's
+  region and muscle shares, so it sums to the loaded-set count. Time-only work
+  (runs, rides, yoga) contributes nothing. It is the Body page's default;
+  `BodyCurrency` is `'work' | 'minutes' | 'volume'` and the page-level toggle
+  offers Work/Volume, with a lens that has no sets falling back to time and
+  saying so. Work exists because `resistanceSets` is gated on
+  `modality === 'resistance'`; do not reuse that field for it, and never mix
+  the three units across a toggle.
+- **Body and Stats share one training period.** `TRAINING_PERIODS` in
+  `app.config.ts` (4W / 6W / 8W / 12W / 6M, default 8W), chosen once and saved
+  per device by `src/lib/periodPrefs.ts`. The radar's window is that period
+  (the old per-radar window list is gone), Stats reads `ASPECT_READ_DAYS * 2` = 364 days so
+  switching never refetches, and the consistency grid caps at the last 8 weeks.
+  Never hardcode a period's day count in a component.
 - **Warm-up and cooldown are logged, not loaded.** `PREP_SECTIONS` in
   `app.config.ts`. Every volume, work (kg·m), set-count, tonnage, e1RM and RPE
   reader goes through `workingSections` / `flattenWorkingSets` in

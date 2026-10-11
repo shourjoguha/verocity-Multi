@@ -224,8 +224,10 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   past values** for that metric, so the middle of the scale means "typical for
   you" and nothing else. `scores` is a presentation of `metrics` against that
   baseline, stored only so a past reading can be shown as drawn.
-  `window_days` keeps the selectable windows (`ASPECT_WINDOWS`) as separate
-  series: a 28-day reading is only ever scored against 28-day samples.
+  `window_days` keeps each selectable window (the `TRAINING_PERIODS` day counts:
+  28 / 42 / 56 / 84 / 182) as a separate series: a 28-day reading is only ever
+  scored against 28-day samples. New lengths backfill client-side once; rows
+  under retired lengths (45 / 60 / 90) are never read.
   Below `ASPECT_MIN_BASELINE` samples an axis is **unscored** — there is no
   absolute fallback, and the chart shows the raw measurement instead. Written by
   the browser on demand (owner-scoped, RLS is the boundary); there is no
@@ -306,16 +308,31 @@ in three cases wrong) answers so Stats output for existing logs is unchanged.
 - **Matching** in `src/lib/movementTaxonomy.ts`: normalise → exact table →
   rules (longest matched fragment wins) → `unknown`. Never falls back to a
   bucket; unresolvable names surface in the UI's unmapped list.
-- **Aggregation** in `src/lib/bodyLoad.ts`, in **two currencies** the region
-  list toggles between. **Working minutes** is the default and the only unit
-  that survives for unloaded mobility work. **Volume** (`regionVolume`) is
+- **Aggregation** in `src/lib/bodyLoad.ts`, in **three currencies**
+  (`BodyCurrency` = `'work' | 'minutes' | 'volume'`). **Work** is the Body page's
+  default: `regionWork` / `muscleWork` / `byLens.work`, where each loaded working
+  set (`isLoadedSet`, prep sections excluded) counts as ONE unit split across the
+  movement's region and muscle weights, so it sums to the loaded-set count;
+  time-only work contributes none. `resistanceSets` and `hardSetsBy*` are
+  unchanged and are not this. The page-level toggle offers **Work / Volume**;
+  **minutes** is no longer a toggle option but is the display fallback for a
+  lens with no sets (cardio, mobility), and the page says so. **Working
+  minutes** remains the only unit that survives for unloaded mobility work.
+  **Volume** (`regionVolume`) is
   `setVolume` distributed across the same `profile.regions` weights — load ×
   rep-equivalents, with unloaded reps priced against the owner's bodyweight.
   Raw **tonnage** (`weight × reps`) still cannot be a currency: it is zero for
   erg intervals, jumps and planks, which is what `setVolume` exists to fix.
   Tonnage and hard sets remain resistance-only secondary readouts.
-  `regionIntensities(summary, currency)` normalises per currency, so the heat
-  map cannot contradict the list beside it.
+  Shading is each muscle's **share of the active measure's total**, quantised
+  into seven bands (edges 1 / 2.5 / 5 / 8 / 12 %) by `src/lib/bodyMapShade.ts`,
+  so map, vertical legend, callouts and list read one unit. The period is the
+  shared `TRAINING_PERIODS` pick (below), not a Body-only control.
+- **Rendering prefs** (per device, `src/lib/bodyMapPrefs.ts`): style `plates`
+  (default) / `engraved` / `thermal`, and for Plates an ink of `mono` (default)
+  or `colour` (`--bm-mango`). Plate faces are opaque; the silhouette is dotted.
+- **Classification of run-named movements.** The `run-named` rule makes Easy
+  Run, Zone 2 Run and Running classify like `run`.
 - **Geometry** in `src/lib/bodyRegions.ts`, renderer-agnostic path data.
 - **Overrides** on `movements.taxonomy`, matched by normalised name. An override
   may carry `muscles` (new, authored at muscle level) or `regions` (old); a
@@ -503,7 +520,8 @@ Function, which validates the token and performs scoped read-only queries.
   remembered per device) over a strip of that window drawn to fit the width
   (a bar per day up to 12 weeks, a bar per week beyond; bar height = duration,
   rest days a hairline), with all-time sessions, time and top e1RM as one muted
-  line under it; recent sessions list
+  line under it (this block keeps its own 2 / 4 / 8 / 12 week, 6 month, all
+  time picker, independent of the shared training period); recent sessions list
   (with set-shape strips + durations); recommendations badge.
 - **Plan** — week-by-week (W1–W16) progression table per day; edit mode
   (drag-reorder days, inline-edit movements/cells, add via library, delete,
@@ -523,7 +541,8 @@ Function, which validates the token and performs scoped read-only queries.
 - **Calendar** — month grid with per-session colored bars (by tag) + set-shape
   strips; click bar → log; click empty → AddSessionMenu; month list.
 - **Stats** — summary cards (sessions, time, adherence), weekly table
-  (count/time/volume), consistency heatmap (7×8 weekday×week), RPE fingerprint by
+  (count/time/volume), consistency heatmap (7 weekdays × up to 8 weeks: the last min(period, 8)
+  weeks, so 12W and 6M still show 8), RPE fingerprint by
   movement family, top-movement e1RM sparklines (with family roll-up), and the
   **fitness profile radar** — six axes, all derived from logged data and each
   scored against the owner's own stored history. **Strength** and **power** are
@@ -532,9 +551,13 @@ Function, which validates the token and performs scoped read-only queries.
   movement's own best e1RM and power biased toward low-rep sets.
   **Endurance** blends HR-weighted aerobic minutes, dense strength work (short
   rests read as conditioning) and the `hr_max − hr_avg` spread scaled by session
-  length, boosted when a conditioning block was logged. Two toggles: measurement window
-  (`ASPECT_WINDOWS`, the responsiveness control) and what the dashed comparison
-  series is (previous block, or the oldest week held). Axes on a thin baseline
+  length, boosted when a conditioning block was logged. The measurement window
+  is the page's **shared training period** (`TRAINING_PERIODS`: 4W / 6W / 8W /
+  12W / 6M, default 8W, saved per device by `src/lib/periodPrefs.ts` and carried
+  across Body and Stats); one picker at the top drives the tiles, mix bar, top
+  lifts, effort and radar. The radar keeps one toggle: what the dashed
+  comparison series is (previous block, or the oldest week held). Stats reads
+  `ASPECT_READ_DAYS * 2` = 364 days so switching never refetches. Axes on a thin baseline
   render hollow; axes with no baseline show their raw measurement and no polygon
   is drawn. An always-available explainer (`AspectExplainer`) states what the
   scale means, since "typical for you" is a claim that needs its source shown.
