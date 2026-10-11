@@ -961,6 +961,12 @@ export const TOOLTIP = {
   holdMs: 4000,
 } as const;
 
+// The date range shown above a history chart while it is scrolled sideways
+// (ui/HistoryScroller.tsx). It fades out `noteHoldMs` after the last scroll.
+export const HISTORY_SCROLL = {
+  noteHoldMs: 2000,
+} as const;
+
 export const TOUCH = {
   longPressMs: 450,
   minTargetPx: 44,

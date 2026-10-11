@@ -34,6 +34,26 @@ two live answers — see that section for why.
 
 ## Rendering & animation
 
+### A tap-to-peek chart column shows nothing on touch, and works on hover
+`[measured in Chromium touch emulation; iOS not observed]`
+A touch tap fires `mouseenter` before `click`. With `onMouseEnter` setting the
+peek and `onClick` toggling it, one tap sets the peek and clears it again, so
+Home's activity columns show no peek on a tap even though hover works. Hover
+handlers plus a toggle on the same element cancel out on touch. Pick one per
+pointer type (e.g. set the peek on `pointerenter` only when
+`pointerType === 'mouse'`). Found while adding history scrolling; **not fixed
+yet**. → `ActivityStrip` in `src/components/ProfileView.tsx`
+
+### A history strip that opened on today shows some earlier stretch
+`[argued, not measured]`
+When column widths come from the measured width, a later width change (font
+load, rotation, a ResizeObserver settling) changes `scrollWidth` while
+`scrollLeft` stays put, so the strip silently stops being pinned to today.
+`ui/HistoryScroller` re-pins to the end on resize only while the latest column
+is in view, and ignores the scroll event its own `scrollLeft` write fires,
+which would otherwise flash the date note on load.
+→ `src/components/ui/HistoryScroller.tsx`
+
 ### One route paints, blinks, and goes blank
 `[reproduced in Chromium, and the symptom observed to stop]`
 `/app/you` showed a blank screen; tapping the tab flashed the page in for about
@@ -615,6 +635,16 @@ signal. The outline now shows only while coverage is partial; the gate lives
 where `estimated` is computed.
 → `src/components/BodyView.tsx`, coverage from `src/lib/bodyLoad.ts`
 
+### Stats stutters on every tooltip move at the 6M period
+`[measured in Chromium]` (figures from the commit that fixed it)
+`useAspectProfile` measured the current and prior window on every render, and
+`StatsView` re-renders on each tooltip move. At 6M that is 182 days of
+`LogDocument` JSONB twice: 3.6s of long tasks per 20 moves. The two measurements
+are now `useMemo`'d on logs, window length and window end (0.5s). Scoring against
+the baseline stays per render on purpose: it is cheap and the baseline grows
+mid-session. Any new heavy derivation in `StatsView` needs the same treatment.
+→ `src/lib/useAspectProfile.ts`, `src/components/StatsView.tsx`
+
 ## Build & deploy
 
 ### A build step works locally and silently does nothing on Vercel
@@ -706,10 +736,13 @@ first frame is whatever the last visit stored under that key. Widening a fetch
 without renaming the key therefore paints the **old** span and computes anything
 derived from it — legend dates, window-scoped scores — against the wrong range
 until revalidation lands, which reads as "my window change did nothing".
-**The SWR key must name the window it holds** (`stats:logs:120d`, not
-`stats:logs:8w`), so changing the span changes the key and the stale entry is
-simply never read. Stats builds its key from `ASPECT_WINDOW_DAYS` for that reason.
-→ `src/lib/useAuthedQuery.ts`, `StatsView.tsx`, `ASPECT_WINDOW_DAYS` in `src/app.config.ts`
+**The SWR key must name the window it holds** (`stats:logs:364d`, not
+`stats:logs:6m`), so changing the span changes the key and the stale entry is
+simply never read. Stats builds its key from `ASPECT_READ_DAYS * 2` (the longest
+training period plus the block before it) for that reason. It was `120d` while
+the longest window was 90 days; widening the fetch to 364 days renamed it. Body's
+key names the picked period (`body:logs:${periodKey}`) for the same reason.
+→ `src/lib/useAuthedQuery.ts`, `StatsView.tsx`, `ASPECT_READ_DAYS` in `src/app.config.ts`
 
 ### A write lands in the database but not on the screen
 `[argued — not reproduced]`
@@ -786,6 +819,14 @@ headless automation. If this bites again, the durable fix is network-first for
 navigations rather than more patching of the update path.
 
 ## Testing & tooling
+
+### A touch-scroll probe reports "can't scroll" when the page scrolls fine
+`[measured in headless Chromium]`
+CDP `Input.synthesizeScrollGesture` with `gestureSourceType: 'touch'` does
+nothing in this headless Chromium, in either direction. Raw
+`Input.dispatchTouchEvent` touchStart / touchMove / touchEnd sequences do scroll,
+snap included. A probe built on the first reports a broken scroller that is not
+broken. → the probes behind the HistoryScroller change
 
 ### A slim segmented tab shipped a sub-44px tap target and reddened audit:mobile
 `[measured in Chromium, and the symptom observed to stop]`
@@ -1263,6 +1304,17 @@ re-samples a filtered layer each frame), without having been observed. An iPhone
 check of slab drag in all three styles is still owed; do not cite a green audit
 as evidence for it.
 → `scripts/flicker-probe.mjs`, `src/components/BodyMap.tsx`
+
+### The body-map contrast test passes against colours that are no longer the tokens
+`[argued — not reproduced]`
+`bodyMapShade.test.ts` checks that adjacent shade bands stay distinguishable by
+computing WCAG contrast from `--color-surface`, `--color-fg` and `--bm-mango`.
+Vitest cannot read `global.css`, so those HSL values are **copied into the test**.
+Change a token and the test keeps passing against the old number; it proves the
+ramp only for the colours it was given. Edit the test's `TOKENS` in the same
+change as the token, in both themes. Mono uses a 1.2 floor between bands and
+colour 1.15 because mango is lighter than the grey ink on white.
+→ `src/lib/bodyMapShade.test.ts`, `src/styles/global.css` (`--bm-mango`)
 
 ## Data & privacy
 
@@ -1758,6 +1810,18 @@ cutting a longer fragment into two shorter ones. Lengthen one fragment; never
 reorder.
 → `src/lib/movementTaxonomy.ts` (`RULES`), `movementTaxonomy.test.ts`
 
+### A run vanishes from the body map ("Easy Run", "Zone 2 Run", "Running")
+`[measured in vitest]`
+Only the bare name `run` was an exact entry and no substring rule carried a run
+fragment, so any decorated run name fell through to unclassified and dropped out
+of the map and the lens split. `Treadmill Run` resolved, but through
+`machine-locomotion`, with a different profile. The `run-named` rule now mirrors
+`run` (including `bwLoad` and the horizontal factor), with vetoes for names that
+contain "run" without being one: lunge, squat, drill, run-up. When a named
+cardio movement is missing from `/app/body`, check the unmapped list before
+suspecting the aggregation.
+→ `src/lib/movementTaxonomy.ts` (`run-named`), `movementTaxonomy.test.ts`
+
 ## Superseded
 
 Kept so the search path survives, **demoted so it stops reading as advice.**
@@ -1871,6 +1935,14 @@ The fitness radar:
 
 ## Decisions
 
+- **Body-map shade is each muscle's share of the period's TOTAL, not of the
+  busiest muscle.** Scaling to the max let one dominant muscle wash every other
+  out. Seven fixed bands (untrained, then edges at 1 / 2.5 / 5 / 8 / 12 %) in
+  `src/lib/bodyMapShade.ts`, gently log-spaced because ~22 muscles average ~4.5%.
+  Map, vertical legend, callouts, top three and list all read % of total, so they
+  cannot disagree. The measure behind it is Work (default) or Volume; they are
+  different units, and the % is only comparable inside one of them.
+  `muscleIntensities` (max-normalised) is no longer read by the Body view.
 - **Bottom tab bar, not a drawer.** Seven destinations behind a top-left burger
   is the furthest point from a thumb. Four tabs + "More" (which keeps the
   drawer). The Logger opts out — it owns the bottom with its own Finish bar.
@@ -1899,12 +1971,18 @@ The fitness radar:
   Its displayed value has always rolled daily: `StatsView` anchors
   `aspectWindows` on `new Date()` and the log writers clear the query cache, so a
   logged workout moves the shape the same day. "It feels unresponsive" was one
-  session being ~1/25th of a 60-day window. Hence `ASPECT_WINDOWS` — a shorter
-  span, not more frequent snapshots. Sampling the *baseline* more finely changes
+  session being ~1/25th of a 60-day window. Hence a selectable window — a shorter
+  span, not more frequent snapshots. (Since the shared-period change that window
+  is the page's `TRAINING_PERIODS` pick, 4W to 6M, and the old ASPECT_WINDOWS list no longer
+  exists; the lever is the same.) Sampling the *baseline* more finely changes
   how well the median is estimated and essentially nothing on screen; that is
   worth doing for a different reason (it reaches `ASPECT_MIN_BASELINE` sooner),
   and it is what made the invented anchor values deletable.
-- **Two window lengths mean two baseline series.** `aspect_snapshots` is keyed
+- **Two window lengths mean two baseline series.** The lengths are now the
+  `TRAINING_PERIODS` day counts (28/42/56/84/182). Moving off 28/45/60/90 meant
+  42/56/84/182 backfilled their baselines client-side once; rows under the
+  retired 45/60/90 lengths are never read (baselines filter on `window_days`) and
+  were left in place, no migration. `aspect_snapshots` is keyed
   `(owner, period_end, window_days)` and `baselinesFor` filters on it. Scoring a
   28-day reading against 60-day samples is wrong on every axis and looks
   completely normal, so the separation lives in one named function with a test

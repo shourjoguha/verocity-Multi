@@ -132,8 +132,8 @@ A second pass then removed the last of the invented numbers: the six absolute
 anchors a thin baseline used to fall back on are gone, so an axis without enough
 of the user's own history is simply unscored and shows its raw measurement.
 Snapshots sample weekly rather than monthly (a real baseline in ~4 weeks, not ~4
-months), `ASPECT_WINDOWS` adds a selectable measurement window as the
-responsiveness control, and `AspectExplainer` documents the scale in the UI. It
+months), an ASPECT_WINDOWS list adds a selectable measurement window as the
+responsiveness control (later replaced by the shared `TRAINING_PERIODS`, Phase 15), and `AspectExplainer` documents the scale in the UI. It
 also fixed a latent trap that affected every sheet: `Modal` now portals to
 `<body>`, because a filling CSS animation on `transform` made `.stagger-item` a
 containing block and broke `position: fixed` inside it.
@@ -450,7 +450,7 @@ in a row closes the cycle on the other days; if that is a redo, delete or
 cancel the first log. Stored `week_number` on existing rows is not backfilled —
 nothing reads it for display, and the Logger stamps new logs correctly.
 
-### Phase 14 — Muscle-level body map  `[built on branch; awaiting owner iPhone check and merge]`
+### Phase 14 — Muscle-level body map  `[shipped; owner iPhone check outstanding]`
 Replace the 9-region body map with a 21-muscle Plates map (Engraved and Thermal
 as per-device alternatives in Settings). Regions stay the coach's unit; each
 muscle has one parent region and region weights become derived. Full phased
@@ -464,6 +464,29 @@ plan, owner decisions and open questions: `docs/MUSCLE_MAP_PLAN.md`.
 - [x] G docs (this pass)
 - [ ] Owner: iPhone check for slab-drag flicker, all three styles
 - [x] Owner's 7 saved region-level corrections cleared after merge (2026-10-11); none remain
+
+### Phase 15 — Body work measure and shared training period  `[shipped]`
+PRs #255 and #256. Reads: `docs/LESSONS.md` Decisions (shade is % of total).
+- [x] Body map legibility: opaque faces, extrusion ribs ~6% cumulative, dotted
+  silhouette, vertical legend, seven shade bands on % of the period's total
+  (`src/lib/bodyMapShade.ts`), Mono / Colour plate ink (`--bm-mango`,
+  `src/lib/bodyMapPrefs.ts`), WCAG contrast test with hand-copied token values
+- [x] Work measure in `src/lib/bodyLoad.ts` (`regionWork`, `muscleWork`,
+  `byLens.work`): loaded working sets, prep excluded, split by muscle share;
+  `BodyCurrency` gains `'work'`; page-level Work / Volume toggle replaces the
+  Minutes / Volume toggle, lenses without sets fall back to time
+- [x] Shared `TRAINING_PERIODS` (4W / 6W / 8W / 12W / 6M, default 8W) and
+  `src/lib/periodPrefs.ts`, carried across Body and Stats; the old ASPECT_WINDOWS list
+  removed; Stats reads 364 days; new radar baselines backfill client-side
+- [x] Every Stats card follows the period; consistency grid capped at 8 weeks;
+  `useAspectProfile` memoises the current / prior measurement
+- [x] Taxonomy: `run-named` rule (Easy Run, Zone 2 Run, Running)
+- [x] History scrolling on the Stats consistency grid and Home activity bars
+  (`ui/HistoryScroller`): fixed in-view column count, date note fades 2s after
+  scroll stops, Home headline follows the bars in view
+- [ ] Owner iPhone check: Body in all three styles (see Phase 14), and history
+  scrolling on WebKit (momentum, snap, vertical swipe from the chart)
+- [ ] Tap-to-peek on Home's activity columns cancels itself on touch (LESSONS)
 
 ## Backlog
 

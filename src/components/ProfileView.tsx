@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { supabase, supabasePublic } from '@/lib/supabase';
 import {
   getActivePlan,
@@ -43,6 +43,7 @@ import { AddSessionMenu } from '@/components/AddSessionMenu';
 import { LogQuickView } from '@/components/LogQuickView';
 import { MonthCalendar } from '@/components/MonthCalendar';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { formatDateRange, HistoryScroller, type HistoryRange } from '@/components/ui/HistoryScroller';
 import { displayNameFor, hrefFor, isReadOnly, type Surface } from '@/lib/surface';
 import { READ_ONLY_NOTICE, readOnlyProps } from '@/components/ui/ReadOnly';
 import { toast } from '@/lib/toast';
@@ -73,17 +74,24 @@ function dayBadge(i: number): string {
 // The window is picked from a hidden native <select> laid over the range label
 // ("Last 4 weeks"): no chevron, no underline, and on iOS the platform's own
 // scroll-wheel picker. The headline and the session count are summed from the
-// SAME window the bars show, so the number always describes the chart under it.
-// (The strip used to scroll through the whole history beside all-time totals,
-// and the totals read as a caption for whatever happened to be on screen.)
+// SAME columns the bars show, so the number always describes the chart under it.
 // All-time totals and the top e1RM are one muted line under the strip.
 //
-// Up to DAILY_MAX_DAYS the strip is one column per day; past that a day column
-// would be under ~2px, so it switches to one column per 7-day bucket, coloured
-// by that week's dominant tag. Columns share the width equally, so the strip
-// never scrolls, and heights are relative to the tallest column IN THE WINDOW
+// The window sets how many columns are IN VIEW; the strip itself holds the
+// whole history back to the first logged day and scrolls sideways through it
+// (ui/HistoryScroller), opening on the latest window. While it is scrolled
+// back, the headline follows the columns in view and returns to the window
+// when scrolled home — the owner's decision, so the number keeps describing
+// what is under it. (An earlier scrolling strip sat beside all-time totals,
+// which read as a caption for whatever happened to be on screen.)
+//
+// Up to DAILY_MAX_DAYS in view the strip is one column per day; past that a
+// day column would be under ~2px, so it switches to one column per 7-day
+// bucket, coloured by that week's dominant tag. The in-view columns share the
+// width equally, and heights are relative to the tallest column IN VIEW
 // (linear, no upstream ceiling — see docs/LESSONS.md § "A chart normalised to
-// what is on screen still renders flat").
+// what is on screen still renders flat"). That scale is one CSS variable on
+// the strip, so scrolling rescales the bars without re-rendering them.
 //
 // Within a day column: rest is a hairline, a session's height is its duration,
 // and a day with MORE than one session splits the column into adjacent bars,
@@ -149,6 +157,11 @@ function ActivityStrip({
   const [windowKey, setWindowKey] = useState<ActivityWindowKey>(DEFAULT_WINDOW);
   const [width, setWidth] = useState(0);
   const [peekIndex, setPeekIndex] = useState<number | null>(null);
+  // The columns in view while scrolled back; null = the latest window. Carries
+  // the column count it was measured against, so a history that grew since
+  // (a new day, a new log) falls back to the latest window rather than
+  // pointing at the wrong columns.
+  const [scrolled, setScrolled] = useState<(HistoryRange & { count: number }) | null>(null);
 
   // Restored after mount, not in the initialiser: the island's first render
   // must match the server's.
@@ -167,24 +180,48 @@ function ActivityStrip({
   const win = ACTIVITY_WINDOWS.find((w) => w.key === windowKey) ?? ACTIVITY_WINDOWS[1];
 
   // buildTimeline runs from the first logged day through today + 14 days of
-  // runway; the strip ends on today. "All time" over a short history is padded
-  // to the narrowest window, so three days of logs are not three huge bars.
-  const points = useMemo(() => {
+  // runway; the strip ends on today.
+  const history = useMemo(() => {
     const all = buildTimeline(plan, logs);
     const todayIndex = all.findIndex((p) => p.isToday);
-    const history = todayIndex >= 0 ? all.slice(0, todayIndex + 1) : all;
-    return windowPoints(history, win.days ?? Math.max(ACTIVITY_WINDOWS[0].days, history.length));
-  }, [plan, logs, win.days]);
-  // By what is actually drawn, not by the window's name: "All time" over two
-  // months of history is still a column per day.
-  const daily = points.length <= DAILY_MAX_DAYS;
+    return todayIndex >= 0 ? all.slice(0, todayIndex + 1) : all;
+  }, [plan, logs]);
+  // Days in view. "All time" over a short history is padded to the narrowest
+  // window, so three days of logs are not three huge bars.
+  const windowDays = win.days ?? Math.max(ACTIVITY_WINDOWS[0].days, history.length);
+  // The whole history, padded at the front to at least one window.
+  const points = useMemo(
+    () => windowPoints(history, Math.max(windowDays, history.length)),
+    [history, windowDays],
+  );
+  // By what is in view, not by the window's name: "All time" over two months
+  // of history is still a column per day.
+  const daily = windowDays <= DAILY_MAX_DAYS;
   const weeks = useMemo(() => (daily ? [] : toWeeks(points)), [daily, points]);
 
+  const count = daily ? points.length : weeks.length;
+  const n = Math.min(count, daily ? windowDays : Math.ceil(windowDays / 7));
+  const range: HistoryRange =
+    scrolled && scrolled.count === count
+      ? scrolled
+      : { start: Math.max(0, count - n), end: count - 1 };
+  const latest = range.end === count - 1;
+
+  // First and last date of a run of columns.
+  const datesOf = (r: HistoryRange): [string, string] =>
+    daily ? [points[r.start].date, points[r.end].date] : [weeks[r.start].start, weeks[r.end].end];
+
   // Summed from the completed logs, not from the bars, so "All time" here and
-  // the all-time line below are the same numbers by construction.
+  // the all-time line below are the same numbers by construction. Scrolled
+  // back, it is the columns in view.
+  const fromTo = latest ? null : datesOf(range);
+  const sumFrom = fromTo?.[0];
+  const sumTo = fromTo?.[1];
   const sum = useMemo(() => {
     let inWindow = done;
-    if (win.days != null) {
+    if (sumFrom != null && sumTo != null) {
+      inWindow = done.filter((l) => l.log_date >= sumFrom && l.log_date <= sumTo);
+    } else if (win.days != null) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - (win.days - 1));
       const from = ymd(cutoff);
@@ -194,24 +231,21 @@ function ActivityStrip({
       count: inWindow.length,
       seconds: inWindow.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0),
     };
-  }, [done, win.days]);
+  }, [done, win.days, sumFrom, sumTo]);
   const allTime = useMemo(
     () => ({ count: done.length, seconds: done.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0) }),
     [done],
   );
 
-  const n = daily ? points.length : weeks.length;
   const gap = columnGap(n);
   const colW = n > 0 ? Math.max(1, (width - gap * (n - 1)) / n) : 0;
-  const tallest = daily
-    ? Math.max(0, ...points.flatMap((p) => p.sessionSeconds))
-    : Math.max(0, ...weeks.map((w) => w.seconds));
-  const heightOf = (seconds: number) =>
-    tallest > 0 ? Math.max(BAR_MIN, Math.round((seconds / tallest) * STRIP_HEIGHT)) : BAR_MIN;
-  // The today frame is a 1.5px inset; on a ~3px column that would paint the
-  // whole column, so narrow columns get a hairline instead.
-  const frameClass =
-    colW >= 8 ? 'shadow-[inset_0_0_0_1.5px_var(--color-fg)]' : 'shadow-[inset_0_0_0_1px_var(--color-fg)]';
+  // Tallest column per column, so the in-view maximum is a slice, not a walk
+  // over every session.
+  const colMax = useMemo(
+    () => (daily ? points.map((p) => Math.max(0, ...p.sessionSeconds)) : weeks.map((w) => w.seconds)),
+    [daily, points, weeks],
+  );
+  const tallest = count > 0 ? Math.max(0, ...colMax.slice(range.start, range.end + 1)) : 0;
 
   // Outside-tap dismiss for the peeked column.
   useEffect(() => {
@@ -232,25 +266,103 @@ function ActivityStrip({
         : weeks[peekIndex] &&
           `Week of ${weeks[peekIndex].start} · ${weeks[peekIndex].sessions} session${weeks[peekIndex].sessions === 1 ? '' : 's'}`;
 
-  const peekProps = (i: number) => ({
-    onClick: (e: MouseEvent<HTMLButtonElement>) => {
-      e.stopPropagation();
-      setPeekIndex((cur) => (cur === i ? null : i));
-    },
-    onMouseEnter: () => setPeekIndex(i),
-    onMouseLeave: () => setPeekIndex((cur) => (cur === i ? null : cur)),
-  });
-
-  const todayFrame = (
-    // On the COLUMN, not the bar, and stopping at the baseline: wrapping the
-    // pedestal lane merged its bottom stroke with the pedestal on a day that is
-    // both today and multi-session.
-    <span
-      aria-hidden
-      className={`pointer-events-none absolute inset-x-0 top-0 ${frameClass}`}
-      style={{ bottom: FOOT_LANE }}
-    />
-  );
+  // The columns, memoised: scrolling changes the headline and the height
+  // scale, neither of which needs a column re-rendered. A bar's height is its
+  // linear seconds times `--k` (1 / tallest in view, set on the strip below),
+  // floored at BAR_MIN.
+  const columns = useMemo(() => {
+    if (width <= 0) return null;
+    const heightOf = (seconds: number) => `max(${BAR_MIN}px, calc(var(--k) * ${seconds * STRIP_HEIGHT}px))`;
+    const peekProps = (i: number) => ({
+      onClick: (e: MouseEvent<HTMLButtonElement>) => {
+        e.stopPropagation();
+        setPeekIndex((cur) => (cur === i ? null : i));
+      },
+      onMouseEnter: () => setPeekIndex(i),
+      onMouseLeave: () => setPeekIndex((cur) => (cur === i ? null : cur)),
+    });
+    // The today frame is a 1.5px inset; on a ~3px column that would paint the
+    // whole column, so narrow columns get a hairline instead.
+    const frameClass =
+      colW >= 8 ? 'shadow-[inset_0_0_0_1.5px_var(--color-fg)]' : 'shadow-[inset_0_0_0_1px_var(--color-fg)]';
+    const todayFrame = (
+      // On the COLUMN, not the bar, and stopping at the baseline: wrapping the
+      // pedestal lane merged its bottom stroke with the pedestal on a day that is
+      // both today and multi-session.
+      <span
+        aria-hidden
+        className={`pointer-events-none absolute inset-x-0 top-0 ${frameClass}`}
+        style={{ bottom: FOOT_LANE }}
+      />
+    );
+    if (daily) {
+      return points.map((p, i) => {
+        const multi = p.state === 'done' && p.sessions.length > 1;
+        const subW = multi ? (colW - SUB_GAP * (p.sessions.length - 1)) / p.sessions.length : colW;
+        return (
+          <button
+            key={p.date}
+            type="button"
+            {...peekProps(i)}
+            className="relative flex h-full shrink-0 cursor-pointer flex-col justify-end"
+            // paddingBottom is the pedestal lane: every column reserves it
+            // so the baseline stays one straight line.
+            style={{ width: colW, paddingBottom: FOOT_LANE }}
+            aria-label={`${p.date} ${p.fullLabel}`}
+            title={`${p.fullLabel} · ${p.date}`}
+          >
+            {p.state !== 'done' ? (
+              <span className="h-0.5 w-full bg-border" aria-hidden />
+            ) : (
+              <span className="flex items-end" style={{ gap: SUB_GAP }} aria-hidden>
+                {p.sessions.map((colors, si) => (
+                  // A session's tags stack inside its own bar.
+                  <span
+                    key={si}
+                    className="flex flex-col"
+                    style={{ width: subW, height: heightOf(p.sessionSeconds[si]) }}
+                  >
+                    {colors.map((c, ci) => (
+                      <span key={ci} style={{ flex: 1, backgroundColor: c }} />
+                    ))}
+                  </span>
+                ))}
+              </span>
+            )}
+            {p.isToday ? todayFrame : null}
+            {multi ? (
+              // The pedestal: `--color-fg` at 2.5px against the rest
+              // hairline's `--color-border` at 2px — they share a band and
+              // are told apart by weight and tone, so keep the contrast.
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 bg-fg"
+                style={{ height: FOOT_H }}
+              />
+            ) : null}
+          </button>
+        );
+      });
+    }
+    return weeks.map((w, i) => (
+      <button
+        key={w.start}
+        type="button"
+        {...peekProps(i)}
+        className="relative flex h-full shrink-0 cursor-pointer flex-col justify-end"
+        style={{ width: colW, paddingBottom: FOOT_LANE }}
+        aria-label={`${w.start} to ${w.end}: ${w.sessions} sessions`}
+        title={`Week of ${w.start}`}
+      >
+        {w.color ? (
+          <span aria-hidden style={{ height: heightOf(w.seconds), backgroundColor: w.color }} />
+        ) : (
+          <span className="h-0.5 w-full bg-border" aria-hidden />
+        )}
+        {w.isCurrent ? todayFrame : null}
+      </button>
+    ));
+  }, [width, daily, points, weeks, colW]);
 
   return (
     <div ref={containerRef} className="relative">
@@ -267,6 +379,7 @@ function ActivityStrip({
               const key = e.target.value as ActivityWindowKey;
               setWindowKey(key);
               setPeekIndex(null);
+              setScrolled(null);
               try {
                 window.localStorage.setItem(WINDOW_STORAGE_KEY, key);
               } catch {
@@ -299,79 +412,24 @@ function ActivityStrip({
 
       <div
         ref={stripRef}
-        className="mt-2.5 flex items-end"
-        style={{ height: STRIP_HEIGHT + FOOT_LANE, gap }}
-        aria-label={daily ? 'One bar per day' : 'One bar per week'}
+        className="mt-2.5"
+        style={{ height: STRIP_HEIGHT + FOOT_LANE, '--k': tallest > 0 ? 1 / tallest : 0 } as CSSProperties}
       >
-        {width > 0 && daily
-          ? points.map((p, i) => {
-              const multi = p.state === 'done' && p.sessions.length > 1;
-              const subW = multi ? (colW - SUB_GAP * (p.sessions.length - 1)) / p.sessions.length : colW;
-              return (
-                <button
-                  key={p.date}
-                  type="button"
-                  {...peekProps(i)}
-                  className="relative flex h-full shrink-0 cursor-pointer flex-col justify-end"
-                  // paddingBottom is the pedestal lane: every column reserves it
-                  // so the baseline stays one straight line.
-                  style={{ width: colW, paddingBottom: FOOT_LANE }}
-                  aria-label={`${p.date} ${p.fullLabel}`}
-                  title={`${p.fullLabel} · ${p.date}`}
-                >
-                  {p.state !== 'done' ? (
-                    <span className="h-0.5 w-full bg-border" aria-hidden />
-                  ) : (
-                    <span className="flex items-end" style={{ gap: SUB_GAP }} aria-hidden>
-                      {p.sessions.map((colors, si) => (
-                        // A session's tags stack inside its own bar.
-                        <span
-                          key={si}
-                          className="flex flex-col"
-                          style={{ width: subW, height: heightOf(p.sessionSeconds[si]) }}
-                        >
-                          {colors.map((c, ci) => (
-                            <span key={ci} style={{ flex: 1, backgroundColor: c }} />
-                          ))}
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                  {p.isToday ? todayFrame : null}
-                  {multi ? (
-                    // The pedestal: `--color-fg` at 2.5px against the rest
-                    // hairline's `--color-border` at 2px — they share a band and
-                    // are told apart by weight and tone, so keep the contrast.
-                    <span
-                      aria-hidden
-                      className="pointer-events-none absolute inset-x-0 bottom-0 bg-fg"
-                      style={{ height: FOOT_H }}
-                    />
-                  ) : null}
-                </button>
-              );
-            })
-          : null}
-        {width > 0 && !daily
-          ? weeks.map((w, i) => (
-              <button
-                key={w.start}
-                type="button"
-                {...peekProps(i)}
-                className="relative flex h-full shrink-0 cursor-pointer flex-col justify-end"
-                style={{ width: colW, paddingBottom: FOOT_LANE }}
-                aria-label={`${w.start} to ${w.end}: ${w.sessions} sessions`}
-                title={`Week of ${w.start}`}
-              >
-                {w.color ? (
-                  <span aria-hidden style={{ height: heightOf(w.seconds), backgroundColor: w.color }} />
-                ) : (
-                  <span className="h-0.5 w-full bg-border" aria-hidden />
-                )}
-                {w.isCurrent ? todayFrame : null}
-              </button>
-            ))
-          : null}
+        {columns ? (
+          <HistoryScroller
+            // A new window is a new strip: it reopens on the latest columns.
+            key={windowKey}
+            count={count}
+            visible={n}
+            ariaLabel={daily ? 'One bar per day' : 'One bar per week'}
+            labelFor={(r) => formatDateRange(...datesOf(r))}
+            onRangeChange={(r) => setScrolled(r.end === count - 1 ? null : { ...r, count })}
+            className="items-end"
+            style={{ height: STRIP_HEIGHT + FOOT_LANE, gap }}
+          >
+            {columns}
+          </HistoryScroller>
+        ) : null}
       </div>
 
       {win.days != null ? (
