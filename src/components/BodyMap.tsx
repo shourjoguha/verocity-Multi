@@ -8,15 +8,17 @@ import {
   type BodyFace,
   type RegionShape,
 } from '@/lib/bodyRegions';
-import {
-  MUSCLES,
-  MUSCLE_KEYS,
-  MUSCLE_REGION_KEYS,
-  type MuscleKey,
-  type RegionKey,
-} from '@/app.config';
+import { MUSCLES, MUSCLE_KEYS, MUSCLE_REGION_KEYS, type MuscleKey, type RegionKey } from '@/app.config';
 import { EASE } from '@/components/anim';
-import type { BodyMapStyle } from '@/lib/bodyMapPrefs';
+import type { BodyMapInkPref, BodyMapStyle } from '@/lib/bodyMapPrefs';
+import {
+  BODY_SHADE_BANDS,
+  BODY_SHADE_LABELS,
+  PLATE_BASE_TINT,
+  plateOpacity,
+  shadeBand,
+  shadePosition,
+} from '@/lib/bodyMapShade';
 
 // Presentational only — no data loading, no query imports. See the CSS block
 // "Body map slab" in global.css for the 3D contract and the flattening trap.
@@ -27,7 +29,11 @@ import type { BodyMapStyle } from '@/lib/bodyMapPrefs';
 
 // Extrusion ribs between the two faces. Closely spaced so the edge reads as a
 // continuous solid rather than a stack of cards — the Echo Stack wants to look
-// like separate layers, a body does not.
+// like separate layers, a body does not. Each rib is nearly transparent: the 15
+// layers stack to ~6% ink, a hairline-weight edge at the rest tilt rather than
+// a cast shadow (depth is retired). The faces are opaque, so no rib ever shows
+// through a muscle.
+const RIB_OPACITY = 0.004; // 0.0085 (~12%) still read as a halo on dark cards
 const RIB_Z = Array.from({ length: 15 }, (_, i) => 14 - i * 2);
 
 // The figure rests at a slight angle rather than dead-on. A head-on view of a
@@ -40,8 +46,16 @@ function spinFor(face: BodyFace): number {
   return face === 'back' ? 180 + REST_TILT : -REST_TILT;
 }
 
-const FILL_FLOOR = 0.1; // an untrained muscle still reads as part of a body
-const FILL_RANGE = 0.65; // ceiling 0.75, so labels stay legible over it
+// Silhouette outline (Plates, Engraved): dotted, so it stays distinct from the
+// per-muscle ESTIMATED outline (dashed "2 2", 0.3) drawn further down.
+const OUTLINE_DASH = '1 1.8';
+const OUTLINE_O = 0.4;
+
+// Plates inks. Mono is the chrome ink; colour is a DATA colour (--bm-mango).
+const INK_VAR: Record<BodyMapInkPref, string> = {
+  mono: 'var(--color-fg)',
+  colour: 'var(--bm-mango)',
+};
 
 // Plates: the gaps between muscles are drawn in the card's surface colour, so
 // they read as cuts through the ink rather than as outlines. User units (not
@@ -94,10 +108,6 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
-function fillOpacity(intensity: number): number {
-  return FILL_FLOOR + Math.max(0, Math.min(1, intensity)) * FILL_RANGE;
-}
-
 // Emit a shape, plus its mirrored twin when the data asks for one.
 function Mirrored({ shape, children }: { shape: RegionShape; children: (d: string) => React.ReactNode }) {
   return (
@@ -117,8 +127,10 @@ function Face({
   reduce,
   variant,
   blur,
+  ink,
 }: {
   variant: BodyMapStyle;
+  ink: BodyMapInkPref;
   blur: boolean;
   face: BodyFace;
   intensity: Record<MuscleKey, number>;
@@ -137,16 +149,22 @@ function Face({
   const blurId = `${uid}-${face}-blur`;
   return (
     <svg className="bodymap-face" data-face={face} viewBox={BODY_VIEWBOX} aria-hidden="true">
+      {/* Opaque backing, first and in every style: the faces are translucent
+          layers over the ribs, and without this the ribs show through every
+          muscle and flatten the ramp. */}
+      <path d={BODY_MUSCLE_SILHOUETTE[face]} fill="var(--color-surface)" />
       {/* base silhouette. Thermal fills via `style` because color-mix and the
           heat tokens are CSS values, not presentation-attribute values. */}
       <path
         d={BODY_MUSCLE_SILHOUETTE[face]}
         fill={engraved ? 'none' : thermal ? undefined : 'var(--color-fg)'}
-        fillOpacity={engraved || thermal ? undefined : 0.06}
+        fillOpacity={engraved || thermal ? undefined : PLATE_BASE_TINT}
         style={thermal ? { fill: 'var(--heat-lo)' } : undefined}
         stroke="var(--color-fg)"
-        strokeOpacity={engraved ? 0.35 : 0.25}
+        strokeOpacity={thermal ? 0.25 : OUTLINE_O}
         strokeWidth={0.6}
+        strokeDasharray={thermal ? undefined : OUTLINE_DASH}
+        strokeLinecap={thermal ? undefined : 'round'}
         vectorEffect="non-scaling-stroke"
       />
       {/* Thermal: heat fills clipped to the silhouette, blurred under a fine
@@ -167,7 +185,7 @@ function Face({
           <g clipPath={`url(#${clipId})`}>
             <g filter={blur ? `url(#${blurId})` : undefined}>
               {pieces.map(({ m, j, shape }) => {
-                const fill = heatFill(intensity[m] ?? 0);
+                const fill = heatFill(shadePosition(shadeBand(intensity[m] ?? 0)));
                 return (
                   <Mirrored key={`${m}-${j}`} shape={shape}>
                     {(d) => (
@@ -197,7 +215,7 @@ function Face({
           inside the mirror transform, so its pattern mirrors with it. */}
       {engraved
         ? pieces.map(({ m, j, shape }) => {
-            const i = clamp01(intensity[m] ?? 0);
+            const i = shadePosition(shadeBand(intensity[m] ?? 0));
             const pid = `${uid}-${face}-${m}-${j}`;
             return (
               <g key={`${m}-${j}`}>
@@ -242,7 +260,7 @@ function Face({
         : null}
       {/* Plates: one fill per muscle piece, gap stroke in the surface colour. */}
       {(engraved || thermal ? [] : pieces).map(({ m, j, shape }) => {
-        const target = fillOpacity(intensity[m] ?? 0);
+        const target = plateOpacity(shadeBand(intensity[m] ?? 0), ink);
         const delay = MUSCLE_REGION_KEYS.indexOf(MUSCLES[m].region) * 0.04;
         return (
           <Mirrored key={`${m}-${j}`} shape={shape}>
@@ -251,7 +269,7 @@ function Face({
               // hidden if the observer never fires (same note as RadarChart).
               <motion.path
                 d={d}
-                fill="var(--color-fg)"
+                fill={INK_VAR[ink]}
                 stroke="var(--color-surface)"
                 strokeWidth={GAP_WIDTH}
                 strokeLinejoin="round"
@@ -340,8 +358,10 @@ export function BodyMap({
   onFaceChange,
   selected,
   style = 'plates',
+  ink = 'mono',
 }: {
   style?: BodyMapStyle;
+  ink?: BodyMapInkPref;
   // Per MUSCLE, 0..1 against the busiest muscle (muscleIntensities).
   intensity: Record<MuscleKey, number>;
   // Muscles whose minutes came wholly or partly from the default split (D4).
@@ -387,7 +407,11 @@ export function BodyMap({
     const el = slabRef.current;
     if (!el) return;
     el.classList.remove('bodymap-snapping');
-    drag.current = { startX: e.clientX, startSpin: spin.current, id: e.pointerId };
+    drag.current = {
+      startX: e.clientX,
+      startSpin: spin.current,
+      id: e.pointerId,
+    };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -414,55 +438,62 @@ export function BodyMap({
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <div
-        className="bodymap-stage mx-auto w-full max-w-[200px]"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        role="img"
-        aria-label={
-          top.length > 0
-            ? `Body map, ${face} view. Most-worked muscles: ${top.join(', ')}.`
-            : `Body map, ${face} view. No work logged in this window.`
-        }
-      >
-        <div ref={slabRef} className="bodymap-slab">
-          {/* Sizer establishes the 100:220 aspect box; faces and ribs are
+      {/* Relative wrapper carries no grouping property; the legend is a SIBLING
+          of the stage, never inside it (see global.css "Body map slab"). */}
+      <div className="relative mx-auto w-full max-w-[200px]">
+        <div
+          className="bodymap-stage w-full"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          role="img"
+          aria-label={
+            top.length > 0
+              ? `Body map, ${face} view. Most-worked muscles: ${top.join(', ')}.`
+              : `Body map, ${face} view. No work logged in this window.`
+          }
+        >
+          <div ref={slabRef} className="bodymap-slab">
+            {/* Sizer establishes the 100:220 aspect box; faces and ribs are
               absolutely positioned over it. */}
-          <div className="bodymap-sizer" style={{ aspectRatio: '100 / 220' }} />
-          <Face
-            face="front"
-            intensity={intensity}
-            estimated={estimated}
-            selected={selected}
-            systemic={systemic}
-            reduce={reduce}
-            variant={style}
-            blur={blur}
-          />
-          {RIB_Z.map((z) => (
-            <svg
-              key={z}
-              className="bodymap-rib"
-              viewBox={BODY_VIEWBOX}
-              aria-hidden="true"
-              style={{ transform: `translateZ(${z}px)` }}
-            >
-              <path d={BODY_MUSCLE_SILHOUETTE.front} fill="var(--color-fg)" fillOpacity={0.055} />
-            </svg>
-          ))}
-          <Face
-            face="back"
-            intensity={intensity}
-            estimated={estimated}
-            selected={selected}
-            systemic={systemic}
-            reduce={reduce}
-            variant={style}
-            blur={blur}
-          />
+            <div className="bodymap-sizer" style={{ aspectRatio: '100 / 220' }} />
+            <Face
+              face="front"
+              intensity={intensity}
+              estimated={estimated}
+              selected={selected}
+              systemic={systemic}
+              reduce={reduce}
+              variant={style}
+              blur={blur}
+              ink={ink}
+            />
+            {RIB_Z.map((z) => (
+              <svg
+                key={z}
+                className="bodymap-rib"
+                viewBox={BODY_VIEWBOX}
+                aria-hidden="true"
+                style={{ transform: `translateZ(${z}px)` }}
+              >
+                <path d={BODY_MUSCLE_SILHOUETTE.front} fill="var(--color-fg)" fillOpacity={RIB_OPACITY} />
+              </svg>
+            ))}
+            <Face
+              face="back"
+              intensity={intensity}
+              estimated={estimated}
+              selected={selected}
+              systemic={systemic}
+              reduce={reduce}
+              variant={style}
+              blur={blur}
+              ink={ink}
+            />
+          </div>
         </div>
+        <ShadeLegend style={style} ink={ink} />
       </div>
 
       {/* The discrete control ships always: it is the keyboard path, the
@@ -497,6 +528,100 @@ export function BodyMap({
         </svg>
         <span className="t-label leading-none">{face}</span>
       </button>
+    </div>
+  );
+}
+
+const LEGEND_CELL = 10; // px per band; labels sit on the band edges
+
+// Thin vertical key beside the figure: one cell per shade band, heaviest on
+// top, each painted with exactly what the map paints for that band in the
+// active style + ink. Static — nothing animates here.
+function ShadeLegend({ style, ink }: { style: BodyMapStyle; ink: BodyMapInkPref }) {
+  const uid = useId().replace(/:/g, '');
+  const h = BODY_SHADE_BANDS * LEGEND_CELL;
+  const bands = Array.from({ length: BODY_SHADE_BANDS }, (_, k) => BODY_SHADE_BANDS - 1 - k); // top-down
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute bottom-1 left-full -ml-5 flex items-start gap-1"
+    >
+      <div className="relative" style={{ width: 6, height: h }}>
+        <svg width={6} height={h} className="block">
+          {bands.map((band, row) => {
+            const y = row * LEGEND_CELL;
+            const pos = shadePosition(band);
+            return (
+              <g key={band}>
+                {style === 'thermal' ? (
+                  <rect x={0} y={y} width={6} height={LEGEND_CELL} style={{ fill: heatFill(pos) }} />
+                ) : (
+                  <>
+                    <rect x={0} y={y} width={6} height={LEGEND_CELL} fill="var(--color-surface)" />
+                    {style === 'engraved' ? (
+                      <>
+                        <defs>
+                          <pattern
+                            id={`${uid}-${band}`}
+                            width={HATCH_PITCH}
+                            height={HATCH_PITCH}
+                            patternUnits="userSpaceOnUse"
+                          >
+                            <line
+                              x1={HATCH_PITCH / 2}
+                              y1={0}
+                              x2={HATCH_PITCH / 2}
+                              y2={HATCH_PITCH}
+                              stroke="var(--color-fg)"
+                              strokeWidth={HATCH_W_FLOOR + pos * HATCH_W_RANGE}
+                              strokeOpacity={HATCH_O_FLOOR + pos * HATCH_O_RANGE}
+                            />
+                          </pattern>
+                        </defs>
+                        <rect x={0} y={y} width={6} height={LEGEND_CELL} fill={`url(#${uid}-${band})`} />
+                      </>
+                    ) : (
+                      <>
+                        <rect
+                          x={0}
+                          y={y}
+                          width={6}
+                          height={LEGEND_CELL}
+                          fill="var(--color-fg)"
+                          fillOpacity={PLATE_BASE_TINT}
+                        />
+                        <rect
+                          x={0}
+                          y={y}
+                          width={6}
+                          height={LEGEND_CELL}
+                          fill={INK_VAR[ink]}
+                          fillOpacity={plateOpacity(band, ink)}
+                        />
+                      </>
+                    )}
+                  </>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+        <div className="absolute inset-0 border border-border" />
+        {/* tick labels: BODY_SHADE_LABELS runs 0..100 bottom-up; label k sits on
+            the edge below band k+1 (the last one tops the bar). */}
+        {BODY_SHADE_LABELS.map((label, k) => (
+          <span
+            key={label}
+            className="absolute left-2 text-[8px] leading-none tabular-nums text-muted"
+            style={{ top: h - (k + 1) * LEGEND_CELL - 3 }}
+          >
+            {label}
+          </span>
+        ))}
+      </div>
+      <span className="absolute left-0 w-14 text-[8px] leading-tight text-muted" style={{ top: h + 3 }}>
+        % of top muscle
+      </span>
     </div>
   );
 }
