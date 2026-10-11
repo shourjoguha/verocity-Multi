@@ -1,6 +1,6 @@
 # Muscle map: build plan
 
-Status: **in progress.** Phase B and C1 started 2026-10-11. Canonical copy of the plan. The review page
+Status: **built on the branch; awaiting owner iPhone check and merge.** Canonical copy of the plan. The review page
 the owner filled in is a claude.ai artifact; everything decided there is
 recorded in the appendix below, so no session needs the artifact to proceed.
 

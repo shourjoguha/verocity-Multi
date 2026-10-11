@@ -317,7 +317,13 @@ in three cases wrong) answers so Stats output for existing logs is unchanged.
   `regionIntensities(summary, currency)` normalises per currency, so the heat
   map cannot contradict the list beside it.
 - **Geometry** in `src/lib/bodyRegions.ts`, renderer-agnostic path data.
-- **Overrides** on `movements.taxonomy`, matched by normalised name.
+- **Overrides** on `movements.taxonomy`, matched by normalised name. An override
+  may carry `muscles` (new, authored at muscle level) or `regions` (old); a
+  `regions` override is expanded through `MUSCLE_DEFAULT_SPLIT` at read time, so
+  saved rows need no migration.
+- **Muscle level.** A `MovementProfile` carries `muscles` (21 `MUSCLES`, each
+  with one parent region) and `muscleSource` (`authored` or `split`); `regions`
+  is derived from `muscles` and never authored. Geometry ids are muscle ids.
 
 Owned by the `movement-taxonomy` skill; `npm test` is the only check that can
 see a regression, and it cannot see whether a mapping is anatomically correct.
