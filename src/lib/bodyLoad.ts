@@ -84,7 +84,10 @@ export interface BodyLoadSummary {
    * Every lens's minutes sum to `regionMinutes`, and its volume to
    * `regionVolume`, except for work whose modality could not be inferred at all.
    */
-  byLens: Record<BodyLensKey, { minutes: Record<RegionKey, number>; volume: Record<RegionKey, number> }>;
+  byLens: Record<
+    BodyLensKey,
+    { minutes: Record<RegionKey, number>; volume: Record<RegionKey, number>; work: Record<RegionKey, number> }
+  >;
   modalityMinutes: Record<ModalityKey, number>;
   planeMinutes: Record<PlaneKey, number>;
   rotaryMinutes: Record<RotaryRole, number>;
@@ -110,6 +113,24 @@ export interface BodyLoadSummary {
   hardSetsByRegion: Record<RegionKey, number>;
   resistanceTonnage: Record<RegionKey, number>;
   /**
+   * WORK — the body map's default currency. Every loaded working set (see
+   * isLoadedSet; prep sections excluded) is ONE unit, split across regions by
+   * the profile's region weights, so it sums to the loaded working-set count:
+   * ten squat sets at quads 0.5 / glutes 0.3 / core 0.2 are quads 5, glutes 3,
+   * core 2. Time-only work (runs, rides, yoga, timed holds) contributes none.
+   *
+   * NEW, not a reuse of `resistanceSets`, which is the same arithmetic gated on
+   * `modality === 'resistance'` — the gate CLAUDE.md forbids for loaded work,
+   * because a loaded carry is `endurance` by modality. `resistanceSets` keeps
+   * its old meaning for the reader that already shows it. Nor is it
+   * `hardSetsByRegion`, which counts whole sets per region and must never be
+   * totalled; this one is fractional and is MEANT to be totalled.
+   *
+   * Counted independently of the session clock: an item the allocation left
+   * with no minutes still did its sets.
+   */
+  regionWork: Record<RegionKey, number>;
+  /**
    * PER-MUSCLE TWINS of the region outputs above (docs/MUSCLE_MAP_PLAN.md
    * Phase D). Same walk, same allocated minutes, same prep exclusion, read from
    * `profile.muscles` instead of `profile.regions`. Because a profile's muscles
@@ -122,7 +143,12 @@ export interface BodyLoadSummary {
    */
   muscleMinutes: Record<MuscleKey, number>;
   muscleVolume: Record<MuscleKey, number>;
-  byLensMuscle: Record<BodyLensKey, { minutes: Record<MuscleKey, number>; volume: Record<MuscleKey, number> }>;
+  byLensMuscle: Record<
+    BodyLensKey,
+    { minutes: Record<MuscleKey, number>; volume: Record<MuscleKey, number>; work: Record<MuscleKey, number> }
+  >;
+  /** Fractional, sums to 1 per loaded working set — the twin of `regionWork`. */
+  muscleWork: Record<MuscleKey, number>;
   /** Fractional, sums to 1 per resistance set — the twin of `resistanceSets`. */
   resistanceSetsByMuscle: Record<MuscleKey, number>;
   /**
@@ -143,6 +169,7 @@ export interface BodyLoadSummary {
     volume: Record<MuscleKey, number>;
     resistanceSets: Record<MuscleKey, number>;
     hardSets: Record<MuscleKey, number>;
+    work: Record<MuscleKey, number>;
   };
   /**
    * 0..1 per output: authored total / total (plan decision D4). 0 when every
@@ -150,7 +177,7 @@ export interface BodyLoadSummary {
    * the output is empty. The hard-set ratio is a share of set-credits, the only
    * place that field is ever summed.
    */
-  muscleCoverage: { minutes: number; volume: number; resistanceSets: number; hardSets: number };
+  muscleCoverage: { minutes: number; volume: number; resistanceSets: number; hardSets: number; work: number };
   unmapped: UnmappedMovement[];
   totalMinutes: number;
   // classified / (classified + unmapped), 0..1
@@ -835,22 +862,31 @@ export function summarizeBodyLoad(
   const resistanceSets = zeroed(MUSCLE_REGION_KEYS);
   const hardSetsByRegion = zeroed(MUSCLE_REGION_KEYS);
   const resistanceTonnage = zeroed(MUSCLE_REGION_KEYS);
+  const regionWork = zeroed(MUSCLE_REGION_KEYS);
   const byLens = Object.fromEntries(
-    BODY_LENS_KEYS.map((k) => [k, { minutes: zeroed(MUSCLE_REGION_KEYS), volume: zeroed(MUSCLE_REGION_KEYS) }]),
+    BODY_LENS_KEYS.map((k) => [
+      k,
+      { minutes: zeroed(MUSCLE_REGION_KEYS), volume: zeroed(MUSCLE_REGION_KEYS), work: zeroed(MUSCLE_REGION_KEYS) },
+    ]),
   ) as BodyLoadSummary['byLens'];
 
   const muscleMinutes = zeroed(MUSCLE_KEYS);
   const muscleVolume = zeroed(MUSCLE_KEYS);
   const resistanceSetsByMuscle = zeroed(MUSCLE_KEYS);
   const hardSetsByMuscle = zeroed(MUSCLE_KEYS);
+  const muscleWork = zeroed(MUSCLE_KEYS);
   const byLensMuscle = Object.fromEntries(
-    BODY_LENS_KEYS.map((k) => [k, { minutes: zeroed(MUSCLE_KEYS), volume: zeroed(MUSCLE_KEYS) }]),
+    BODY_LENS_KEYS.map((k) => [
+      k,
+      { minutes: zeroed(MUSCLE_KEYS), volume: zeroed(MUSCLE_KEYS), work: zeroed(MUSCLE_KEYS) },
+    ]),
   ) as BodyLoadSummary['byLensMuscle'];
   const muscleAuthored: BodyLoadSummary['muscleAuthored'] = {
     minutes: zeroed(MUSCLE_KEYS),
     volume: zeroed(MUSCLE_KEYS),
     resistanceSets: zeroed(MUSCLE_KEYS),
     hardSets: zeroed(MUSCLE_KEYS),
+    work: zeroed(MUSCLE_KEYS),
   };
 
   let systemicMinutes = 0;
@@ -879,6 +915,28 @@ export function summarizeBodyLoad(
 
     // PASS 3 — attribute the allocated minutes.
     for (const { item, section, profile, hasRegions, modality, minutes } of walk) {
+      const lens = lensFor(modality);
+
+      // WORK, before the minutes gate on purpose: it counts sets, not clock,
+      // so an item the allocation happened to leave at zero minutes still
+      // did its sets. Unmapped work has no profile to split across and stays
+      // out, exactly as its minutes stay out of every region.
+      if (hasRegions && loadSections.has(section)) {
+        const loaded = item.sets.filter((s) => isLoadedSet(s, profile)).length;
+        if (loaded > 0) {
+          for (const [region, weight] of Object.entries(profile.regions) as [RegionKey, number][]) {
+            regionWork[region] += loaded * weight;
+            if (lens) byLens[lens].work[region] += loaded * weight;
+          }
+          const authoredWork = profile.muscleSource === 'authored';
+          for (const [muscle, weight] of Object.entries(profile.muscles) as [MuscleKey, number][]) {
+            muscleWork[muscle] += loaded * weight;
+            if (lens) byLensMuscle[lens].work[muscle] += loaded * weight;
+            if (authoredWork) muscleAuthored.work[muscle] += loaded * weight;
+          }
+        }
+      }
+
       if (minutes <= 0) continue;
 
       if (!hasRegions) {
@@ -903,8 +961,6 @@ export function summarizeBodyLoad(
       const itemVolume = isLoad
         ? item.sets.reduce((acc, s) => acc + setVolume(s, unweightedKg, rom, bw), 0)
         : 0;
-
-      const lens = lensFor(modality);
 
       for (const [region, weight] of Object.entries(profile.regions) as [RegionKey, number][]) {
         regionMinutes[region] += minutes * weight;
@@ -991,9 +1047,11 @@ export function summarizeBodyLoad(
     resistanceSets,
     hardSetsByRegion,
     resistanceTonnage,
+    regionWork,
     muscleMinutes,
     muscleVolume,
     byLensMuscle,
+    muscleWork,
     resistanceSetsByMuscle,
     hardSetsByMuscle,
     muscleAuthored,
@@ -1002,6 +1060,7 @@ export function summarizeBodyLoad(
       volume: share(muscleAuthored.volume, muscleVolume),
       resistanceSets: share(muscleAuthored.resistanceSets, resistanceSetsByMuscle),
       hardSets: share(muscleAuthored.hardSets, hardSetsByMuscle),
+      work: share(muscleAuthored.work, muscleWork),
     },
     unmapped: [...unmapped.entries()]
       .map(([name, v]) => ({ name, minutes: v.minutes, sessions: v.sessions.size }))
@@ -1012,8 +1071,12 @@ export function summarizeBodyLoad(
   };
 }
 
-/** The two currencies the body map can be read in. */
-export type BodyCurrency = 'minutes' | 'volume';
+/**
+ * The currencies the body map can be read in. `work` (loaded working sets,
+ * split by share) is the default the page shows; `minutes` stays for emptiness
+ * checks and the no-sets fallback, where a lens holds time but no sets.
+ */
+export type BodyCurrency = 'work' | 'minutes' | 'volume';
 
 // The single funnel every body-map surface reads — the silhouette heat, the
 // region list and the callouts all come through here, so the lens only has to be
@@ -1024,8 +1087,10 @@ export function regionTotals(
   currency: BodyCurrency,
   lens?: BodyLensKey,
 ): Record<RegionKey, number> {
-  const scope = lens ? summary.byLens[lens] : { minutes: summary.regionMinutes, volume: summary.regionVolume };
-  return currency === 'volume' ? scope.volume : scope.minutes;
+  const scope = lens
+    ? summary.byLens[lens]
+    : { minutes: summary.regionMinutes, volume: summary.regionVolume, work: summary.regionWork };
+  return scope[currency];
 }
 
 // Region intensities normalised 0..1 against the busiest region, for the map.
@@ -1053,8 +1118,8 @@ export function muscleTotals(
 ): Record<MuscleKey, number> {
   const scope = lens
     ? summary.byLensMuscle[lens]
-    : { minutes: summary.muscleMinutes, volume: summary.muscleVolume };
-  return currency === 'volume' ? scope.volume : scope.minutes;
+    : { minutes: summary.muscleMinutes, volume: summary.muscleVolume, work: summary.muscleWork };
+  return scope[currency];
 }
 
 export function muscleIntensities(
