@@ -28,7 +28,8 @@ import {
   governEdges,
   isBriefLive,
 } from '@/lib/coach/governor';
-import { impactScore } from '@/lib/coach/impact';
+import { impactScore, isOutcome } from '@/lib/coach/impact';
+import { outcomeKind } from '@/lib/coach/outcome';
 import type { Reading } from '@/lib/coach/recurrence';
 import type { EvidencePayload } from '@/lib/coach/types';
 import {
@@ -65,6 +66,12 @@ import DeepEnrichment from '@/components/DeepEnrichment';
  * fifth true finding so much as destroy it — no row, no history, nothing for
  * the athlete to expand. CLAUDE.md's rule is "default to 3-4 things, collapse
  * the rest", and a collapsed default with no expansion is a removed feature.
+ *
+ * Only RULE findings compete for these slots. Closing rows (`outcome.*`,
+ * "Cleared" / "Re-measured") used to, and on 2026-10-13 one scored ~0.245
+ * against the only real open item at ~0.247 — a report about the past taking a
+ * slot from a problem in the present. They render in their own compact strip
+ * (`ClosedStrip`) and consume nothing here.
  */
 const SURFACED_LIMIT = 3;
 
@@ -102,8 +109,14 @@ type Unit =
  * A theme ranks at its best member — a group is exactly as urgent as the worst
  * thing in it, and averaging would let two mild findings bury one severe one.
  */
-function partitionOpen(open: Recommendation[]): { lead: Unit[]; rest: Recommendation[] } {
-  const ranked = [...open].sort((a, b) => rank(b) - rank(a));
+function partitionOpen(open: Recommendation[]): {
+  lead: Unit[];
+  rest: Recommendation[];
+  closed: Recommendation[];
+} {
+  const isClosing = (r: Recommendation) => r.rule_id != null && isOutcome(r.rule_id);
+  const closed = open.filter(isClosing).sort((a, b) => rank(b) - rank(a));
+  const ranked = open.filter((r) => !isClosing(r)).sort((a, b) => rank(b) - rank(a));
   const groups = groupByTheme(ranked);
   const grouped = new Set(groups.flatMap((g) => g.rows.map((r) => r.id)));
 
@@ -126,7 +139,35 @@ function partitionOpen(open: Recommendation[]): { lead: Unit[]; rest: Recommenda
   const rest = units
     .slice(SURFACED_LIMIT)
     .flatMap((u) => (u.kind === 'theme' ? u.rows : [u.row]));
-  return { lead, rest };
+  return { lead, rest, closed };
+}
+
+/**
+ * Closing rows, below the open findings and visibly lesser than them: one line
+ * each, no action, no trajectory. Each still opens to its full body — the
+ * re-measured ones carry the only explanation of why a number moved, so a strip
+ * with no way in would be a removed feature. The 44px tap target is a hit box,
+ * not a taller row.
+ */
+function ClosedStrip({ rows, onOpen }: { rows: Recommendation[]; onOpen: (r: Recommendation) => void }) {
+  return (
+    <ul className="mt-4 flex flex-col divide-y divide-border-soft border-y border-border-soft">
+      {rows.map((r) => (
+        <li key={r.id}>
+          <button
+            type="button"
+            onClick={() => onOpen(r)}
+            className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-xs text-muted transition-colors hover:text-fg"
+          >
+            <span className="min-w-0 truncate">{r.tldr}</span>
+            <span className="shrink-0 text-[0.6rem] uppercase tracking-wider">
+              {outcomeKind(r.evidence) === 'remeasured' ? 'Coach change' : 'Closed'}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -588,8 +629,15 @@ export default function CoachView() {
       for (const m of movements) {
         if (m.taxonomy) overrides[normalizeMovementName(m.name)] = m.taxonomy;
       }
-      const { write, refreshed, findings, suppressed, observations: readings, resolved } =
-        runCoach({
+      const {
+        write,
+        refreshed,
+        findings,
+        suppressed,
+        observations: readings,
+        resolved,
+        remeasured,
+      } = runCoach({
           logs,
           meals,
           stats,
@@ -621,9 +669,12 @@ export default function CoachView() {
       // gagged by its own cooldowns while the athlete kept training — so the
       // one message an athlete saw most was the one that told them least.
       const fresh = write.length - refreshed.length - resolved.length;
+      // A re-measure is not a clear, and the toast must not call it one.
+      const cleared = resolved.length - remeasured.length;
       const parts = [
         fresh > 0 ? `${fresh} new` : null,
-        resolved.length > 0 ? `${resolved.length} cleared` : null,
+        cleared > 0 ? `${cleared} cleared` : null,
+        remeasured.length > 0 ? `${remeasured.length} re-measured` : null,
         refreshed.length > 0 ? `${refreshed.length} updated` : null,
       ].filter(Boolean);
       if (parts.length > 0) {
@@ -761,7 +812,8 @@ export default function CoachView() {
   // one because it was first raised a while ago, and the old created-at slider
   // hid exactly the aging findings that most needed seeing.
   const open = recs.filter((r) => isLiveRec(r, now));
-  const { lead, rest } = partitionOpen(open);
+  const { lead, rest, closed } = partitionOpen(open);
+  const hasOpenFindings = lead.length > 0;
 
   const byRule = readingsByRule(observations);
   const seriesOf = (r: Recommendation): Reading[] => (r.rule_id ? (byRule.get(r.rule_id) ?? []) : []);
@@ -841,7 +893,7 @@ export default function CoachView() {
         <Item>
           <section className="mb-10">
             <SectionHeader>Open</SectionHeader>
-            {open.length === 0 ? (
+            {!hasOpenFindings ? (
               <EmptyState>Nothing open. Tap “Check-in” to scan recent sessions.</EmptyState>
             ) : (
               <>
@@ -886,6 +938,7 @@ export default function CoachView() {
                 ) : null}
               </>
             )}
+            {closed.length > 0 ? <ClosedStrip rows={closed} onOpen={setActive} /> : null}
           </section>
         </Item>
 

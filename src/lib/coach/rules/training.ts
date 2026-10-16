@@ -53,9 +53,9 @@ export function heavyFractionFor(stats: UserStats | null): number {
 /**
  * Loaded work rarely reaching the intensity the strength adaptation needs.
  *
- * Reads every resistance section, not just `primary` — see the note on
- * `loadedIntensity` in ../signals.ts for why that distinction cost this rule its
- * voice in the first version.
+ * Judged on strength-shaped sets only — main block, five reps or fewer — at the
+ * athlete's own request. See the note on `loadedIntensity` in ../signals.ts for
+ * why the scope widened once and then narrowed again.
  *
  * Gated on the athlete actually claiming strength as a goal: a lifter who ranked
  * strength at zero and works at 60% is not making a mistake, they are training
@@ -104,9 +104,9 @@ export function loadedTooLight(
   return {
     ruleId: 'training.intent.loaded-too-light',
     periodKey,
-    tldr: `${pct(share)} of loaded sets reach ${pct(heavy)}`,
+    tldr: `${pct(share)} of main-block strength sets reach ${pct(heavy)}`,
     action: `Take one lift per session to ${pct(heavy)} of its best for sets of ${TRAINING.strengthReps.value} or fewer.`,
-    body: `${atOrAboveHeavy} of ${total} loaded sets in the last ${s.windowDays} days sat at or above ${pct(heavy)} of that movement's own best estimate.${lift} ${
+    body: `${atOrAboveHeavy} of ${total} main-block sets of ${TRAINING.strengthReps.value} reps or fewer in the last ${s.windowDays} days sat at or above ${pct(heavy)} of that movement's own best estimate. Hypertrophy, accessory and conditioning sets are left out — they are light for other reasons.${lift} ${
       moderate
         ? `You logged your experience as intermediate, so the line here is Galpin's own for that case — "${line.quote}" — rather than his ${pct(TRAINING.strengthIntensity.value)} for the highly trained, at ${TRAINING.strengthReps.value} reps or fewer.`
         : `Galpin puts true strength work "${TRAINING.strengthIntensity.quote}" at ${TRAINING.strengthReps.value} reps or fewer — below that the adaptation on offer is size, not force. His caveat: that is for the moderately-to-highly trained; at a lower training age far less will do.`
@@ -118,7 +118,8 @@ export function loadedTooLight(
     observed: {
       heavyLine: heavy,
       heavySets: atOrAboveHeavy,
-      loadedSets: total,
+      strengthSets: total,
+      scope: `primary, <=${TRAINING.strengthReps.value} reps`,
       share: round(share, 2),
       topMovement,
       topMovementBestKg,
@@ -439,11 +440,20 @@ export function intervalOrdering(
 }
 
 /**
- * A long unbroken run of training days.
+ * A run of training days that is still going.
  *
- * Galpin wants performance, a biomarker AND symptoms together before calling
- * overreaching, and this has only one of the three. So it is deliberately
- * phrased as a question rather than a verdict, and carries low confidence.
+ * A LOAD CUE, AND THE BODY HAS TO SAY SO. The number comes from Galpin's
+ * `recovery.overreachingRun`, and that claim is about five days in a row of
+ * performance DECREMENT — not five days of training. The same episode treats
+ * functional overreaching as the target of hard training, and says a day off in
+ * between does not change that call. This rule sees only the calendar, so
+ * it borrows his number as a point to look, and must never imply it measured
+ * the decrement his number is about. The earlier body quoted the decrement line
+ * as if training days were what it counted.
+ *
+ * It reads the CURRENT run (see `currentConsecutiveDays` in ../signals.ts). The
+ * longest run anywhere in the window fired on a run the athlete had already
+ * broken with two rest days.
  */
 export function consecutiveDays(
   s: TrainingSignals,
@@ -451,7 +461,8 @@ export function consecutiveDays(
   periodKey: string,
 ): Finding | null {
   const run = TRAINING.overreachingRun.value;
-  if (s.longestConsecutiveDays < run) return null;
+  const days = s.currentConsecutiveDays;
+  if (days < run) return null;
   // Defer when the symptom channel is also speaking: `readinessAndLoad` says
   // the same thing with two signals instead of one, and emitting both would put
   // the weaker version of a finding next to the stronger one.
@@ -460,14 +471,15 @@ export function consecutiveDays(
   return {
     ruleId: 'training.recovery.consecutive-days',
     periodKey,
-    tldr: `${s.longestConsecutiveDays} straight training days`,
-    action: 'Take a full day off, or drop one session to RPE 6 and half the range of motion.',
-    body: `You trained ${s.longestConsecutiveDays} calendar days in a row inside the last ${s.windowDays}. Galpin's threshold for paying attention is "${TRAINING.overreachingRun.quote}" — but he wants three signals together before calling it overreaching: a performance drop, a moving biomarker, and symptoms. This is only the first, so treat it as worth a look, not a diagnosis. His preferred response is a lighter session rather than a cancelled one.`,
-    drift: shareOf(s.longestConsecutiveDays - run + 1, 5),
+    tldr: `${days} training days in a row, and counting`,
+    action:
+      'Nothing to change if sessions still feel normal. If they have started to feel worse, not just harder, make the next one lighter rather than skipping it.',
+    body: `You have trained ${days} calendar days running, up to ${s.currentRunEndedOn}. Recovery sessions are not counted. This is a load cue only: Galpin's number — "${TRAINING.overreachingRun.quote}" — is about five days in a row of performance getting worse, not five days of training, and this app cannot see your performance from one day to the next. He treats a hard stretch you recover from as the point of training, and wants a performance drop, a moving biomarker and symptoms together before calling anything overreaching. So read this as a prompt to notice how the last few sessions felt, not as a sign anything is wrong.`,
+    drift: shareOf(days - run + 1, 5),
     confidence: 0.35,
     sufficiency: 'ok',
     claims: [TRAINING.overreachingRun],
-    observed: { longestRun: s.longestConsecutiveDays, threshold: run },
+    observed: { currentRun: days, runEndedOn: s.currentRunEndedOn, threshold: run },
   };
 }
 
@@ -660,11 +672,13 @@ export function readinessAndLoad(
   // Symptom channel: the athlete's own scale, at its second-worst points.
   const symptom = lowSleepSessions + highSorenessSessions;
   if (symptom < 2) return null;
-  // Load channel: a run of consecutive training days, or a week above their own
-  // stated frequency. Without one of these there is only a symptom, and a
-  // symptom alone is a mood, not a training signal.
+  // Load channel: a run of consecutive training days that is STILL GOING, or a
+  // week above their own stated frequency. Without one of these there is only a
+  // symptom, and a symptom alone is a mood, not a training signal. A run the
+  // athlete has already broken with rest is not load on them now — see
+  // `currentConsecutiveDays` in ../signals.ts.
   const loadFlag =
-    s.longestConsecutiveDays >= TRAINING.overreachingRun.value - 1 ||
+    s.currentConsecutiveDays >= TRAINING.overreachingRun.value - 1 ||
     s.sessionsPerWeek.value >= 5;
   if (!loadFlag) return null;
 
@@ -673,7 +687,11 @@ export function readinessAndLoad(
     periodKey,
     tldr: `${symptom} sessions on poor sleep or high soreness`,
     action: `Keep the session but drop it to RPE ${READINESS.respondLighter.value} — lighter, not cancelled.`,
-    body: `Of the ${rated} sessions that recorded a vibe check, ${lowSleepSessions} started on sleep rated 2 or worse and ${highSorenessSessions} on soreness rated 4 or more; your averages are sleep ${round(meanSleep, 1)}, energy ${round(meanEnergy, 1)}, soreness ${round(meanSoreness, 1)} out of 5. Alongside that you trained ${s.longestConsecutiveDays} days in a row. Galpin wants three signals before calling this overreaching — "${TRAINING.overreachingRun.quote.slice(0, 60)}…" is only the load half, and the missing one is a biomarker this app cannot see without a wearable. His response to a bad day is not a cancelled session: "${READINESS.respondLighter.quote}".`,
+    body: `Of the ${rated} sessions that recorded a vibe check, ${lowSleepSessions} started on sleep rated 2 or worse and ${highSorenessSessions} on soreness rated 4 or more; your averages are sleep ${round(meanSleep, 1)}, energy ${round(meanEnergy, 1)}, soreness ${round(meanSoreness, 1)} out of 5. Alongside that, ${
+      s.currentConsecutiveDays >= TRAINING.overreachingRun.value - 1
+        ? `you are ${s.currentConsecutiveDays} training days into a run`
+        : `you are averaging ${round(s.sessionsPerWeek.value, 1)} sessions a week`
+    } — a load cue, not a measure of performance. Galpin wants three signals before calling this overreaching — a performance drop, a moving biomarker and symptoms — and this has only the symptoms and the load; the biomarker is something this app cannot see without a wearable. His response to a bad day is not a cancelled session: "${READINESS.respondLighter.quote}".`,
     drift: shareOf(symptom, rated),
     confidence: 0.45,
     sufficiency: r.sufficiency,
@@ -686,7 +704,7 @@ export function readinessAndLoad(
       meanSleep: round(meanSleep, 1),
       meanEnergy: round(meanEnergy, 1),
       meanSoreness: round(meanSoreness, 1),
-      longestConsecutiveDays: s.longestConsecutiveDays,
+      currentConsecutiveDays: s.currentConsecutiveDays,
     },
   };
 }

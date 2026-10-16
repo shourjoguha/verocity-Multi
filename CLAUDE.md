@@ -25,6 +25,7 @@ intent, LESSONS describes what actually happened.
 | Change visuals, tokens, or layout                                        | **Hard rules below** (canonical), then `app.config.ts` |
 | Touch the AI coach                                                       | `supabase/functions/coach/index.ts`, `lib/deepGovernors.ts` |
 | **Change when a finding is allowed to speak again**                      | `src/lib/coach/recurrence.ts` — read its header first |
+| **Change how a coach rule measures** (sections, sessions, a threshold)   | add a dated entry to `DEFINITION_CHANGES` in `src/lib/coach/outcome.ts` |
 | **Count sets per muscle, or decide what counts as loaded work**          | `src/lib/bodyLoad.ts` — `meaningfulRegionShare`, `isLoadedSet` |
 | **Measure how much of a plan was followed, or what counts as a swap**    | `src/lib/planAdherence.ts`, `src/lib/movementSimilarity.ts` |
 | **Split training time by kind of work**                                  | `sessionLens` vs `modalityMinutes` — read the LESSONS entry first |

@@ -1803,6 +1803,19 @@ The check that observed this was `coach_observations` — a rule that fires ever
 reading with flat drift while the athlete keeps marking it done is a measurement
 bug until shown otherwise.
 
+### The coach says "Cleared" for a number the code moved, not the athlete
+`[confirmed in the wild]`
+9f8cb58 moved the intermediate strength line 85% → 75%; `loaded-too-light`
+drift fell 0.68 → 0.12 overnight and two quiet check-ins later the coach wrote
+"Cleared: 8% of loaded sets reach 85%" — "a change holding, not a quiet week".
+The athlete Noted it as confusing. Same week: "9 straight training days" was the
+longest run in 28 days, not the current one (they had rested two days).
+**Decision.** A closing finding is "Re-measured" when `DEFINITION_CHANGES` (or a
+claim value on the decided row) changed on/after the decision day; the headline
+names the subject, never the old tldr. **Any PR that changes how a rule
+measures adds a dated entry there** — nothing detects an unrecorded code change.
+→ `src/lib/coach/outcome.ts`, `signals.ts` (`currentTrainingRun`), `honestFindings.test.ts`
+
 ### A rule split out of another inherits the wrong bwLoad, force and calories
 `[measured against the review CSV]`
 Splitting a class rule (e.g. kettlebell swing, burpee, handstand push-up) copied

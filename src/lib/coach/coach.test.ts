@@ -145,12 +145,15 @@ describe('signals', () => {
     expect(minutes.resistance).toBeGreaterThan(minutes.endurance);
   });
 
-  it('reads loaded work from every resistance section, not just `primary`', () => {
-    // The bug this replaced: filtering to the `primary` section found 4 usable
-    // sets and went permanently silent, while `accessory` and `secondary` held
-    // 142 more — including the athlete's actual heavy lift.
-    expect(training.loadedIntensity.samples).toBeGreaterThan(100);
-    expect(training.loadedIntensity.sufficiency).toBe('ok');
+  it('judges strength intensity on main-block sets of five or fewer, and says so when there are few', () => {
+    // The August fixture keeps its heavy squats in `secondary`, which is the
+    // case that once made this signal widen to every section. It is scoped to
+    // the main block again at the athlete's request, so on this fixture the
+    // honest output is insufficiency — never a wider net.
+    expect(training.loadedIntensity.samples).toBeLessThan(20);
+    expect(training.loadedIntensity.sufficiency).toBe('insufficient');
+    expect(training.loadedIntensity.shortfall).toContain('main-block');
+    // The heaviest estimate is still read from every section.
     expect(training.loadedIntensity.value.topMovement).toBeTruthy();
     expect(training.loadedIntensity.value.topMovementBestKg).toBeGreaterThan(0);
   });
@@ -288,7 +291,7 @@ describe('conditioning and vibe', () => {
     // so a symptom on its own must stay silent.
     expect(readinessAndLoad(training, STATS, '2026-W34')).toBeNull();
 
-    const loaded = { ...training, longestConsecutiveDays: 6 };
+    const loaded = { ...training, currentConsecutiveDays: 6 };
     const symptomatic = {
       ...loaded,
       readiness: {
@@ -446,12 +449,14 @@ describe('runCoach', () => {
     expect(f!.body).toContain('not 9');
   });
 
-  it('finds under-loading now that it reads every resistance section', () => {
+  it('stays silent on under-loading when the main block holds too few strength sets', () => {
+    // Hypertrophy, accessory and conditioning sets are light on purpose and no
+    // longer count against strength intensity. Too few main-block sets is
+    // silence, not a finding about the rest of the programme.
     const f = runCoach(base).findings.find(
       (x) => x.ruleId === 'training.intent.loaded-too-light',
     );
-    expect(f).toBeTruthy();
-    expect(f!.observed.loadedSets).toBeGreaterThan(100);
+    expect(f).toBeUndefined();
   });
 
   it('does not promote the highest e1RM to "your main lift"', () => {
@@ -557,7 +562,7 @@ describe('observations', () => {
   it('records a clean zero for a rule with history that has stopped firing', () => {
     // The whole point of the table: without a reading between two decisions
     // there is no trajectory, and improvement is invisible.
-    const quietRule = 'training.strength.rest-too-short';
+    const quietRule = 'training.frequency.below-target';
     const fired = new Set(runCoach(base).findings.map((f) => f.ruleId));
     expect(fired.has(quietRule)).toBe(false);
 
@@ -569,6 +574,22 @@ describe('observations', () => {
     expect(reading).toBeDefined();
     expect(reading!.drift).toBe(0);
     expect(reading!.fired).toBe(false);
+  });
+
+  it("writes NO reading when the rule's own input was insufficient, however many sessions", () => {
+    // The fixture has plenty of sessions but almost no rest-tagged heavy sets,
+    // so `heavyRest` is insufficient and the rest rule is silent because it
+    // could not look — not because rest was fine. A zero here, twice, used to
+    // "clear" a decision on data the rule never measured.
+    const quietRule = 'training.strength.rest-too-short';
+    const t = measureTraining(LOGS, trainingOpts, TODAY);
+    expect(t.sessions).toBeGreaterThanOrEqual(3);
+    expect(t.heavyRest.sufficiency).toBe('insufficient');
+    const out = runCoach({
+      ...base,
+      existing: [rec({ rule_id: quietRule, status: 'acted', created_at: ago(30) })],
+    });
+    expect(out.observations.find((o) => o.rule_id === quietRule)).toBeUndefined();
   });
 
   it('writes NO reading rather than a zero when there was nothing to look at', () => {
@@ -604,7 +625,10 @@ describe('observations', () => {
 describe('closing the loop', () => {
   const ago = (d: number) => new Date(TODAY.getTime() - d * 86_400_000).toISOString();
   const day = (d: number) => ago(d).slice(0, 10);
-  const RULE = 'training.strength.rest-too-short';
+  // Measured on the fixture and clean, so its silence is a real zero. (The
+  // rest rule used here before was silent because its input was insufficient,
+  // which is exactly the case that may no longer clear anything.)
+  const RULE = 'training.frequency.below-target';
 
   /** Acted at a real problem, then three readings walking it down to nothing. */
   const fixedUp = () => ({
@@ -616,7 +640,7 @@ describe('closing the loop', () => {
         disposition: 'acted_as_prescribed',
         created_at: ago(30),
         drift_score: 0.8,
-        tldr: 'Heavy sets are getting 70s of rest',
+        tldr: '2.5 sessions a week against your target of 4',
       }),
     ],
     observations: [
@@ -631,7 +655,37 @@ describe('closing the loop', () => {
     expect(out.resolved).toContain(RULE);
     const row = out.write.find((r) => r.rule_id === `outcome.resolved.${RULE}`);
     expect(row).toBeDefined();
-    expect(row!.tldr).toContain('Heavy sets are getting 70s of rest');
+    // The headline names the subject; the OLD sentence is quoted in the body as
+    // what it read then, never restated as if it were a current number.
+    expect(row!.tldr).toBe('Cleared: sessions per week');
+    expect(row!.tldr).not.toContain('2.5');
+    expect(row!.body_md).toContain('“2.5 sessions a week against your target of 4”');
+    expect(row!.body_md).toContain('has not changed');
+    expect(out.remeasured).toEqual([]);
+  });
+
+  it('says "re-measured", not "cleared", when the coach changed the measure after the decision', () => {
+    const out = runCoach({
+      ...fixedUp(),
+      definitionChanges: [
+        { ruleId: RULE, on: day(20), what: 'only completed sessions are counted' },
+      ],
+    });
+    expect(out.resolved).toContain(RULE);
+    expect(out.remeasured).toEqual([RULE]);
+    const row = out.write.find((r) => r.rule_id === `outcome.resolved.${RULE}`)!;
+    expect(row.tldr).toBe('Re-measured: sessions per week');
+    expect(row.body_md).toContain('only completed sessions are counted');
+    expect(row.body_md).not.toContain('your change holding');
+    expect(row.evidence.observed.outcome).toBe('remeasured');
+  });
+
+  it('ignores a measurement change that predates the decision', () => {
+    const out = runCoach({
+      ...fixedUp(),
+      definitionChanges: [{ ruleId: RULE, on: day(40), what: 'an older change' }],
+    });
+    expect(out.remeasured).toEqual([]);
   });
 
   it('reports the current reading as drift, not the size of the win', () => {

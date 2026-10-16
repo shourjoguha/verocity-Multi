@@ -65,16 +65,13 @@ import {
   proteinTarget,
 } from '@/lib/coach/rules/nutrition';
 import {
-  RESOLUTION_FLOOR,
-  RESOLUTION_HOLD,
-  RESOLUTION_MIN_SESSIONS,
   alreadyResolved,
   readingsSince,
   recurrence,
   resolvedRuleId,
   type Reading,
-  type Recurrence,
 } from '@/lib/coach/recurrence';
+import { closingFinding, type DefinitionChange } from '@/lib/coach/outcome';
 import { themeOf } from '@/lib/coach/themes';
 import type { EvidencePayload, Finding } from '@/lib/coach/types';
 import { SOURCES, CLAIMS } from '@/lib/coach/knowledge';
@@ -135,6 +132,9 @@ export interface CoachInput {
   overrides?: OverrideMap;
   today?: Date;
   windowDays?: number;
+  /** Measurement changelog. Defaults to DEFINITION_CHANGES in ./outcome.ts;
+   *  a seam for tests, never set by the app. */
+  definitionChanges?: readonly DefinitionChange[];
 }
 
 /**
@@ -161,11 +161,6 @@ const SORENESS_SOURCE = 'training.recovery.soreness-source';
 /** The same guard for the nutrition family, whose denominator is days with any
  *  intake logged rather than sessions. */
 export const MIN_MEAL_DAYS_FOR_CLEAN = 7;
-
-/** Impact weight and confidence for a closing finding. Deliberately NOT ranked
- *  by how large the improvement was: good news that outranks a structural
- *  problem is still the wrong thing to lead a page with. */
-const RESOLVED_CONFIDENCE = 0.8;
 
 /** A row ready for upsert. Mirrors `recommendations` after migration 0036. */
 export interface CoachRecInput {
@@ -332,50 +327,6 @@ function localDay(d: Date): string {
 }
 
 /**
- * The closing finding for a rule the athlete fixed.
- *
- * Borrows the headline from the row being closed so the athlete recognises the
- * thing being reported as done. `claims` is empty: this is not an assertion
- * about the body, it is a report about their own record, and inventing a
- * citation for it would devalue every real one.
- *
- * `drift` is the CURRENT (low) reading, not the size of the improvement. The
- * column means "distance past the threshold" everywhere else, and overloading
- * it here would make `rank()` in CoachView read a big win as a big problem. The
- * improvement is carried in `observed` instead, where it cannot be mistaken for
- * a severity.
- */
-function resolvedFinding(
-  ruleId: string,
-  decision: Recommendation,
-  driftNow: number,
-  periodKey: string,
-  verdict: Recurrence,
-): Finding {
-  const was = decision.drift_score ?? 0;
-  const drop = Math.round((was - driftNow) * 100);
-  const what = (decision.tldr ?? ruleId).trim();
-  return {
-    ruleId: resolvedRuleId(ruleId),
-    periodKey,
-    tldr: `Cleared: ${what}`,
-    action: 'Nothing to do. Keeping this is the work now.',
-    body: `You acted on this on ${decision.created_at.slice(0, 10)} when it was reading ${Math.round(was * 100)}% past its threshold. It has been at or under ${Math.round(RESOLUTION_FLOOR * 100)}% for the last ${RESOLUTION_HOLD} check-ins, across ${RESOLUTION_MIN_SESSIONS}+ sessions since — that is a change holding, not a quiet week. The rule goes back on watch from here: if it comes back, it will be measured against this new level rather than the old one.`,
-    drift: driftNow,
-    confidence: RESOLVED_CONFIDENCE,
-    sufficiency: 'ok',
-    claims: [],
-    observed: {
-      driftAtDecision: Number(was.toFixed(2)),
-      driftNow: Number(driftNow.toFixed(2)),
-      improvementPoints: drop,
-      decidedOn: decision.created_at.slice(0, 10),
-      readings: verdict.slope != null ? `slope ${verdict.slope}` : 'short series',
-    },
-  };
-}
-
-/**
  * Everything the coach knows, in one pure pass.
  *
  * Returns the findings it would write AND the ones it suppressed, because a
@@ -391,10 +342,14 @@ export function runCoach(input: CoachInput): {
   /** This run's drift readings, for `upsertCoachObservations`. One per rule that
    *  could be measured, whether or not it spoke — see MIN_SESSIONS_FOR_CLEAN. */
   observations: CoachObservationInput[];
-  /** Rule ids that cleared this run, i.e. whose `outcome.resolved.*` finding is
-   *  in `write`. Reported so the surface can say "1 cleared" rather than
-   *  counting a closing finding as a new problem. */
+  /** Rule ids that closed this run, i.e. whose `outcome.resolved.*` finding is
+   *  in `write` — cleared AND re-measured. Reported so the surface can say
+   *  "1 cleared" rather than counting a closing finding as a new problem. */
   resolved: string[];
+  /** The subset of `resolved` that closed because the coach changed how it
+   *  measures the rule, not because the athlete did (see ./outcome.ts). The
+   *  surface must not call these "cleared". */
+  remeasured: string[];
 } {
   const today = input.today ?? new Date();
   const windowDays = input.windowDays ?? COACH_WINDOW_DAYS;
@@ -441,7 +396,8 @@ export function runCoach(input: CoachInput): {
   if (cal) findings.push(cal);
   // The plan's own double progression: range, cap and step all come from the
   // prescription, so this is the one training rule that needs the plan itself.
-  const step = loadStepDue(measureLoadSteps(input.logs, input.plan, today), input.stats, weekKey);
+  const loadSteps = measureLoadSteps(input.logs, input.plan, today);
+  const step = loadStepDue(loadSteps, input.stats, weekKey);
   if (step) findings.push(step);
 
   // Monthly cadence for the standing protein target — it restates a number that
@@ -468,12 +424,61 @@ export function runCoach(input: CoachInput): {
   // in step with rules/** for no gain. The set grows itself — a rule's first
   // firing is what enrols it.
   const observedOn = localDay(today);
+  //
+  // CLEAN MEANS THE RULE'S OWN INPUT WAS MEASURED, not just the family's.
+  // The family floors below are coarse: three sessions say nothing about
+  // whether the main block held twenty strength sets, or whether any interval
+  // bouts were logged at all. A rule that went quiet because its OWN signal
+  // was `insufficient` used to be written as `drift: 0` here — measured and
+  // clean — and two such readings close a decided rule as "Cleared" on data it
+  // never looked at. Narrowing `loadedIntensity` to main-block strength sets
+  // made that path live, so every rule with an input gate now reports it.
+  //
+  // This is a second list of rule ids, which the comment above warns against,
+  // and it is one on purpose: a rule returns `null` for "fine" and for "could
+  // not tell" alike, and only the signal it gated on can tell the two apart. A
+  // rule missing from this map falls back to the family floor alone — the old
+  // behaviour, never a stricter one — so a new rule degrades to coarse, not to
+  // silence. Gates on the athlete's own settings (a goal ranked under 25) are
+  // deliberately NOT here: "this does not apply to you" is a clean reading.
+  const sufficient = (m: { sufficiency: string }) => m.sufficiency !== 'insufficient';
+  const ruleInputMeasured: Record<string, () => boolean> = {
+    'training.intent.loaded-too-light': () => sufficient(training.loadedIntensity),
+    'training.hypertrophy.effort-low': () => sufficient(training.hypertrophyEffort),
+    'training.effort.rpe-calibration': () => sufficient(training.rpeCalibration),
+    'training.strength.rest-too-short': () => sufficient(training.heavyRest),
+    'training.hypertrophy.region-volume-short': () =>
+      sufficient(training.regionSetsPerWeek) && training.coverage >= 0.6,
+    'training.hypertrophy.total-volume-short': () =>
+      sufficient(training.regionSetsPerWeek) && training.coverage >= 0.6,
+    'training.endurance.zone2-short': () => sufficient(training.sessionMinutesPerWeek),
+    'training.endurance.interval-ordering': () => training.mixedSessions >= 3,
+    'training.frequency.below-target': () => sufficient(training.sessionsPerWeek),
+    'training.endurance.intervals-not-all-out': () => sufficient(training.intervals),
+    'training.effort.interval-rpe-underreads': () => sufficient(training.intervals),
+    'training.recovery.symptoms-and-load': () => sufficient(training.readiness),
+    'training.progression.load-step-due': () => sufficient(loadSteps),
+    goal: () => sufficient(goals),
+    'nutrition.dose.protein-target': () =>
+      input.stats?.body_weight_kg != null && sufficient(nutrition.mealsPerDay),
+    'nutrition.style.protein-gap-days': () => sufficient(nutrition.proteinFeedsPerDay),
+    'nutrition.timing.arriving-hungry': () =>
+      sufficient(nutrition.meanHungerBefore) && sufficient(nutrition.meanLongestGapHours),
+    'nutrition.timing.carb-window': () => sufficient(training.sessionsPerWeek),
+    'nutrition.timing.long-session-unfed': () => fuel.pairedDays >= 3,
+    'nutrition.style.carb-concentration': () =>
+      nutrition.text.described >= 12 &&
+      nutrition.text.described / Math.max(1, nutrition.text.total) >= 0.5 &&
+      nutrition.text.withCarbSource >= 8,
+  };
+  const inputMeasured = (ruleId: string): boolean =>
+    (ruleInputMeasured[ruleId] ?? ruleInputMeasured[family(ruleId)] ?? (() => true))();
   const cleanIsMeasurable = (ruleId: string) =>
     ruleId === SORENESS_SOURCE
       ? false
-      : family(ruleId) === 'nutrition'
-        ? nutrition.daysLogged >= MIN_MEAL_DAYS_FOR_CLEAN
-        : training.sessions >= MIN_SESSIONS_FOR_CLEAN;
+      : (family(ruleId) === 'nutrition'
+          ? nutrition.daysLogged >= MIN_MEAL_DAYS_FOR_CLEAN
+          : training.sessions >= MIN_SESSIONS_FOR_CLEAN) && inputMeasured(ruleId);
 
   const firedById = new Map(findings.map((f) => [f.ruleId, f]));
   const withHistory = new Set(
@@ -585,8 +590,8 @@ export function runCoach(input: CoachInput): {
   // A rule the athlete ACTED on, whose drift has since fallen below the floor
   // and stayed there. Computed over decisions rather than over findings,
   // because a resolved rule by definition does not fire — which is exactly why
-  // the engine had no way to say so before. The headline is borrowed from the
-  // row being closed: it is the sentence the athlete already recognises.
+  // the engine had no way to say so before. WHAT it says — cleared, or
+  // re-measured because the coach changed the ruler — is ./outcome.ts's call.
   //
   // Dismissals are excluded in `recurrence`, and a resolution is said once —
   // see `alreadyResolved`. Both guards exist because good news restated every
@@ -610,7 +615,18 @@ export function runCoach(input: CoachInput): {
       today,
     });
     if (verdict.reason !== 'resolved') continue;
-    resolvedFindings.push(resolvedFinding(ruleId, decision, driftNow, weekKey, verdict));
+    resolvedFindings.push(
+      closingFinding({
+        ruleId,
+        decision,
+        current: f,
+        driftNow,
+        newSessions: newSessionsSince(decision.created_at),
+        periodKey: weekKey,
+        verdict,
+        changes: input.definitionChanges,
+      }),
+    );
   }
 
   // A RULE THAT CLEARED MUST NOT ALSO COMPLAIN. Resolution needs the last
@@ -665,6 +681,9 @@ export function runCoach(input: CoachInput): {
     findings: [...findings, ...resolvedFindings],
     observations,
     resolved: resolvedFindings.map((f) => f.ruleId.replace('outcome.resolved.', '')),
+    remeasured: resolvedFindings
+      .filter((f) => f.observed.outcome === 'remeasured')
+      .map((f) => f.ruleId.replace('outcome.resolved.', '')),
   };
 }
 
