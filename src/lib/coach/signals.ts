@@ -207,20 +207,33 @@ export interface TrainingSignals {
    */
   repBands: Measured<{ strength: number; blended: number; hypertrophy: number; endurance: number }>;
   /**
-   * Of RESISTANCE sets that recorded both load and reps, the fraction loaded at
-   * or above the strength threshold, measured against each movement's own best
-   * e1RM in the window. A claim about intent, not about absolute strength.
+   * Of STRENGTH-SHAPED sets — main block (`primary`), load and reps recorded,
+   * `strengthRepMax` reps or fewer — the fraction loaded at or above the
+   * strength threshold, measured against each movement's own best e1RM in the
+   * window. A claim about intent, not about absolute strength.
    *
-   * WHY ALL RESISTANCE SECTIONS AND NOT JUST `primary`. The first version of
-   * this read the `primary` slot only, on the assumption that is where the main
-   * lift lives. In real logs it is not: across a four-week window the `primary`
-   * section held 17 sets of which 4 recorded load and reps, while `accessory`
-   * held 144 sets with 117 loaded and `secondary` held the actual heavy work —
-   * Back Squat to 100 kg on three-minute rests. Filtering to `primary` threw
-   * away 142 of the 146 usable loaded sets and made the rule permanently
-   * silent, which read as "nothing to say" rather than "looking in the wrong
-   * place". Section is a layout choice in the logger, not a statement about
-   * what the set was for; the load and the reps are the statement.
+   * WHY THE SCOPE MOVED BACK TO `primary`, AND WHY THAT IS NOT THE OLD BUG. The
+   * first version read `primary` only, and in the August logs that section held
+   * 4 usable sets while `secondary` held the heavy squats — so it went silent,
+   * and was widened to every resistance section. Widening fixed the silence and
+   * broke the question: hypertrophy, accessory and conditioning sets are light
+   * ON PURPOSE, and counting them made "8% of loaded sets reach 85%" a
+   * statement about the programme's shape rather than about the strength work
+   * in it. The athlete said so on the row (disposition note, 2026-10-03): judge
+   * strength on pure strength work only — the main block, five reps or fewer,
+   * long rest. Galpin's own line agrees: true strength training is five reps a
+   * set or fewer, after a warm-up ramp (`strength.reps`). The logs moved too: by
+   * October the main block held 27 loaded sets of five or fewer in four weeks,
+   * above this signal's floor of 20.
+   *
+   * Rest is NOT part of the filter. An untouched rest picker resolves to a
+   * 30-second assumption (./intent.ts), so filtering on rest would drop most
+   * real strength sets for a tag nobody set; `heavyRest` is where rest is
+   * judged. Ramp sets in the main block are counted and read as not heavy —
+   * the 20% bar in `loadedTooLight` leaves room for them.
+   *
+   * If the main block empties again, the honest output is insufficiency, not
+   * a wider net: the rule goes quiet rather than measuring the wrong sets.
    */
   loadedIntensity: Measured<{
     atOrAboveHeavy: number;
@@ -308,8 +321,24 @@ export interface TrainingSignals {
   mixedSessions: number;
   /** Of those, how many put the conditioning block before the resistance work. */
   mixedConditioningFirst: number;
-  /** Longest run of consecutive calendar days with a completed session. */
-  longestConsecutiveDays: number;
+  /**
+   * The CURRENT run of consecutive training days: the run that ends today or
+   * yesterday, and 0 when the last training day is older than that.
+   *
+   * THIS WAS THE LONGEST RUN ANYWHERE IN THE WINDOW, AND THAT WAS A BUG. On
+   * 2026-10-13 it reported "9 straight training days" for a Sep 18–26 run to an
+   * athlete who had taken Oct 11 and 12 off — their note on the finding was
+   * "outdated… I had two full days of rest". A run that has already been broken
+   * by rest is history, not load, and nothing that reads this field wants
+   * history.
+   *
+   * Recovery-tagged sessions (`tags` contains 'recovery' — a Yin class, a
+   * breathwork session) are not training days for this purpose. Logging the
+   * recovery the rule is asking for must not be the thing that extends the run.
+   */
+  currentConsecutiveDays: number;
+  /** The last day of that run, 'YYYY-MM-DD', or null when there is none. */
+  currentRunEndedOn: string | null;
   /**
    * Conditioning-block interval work: bouts, their length, and how hard they
    * actually went.
@@ -399,6 +428,40 @@ export interface TrainingOptions {
   unweightedKg?: number;
   /** Calendar days back the evidence puts peak soreness at. */
   sorenessPeakDays?: readonly number[];
+}
+
+/** The activity tag that marks a session as recovery rather than training. */
+const RECOVERY_TAG = 'recovery';
+
+/**
+ * The run of consecutive training days that is still going — see
+ * `currentConsecutiveDays` for why it is not the longest run in the window.
+ *
+ * "Still going" means it ends today or yesterday. Yesterday counts because a
+ * check-in before today's session has not broken anything yet; the day before
+ * yesterday does not, because a full day without training in between is the
+ * break. Dates are compared as UTC day numbers, like every other date the coach
+ * reads (see `localDay` in ./evaluate.ts).
+ */
+export function currentTrainingRun(
+  logs: readonly WorkoutLog[],
+  today: Date,
+): { days: number; endedOn: string | null } {
+  const dayNo = (d: string) => Date.parse(`${d}T00:00:00Z`) / 86_400_000;
+  const days = [
+    ...new Set(
+      logs
+        .filter((l) => l.status === 'done' && !(l.tags ?? []).includes(RECOVERY_TAG))
+        .map((l) => l.log_date.slice(0, 10)),
+    ),
+  ].sort();
+  const last = days[days.length - 1];
+  if (last == null || dayNo(ymd(today)) - dayNo(last) > 1) return { days: 0, endedOn: null };
+  let run = 1;
+  for (let i = days.length - 1; i > 0 && dayNo(days[i]) - dayNo(days[i - 1]) === 1; i -= 1) {
+    run += 1;
+  }
+  return { days: run, endedOn: last };
 }
 
 export function measureTraining(
@@ -605,9 +668,13 @@ export function measureTraining(
                 // the only honest read — assuming the set was light would
                 // invent one.
                 if (best != null && best > 0) {
-                  loaded += 1;
                   const fraction = a.weight / best;
-                  if (fraction >= opts.heavyFraction) heavy += 1;
+                  // Strength intensity is judged on strength-shaped sets only —
+                  // see the note on `loadedIntensity`.
+                  if (section.key === 'primary' && a.reps <= opts.strengthRepMax) {
+                    loaded += 1;
+                    if (fraction >= opts.heavyFraction) heavy += 1;
+                  }
                   if (item.movement === topMovement) topFractions.push(fraction);
 
                   // Rest is only interesting where the evidence names a band:
@@ -678,18 +745,7 @@ export function measureTraining(
     }
   }
 
-  // Consecutive training days — the input to any fatigue read. Dates are ymd
-  // strings so this is a sort plus a walk, no Date arithmetic per pair.
-  const days = [...new Set(logs.map((l) => l.log_date.slice(0, 10)))].sort();
-  let longest = 0;
-  let run = 0;
-  let prev: number | null = null;
-  for (const d of days) {
-    const t = Date.parse(`${d}T00:00:00Z`) / 86_400_000;
-    run = prev != null && t - prev === 1 ? run + 1 : 1;
-    prev = t;
-    if (run > longest) longest = run;
-  }
+  const run = currentTrainingRun(logs, today);
 
   return {
     windowDays,
@@ -734,7 +790,7 @@ export function measureTraining(
       },
       loaded,
       20,
-      `only ${loaded} resistance sets recorded both load and reps`,
+      `only ${loaded} main-block sets of ${opts.strengthRepMax} reps or fewer recorded a load`,
     ),
     hypertrophyEffort: measured(
       {
@@ -790,7 +846,8 @@ export function measureTraining(
     coverage: body.coverage,
     mixedSessions: mixed,
     mixedConditioningFirst: conditioningFirst,
-    longestConsecutiveDays: longest,
+    currentConsecutiveDays: run.days,
+    currentRunEndedOn: run.endedOn,
     intervals: measured(
       {
         bouts,

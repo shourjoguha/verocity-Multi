@@ -86,14 +86,13 @@ export const RULE_IMPACT: Record<string, number> = {
   // decides their order among themselves.
   'nutrition.dose.protein-target': 0.15,
 
-  // Closing findings (`outcome.resolved.<ruleId>`), matched by prefix. Weighted
-  // HIGH against a LOW drift, and the pairing is the whole point: a resolved
-  // rule reads at drift ~0 by definition, so on the family default of 0.5 it
-  // scored about 0.15 and sat below every mild open finding on the page. A
-  // "you fixed this" nobody sees is a removed feature. At 0.85 it lands above
-  // the refinements and below anything structural, which is the correct place
-  // for good news — worth reading, never worth leading over a real problem.
-  'outcome.resolved': 0.85,
+  // Closing findings (`outcome.resolved.<ruleId>`) are deliberately NOT in
+  // this table. They were, at 0.85, to lift "you fixed this" above the mild
+  // open findings — and on 2026-10-13 that put a closing card (~0.245) level
+  // with the only real open item (zone2-short, ~0.247), competing for one of
+  // three lead slots. A closing finding is not a problem and does not compete
+  // with problems: see `isOutcome` and `byImpact` below, and the separate strip
+  // in CoachView.
 };
 
 const FAMILY_DEFAULT = 0.5;
@@ -146,9 +145,28 @@ export function impactScore(f: Rankable): number {
   return impactWeight(f.ruleId) * magnitude * f.confidence;
 }
 
-/** Descending impact, ties broken by drift then rule id so it is total and stable. */
+/**
+ * Is this a closing finding (`outcome.*`) rather than a rule finding?
+ *
+ * Closing findings are reports about the athlete's record, not problems, so
+ * they sit in their own tier: after every rule finding in `byImpact`, and in
+ * their own strip on the page, never in a lead slot. Ranked among themselves
+ * by the same score, which on the family default reduces to their order of
+ * drift.
+ */
+export function isOutcome(ruleId: string): boolean {
+  return ruleId.startsWith('outcome.');
+}
+
+/** Descending impact, rule findings before closing findings, ties broken by
+ *  drift then rule id so it is total and stable. */
 export function byImpact(a: Rankable, b: Rankable): number {
-  return impactScore(b) - impactScore(a) || b.drift - a.drift || a.ruleId.localeCompare(b.ruleId);
+  return (
+    Number(isOutcome(a.ruleId)) - Number(isOutcome(b.ruleId)) ||
+    impactScore(b) - impactScore(a) ||
+    b.drift - a.drift ||
+    a.ruleId.localeCompare(b.ruleId)
+  );
 }
 
 // ---- Shared drift normalisation -------------------------------------------
