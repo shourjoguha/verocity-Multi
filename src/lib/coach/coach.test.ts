@@ -562,7 +562,7 @@ describe('observations', () => {
   it('records a clean zero for a rule with history that has stopped firing', () => {
     // The whole point of the table: without a reading between two decisions
     // there is no trajectory, and improvement is invisible.
-    const quietRule = 'training.strength.rest-too-short';
+    const quietRule = 'training.frequency.below-target';
     const fired = new Set(runCoach(base).findings.map((f) => f.ruleId));
     expect(fired.has(quietRule)).toBe(false);
 
@@ -574,6 +574,22 @@ describe('observations', () => {
     expect(reading).toBeDefined();
     expect(reading!.drift).toBe(0);
     expect(reading!.fired).toBe(false);
+  });
+
+  it("writes NO reading when the rule's own input was insufficient, however many sessions", () => {
+    // The fixture has plenty of sessions but almost no rest-tagged heavy sets,
+    // so `heavyRest` is insufficient and the rest rule is silent because it
+    // could not look — not because rest was fine. A zero here, twice, used to
+    // "clear" a decision on data the rule never measured.
+    const quietRule = 'training.strength.rest-too-short';
+    const t = measureTraining(LOGS, trainingOpts, TODAY);
+    expect(t.sessions).toBeGreaterThanOrEqual(3);
+    expect(t.heavyRest.sufficiency).toBe('insufficient');
+    const out = runCoach({
+      ...base,
+      existing: [rec({ rule_id: quietRule, status: 'acted', created_at: ago(30) })],
+    });
+    expect(out.observations.find((o) => o.rule_id === quietRule)).toBeUndefined();
   });
 
   it('writes NO reading rather than a zero when there was nothing to look at', () => {
@@ -609,7 +625,10 @@ describe('observations', () => {
 describe('closing the loop', () => {
   const ago = (d: number) => new Date(TODAY.getTime() - d * 86_400_000).toISOString();
   const day = (d: number) => ago(d).slice(0, 10);
-  const RULE = 'training.strength.rest-too-short';
+  // Measured on the fixture and clean, so its silence is a real zero. (The
+  // rest rule used here before was silent because its input was insufficient,
+  // which is exactly the case that may no longer clear anything.)
+  const RULE = 'training.frequency.below-target';
 
   /** Acted at a real problem, then three readings walking it down to nothing. */
   const fixedUp = () => ({
@@ -621,7 +640,7 @@ describe('closing the loop', () => {
         disposition: 'acted_as_prescribed',
         created_at: ago(30),
         drift_score: 0.8,
-        tldr: 'Heavy sets are getting 70s of rest',
+        tldr: '2.5 sessions a week against your target of 4',
       }),
     ],
     observations: [
@@ -638,9 +657,9 @@ describe('closing the loop', () => {
     expect(row).toBeDefined();
     // The headline names the subject; the OLD sentence is quoted in the body as
     // what it read then, never restated as if it were a current number.
-    expect(row!.tldr).toBe('Cleared: rest on heavy sets');
-    expect(row!.tldr).not.toContain('70s');
-    expect(row!.body_md).toContain('“Heavy sets are getting 70s of rest”');
+    expect(row!.tldr).toBe('Cleared: sessions per week');
+    expect(row!.tldr).not.toContain('2.5');
+    expect(row!.body_md).toContain('“2.5 sessions a week against your target of 4”');
     expect(row!.body_md).toContain('has not changed');
     expect(out.remeasured).toEqual([]);
   });
@@ -649,14 +668,14 @@ describe('closing the loop', () => {
     const out = runCoach({
       ...fixedUp(),
       definitionChanges: [
-        { ruleId: RULE, on: day(20), what: 'only heavy sets of five reps or fewer are counted' },
+        { ruleId: RULE, on: day(20), what: 'only completed sessions are counted' },
       ],
     });
     expect(out.resolved).toContain(RULE);
     expect(out.remeasured).toEqual([RULE]);
     const row = out.write.find((r) => r.rule_id === `outcome.resolved.${RULE}`)!;
-    expect(row.tldr).toBe('Re-measured: rest on heavy sets');
-    expect(row.body_md).toContain('only heavy sets of five reps or fewer are counted');
+    expect(row.tldr).toBe('Re-measured: sessions per week');
+    expect(row.body_md).toContain('only completed sessions are counted');
     expect(row.body_md).not.toContain('your change holding');
     expect(row.evidence.observed.outcome).toBe('remeasured');
   });

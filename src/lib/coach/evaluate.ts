@@ -396,7 +396,8 @@ export function runCoach(input: CoachInput): {
   if (cal) findings.push(cal);
   // The plan's own double progression: range, cap and step all come from the
   // prescription, so this is the one training rule that needs the plan itself.
-  const step = loadStepDue(measureLoadSteps(input.logs, input.plan, today), input.stats, weekKey);
+  const loadSteps = measureLoadSteps(input.logs, input.plan, today);
+  const step = loadStepDue(loadSteps, input.stats, weekKey);
   if (step) findings.push(step);
 
   // Monthly cadence for the standing protein target — it restates a number that
@@ -423,12 +424,61 @@ export function runCoach(input: CoachInput): {
   // in step with rules/** for no gain. The set grows itself — a rule's first
   // firing is what enrols it.
   const observedOn = localDay(today);
+  //
+  // CLEAN MEANS THE RULE'S OWN INPUT WAS MEASURED, not just the family's.
+  // The family floors below are coarse: three sessions say nothing about
+  // whether the main block held twenty strength sets, or whether any interval
+  // bouts were logged at all. A rule that went quiet because its OWN signal
+  // was `insufficient` used to be written as `drift: 0` here — measured and
+  // clean — and two such readings close a decided rule as "Cleared" on data it
+  // never looked at. Narrowing `loadedIntensity` to main-block strength sets
+  // made that path live, so every rule with an input gate now reports it.
+  //
+  // This is a second list of rule ids, which the comment above warns against,
+  // and it is one on purpose: a rule returns `null` for "fine" and for "could
+  // not tell" alike, and only the signal it gated on can tell the two apart. A
+  // rule missing from this map falls back to the family floor alone — the old
+  // behaviour, never a stricter one — so a new rule degrades to coarse, not to
+  // silence. Gates on the athlete's own settings (a goal ranked under 25) are
+  // deliberately NOT here: "this does not apply to you" is a clean reading.
+  const sufficient = (m: { sufficiency: string }) => m.sufficiency !== 'insufficient';
+  const ruleInputMeasured: Record<string, () => boolean> = {
+    'training.intent.loaded-too-light': () => sufficient(training.loadedIntensity),
+    'training.hypertrophy.effort-low': () => sufficient(training.hypertrophyEffort),
+    'training.effort.rpe-calibration': () => sufficient(training.rpeCalibration),
+    'training.strength.rest-too-short': () => sufficient(training.heavyRest),
+    'training.hypertrophy.region-volume-short': () =>
+      sufficient(training.regionSetsPerWeek) && training.coverage >= 0.6,
+    'training.hypertrophy.total-volume-short': () =>
+      sufficient(training.regionSetsPerWeek) && training.coverage >= 0.6,
+    'training.endurance.zone2-short': () => sufficient(training.sessionMinutesPerWeek),
+    'training.endurance.interval-ordering': () => training.mixedSessions >= 3,
+    'training.frequency.below-target': () => sufficient(training.sessionsPerWeek),
+    'training.endurance.intervals-not-all-out': () => sufficient(training.intervals),
+    'training.effort.interval-rpe-underreads': () => sufficient(training.intervals),
+    'training.recovery.symptoms-and-load': () => sufficient(training.readiness),
+    'training.progression.load-step-due': () => sufficient(loadSteps),
+    goal: () => sufficient(goals),
+    'nutrition.dose.protein-target': () =>
+      input.stats?.body_weight_kg != null && sufficient(nutrition.mealsPerDay),
+    'nutrition.style.protein-gap-days': () => sufficient(nutrition.proteinFeedsPerDay),
+    'nutrition.timing.arriving-hungry': () =>
+      sufficient(nutrition.meanHungerBefore) && sufficient(nutrition.meanLongestGapHours),
+    'nutrition.timing.carb-window': () => sufficient(training.sessionsPerWeek),
+    'nutrition.timing.long-session-unfed': () => fuel.pairedDays >= 3,
+    'nutrition.style.carb-concentration': () =>
+      nutrition.text.described >= 12 &&
+      nutrition.text.described / Math.max(1, nutrition.text.total) >= 0.5 &&
+      nutrition.text.withCarbSource >= 8,
+  };
+  const inputMeasured = (ruleId: string): boolean =>
+    (ruleInputMeasured[ruleId] ?? ruleInputMeasured[family(ruleId)] ?? (() => true))();
   const cleanIsMeasurable = (ruleId: string) =>
     ruleId === SORENESS_SOURCE
       ? false
-      : family(ruleId) === 'nutrition'
-        ? nutrition.daysLogged >= MIN_MEAL_DAYS_FOR_CLEAN
-        : training.sessions >= MIN_SESSIONS_FOR_CLEAN;
+      : (family(ruleId) === 'nutrition'
+          ? nutrition.daysLogged >= MIN_MEAL_DAYS_FOR_CLEAN
+          : training.sessions >= MIN_SESSIONS_FOR_CLEAN) && inputMeasured(ruleId);
 
   const firedById = new Map(findings.map((f) => [f.ruleId, f]));
   const withHistory = new Set(
