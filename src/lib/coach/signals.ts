@@ -434,6 +434,18 @@ export interface TrainingOptions {
 const RECOVERY_TAG = 'recovery';
 
 /**
+ * A session tagged 'recovery' is never training, whatever else it is tagged.
+ * A Yin class tagged recovery + mobility still counts as mobility minutes (the
+ * body map and goal shares read every log), but it is not a training session:
+ * not for frequency, not for the run of training days, not as a trained day or
+ * an unfed hard session for the nutrition rules, and not as a session that
+ * loaded a sore muscle. Operator ruling, 2026-10-18.
+ */
+export function isRecovery(log: WorkoutLog): boolean {
+  return (log.tags ?? []).includes(RECOVERY_TAG);
+}
+
+/**
  * The run of consecutive training days that is still going — see
  * `currentConsecutiveDays` for why it is not the longest run in the window.
  *
@@ -451,7 +463,7 @@ export function currentTrainingRun(
   const days = [
     ...new Set(
       logs
-        .filter((l) => l.status === 'done' && !(l.tags ?? []).includes(RECOVERY_TAG))
+        .filter((l) => l.status === 'done' && !isRecovery(l))
         .map((l) => l.log_date.slice(0, 10)),
     ),
   ].sort();
@@ -746,18 +758,20 @@ export function measureTraining(
   }
 
   const run = currentTrainingRun(logs, today);
+  const trainingSessions = logs.filter((l) => !isRecovery(l)).length;
 
   return {
     windowDays,
     weeks,
-    sessions: logs.length,
+    // Training sessions only: recovery is logged, not trained (see isRecovery).
+    sessions: trainingSessions,
     // Four sessions is the floor for a weekly rate over four weeks: below one a
     // week there is no rate, only a handful of events.
     sessionsPerWeek: measured(
-      logs.length / weeks,
-      logs.length,
+      trainingSessions / weeks,
+      trainingSessions,
       4,
-      `only ${logs.length} sessions in the last ${windowDays} days`,
+      `only ${trainingSessions} sessions in the last ${windowDays} days`,
     ),
     sessionMinutesPerWeek: measured(
       sessionPerWeek,
@@ -921,7 +935,12 @@ function measureSorenessSource(
     {
       report,
       soreness: report.data.session!.vibe!.soreness,
-      areas: explainSoreness(report, done, opts.sorenessPeakDays, opts.overrides),
+      areas: explainSoreness(
+        report,
+        done.filter((l) => !isRecovery(l)),
+        opts.sorenessPeakDays,
+        opts.overrides,
+      ),
     },
     1,
     1,
@@ -1079,7 +1098,7 @@ export function measureFuelTiming(
 ): FuelTimingSignals {
   const start = windowStart(today, windowDays);
   const logs = completedLogs(allLogs).filter(
-    (l) => l.log_date.slice(0, 10) >= start && l.started_at != null,
+    (l) => l.log_date.slice(0, 10) >= start && l.started_at != null && !isRecovery(l),
   );
   const mealsByDay = new Map<string, number[]>();
   for (const m of allMeals) {
@@ -1170,6 +1189,7 @@ export function measureNutrition(
   // 18:00 — rather than inventing a session end time.
   const trainedDays = new Set(
     completedLogs(allLogs)
+      .filter((l) => !isRecovery(l))
       .map((l) => l.log_date.slice(0, 10))
       .filter((d) => d >= start),
   );
