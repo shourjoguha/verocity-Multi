@@ -411,9 +411,10 @@ function EffortChart({ review: r }: { review: Review }) {
   );
 }
 
-// One row per staple track. Each end shows the set that best represents that
-// session; the change is in estimated 1RM (see findStaples), so reps, RPE and
-// pause credit all count and a variation is compared only with itself.
+// One row per staple track. Each end shows the set that best represents the
+// median of the first / last few sessions; the change is in estimated 1RM
+// (see findStaples), so reps, RPE and pause credit all count and a variation is
+// compared only with itself.
 function StapleEnd({ set, strong }: { set: StapleSet; strong?: boolean }) {
   return (
     <span className={`block tabular-nums ${strong ? 'text-fg' : 'text-muted'}`}>
@@ -472,7 +473,8 @@ function StaplesTable({ review: r }: { review: Review }) {
         </tbody>
       </table>
       <p className="border-t border-border-soft px-3 py-2 text-[0.65rem] text-muted">
-        Change in estimated 1RM from weight and reps; RPE counts too when both sessions were rated.
+        Change in estimated 1RM, the median of the first few sessions against the median of the last few. RPE counts (up to two
+        reps in reserve) when both were rated, but as much weight for more reps, or more weight for as many, is always up.
         {credited ? ` (p) paused and (t) tempo sets count ${Math.round((LOAD_EQUIVALENCE.pauseTempo - 1) * 100)}% heavier.` : ''}
         {' '}A (v) variation is only compared with itself; isometric work like Pallof press is compared by reps.
       </p>

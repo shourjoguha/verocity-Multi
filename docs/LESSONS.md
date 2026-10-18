@@ -1778,6 +1778,27 @@ parenthesised form — so a spring of paused sets was invisible, and a claim tha
 `src/lib/notations.ts` only. A variation is its own track (`trackName`), never
 priced; a genuinely different exercise gets its own movement name.
 
+### A staple lift reads as down after the athlete added reps
+
+`[measured: live log replayed through findStaples in vitest]` Three causes,
+none of them the 1RM formula. One session per end, so a closing deload or a
+volume day set the verdict. Uncapped reps-in-reserve, so an optimistic @6.5 on
+the first session made the baseline unreachable. And RPE could cancel a counted
+rep gain (100×8 @8 → 100×10 @10 reads flat). **Decision:** each end is the
+median of up to three sessions (`STAPLE_END_SESSIONS`), RIR credit is capped at
+`LOAD_EQUIVALENCE.maxRir` (2), and more reps at the same weight (or more weight
+at the same reps) is up whatever the RPE says (`dominates`).
+
+**Wrong twice first.** Comparing like-with-like by rep range (1–5 / 6–10 / 11+)
+looked right for undulating plans. On the real log it hid every progression
+that changed rep range: Back Squat 60×8 → 90×5 read −16% and Iso Row lost
+27 points. Best-of-ends instead of median let one early 110×10 hip thrust set
+the baseline and read the block as −9%. A cutoff at RPE 8 instead of a cap
+tilts any comparison whose ends sit either side of the line. Landmine press
+15×10 → 10×15 still reads down, correctly: a third off the bar for five reps,
+where a rep-max table allows about 13%.
+-> `src/lib/review.ts` (`findStaples`), `review.test.ts`
+
 ### The coach fires the same finding every check-in after the athlete acted on it
 
 **The RPE it read was last session's, not this one's.** `prefilled` is stamped
