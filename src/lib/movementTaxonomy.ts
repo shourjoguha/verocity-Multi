@@ -132,6 +132,17 @@ export function normalizeMovementName(raw: string): string {
   return tokens.join(' ').trim();
 }
 
+// Names an athlete logs as an item that are not a movement: "Rest" filling the
+// seconds left on an AMRAP clock after the last full round. Not unknown — there
+// is nothing to map — so the body map leaves them out entirely rather than
+// listing them as unmapped and spending session minutes on them. Exact
+// normalised names only; this is not a fallback bucket.
+const PLACEHOLDERS = new Set(['rest']);
+
+export function isPlaceholder(raw: string): boolean {
+  return PLACEHOLDERS.has(normalizeMovementName(raw));
+}
+
 // Split a compound name into atoms, on the RAW string.
 //
 // Stripping parenthesised content first is load-bearing: without it the `row`

@@ -29,6 +29,9 @@ export type ReviewPeriod = { kind: 'all' } | { kind: 'quarter' } | { kind: 'plan
 export const QUARTER_DAYS = 91;
 /** A movement needs this many sessions in the window to count as a staple. */
 export const STAPLE_MIN_SESSIONS = 3;
+/** Each end of a staple is the median of this many sessions (fewer, and odd, on
+ *  a short track), so one deload or one peak day cannot set the verdict. */
+export const STAPLE_END_SESSIONS = 3;
 const STAPLE_LIMIT = 6;
 
 export interface ReviewWindow {
@@ -136,6 +139,7 @@ export interface Staple {
   variant: boolean;
   since: string;
   sessions: number;
+  /** Median session among the first few, and among the last few. */
   first: StapleSet;
   last: StapleSet;
   /** Change in estimated 1RM, as a fraction; null when either end has none. */
@@ -322,10 +326,15 @@ function measureEffort(logs: WorkoutLog[], dayLabel: (log: WorkoutLog) => string
   return { hard, total, ratedSessions, unratedSessions, byGroup };
 }
 
-// Loaded movements done in enough sessions to have a trend, first session
-// against latest, compared on estimated 1RM rather than raw kilos:
+// Loaded movements done in enough sessions to have a trend, the median of the
+// first few sessions against the median of the last few, compared on estimated
+// 1RM rather than raw kilos — across rep ranges, because moving from 8s to 5s
+// (or 10s to 15s) is how a progression runs, and bucketing by range hid exactly
+// that on real logs:
 //   - reps count (Brzycki), and on a session that actually used the RPE dial so
-//     do the reps left in the tank — 5 @8 is 7 to failure;
+//     do the reps left in the tank, at most two — 5 @8 is 7 to failure;
+//   - more reps at the same weight (or more weight at the same reps) is up
+//     whatever the RPE says;
 //   - a paused or tempo set is credited LOAD_EQUIVALENCE.pauseTempo;
 //   - a (v) variation is its own track, never priced against the plain lift;
 //   - isometric work (Pallof press: a band) is compared on reps, not load.
@@ -369,7 +378,10 @@ function findStaples(logs: WorkoutLog[], overrides: OverrideMap = {}): Staple[] 
               rpe: rated ? (rpe ?? null) : null,
               held,
               estimate: estimateAt(reps),
-              rpeEstimate: rated && rpe != null ? estimateAt(reps + Math.max(0, 10 - rpe)) : null,
+              rpeEstimate:
+                rated && rpe != null
+                  ? estimateAt(reps + Math.min(LOAD_EQUIVALENCE.maxRir, Math.max(0, 10 - rpe)))
+                  : null,
             };
             // The session's best set by weight × reps alone is the one shown, so
             // which set stands for a session never depends on its RPE. The
@@ -393,27 +405,55 @@ function findStaples(logs: WorkoutLog[], overrides: OverrideMap = {}): Staple[] 
   return [...tracks.values()]
     .filter((t) => t.rows.length >= STAPLE_MIN_SESSIONS)
     .map((t): Staple => {
-      const first = t.rows[0];
-      const last = t.rows[t.rows.length - 1];
+      // Each end is the median of its first / last k sessions: an odd k, never
+      // more than half the track. The best of them let one early peak set the
+      // baseline (110×10 once, then 90–100×10 for weeks, read as a 9% drop).
+      const half = Math.min(STAPLE_END_SESSIONS, Math.floor(t.rows.length / 2));
+      const k = Math.max(1, half % 2 ? half : half - 1);
+      const median = (rows: StapleSet[]) =>
+        [...rows].sort((a, b) => (stronger(a, b) ? 1 : stronger(b, a) ? -1 : 0))[(k - 1) / 2];
+      const first = median(t.rows.slice(0, k));
+      const last = median(t.rows.slice(-k));
       // RPE only when both ends were rated: adding reps-in-reserve to one end
       // and not the other reads identical sets as progress.
-      const rpeAdjusted = first.rpeEstimate != null && last.rpeEstimate != null;
-      const a = rpeAdjusted ? first.rpeEstimate : first.estimate;
-      const b = rpeAdjusted ? last.rpeEstimate : last.estimate;
+      let rpeAdjusted = first.rpeEstimate != null && last.rpeEstimate != null;
+      const ratio = (a: number | null, b: number | null) => (a && b ? b / a - 1 : null);
+      let change = rpeAdjusted ? ratio(first.rpeEstimate, last.rpeEstimate) : ratio(first.estimate, last.estimate);
+      // As much weight for more reps, or more weight for as many, is up whatever
+      // the RPE said (and the reverse is down): a counted rep outranks a
+      // self-rated one. Brzycki agrees with the counted direction, so the
+      // unadjusted estimate carries the figure.
+      const dominance = t.repsOnly ? 0 : dominates(last, first) ? 1 : dominates(first, last) ? -1 : 0;
+      if (dominance !== 0 && change != null && Math.sign(change) !== dominance) {
+        rpeAdjusted = false;
+        change = ratio(first.estimate, last.estimate);
+      }
       return {
         movement: t.name,
         measure: t.repsOnly ? 'reps' : '1rm',
         variant: t.variant,
-        since: first.date,
+        since: t.rows[0].date,
         sessions: t.rows.length,
         first,
         last,
-        change: a && b ? b / a - 1 : null,
+        change,
         rpeAdjusted,
       };
     })
     .sort((a, b) => b.sessions - a.sessions)
     .slice(0, STAPLE_LIMIT);
+}
+
+/** Stronger by estimate, by weight when neither can be estimated. */
+function stronger(a: StapleSet, b: StapleSet): boolean {
+  if (a.estimate != null || b.estimate != null) return (a.estimate ?? 0) > (b.estimate ?? 0);
+  return a.weight > b.weight;
+}
+
+/** At least as heavy (pause credit included) for at least as many reps, and more of one. */
+function dominates(a: StapleSet, b: StapleSet): boolean {
+  const load = (s: StapleSet) => s.weight * (s.held ? LOAD_EQUIVALENCE.pauseTempo : 1);
+  return load(a) >= load(b) && a.reps >= b.reps && (load(a) > load(b) || a.reps > b.reps);
 }
 
 // --- headlines -----------------------------------------------------------------

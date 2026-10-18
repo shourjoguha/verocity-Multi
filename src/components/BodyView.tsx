@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { createMovement, getLogsInRange, getMovements, getUserStats } from '@/lib/queries';
+import { getLogsInRange, getMovements, getUserStats, saveMovementTaxonomy } from '@/lib/queries';
+import { toast } from '@/lib/toast';
 import { loadAllLogs, logsBetween } from '@/lib/logStore';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { supabasePublic } from '@/lib/supabase';
@@ -232,14 +233,14 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
     return { ...out, ...localOverrides };
   }, [movements, localOverrides]);
 
-  // A logged movement usually has no library row (logs carry only a name), so
-  // saving a map CREATES the owner-scoped row. createMovement sets
-  // owner_user_id itself, which satisfies 0005_lock_shared_library by
-  // construction — and it is also how the library finally gets populated.
+  // Logging a new name usually already created its owner-scoped library row
+  // (with no taxonomy), so saving a map UPDATES that row, and creates one only
+  // when there is none — see saveMovementTaxonomy. A failed save says so; it
+  // used to leave the sheet open with no word, which read as a dead button.
   async function handleMap(name: string, taxonomy: MovementTaxonomyOverride) {
     if (busy) return;
     setBusy(true);
-    const created = await createMovement({
+    const saved = await saveMovementTaxonomy({
       name,
       category: null,
       primary_metric: DEFAULT_PRIMARY_METRIC,
@@ -247,9 +248,11 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
       taxonomy,
     });
     setBusy(false);
-    if (created) {
+    if (saved) {
       setLocalOverrides((prev) => ({ ...prev, [normalizeMovementName(name)]: taxonomy }));
       setMapping(null);
+    } else {
+      toast(`Couldn't save the mapping for ${name}`, 'error');
     }
   }
 

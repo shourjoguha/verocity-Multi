@@ -1011,9 +1011,15 @@ export const PREFILL = { roundKg: 2.5, maxRefReps: 12 } as const;
 //                        compares two sets by ratio, but not much higher: on
 //                        real logs a 20 cap read 25×12 → 30×20 calf raises as
 //                        +61%, because the formula runs away past ~15.
+//   `maxRir`           — reps-in-reserve credited to one set, at most. Self-rated
+//                        RPE is accurate near failure and drifts far from it,
+//                        and one optimistic @6.5 on the first session read every
+//                        later rep gain as a drop. A cap, not a cutoff at RPE 8:
+//                        crediting @8 and nothing at @7 tilts a comparison the
+//                        moment its ends sit either side of the line.
 // A (v) variation is never priced: some variations are easier at the same load
 // (heel-elevated, machine), so it is compared only with itself.
-export const LOAD_EQUIVALENCE = { pauseTempo: 1.1, maxEffectiveReps: 15 } as const;
+export const LOAD_EQUIVALENCE = { pauseTempo: 1.1, maxEffectiveReps: 15, maxRir: 2 } as const;
 
 // Fitness-profile radar axes (Stats spider chart). All six derive from logged
 // data (lib/aspects.ts); a recent check-in overrides any of them. There is no

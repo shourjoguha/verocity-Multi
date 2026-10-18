@@ -37,7 +37,7 @@ import {
   type RotaryRole,
   type SectionKey,
 } from '@/app.config';
-import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
+import { classifyMovement, isPlaceholder, type OverrideMap } from '@/lib/movementTaxonomy';
 import { isHeld } from '@/lib/notations';
 import { workingSections } from '@/lib/stats';
 import { isSubroutine } from '@/lib/subroutine';
@@ -482,7 +482,7 @@ export function summarizeTrainingVolume(
     for (const section of workingSections(log)) {
       for (const group of section.groups ?? []) {
         for (const item of group.items ?? []) {
-          if (isSubroutine(item)) continue;
+          if (isSubroutine(item) || isPlaceholder(item.movement)) continue;
 
           const minutes = item.sets.reduce((acc, s) => acc + setMinutes(s), 0);
           if (minutes <= 0) continue;
@@ -790,7 +790,7 @@ function buildWalk(log: WorkoutLog, overrides: OverrideMap): WalkItem[] {
   for (const section of log.data?.sections ?? []) {
     for (const group of section.groups ?? []) {
       for (const item of group.items ?? []) {
-        if (isSubroutine(item)) continue;
+        if (isSubroutine(item) || isPlaceholder(item.movement)) continue;
 
         const raw = item.sets.reduce((acc, s) => acc + setMinutes(s), 0);
         if (raw <= 0) continue;

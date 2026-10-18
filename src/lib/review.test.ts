@@ -232,9 +232,9 @@ describe('staple lifts — like with like', () => {
 
   it('counts reps-in-reserve when both ends were rated: same load at a lower RPE is progress', () => {
     const [s] = staples([
-      log('b1', '2026-05-18', [['Back Squat', s2(100, 5, 9, 8)]]),
-      log('b2', '2026-06-01', [['Back Squat', s2(100, 5, 9, 8)]]),
-      log('b3', '2026-06-15', [['Back Squat', s2(100, 5, 8, 7)]]),
+      log('b1', '2026-05-18', [['Back Squat', s2(100, 5, 9)]]),
+      log('b2', '2026-06-01', [['Back Squat', s2(100, 5, 9)]]),
+      log('b3', '2026-06-15', [['Back Squat', s2(100, 5, 8, 9)]]),
     ]);
     expect(s.rpeAdjusted).toBe(true);
     expect(s.change).toBeGreaterThan(0.02);
@@ -291,5 +291,69 @@ describe('staple lifts — like with like', () => {
       log('k3', '2026-09-01', [['KB Swing', s2(24, 25, 7)]]),
     ]);
     expect(s.change).toBeNull();
+  });
+
+  it('credits at most two reps-in-reserve: an optimistic @6 does not inflate the start', () => {
+    // 100×5 @6 claims 4 in reserve; uncapped it read the same set at @8 as a 7% drop.
+    const [s] = staples([
+      log('r1', '2026-05-18', [['Back Squat', s2(100, 5, 6, 6.5)]]),
+      log('r2', '2026-06-01', [['Back Squat', s2(100, 5, 7, 6.5)]]),
+      log('r3', '2026-06-15', [['Back Squat', s2(100, 5, 8)]]),
+    ]);
+    expect(s.rpeAdjusted).toBe(true);
+    expect(s.change).toBe(0);
+  });
+
+  it('reads as much weight for more reps as up, even when the RPE rose to match', () => {
+    // 100×8 @8 → 100×10 @10: both 10 to failure by RPE, but two more reps were counted.
+    const [s] = staples([
+      log('d1', '2026-05-18', [['Back Squat', s2(100, 8, 8)]]),
+      log('d2', '2026-06-01', [['Back Squat', s2(100, 9, 9)]]),
+      log('d3', '2026-06-15', [['Back Squat', s2(100, 10, 10)]]),
+    ]);
+    expect(s.rpeAdjusted).toBe(false);
+    expect(s.change).toBeGreaterThan(0.05);
+  });
+
+  it('still reads a weight drop the extra reps do not pay for as down', () => {
+    // Real log: landmine press 15×10 → 10×15 is a third off the bar for five
+    // reps, where a rep-max table allows about 13%.
+    const [s] = staples([
+      log('l1', '2026-07-28', [['Landmine Press', s2(15, 10, 7)]]),
+      log('l2', '2026-08-19', [['Landmine Press', s2(15, 10, 8)]]),
+      log('l3', '2026-08-26', [['Landmine Press', s2(15, 10, 8.5)]]),
+      log('l4', '2026-09-19', [['Landmine Press', s2(10, 15, 7)]]),
+    ]);
+    expect([s.first.weight, s.last.weight]).toEqual([15, 10]);
+    expect(s.change).toBeLessThan(-0.05);
+  });
+
+  it('takes the median of the last few sessions, so a closing light day does not read as a drop', () => {
+    const [s] = staples([
+      log('e1', '2026-05-04', [['Back Squat', s2(80, 5, 7)]]),
+      log('e2', '2026-05-11', [['Back Squat', s2(85, 5, 7)]]),
+      log('e3', '2026-05-18', [['Back Squat', s2(90, 5, 7)]]),
+      log('e4', '2026-05-25', [['Back Squat', s2(95, 5, 7)]]),
+      log('e5', '2026-06-01', [['Back Squat', s2(100, 5, 7)]]),
+      log('e6', '2026-06-08', [['Back Squat', s2(70, 5, 7)]]), // deload
+    ]);
+    // Median of 80/85/90 against median of 95/100/70.
+    expect([s.first.weight, s.last.weight]).toEqual([85, 95]);
+    expect(s.change).toBeGreaterThan(0);
+  });
+
+  it('takes the median of the first few sessions, so one early peak does not set the baseline', () => {
+    // Real log: hip thrust 110×10 once, then 90–100. The best of the first three
+    // read the whole block as a 9% drop.
+    const [s] = staples([
+      log('t1', '2026-07-13', [['Hip Thrust Machine', s2(90, 12, 7)]]),
+      log('t2', '2026-07-27', [['Hip Thrust Machine', s2(70, 12, 7)]]),
+      log('t3', '2026-08-07', [['Hip Thrust Machine', s2(110, 10, 7)]]),
+      log('t4', '2026-08-18', [['Hip Thrust Machine', s2(100, 10, 7)]]),
+      log('t5', '2026-08-24', [['Hip Thrust Machine', s2(100, 10, 7)]]),
+      log('t6', '2026-09-02', [['Hip Thrust Machine', s2(90, 12, 7)]]),
+    ]);
+    expect([s.first.weight, s.last.weight]).toEqual([90, 100]);
+    expect(s.change).toBeGreaterThan(0);
   });
 });

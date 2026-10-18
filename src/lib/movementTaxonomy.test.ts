@@ -5,6 +5,7 @@ import {
   RULES,
   classifyMovement,
   isClassified,
+  isPlaceholder,
   musclesFromRegions,
   normalizeMovementName,
   pm,
@@ -1334,5 +1335,12 @@ describe('named runs classify exactly like a bare Run', () => {
     'Brick',
   ])('%s is not read as a run', (name) => {
     expect(classifyMovement(name).profile).not.toEqual(run);
+  });
+});
+
+describe('isPlaceholder', () => {
+  it('matches the exact name only, so a movement containing it still classifies', () => {
+    expect(['Rest', ' rest ', 'REST'].every(isPlaceholder)).toBe(true);
+    expect(['Rest-Pause Curl', 'Rest Day Walk', 'Back Squat'].some(isPlaceholder)).toBe(false);
   });
 });
