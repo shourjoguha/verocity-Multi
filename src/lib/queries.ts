@@ -281,6 +281,36 @@ export async function createMovement(input: MovementInput): Promise<Movement | n
   return data as Movement;
 }
 
+/**
+ * Save a body-map mapping for a logged name. Logging a new name already creates
+ * an owner row with no taxonomy, and movements_owner_name_unique (0045) allows
+ * one row per owner per lower(trim(name)) — so an insert alone failed for
+ * nearly every unmapped movement, and the sheet just stayed open. Update that
+ * row when it exists; create one (from `input`) only when it does not.
+ */
+export async function saveMovementTaxonomy(
+  input: MovementInput & { taxonomy: MovementTaxonomyOverride },
+): Promise<boolean> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
+  if (!user) return false;
+  const { data: rows, error } = await supabase
+    .from('movements')
+    .select('id, name')
+    .eq('owner_user_id', user.id);
+  if (error) return false;
+  const key = input.name.trim().toLowerCase();
+  const existing = (rows ?? []).find((r) => r.name.trim().toLowerCase() === key);
+  if (!existing) return (await createMovement(input)) !== null;
+  const { error: updateError } = await supabase
+    .from('movements')
+    .update({ taxonomy: input.taxonomy })
+    .eq('id', existing.id);
+  return !updateError;
+}
+
 export async function updateMovement(id: string, patch: MovementInput): Promise<boolean> {
   const { error } = await supabase
     .from('movements')

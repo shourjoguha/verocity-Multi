@@ -1867,6 +1867,20 @@ cardio movement is missing from `/app/body`, check the unmapped list before
 suspecting the aggregation.
 → `src/lib/movementTaxonomy.ts` (`run-named`), `movementTaxonomy.test.ts`
 
+### Saving a body-map mapping does nothing — the sheet just stays open
+
+`[root cause read from the live DB; save not observed in a browser]` Map on
+/app/body always INSERTed a library row, but logging a new name had already
+created one (owner-scoped, no taxonomy), and `movements_owner_name_unique`
+(0045) allows one per owner per `lower(trim(name))`. The insert hit the
+unique index, `createMovement` swallowed the error as `null`, and the sheet
+stayed open with no message. Every unmapped name in the live library had such
+a row. **Decision:** `saveMovementTaxonomy` updates the existing row and
+inserts only when there is none, and a failed save toasts. Separately, an item
+named exactly "Rest" (an AMRAP's leftover seconds) is `isPlaceholder`: left
+out of the body map, so it is neither unmapped nor spends session minutes.
+-> `src/lib/queries.ts`, `src/components/BodyView.tsx`, `src/lib/movementTaxonomy.ts`
+
 ## Superseded
 
 Kept so the search path survives, **demoted so it stops reading as advice.**

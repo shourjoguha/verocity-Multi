@@ -310,6 +310,28 @@ describe('summarizeBodyLoad', () => {
     expect(regionTotal).toBeCloseTo(s.totalMinutes - s.unmapped[0].minutes, 3);
   });
 
+  it('leaves a "Rest" placeholder out: not unmapped, and no share of the clock', () => {
+    // Real log: a 20-minute AMRAP finished its five rounds with ~30s on the
+    // clock, logged as an item called Rest rather than a sixth round.
+    const amrap = (withRest: boolean) =>
+      log(
+        [
+          {
+            key: 'primary',
+            items: [
+              item('Back Squat', 'weight', [set({ weight: 60, reps: 10 })]),
+              ...(withRest ? [item('Rest', 'time', [set({ time: 30 })])] : []),
+            ],
+          },
+        ],
+        { total_seconds: 1200 },
+      );
+    const s = summarizeBodyLoad([amrap(true)]);
+    expect(s.unmapped).toEqual([]);
+    expect(s.coverage).toBe(1);
+    expect(s.regionMinutes).toEqual(summarizeBodyLoad([amrap(false)]).regionMinutes);
+  });
+
   it('reports coverage as the classified share of minutes', () => {
     const s = summarizeBodyLoad([mixed]);
     const wtd = s.unmapped[0].minutes;
