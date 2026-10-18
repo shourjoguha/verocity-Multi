@@ -166,7 +166,17 @@ function ReviewBody({ review: r }: { review: Review }) {
 
       <Item>
         <section className="mb-8">
-          <SectionHeader>Frequency</SectionHeader>
+          <SectionHeader
+            action={
+              r.adherence ? (
+                <span className="text-xs text-muted tabular-nums">
+                  Plan adherence <span className="text-fg">{r.adherence.pct}%</span>
+                </span>
+              ) : null
+            }
+          >
+            Frequency
+          </SectionHeader>
           <Calendar review={r} />
         </section>
       </Item>
