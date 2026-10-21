@@ -99,6 +99,7 @@ import { SetEntrySheet } from '@/components/logger/SetEntrySheet';
 import { MovementPicker } from '@/components/logger/MovementPicker';
 import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
+import { FinishDetailsSheet, type FinishDetails } from '@/components/logger/FinishDetailsSheet';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import {
   LinkGlyph,
@@ -231,6 +232,10 @@ export default function Logger() {
     setCollapsed(addAll);
   };
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // Finish asks for type / duration / avg HR in a sheet when none of the
+  // session's details were filled in; `hrAvg` is a resumed row's, if it has one.
+  const [askDetails, setAskDetails] = useState(false);
+  const [hrAvg, setHrAvg] = useState<number | null>(null);
   // The Done pile is open by default — you should see what you've finished —
   // but it folds away as one unit when the remaining work needs the screen.
   const [doneOpen, setDoneOpen] = useState(true);
@@ -308,6 +313,7 @@ export default function Logger() {
           setStatus(log.status);
           setLogDate(log.log_date);
           setTags(log.tags ?? []);
+          setHrAvg(log.hr_avg);
           if (log.plan_id) setSubs(await getMovementSubs(log.plan_id));
           if (log.session_id) setLinkedSession(await getSessionById(log.session_id));
           if (log.plan_id && log.day_key && log.week_number) {
@@ -758,17 +764,20 @@ export default function Logger() {
     setPicker(null);
   }
 
-  async function finish() {
+  async function finish(details?: FinishDetails) {
     setStatus('done');
     stopwatch.pause();
+    const finalTags = details?.tags.length ? details.tags : tagsRef.current;
+    const finalSeconds = details?.seconds ?? secondsRef.current;
     if (idRef.current) {
       const ok = await updateLog(idRef.current, {
         data: docRef.current,
-        total_seconds: secondsRef.current,
+        total_seconds: finalSeconds,
         status: 'done',
         ended_at: new Date().toISOString(),
         log_date: logDateRef.current,
-        tags: tagsRef.current,
+        tags: finalTags,
+        ...(details?.hrAvg != null ? { hr_avg: details.hrAvg } : {}),
       });
       if (!ok) {
         toast('Save failed — check your connection and try again', 'error');
@@ -776,7 +785,7 @@ export default function Logger() {
       }
       await persistDocumentMovements(docRef.current);
     }
-    track('workout_completed', { duration_seconds: secondsRef.current, tags: tagsRef.current });
+    track('workout_completed', { duration_seconds: finalSeconds, tags: finalTags });
     window.location.href = idRef.current ? `/app/session?id=${idRef.current}` : '/app';
   }
 
@@ -2200,7 +2209,10 @@ export default function Logger() {
                   which the per-movement trash does not. Both are `min-h-11`
                   with a border so their boxes align to the pixel (see the
                   Button primitive's note on why primary carries a border). */}
-              <Button onClick={() => finish()} className="flex-1">
+              <Button
+                onClick={() => (tags.length === 0 && hrAvg == null ? setAskDetails(true) : finish())}
+                className="flex-1"
+              >
                 Finish
                 <span className="ml-2 text-bg/45 tabular-nums">
                   {sessionSets.done}/{sessionSets.total}
@@ -2219,6 +2231,13 @@ export default function Logger() {
           )}
         </div>
       </div>
+
+      <FinishDetailsSheet
+        open={askDetails}
+        seconds={stopwatch.seconds}
+        onClose={() => setAskDetails(false)}
+        onSave={finish}
+      />
 
       <Modal open={confirmDiscard} onClose={() => setConfirmDiscard(false)} title="Discard session">
         <div className="flex flex-col gap-4 p-4">

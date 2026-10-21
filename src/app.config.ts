@@ -164,6 +164,9 @@ export const TIMERS = {
   // here so a stale session never racks up a 9-hour duration, and Home stops
   // offering to resume one past it. The user can edit the time later.
   maxWorkoutSeconds: 2 * 60 * 60,
+  // Top of the hours wheel in the Logger's finish sheet. Above the live cap on
+  // purpose: the sheet is where a session that ran long gets its real time.
+  finishMaxHours: 5,
 } as const;
 
 // Subroutines: free-text blocks (title + description + optional link) that sit
