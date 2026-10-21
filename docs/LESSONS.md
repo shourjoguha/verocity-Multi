@@ -776,6 +776,22 @@ bound the auto-end uses). A reopened `done` log still seeds from its recorded
 duration and stays frozen.
 → `src/lib/useTimer.ts`, `Logger.tsx`
 
+### The session clock loses the time the phone was locked
+`[measured in Chromium, and the symptom observed to stop]`
+`useStopwatch` counted: `setSeconds(s => s + 1)` per `setInterval` tick. iOS
+suspends timers while the screen is off, so every locked minute went uncounted —
+on the clock, in the autosave's `total_seconds`, and in the duration Finish
+saved. Reproduced with Playwright's fake clock (`page.clock.setSystemTime` jumps
+the wall clock without firing timers, which is exactly a locked phone): 10
+minutes asleep moved the clock by **1 second**; after the fix, by 10:00.
+**Never count elapsed time with a timer; read it off the wall clock.** The
+interval now only re-renders — the value is `banked + (now − runFrom)`, and Pause
+banks it. A new session is seeded from `started_at` rather than started at 0
+after the create's round-trip, so an unpaused session's duration is exactly
+end − `started_at`. The same trap already took the rest countdown (see the note
+at the bottom of `useTimer.ts`).
+→ `src/lib/useTimer.ts`, `Logger.tsx`
+
 ### A loader that fails leaves stale numbers looking current
 `[argued — not reproduced]`
 `ProfileView`'s loader was an un-caught async IIFE. One rejected query and none
