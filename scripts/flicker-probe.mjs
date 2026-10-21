@@ -93,7 +93,8 @@ const workoutLog = {
   log_date: new Date().toISOString().slice(0, 10),
   status: 'in_progress',
   total_seconds: 1830,
-  tags: ['strength'],
+  // Untagged, so Finish opens FinishDetailsSheet instead of finishing.
+  tags: [],
   started_at: new Date().toISOString(),
   ended_at: null,
   data: logDoc,
@@ -215,6 +216,12 @@ const SCENARIOS = [
     // The handoff is the interesting part: this closes the options sheet and
     // opens the picker. Both scrims used to be on screen together.
     then: '[role="dialog"] button:has-text("Swap movement")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Logger · finish → session details (FinishDetailsSheet)',
+    route: `/app/log?logId=${LOG_ID}`,
+    open: 'button:has-text("Finish")',
     close: '[role="dialog"] button:has-text("Close")',
   },
 ];
