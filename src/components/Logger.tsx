@@ -524,6 +524,10 @@ export default function Logger() {
       setStartedAt(startedIso);
       if (linkedPlanId) setSubs(await getMovementSubs(linkedPlanId));
       setShowVibe(true);
+      // Anchored to started_at, not to now: the create and the subs fetch
+      // above are network round-trips, and Finish's duration is meant to be
+      // exactly end − started_at for a session that was never paused.
+      stopwatch.set(Math.floor((Date.now() - new Date(startedIso).getTime()) / 1000));
       stopwatch.start();
       setReady(true);
     })();
