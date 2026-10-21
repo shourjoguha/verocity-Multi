@@ -233,9 +233,10 @@ export default function Logger() {
   };
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // Finish asks for type / duration / avg HR in a sheet when none of the
-  // session's details were filled in; `hrAvg` is a resumed row's, if it has one.
+  // session's details were filled in; `hasHr` is whether a resumed row already
+  // carries a heart rate.
   const [askDetails, setAskDetails] = useState(false);
-  const [hrAvg, setHrAvg] = useState<number | null>(null);
+  const [hasHr, setHasHr] = useState(false);
   // The Done pile is open by default — you should see what you've finished —
   // but it folds away as one unit when the remaining work needs the screen.
   const [doneOpen, setDoneOpen] = useState(true);
@@ -313,7 +314,7 @@ export default function Logger() {
           setStatus(log.status);
           setLogDate(log.log_date);
           setTags(log.tags ?? []);
-          setHrAvg(log.hr_avg);
+          setHasHr(log.hr_avg != null || log.hr_max != null);
           if (log.plan_id) setSubs(await getMovementSubs(log.plan_id));
           if (log.session_id) setLinkedSession(await getSessionById(log.session_id));
           if (log.plan_id && log.day_key && log.week_number) {
@@ -782,6 +783,7 @@ export default function Logger() {
         log_date: logDateRef.current,
         tags: finalTags,
         ...(details?.hrAvg != null ? { hr_avg: details.hrAvg } : {}),
+        ...(details?.hrMax != null ? { hr_max: details.hrMax } : {}),
       });
       if (!ok) {
         toast('Save failed — check your connection and try again', 'error');
@@ -2214,7 +2216,7 @@ export default function Logger() {
                   with a border so their boxes align to the pixel (see the
                   Button primitive's note on why primary carries a border). */}
               <Button
-                onClick={() => (tags.length === 0 && hrAvg == null ? setAskDetails(true) : finish())}
+                onClick={() => (tags.length === 0 && !hasHr ? setAskDetails(true) : finish())}
                 className="flex-1"
               >
                 Finish

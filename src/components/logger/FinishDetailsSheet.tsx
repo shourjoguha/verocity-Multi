@@ -19,6 +19,7 @@ export type FinishDetails = {
   // exact seconds stand rather than being rounded to the minute.
   seconds?: number;
   hrAvg: number | null;
+  hrMax: number | null;
 };
 
 // Shown by the Logger's Finish when nothing about the session has been filled
@@ -48,6 +49,7 @@ function FinishDetailsBody({ seconds, onSave }: { seconds: number; onSave: (d: F
   const [m, setM] = useState(() => Math.floor((seconds % 3600) / 60));
   const [timeTouched, setTimeTouched] = useState(false);
   const [hr, setHr] = useState<number | null>(null);
+  const [hrMax, setHrMax] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   const toggle = (key: string) =>
@@ -79,7 +81,8 @@ function FinishDetailsBody({ seconds, onSave }: { seconds: number; onSave: (d: F
           </div>
         </div>
 
-        <div className="flex gap-4">
+        {/* One row of four wheels, so the sheet's height does not grow. */}
+        <div className="flex gap-3">
           <div className="min-w-0 flex-[2]">
             <div className="mb-2 t-label text-muted">Duration</div>
             <div className="flex items-center gap-1">
@@ -115,6 +118,16 @@ function FinishDetailsBody({ seconds, onSave }: { seconds: number; onSave: (d: F
               format={(v) => (v == null ? '—' : String(v))}
             />
           </div>
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 t-label text-muted">Max HR</div>
+            <WheelPicker
+              label="Max heart rate (BPM)"
+              options={BPM}
+              value={hrMax}
+              onChange={setHrMax}
+              format={(v) => (v == null ? '—' : String(v))}
+            />
+          </div>
         </div>
       </div>
       <div className="border-t border-border p-4">
@@ -123,7 +136,7 @@ function FinishDetailsBody({ seconds, onSave }: { seconds: number; onSave: (d: F
           onClick={async () => {
             setSaving(true);
             // Resolves only if the save failed — success navigates away.
-            await onSave({ tags, seconds: timeTouched ? h * 3600 + m * 60 : undefined, hrAvg: hr });
+            await onSave({ tags, seconds: timeTouched ? h * 3600 + m * 60 : undefined, hrAvg: hr, hrMax });
             setSaving(false);
           }}
           className="w-full"
