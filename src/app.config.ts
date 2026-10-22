@@ -169,6 +169,12 @@ export const TIMERS = {
   finishMaxHours: 5,
 } as const;
 
+// The finish sheet's heart-rate wheels. Same range HeartRate.tsx and
+// ActivityLogger.tsx clamp to. With no earlier session carrying a heart rate,
+// the wheels rest on these — a typical working value, so the first flick is
+// short — but nothing is saved until the athlete scrolls or taps.
+export const HR_WHEEL = { minBpm: 30, maxBpm: 230, restAvg: 140, restMax: 175 } as const;
+
 // Subroutines: free-text blocks (title + description + optional link) that sit
 // among movements in a section. The description cap is shared by the editing
 // UI (maxLength) and the plan validator.

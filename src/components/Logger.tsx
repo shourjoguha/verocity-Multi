@@ -99,7 +99,11 @@ import { SetEntrySheet } from '@/components/logger/SetEntrySheet';
 import { MovementPicker } from '@/components/logger/MovementPicker';
 import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
-import { FinishDetailsSheet, type FinishDetails } from '@/components/logger/FinishDetailsSheet';
+import {
+  FinishDetailsSheet,
+  type FinishDetails,
+  type LastHeartRate,
+} from '@/components/logger/FinishDetailsSheet';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import {
   LinkGlyph,
@@ -122,6 +126,20 @@ const METRIC_CYCLE: MetricKey[] = [...PRIMARY_METRICS];
 const ICON_BTN =
   'hill-btn flex h-11 w-11 shrink-0 items-center justify-center transition-colors';
 const GLYPH = 'h-[1.15rem] w-[1.15rem]';
+
+// The newest other finished session that logged a heart rate — where the
+// finish sheet's HR wheels rest. getAllLogs orders by date only, so a same-day
+// pair is split by started_at.
+function lastHeartRate(logs: WorkoutLog[], currentId: string | null): LastHeartRate | null {
+  let best: WorkoutLog | null = null;
+  const key = (l: WorkoutLog) => `${l.log_date}|${l.started_at ?? ''}`;
+  for (const l of logs) {
+    if (l.id === currentId || l.status !== 'done') continue;
+    if (l.hr_avg == null && l.hr_max == null) continue;
+    if (!best || key(l) > key(best)) best = l;
+  }
+  return best ? { avg: best.hr_avg, max: best.hr_max } : null;
+}
 
 function clock(total: number): string {
   const h = Math.floor(total / 3600);
@@ -237,6 +255,7 @@ export default function Logger() {
   // carries a heart rate.
   const [askDetails, setAskDetails] = useState(false);
   const [hasHr, setHasHr] = useState(false);
+  const [lastHr, setLastHr] = useState<LastHeartRate | null>(null);
   // The Done pile is open by default — you should see what you've finished —
   // but it folds away as one unit when the remaining work needs the screen.
   const [doneOpen, setDoneOpen] = useState(true);
@@ -315,6 +334,9 @@ export default function Logger() {
           setLogDate(log.log_date);
           setTags(log.tags ?? []);
           setHasHr(log.hr_avg != null || log.hr_max != null);
+          // Not awaited: only the finish sheet reads it, and the history is
+          // usually already cached by the page that sent you here.
+          loadAllLogs().then((logs) => setLastHr(lastHeartRate(logs, log.id)));
           if (log.plan_id) setSubs(await getMovementSubs(log.plan_id));
           if (log.session_id) setLinkedSession(await getSessionById(log.session_id));
           if (log.plan_id && log.day_key && log.week_number) {
@@ -374,6 +396,7 @@ export default function Logger() {
       ]);
       const recent = newestLogs(allLogs, 50);
       setBestByMovement(bestE1rmByTrack(allLogs));
+      setLastHr(lastHeartRate(allLogs, null));
 
       // Everything below builds and creates a NEW row, so this is the one
       // place every entry point converges on — the Home CTA and its ⋯ chooser,
@@ -2241,6 +2264,7 @@ export default function Logger() {
       <FinishDetailsSheet
         open={askDetails}
         seconds={stopwatch.seconds}
+        lastHr={lastHr}
         onClose={() => setAskDetails(false)}
         onSave={finish}
       />
