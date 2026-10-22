@@ -1,17 +1,12 @@
 import { useState } from 'react';
-import { ACTIVITY_TAGS, TIMERS } from '@/app.config';
+import { ACTIVITY_TAGS, HR_WHEEL, TIMERS } from '@/app.config';
 import { Button } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
 import { WheelPicker } from '@/components/ui/WheelPicker';
 
-// Same range as HeartRate.tsx / ActivityLogger.tsx.
-const MIN_BPM = 30;
-const MAX_BPM = 230;
-
 const HOURS = Array.from({ length: TIMERS.finishMaxHours + 1 }, (_, i) => i);
 const MINUTES = Array.from({ length: 60 }, (_, i) => i);
-// null first: "not logged" is where the wheel starts.
-const BPM: (number | null)[] = [null, ...Array.from({ length: MAX_BPM - MIN_BPM + 1 }, (_, i) => MIN_BPM + i)];
+const BPM = Array.from({ length: HR_WHEEL.maxBpm - HR_WHEEL.minBpm + 1 }, (_, i) => HR_WHEEL.minBpm + i);
 
 export type FinishDetails = {
   tags: string[];
@@ -22,28 +17,41 @@ export type FinishDetails = {
   hrMax: number | null;
 };
 
+// The most recent earlier session's heart rate — where the HR wheels rest.
+export type LastHeartRate = { avg: number | null; max: number | null };
+
 // Shown by the Logger's Finish when nothing about the session has been filled
 // in yet. Every field is optional; Save with nothing chosen finishes as before.
 export function FinishDetailsSheet({
   open,
   seconds,
+  lastHr,
   onClose,
   onSave,
 }: {
   open: boolean;
   seconds: number;
+  lastHr: LastHeartRate | null;
   onClose: () => void;
   onSave: (details: FinishDetails) => Promise<void>;
 }) {
   return (
     <Modal open={open} onClose={onClose} title="Finish session">
       {/* A child, so its state is fresh each time the sheet opens. */}
-      <FinishDetailsBody seconds={seconds} onSave={onSave} />
+      <FinishDetailsBody seconds={seconds} lastHr={lastHr} onSave={onSave} />
     </Modal>
   );
 }
 
-function FinishDetailsBody({ seconds, onSave }: { seconds: number; onSave: (d: FinishDetails) => Promise<void> }) {
+function FinishDetailsBody({
+  seconds,
+  lastHr,
+  onSave,
+}: {
+  seconds: number;
+  lastHr: LastHeartRate | null;
+  onSave: (d: FinishDetails) => Promise<void>;
+}) {
   const [tags, setTags] = useState<string[]>([]);
   const [h, setH] = useState(() => Math.min(TIMERS.finishMaxHours, Math.floor(seconds / 3600)));
   const [m, setM] = useState(() => Math.floor((seconds % 3600) / 60));
@@ -105,6 +113,7 @@ function FinishDetailsBody({ seconds, onSave }: { seconds: number; onSave: (d: F
                   setTimeTouched(true);
                 }}
                 format={(v) => `${String(v).padStart(2, '0')}m`}
+                loop
               />
             </div>
           </div>
@@ -114,8 +123,9 @@ function FinishDetailsBody({ seconds, onSave }: { seconds: number; onSave: (d: F
               label="Average heart rate (BPM)"
               options={BPM}
               value={hr}
+              rest={lastHr?.avg ?? HR_WHEEL.restAvg}
               onChange={setHr}
-              format={(v) => (v == null ? '—' : String(v))}
+              format={String}
             />
           </div>
           <div className="min-w-0 flex-1">
@@ -124,11 +134,32 @@ function FinishDetailsBody({ seconds, onSave }: { seconds: number; onSave: (d: F
               label="Max heart rate (BPM)"
               options={BPM}
               value={hrMax}
+              rest={lastHr?.max ?? HR_WHEEL.restMax}
               onChange={setHrMax}
-              format={(v) => (v == null ? '—' : String(v))}
+              format={String}
             />
           </div>
         </div>
+
+        {/* One fixed-height slot: the hint while heart rate is unset, the way
+            back to unset once it is. Same height either way, so choosing a
+            value never moves the Save button. */}
+        {hr != null || hrMax != null ? (
+          <button
+            type="button"
+            onClick={() => {
+              setHr(null);
+              setHrMax(null);
+            }}
+            className="-mt-2 flex min-h-11 items-center self-end t-control text-muted transition-colors hover:text-fg"
+          >
+            Clear heart rate
+          </button>
+        ) : (
+          <p className="-mt-2 flex min-h-11 items-center justify-end text-xs text-muted">
+            {lastHr ? 'HR rests on last session’s' : 'HR is optional'} — scroll or tap to set
+          </p>
+        )}
       </div>
       <div className="border-t border-border p-4">
         <Button
