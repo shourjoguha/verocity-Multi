@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Disclosure } from '@/components/ui/Disclosure';
+import { adherenceText, useActivePlanAdherence } from '@/components/PlanAdherence';
 import { formatDateRange, HistoryScroller } from '@/components/ui/HistoryScroller';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { FitnessProfile } from '@/components/FitnessProfile';
@@ -70,35 +71,26 @@ function periodPhrase(key: TrainingPeriodKey): string {
   return p.key.endsWith('m') ? `${parseInt(p.label, 10)} months` : `${p.days / 7} weeks`;
 }
 
-// Both lanes, named. The old label printed one summed figure, which is the
-// number `workIntensity` exists to stop anyone reading as meaningful.
-function workLabel(work: WorkTotals): string {
-  const parts: string[] = [];
-  if (work.resistance > 0) parts.push(`${formatWork(work.resistance)} lifting`);
-  if (work.cardio > 0) parts.push(`${formatWork(work.cardio)} cardio`);
-  return parts.length > 0 ? `${parts.join(' · ')} ${WORK_UNIT}` : 'no work logged';
-}
-
-// The two bars, in the tap detail. A lane the day did not do is
-// left out, like the half that is not drawn.
-function laneLabel(lift: LaneScore, cardio: LaneScore): string | null {
-  // Both halves still building: one phrase, not the same caveat twice.
-  if (lift.kind === 'baseline' && cardio.kind !== 'score') {
-    if (cardio.kind === 'none' || cardio.n === lift.n) {
-      return `Building baseline: ${lift.n} of ${CONSISTENCY.minSessions} sessions`;
-    }
-  }
-  if (cardio.kind === 'baseline' && lift.kind === 'none') {
-    return `Building baseline: ${cardio.n} of ${CONSISTENCY.minSessions} sessions`;
-  }
-  const part = (name: string, s: LaneScore): string | null =>
-    s.kind === 'none'
-      ? null
+// The tap detail, one line per lane: its work and where that sits against
+// your usual best — the two bars, read out. Both lanes named, never one summed
+// figure (the number `workIntensity` exists to stop anyone reading as
+// meaningful). The unit rides the first line only. A lane the day did not do
+// is left out, like the half that is not drawn.
+function laneLines(work: WorkTotals, lift: LaneScore, cardio: LaneScore): string {
+  const vs = (s: LaneScore): string =>
+    s.kind === 'score'
+      ? s.over
+        ? ' · above best'
+        : ` · ${Math.round(s.value * 100)}% of best`
       : s.kind === 'baseline'
-        ? `${name} building baseline (${s.n}/${CONSISTENCY.minSessions})`
-        : `${name} ${s.over ? 'above' : `${Math.round(s.value * 100)}%`}`;
-  const parts = [part('lifting', lift), part('cardio', cardio)].filter(Boolean);
-  return parts.length > 0 ? `vs usual best: ${parts.join(' · ')}` : null;
+        ? ` · baseline ${s.n}/${CONSISTENCY.minSessions}`
+        : '';
+  const lines: string[] = [];
+  if (work.resistance > 0) lines.push(`Lift ${formatWork(work.resistance)} ${WORK_UNIT}${vs(lift)}`);
+  if (work.cardio > 0) {
+    lines.push(`Cardio ${formatWork(work.cardio)}${lines.length ? '' : ` ${WORK_UNIT}`}${vs(cardio)}`);
+  }
+  return lines.length > 0 ? lines.join('\n') : 'No work logged';
 }
 
 // Lifting on top, cardio below, as two stacked bars on a small PLATE in the
@@ -529,13 +521,17 @@ const ConsistencyGrid = memo(function ConsistencyGrid({
                 <div key={row} className="hill aspect-square bg-fg/[0.05]" />
               );
             }
+            // Biggest moves first, two named; unchanged ones sort last and
+            // fold into "+N more" rather than spending the box on "=".
             const loads = formatLoadChanges(
               [...cell.loads].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
+              2,
             );
-            const vsBest = laneLabel(cell.lift, cell.cardio);
-            const label = `${dateLabel} · ${cell.labels.join(', ')} · ${workLabel(cell.work)}${
-              vsBest ? `\n${vsBest}` : ''
-            }${loads ? `\nLoad vs last: ${loads}` : ''}`;
+            const label = `${dateLabel} · ${cell.labels.join(', ')}\n${laneLines(
+              cell.work,
+              cell.lift,
+              cell.cardio,
+            )}${loads ? `\nLoad: ${loads}` : ''}`;
             // One horizontal band PER LOG, stacked and split by a hairline
             // (the container bg shows through a 1px gap), each band's share
             // proportional to that log's duration. A single-log day is one
@@ -640,6 +636,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
     key: mode === 'app' ? 'stats:logs:all' : undefined,
   });
 
+  const adherence = useActivePlanAdherence(mode === 'app');
   const { data: stats, loading: statsLoading } = useAuthedQuery(
     () => (mode === 'app' ? getUserStats() : Promise.resolve(null)),
     { auth: mode === 'app', key: mode === 'app' ? 'userStats' : undefined },
@@ -862,12 +859,14 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
             {mode === 'app' ? (
               // The Adherence tile that used to sit in this strip measured
               // against the log document, not the plan, so it could only ever
-              // read ~100. The real one needs the plan and its whole history.
+              // read ~100. The real one needs the plan and its whole history,
+              // which `history` already is. The number is the answer; the link
+              // is only for the per-movement table on /app/plan.
               <a
                 href="/app/plan"
-                className="-my-3 mt-0 inline-flex min-h-11 items-center text-[0.7rem] text-muted underline"
+                className="-my-3 mt-0 inline-flex min-h-11 items-center text-[0.7rem] tabular-nums text-muted underline"
               >
-                Plan adherence →
+                {adherence ? `${adherenceText(adherence)} →` : 'Plan adherence →'}
               </a>
             ) : null}
           </section>

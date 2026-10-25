@@ -8,7 +8,40 @@
 // the point, and the table is the detail behind it.
 
 import type { AdherenceRow, PlanAdherence as Adherence } from '@/lib/planAdherence';
+import { computePlanAdherence } from '@/lib/planAdherence';
+import { getActivePlan } from '@/lib/queries';
+import { loadAllLogs } from '@/lib/logStore';
+import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { Disclosure } from '@/components/ui/Disclosure';
+
+// The active plan's adherence for the pages that show it as one line (Stats,
+// Body). Every log, not the page's window: the plan's whole life is the
+// question. One request shared by every caller on the page — the Progress pager
+// mounts Stats and Body together.
+let inFlight: Promise<Adherence | null> | null = null;
+function loadActiveAdherence(): Promise<Adherence | null> {
+  inFlight ??= Promise.all([getActivePlan(), loadAllLogs()])
+    .then(([plan, logs]) =>
+      plan?.parsed ? computePlanAdherence(plan.id, plan.parsed, logs, new Date()) : null,
+    )
+    .finally(() => {
+      inFlight = null;
+    });
+  return inFlight;
+}
+
+export function useActivePlanAdherence(enabled: boolean): Adherence | null {
+  const { data } = useAuthedQuery(
+    () => (enabled ? loadActiveAdherence() : Promise.resolve(null)),
+    { key: enabled ? 'plan:active-adherence' : undefined, auth: enabled },
+  );
+  return data;
+}
+
+/** "Plan 82% · main 88%" — main only when the plan prescribes prep. */
+export function adherenceText(a: Adherence): string {
+  return a.mainPct == null ? `Plan ${a.pct}%` : `Plan ${a.pct}% · main ${a.mainPct}%`;
+}
 
 // The bands, in the order they stack. Monochrome per the chrome rule — this is
 // not a delta and not an activity, so it takes no hue. Each band is also
@@ -60,9 +93,14 @@ export function PlanAdherenceSection({ adherence }: { adherence: Adherence | nul
     <Disclosure
       title="Plan adherence"
       headerRight={
-        <span className="font-display text-lg leading-none tabular-nums text-fg">
-          {a.pct}
-          <span className="ml-0.5 text-xs font-medium text-muted">%</span>
+        <span className="inline-flex items-baseline gap-1.5">
+          <span className="font-display text-lg leading-none tabular-nums text-fg">
+            {a.pct}
+            <span className="ml-0.5 text-xs font-medium text-muted">%</span>
+          </span>
+          {a.mainPct != null ? (
+            <span className="text-xs tabular-nums text-muted">main {a.mainPct}%</span>
+          ) : null}
         </span>
       }
     >

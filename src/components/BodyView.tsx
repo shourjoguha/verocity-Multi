@@ -43,6 +43,7 @@ import { BodyMap } from '@/components/BodyMap';
 import { useBodyMapInk, useBodyMapStyle } from '@/lib/bodyMapPrefs';
 import { setPeriod, usePeriod } from '@/lib/periodPrefs';
 import { EASE, Item, PageStagger } from '@/components/anim';
+import { adherenceText, useActivePlanAdherence } from '@/components/PlanAdherence';
 
 // The page-wide measure. Work is each loaded working set counted once, split
 // across the muscles it trains (so it sums to the number of sets); Volume is the
@@ -195,6 +196,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const [busy, setBusy] = useState(false);
   // Overrides saved in this session, so the map updates without a refetch.
   const [localOverrides, setLocalOverrides] = useState<OverrideMap>({});
+  const adherence = useActivePlanAdherence(!showcase);
 
   const days = TRAINING_PERIODS.find((p) => p.key === periodKey)!.days;
   // Real "now" on both surfaces — the showcase is live (migration 0034).
@@ -393,7 +395,19 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           header: the totals under them change with the period and nothing else. */}
       <Item>
         <div className="mb-5 flex items-start justify-between gap-3">
-          <EchoText text="BODY" as="h1" className={ECHO_APP_TITLE} />
+          {/* Adherence sits under the title, in the height the right-hand
+              controls already take: the whole plan, so not in the period line. */}
+          <div className="flex min-w-0 flex-col items-start">
+            <EchoText text="BODY" as="h1" className={ECHO_APP_TITLE} />
+            {adherence ? (
+              <a
+                href="/app/plan"
+                className="-my-3 inline-flex min-h-11 items-center text-[0.7rem] tabular-nums text-muted underline"
+              >
+                {adherenceText(adherence)}
+              </a>
+            ) : null}
+          </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5 pt-1">
             <SegmentedTabs
               tabs={TRAINING_PERIODS.map((p) => ({ key: p.key, label: p.label }))}
