@@ -93,8 +93,7 @@ const workoutLog = {
   log_date: new Date().toISOString().slice(0, 10),
   status: 'in_progress',
   total_seconds: 1830,
-  // Untagged, so Finish opens FinishDetailsSheet instead of finishing.
-  tags: [],
+  tags: ['strength'],
   started_at: new Date().toISOString(),
   ended_at: null,
   data: logDoc,

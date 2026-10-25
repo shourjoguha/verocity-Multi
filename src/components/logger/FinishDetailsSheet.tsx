@@ -20,17 +20,26 @@ export type FinishDetails = {
 // The most recent earlier session's heart rate — where the HR wheels rest.
 export type LastHeartRate = { avg: number | null; max: number | null };
 
-// Shown by the Logger's Finish when nothing about the session has been filled
-// in yet. Every field is optional; Save with nothing chosen finishes as before.
+// Opened by every Finish in the Logger. It used to open only when nothing had
+// been filled in yet, so choosing a type under Session details mid-workout was
+// enough to skip it — and with it the only place to log duration and HR before
+// saving. It now always opens, pre-filled with what the session already has.
+// Every field is optional; Save with nothing changed finishes as before.
 export function FinishDetailsSheet({
   open,
   seconds,
+  tags,
+  hr,
   lastHr,
   onClose,
   onSave,
 }: {
   open: boolean;
   seconds: number;
+  // What the session already carries: types picked under Session details, and
+  // a heart rate already on a resumed row. These start chosen, not resting.
+  tags: string[];
+  hr: LastHeartRate | null;
   lastHr: LastHeartRate | null;
   onClose: () => void;
   onSave: (details: FinishDetails) => Promise<void>;
@@ -38,26 +47,30 @@ export function FinishDetailsSheet({
   return (
     <Modal open={open} onClose={onClose} title="Finish session">
       {/* A child, so its state is fresh each time the sheet opens. */}
-      <FinishDetailsBody seconds={seconds} lastHr={lastHr} onSave={onSave} />
+      <FinishDetailsBody seconds={seconds} initialTags={tags} initialHr={hr} lastHr={lastHr} onSave={onSave} />
     </Modal>
   );
 }
 
 function FinishDetailsBody({
   seconds,
+  initialTags,
+  initialHr,
   lastHr,
   onSave,
 }: {
   seconds: number;
+  initialTags: string[];
+  initialHr: LastHeartRate | null;
   lastHr: LastHeartRate | null;
   onSave: (d: FinishDetails) => Promise<void>;
 }) {
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>(initialTags);
   const [h, setH] = useState(() => Math.min(TIMERS.finishMaxHours, Math.floor(seconds / 3600)));
   const [m, setM] = useState(() => Math.floor((seconds % 3600) / 60));
   const [timeTouched, setTimeTouched] = useState(false);
-  const [hr, setHr] = useState<number | null>(null);
-  const [hrMax, setHrMax] = useState<number | null>(null);
+  const [hr, setHr] = useState<number | null>(initialHr?.avg ?? null);
+  const [hrMax, setHrMax] = useState<number | null>(initialHr?.max ?? null);
   const [saving, setSaving] = useState(false);
 
   const toggle = (key: string) =>
