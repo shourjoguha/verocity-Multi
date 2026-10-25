@@ -171,6 +171,9 @@ function ReviewBody({ review: r }: { review: Review }) {
               r.adherence ? (
                 <span className="text-xs text-muted tabular-nums">
                   Plan adherence <span className="text-fg">{r.adherence.pct}%</span>
+                  {r.adherence.mainPct != null ? (
+                    <> · main <span className="text-fg">{r.adherence.mainPct}%</span></>
+                  ) : null}
                 </span>
               ) : null
             }

@@ -334,4 +334,19 @@ describe('computePlanAdherence', () => {
     expect(a.exactSets).toBe(3);
     expect(a.extraSets).toBe(0);
   });
+
+  it('splits out main work when the plan prescribes warm-up or cooldown', () => {
+    const warm = { ...ex('Bike', '2x5'), section: 'warmup' as const };
+    const day = { dayKey: 'mon', label: 'Monday', exercises: [warm, ex('Back Squat', '3x5')] };
+    // Squats done, warm-up skipped: 3 of 5 overall, all of the main work.
+    const a = run(plan([day]), [log('l1', '2026-01-05', 'mon', [['Back Squat', 3]])]);
+    expect(a!.pct).toBe(60);
+    expect(a!.mainPct).toBe(100);
+    expect(a!.rows.find((r) => r.movement === 'Bike')!.prep).toBe(true);
+  });
+
+  it('leaves mainPct null when nothing due was prep', () => {
+    const a = run(plan([MON]), [log('l1', '2026-01-05', 'mon', [['Back Squat', 3]])]);
+    expect(a!.mainPct).toBeNull();
+  });
 });

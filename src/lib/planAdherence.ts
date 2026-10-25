@@ -31,6 +31,7 @@
 //
 // Pure: no DOM, no storage, no Date, no queries. `today` is passed in.
 
+import { PREP_SECTIONS } from '@/app.config';
 import type { ParsedPlan, PlanDay, WorkoutLog } from '@/lib/types';
 import type { OverrideMap } from '@/lib/movementTaxonomy';
 import { parsePlanned } from '@/lib/logBuilder';
@@ -44,6 +45,8 @@ export interface AdherenceRow {
   /** The plan day's label, for display — plan days are keyed, not named. */
   label: string;
   movement: string;
+  /** Prescribed in a warm-up or cooldown section (PREP_SECTIONS). */
+  prep: boolean;
   prescribedSets: number;
   /** Done as written. */
   exactSets: number;
@@ -81,6 +84,11 @@ export interface PlanAdherence {
   extraSets: number;
   /** (exact + swap + makeUp) / prescribed, 0-100, capped at 100. */
   pct: number;
+  /**
+   * The same ratio over the main work only — warm-up and cooldown rows left
+   * out. Null when nothing due was prep, because it would only repeat `pct`.
+   */
+  mainPct: number | null;
   rows: AdherenceRow[];
 }
 
@@ -95,6 +103,7 @@ interface Owed {
   dayKey: string;
   week: number;
   movement: string;
+  prep: boolean;
   sets: number;
 }
 
@@ -113,13 +122,20 @@ function loggedWork(log: WorkoutLog): LoggedWork[] {
 }
 
 /** Exercises a day prescribes in a given week. Subroutines carry no sets. */
-function prescribedFor(day: PlanDay, week: number): { movement: string; sets: number }[] {
-  const out: { movement: string; sets: number }[] = [];
+function prescribedFor(
+  day: PlanDay,
+  week: number,
+): { movement: string; sets: number; prep: boolean }[] {
+  const out: { movement: string; sets: number; prep: boolean }[] = [];
   for (const ex of day.exercises) {
     if (isSubroutine(ex)) continue;
     const planned = ex.plannedByWeek[week]?.trim();
     if (!planned) continue;
-    out.push({ movement: ex.movement, sets: parsePlanned(planned).count });
+    out.push({
+      movement: ex.movement,
+      sets: parsePlanned(planned).count,
+      prep: (PREP_SECTIONS as readonly string[]).includes(ex.section),
+    });
   }
   return out;
 }
@@ -202,7 +218,7 @@ export function computePlanAdherence(
     for (let w = 1; w <= elapsedWeeks; w += 1) {
       if (inFlight && w === elapsedWeeks && !loggedCells.has(`${day.dayKey}|${w}`)) continue;
       for (const p of prescribedFor(day, w)) {
-        owed.push({ dayKey: day.dayKey, week: w, movement: p.movement, sets: p.sets });
+        owed.push({ dayKey: day.dayKey, week: w, movement: p.movement, sets: p.sets, prep: p.prep });
       }
     }
   }
@@ -211,16 +227,19 @@ export function computePlanAdherence(
   if (prescribedSets === 0) return null;
 
   // Rows are keyed by the prescription, not by the week — "what did I stick to"
-  // is a question about a movement across the block.
+  // is a question about a movement across the block. Prep is part of the key so
+  // a bike warm-up and a bike finisher on one day stay on their own side of the
+  // main-work split.
   const rows = new Map<string, AdherenceRow>();
   const rowFor = (o: Owed): AdherenceRow => {
-    const key = `${o.dayKey}|${o.movement.toLowerCase()}`;
+    const key = `${o.dayKey}|${o.prep ? 'prep' : 'main'}|${o.movement.toLowerCase()}`;
     let row = rows.get(key);
     if (!row) {
       row = {
         dayKey: o.dayKey,
         label: dayByKey.get(o.dayKey)?.label ?? o.dayKey,
         movement: o.movement,
+        prep: o.prep,
         prescribedSets: 0,
         exactSets: 0,
         swapSets: 0,
@@ -322,6 +341,9 @@ export function computePlanAdherence(
   }
 
   const hit = exactSets + swapSets + makeUpSets;
+  const mainRows = [...rows.values()].filter((r) => !r.prep);
+  const mainPrescribed = mainRows.reduce((a, r) => a + r.prescribedSets, 0);
+  const mainHit = mainRows.reduce((a, r) => a + r.exactSets + r.swapSets + r.makeUpSets, 0);
   return {
     elapsedWeeks,
     planWeeks,
@@ -334,6 +356,10 @@ export function computePlanAdherence(
     missedSets,
     extraSets,
     pct: Math.min(100, Math.round((hit / prescribedSets) * 100)),
+    mainPct:
+      mainPrescribed > 0 && mainPrescribed < prescribedSets
+        ? Math.min(100, Math.round((mainHit / mainPrescribed) * 100))
+        : null,
     // Worst first: the table's job is to surface what you stopped doing.
     rows: [...rows.values()].sort(
       (a, b) => a.pct - b.pct || b.prescribedSets - a.prescribedSets,
