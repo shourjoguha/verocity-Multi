@@ -776,6 +776,21 @@ bound the auto-end uses). A reopened `done` log still seeds from its recorded
 duration and stays frozen.
 → `src/lib/useTimer.ts`, `Logger.tsx`
 
+### The finish drawer never opens on the phone
+`[confirmed against production rows, Oct 2026]`
+Looked like a stale PWA build. It was not: the rows the athlete finished after
+the drawer shipped had wall-clock durations (so the new build was running) and
+every one carried a type tag. The drawer opened only when the session had no
+tag and no HR yet, and picking a type under Session details mid-workout is the
+normal habit — so it was skipped every time, taking the only pre-save place for
+duration and HR with it. **A gate on "nothing filled in yet" hides a form from
+exactly the users who fill things in.** Finish now always opens it, pre-filled
+with the session's tags and any HR on the row.
+Before blaming the service worker, check the rows: a duration within seconds of
+`ended_at − started_at` across a locked phone means the new stopwatch, which
+means the new build.
+→ `Logger.tsx`, `src/components/logger/FinishDetailsSheet.tsx`
+
 ### The session clock loses the time the phone was locked
 `[measured in Chromium, and the symptom observed to stop]`
 `useStopwatch` counted: `setSeconds(s => s + 1)` per `setInterval` tick. iOS

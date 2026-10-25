@@ -250,11 +250,10 @@ export default function Logger() {
     setCollapsed(addAll);
   };
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  // Finish asks for type / duration / avg HR in a sheet when none of the
-  // session's details were filled in; `hasHr` is whether a resumed row already
-  // carries a heart rate.
+  // Finish always asks for type / duration / HR in a sheet; `rowHr` is a
+  // resumed row's heart rate, which the sheet starts on.
   const [askDetails, setAskDetails] = useState(false);
-  const [hasHr, setHasHr] = useState(false);
+  const [rowHr, setRowHr] = useState<LastHeartRate | null>(null);
   const [lastHr, setLastHr] = useState<LastHeartRate | null>(null);
   // The Done pile is open by default — you should see what you've finished —
   // but it folds away as one unit when the remaining work needs the screen.
@@ -333,7 +332,7 @@ export default function Logger() {
           setStatus(log.status);
           setLogDate(log.log_date);
           setTags(log.tags ?? []);
-          setHasHr(log.hr_avg != null || log.hr_max != null);
+          if (log.hr_avg != null || log.hr_max != null) setRowHr({ avg: log.hr_avg, max: log.hr_max });
           // Not awaited: only the finish sheet reads it, and the history is
           // usually already cached by the page that sent you here.
           loadAllLogs().then((logs) => setLastHr(lastHeartRate(logs, log.id)));
@@ -795,7 +794,9 @@ export default function Logger() {
   async function finish(details?: FinishDetails) {
     setStatus('done');
     stopwatch.pause();
-    const finalTags = details?.tags.length ? details.tags : tagsRef.current;
+    // The sheet opens on the session's tags, so its answer is the whole answer
+    // — including deselecting one.
+    const finalTags = details ? details.tags : tagsRef.current;
     const finalSeconds = details?.seconds ?? secondsRef.current;
     if (idRef.current) {
       const ok = await updateLog(idRef.current, {
@@ -805,8 +806,7 @@ export default function Logger() {
         ended_at: new Date().toISOString(),
         log_date: logDateRef.current,
         tags: finalTags,
-        ...(details?.hrAvg != null ? { hr_avg: details.hrAvg } : {}),
-        ...(details?.hrMax != null ? { hr_max: details.hrMax } : {}),
+        ...(details ? { hr_avg: details.hrAvg, hr_max: details.hrMax } : {}),
       });
       if (!ok) {
         toast('Save failed — check your connection and try again', 'error');
@@ -2239,7 +2239,7 @@ export default function Logger() {
                   with a border so their boxes align to the pixel (see the
                   Button primitive's note on why primary carries a border). */}
               <Button
-                onClick={() => (tags.length === 0 && !hasHr ? setAskDetails(true) : finish())}
+                onClick={() => setAskDetails(true)}
                 className="flex-1"
               >
                 Finish
@@ -2264,6 +2264,8 @@ export default function Logger() {
       <FinishDetailsSheet
         open={askDetails}
         seconds={stopwatch.seconds}
+        tags={tags}
+        hr={rowHr}
         lastHr={lastHr}
         onClose={() => setAskDetails(false)}
         onSave={finish}
