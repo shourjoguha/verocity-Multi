@@ -561,9 +561,12 @@ export interface SetActual {
   /** Jump mark in cm — box height or jump distance, per the item's markKind.
    *  Never priced as work: it records the outcome of a jump, not its load. */
   mark?: number;
-  /** Rest taken BEFORE this set, in seconds, when it differs from the item's
+  /** Rest taken AFTER this set, in seconds, when it differs from the item's
    *  `restSeconds` tag ("vary by set" in movement options). Absent ⇒ the item's
-   *  tag applies. Stated, not timed — see lib/coach/intent.ts. */
+   *  tag applies. In a superset it is the wait before the PARTNER's next set.
+   *  Stated, not timed — see `restGap` in lib/coach/intent.ts.
+   *  Until 2026-11-01 the picker's aria-label said "before"; its visible label
+   *  only ever said "Set N", and values are read as "after" without a shift. */
   rest?: number;
   completed: boolean;
   prefilled: boolean;

@@ -33,7 +33,7 @@ import { completedLogs, workingSections } from '@/lib/stats';
 import { explainSoreness, type AreaExplanation } from '@/lib/soreness';
 import { buildDayInsights, summarizeTiming, toHours } from '@/lib/mealInsights';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
-import { classifyIntent, countIntent, emptyMix, mixShares, type IntentMix } from '@/lib/coach/intent';
+import { classifyIntent, countIntent, emptyMix, mixShares, restGap, type IntentMix } from '@/lib/coach/intent';
 import type { MealLog, UserStats, WorkoutLog } from '@/lib/types';
 import { summarizeMealText, type MealTextSummary } from '@/lib/coach/mealText';
 import type { Measured, Sufficiency } from '@/lib/coach/types';
@@ -592,7 +592,7 @@ export function measureTraining(
         for (const item of group.items ?? []) {
           if (item.kind === 'subroutine') continue;
           itemOrder += 1;
-          for (const set of item.sets ?? []) {
+          for (const [ki, set] of (item.sets ?? []).entries()) {
             const a = set.actual;
             if (!a.completed) continue;
             if (isConditioning) {
@@ -690,13 +690,18 @@ export function measureTraining(
                   if (item.movement === topMovement) topFractions.push(fraction);
 
                   // Rest is only interesting where the evidence names a band:
-                  // heavy, low-rep work. `restSeconds` is the athlete's rest
-                  // TAG — item first, then the group it sits in. Absent rest is absent
-                  // data, never a zero.
+                  // heavy, low-rep work. Read as the EFFECTIVE gap (`restGap`):
+                  // in a superset the partner's set and rest are recovery for
+                  // the muscles it does not share. The movement's own rest must
+                  // be logged — absent rest is absent data, never a zero — and a
+                  // partner's unlogged rest adds nothing rather than an assumption.
                   const isHeavyLowRep =
                     fraction >= opts.heavyFraction && a.reps <= opts.strengthRepMax;
-                  // A per-set override ("vary by set") wins over the item's tag.
-                  const rest = a.rest ?? item.restSeconds ?? group.restSeconds ?? null;
+                  const gap = restGap(group, group.items.indexOf(item), ki, {
+                    unloggedRestSeconds: 0,
+                    overrides,
+                  });
+                  const rest = gap.ownLogged ? gap.seconds : null;
                   if (isHeavyLowRep && rest != null && rest > 0) {
                     heavyRestSum += rest;
                     heavyRestCount += 1;
@@ -712,7 +717,7 @@ export function measureTraining(
                     classifyIntent({
                       item,
                       group,
-                      setRestSeconds: a.rest,
+                      setIndex: ki,
                       restBoundarySeconds: opts.heavyRestSeconds[0],
                       overrides,
                     }),

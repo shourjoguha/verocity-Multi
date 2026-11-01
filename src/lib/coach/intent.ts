@@ -13,21 +13,30 @@
 // rest lengthened the load climbed monotonically and supersets disappeared
 // (39% -> 50% -> 13% -> 0%).
 //
-// THE REST TAG IS THE RIGHT FIELD. `SetActual` has no `rest` member; rest
-// lives on the item as `restSeconds`, which the plan pre-fills and the athlete
-// re-taps from TIMERS.restPresets to say what they actually rested. There is
+// THE REST TAG IS THE RIGHT FIELD. Rest lives on the item as `restSeconds`,
+// which the plan pre-fills and the athlete re-taps from TIMERS.restPresets to
+// say what they actually rested, and optionally per set as `SetActual.rest`
+// ("vary by set"). Both mean the rest taken AFTER the set. There is
 // deliberately no countdown behind it (it paused when the phone locked and was
 // fiddly mid-set, so it was removed): the tag is a statement, not a timing.
 // An untouched tag therefore reads as "rested as prescribed".
 //
+// A SUPERSET'S REST IS NOT ONE TAG. Sets alternate: pull-up 1, dip 1, pull-up 2.
+// The pull-up's rest is the wait after the pull-up, before the dip; the time a
+// pull-up muscle actually gets between its own sets is that rest, plus the dip
+// set, plus the dip's rest. `restGap` adds those up. Reading the item's own tag
+// alone (as this module did until 2026-11-01) made every superset look shorter
+// rested than it was.
+//
 // THE CORPUS CORRECTS THE OBVIOUS VERSION OF THIS RULE. "Superset means it is
 // not strength work" is wrong, and `TRAINING.strengthRest`'s own caveat says
 // so: Galpin "explicitly allows the rest to be filled by supersetting an
-// unrelated muscle group — resting is not the same as standing still." So a
-// superset only argues against strength intent when the partner movement
-// fatigues the SAME muscles, which the region profiles already know. That
-// distinction is the whole reason this module needs the taxonomy and not just
-// the numbers on the set.
+// unrelated muscle group — resting is not the same as standing still." The
+// partner's set is rest for the muscles it does NOT share, and fresh load for
+// the ones it does — so it counts in proportion to how unrelated it is
+// (`regionOverlap`), continuously. There used to be a hard 0.3 cutoff between
+// "unrelated" and "same muscles"; Pull-Up against Dips sat exactly on it and a
+// push/pull superset read as loaded conditioning. There is no cutoff now.
 //
 // NOTHING HERE IS A THRESHOLD OF ITS OWN. The boundary is 120 seconds, and it
 // arrives from both directions in the existing pack: `strengthRest` puts heavy
@@ -36,8 +45,8 @@
 // applies them; it does not invent.
 
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
-import type { RegionKey } from '@/app.config';
-import type { LogGroup, LogItem } from '@/lib/types';
+import { LOAD, type RegionKey } from '@/app.config';
+import type { LogGroup, LogItem, LogSet } from '@/lib/types';
 
 /** What a piece of loaded work appears to be for. */
 export type LoadedIntent =
@@ -68,17 +77,9 @@ export function regionOverlap(
   return Number(shared.toFixed(2));
 }
 
-/**
- * Above this the superset partner counts as the SAME muscle group, so the
- * pairing is a density choice rather than Galpin's filled rest.
- *
- * Editorial, like MEANINGFUL_REGION_SHARE and the impact weights — a judgement
- * about when two movements stop being unrelated, not a claim about the body.
- */
-export const RELATED_OVERLAP = 0.3;
-
-/** Rest at or under which a pairing reads as deliberately dense. Below the
- *  hypertrophy ceiling by a clear margin, so the middle band stays the middle. */
+/** Effective rest at or under which a superset/circuit reads as deliberately
+ *  dense. Below the hypertrophy ceiling by a clear margin, so the middle band
+ *  stays the middle. */
 export const DENSE_REST_SECONDS = 60;
 
 /**
@@ -102,12 +103,100 @@ export const DENSE_REST_SECONDS = 60;
  */
 export const UNLOGGED_REST_SECONDS = 30;
 
+/** The rest LOGGED after set `ki`: the set's own override ("vary by set"),
+ *  else the item's tag, else the group's. Null when none was logged. */
+export function loggedRestAfter(item: LogItem, group: LogGroup, ki: number): number | null {
+  return item.sets[ki]?.actual.rest ?? item.restSeconds ?? group.restSeconds ?? null;
+}
+
+/** How long a set itself took: its logged time, else reps at LOAD.repSeconds. */
+function setWorkSeconds(set: LogSet): number {
+  return set.actual.time ?? (set.actual.reps ?? 0) * LOAD.repSeconds;
+}
+
+export interface RestGap {
+  /** Effective seconds of recovery for this movement's muscles. */
+  seconds: number;
+  /** True when any rest in the gap (own or a partner's) was not logged. */
+  assumed: boolean;
+  /** Whether the movement's OWN rest after the set was logged. */
+  ownLogged: boolean;
+  /** Highest region overlap with any partner in the group, for reporting. */
+  partnerOverlap: number | null;
+}
+
+/**
+ * The recovery a movement's muscles got around set `ki`, in a group whose sets
+ * alternate in item order (pull-up 1, dip 1, pull-up 2, dip 2 ...).
+ *
+ * The gap after set k runs to the movement's own set k+1. In it: its own rest,
+ * then every later partner's set k and that partner's rest, then every earlier
+ * partner's set k+1 and its rest. A partner set that was not done is simply not
+ * in the gap: with 5 pull-ups against 4 dips, dip 4 sits between pull-ups 4
+ * and 5, and nothing sits between dip 4 and the end; with 5 against 6, dip 5
+ * to dip 6 had no pull-up between them, so that gap is the dip's own rest.
+ *
+ * Overlap enters continuously, never as a cutoff: a partner that shares a
+ * fraction `ov` of this movement's muscles reloads that fraction, so for it the
+ * clock restarts when the partner's set ends. Effective rest is the full gap
+ * minus `ov` times the time elapsed up to the end of the most-overlapping
+ * partner set. Fully unrelated (ov 0) counts the whole gap; identical (ov 1)
+ * counts only what came after the partner.
+ *
+ * The LAST set has no gap after it, so it reads the gap that led into it; a
+ * one-set movement reads its own rest alone.
+ */
+export function restGap(
+  group: LogGroup,
+  ii: number,
+  ki: number,
+  opts: { unloggedRestSeconds: number; overrides?: OverrideMap },
+): RestGap {
+  const item = group.items[ii];
+  const restOf = (it: LogItem, k: number) => {
+    const r = loggedRestAfter(it, group, k);
+    return { seconds: r ?? opts.unloggedRestSeconds, logged: r != null };
+  };
+  const n = item.sets.length;
+  const k = n >= 2 ? Math.min(ki, n - 2) : 0;
+  const own = restOf(item, k);
+  let assumed = !own.logged;
+  if (n < 2) return { seconds: own.seconds, assumed, ownLogged: own.logged, partnerOverlap: null };
+
+  const mine = classifyMovement(item.movement, { overrides: opts.overrides }).profile.regions;
+  let elapsed = own.seconds;
+  let reload = 0;
+  let partnerOverlap: number | null = null;
+  // Walk the rotation from the item after this one, wrapping to those before it.
+  const order = [
+    ...group.items.slice(ii + 1).map((it) => ({ it, idx: k })),
+    ...group.items.slice(0, ii).map((it) => ({ it, idx: k + 1 })),
+  ];
+  for (const { it, idx } of order) {
+    if (it.kind === 'subroutine') continue;
+    const set = it.sets[idx];
+    if (!set?.actual.completed) continue;
+    const ov = regionOverlap(mine, classifyMovement(it.movement, { overrides: opts.overrides }).profile.regions);
+    if (partnerOverlap == null || ov > partnerOverlap) partnerOverlap = ov;
+    elapsed += setWorkSeconds(set);
+    reload = Math.max(reload, ov * elapsed);
+    const r = restOf(it, idx);
+    if (!r.logged) assumed = true;
+    elapsed += r.seconds;
+  }
+  return {
+    seconds: Math.max(0, Math.round(elapsed - reload)),
+    assumed,
+    ownLogged: own.logged,
+    partnerOverlap,
+  };
+}
+
 export interface IntentInput {
   item: LogItem;
   group: LogGroup;
-  /** The set's own rest override (`SetActual.rest`), which wins over the
-   *  item's tag when the athlete varied rest by set. */
-  setRestSeconds?: number;
+  /** Which of the item's sets is being classified. */
+  setIndex: number;
   /** `TRAINING.strengthRest.value[0]`, which is also `hypertrophyRest.value`. */
   restBoundarySeconds: number;
   /** Override the assumption for an untouched picker. Defaults to
@@ -118,10 +207,9 @@ export interface IntentInput {
 
 export interface IntentVerdict {
   intent: LoadedIntent;
-  /** The rest the verdict was reached on — the logged value, or the assumed one
-   *  when the picker was never touched. */
+  /** The effective rest the verdict was reached on (see `restGap`). */
   restSeconds: number;
-  /** True when `restSeconds` is the assumption rather than a logged choice. A
+  /** True when any rest in it is the assumption rather than a logged choice. A
    *  caller that does not report this is overstating what it knows. */
   restAssumed: boolean;
   /** Highest region overlap with a partner in the same superset or circuit. */
@@ -142,37 +230,21 @@ export interface IntentVerdict {
  */
 export function classifyIntent(input: IntentInput): IntentVerdict {
   const { item, group, restBoundarySeconds } = input;
-  const logged = input.setRestSeconds ?? item.restSeconds ?? group.restSeconds ?? null;
-  // 0 is a real selection ("no rest"), not an absent one — `??` keeps it.
-  const restAssumed = logged == null;
-  const rest = logged ?? input.unloggedRestSeconds ?? UNLOGGED_REST_SECONDS;
+  const found = group.items.findIndex((it) => it.id === item.id);
+  // An item not found in its group is classified as if alone.
+  const g = found >= 0 ? group : { ...group, items: [item] };
+  const gap = restGap(g, Math.max(0, found), input.setIndex, {
+    unloggedRestSeconds: input.unloggedRestSeconds ?? UNLOGGED_REST_SECONDS,
+    overrides: input.overrides,
+  });
+  const grouped = g.items.filter((it) => it.kind !== 'subroutine').length > 1;
+  const base = { restSeconds: gap.seconds, restAssumed: gap.assumed, partnerOverlap: gap.partnerOverlap };
 
-  const mine = classifyMovement(item.movement, { overrides: input.overrides }).profile.regions;
-  let partnerOverlap: number | null = null;
-  for (const other of group.items) {
-    if (other.id === item.id) continue;
-    const theirs = classifyMovement(other.movement, { overrides: input.overrides }).profile.regions;
-    const o = regionOverlap(mine, theirs);
-    if (partnerOverlap == null || o > partnerOverlap) partnerOverlap = o;
-  }
-  const relatedPartner = partnerOverlap != null && partnerOverlap >= RELATED_OVERLAP;
-
-  // Long rest is strength work — UNLESS it is being spent on a partner that
-  // fatigues the same muscles, which is the one case the corpus's own caveat
-  // does not cover.
-  if (rest >= restBoundarySeconds) {
-    return {
-      intent: relatedPartner ? 'hypertrophy' : 'strength',
-      restSeconds: rest,
-      restAssumed,
-      partnerOverlap,
-    };
-  }
-  // Short rest against a related partner is density work under load.
-  if (rest <= DENSE_REST_SECONDS && relatedPartner) {
-    return { intent: 'conditioning', restSeconds: rest, restAssumed, partnerOverlap };
-  }
-  return { intent: 'hypertrophy', restSeconds: rest, restAssumed, partnerOverlap };
+  // Long effective rest is strength work, whatever filled it.
+  if (gap.seconds >= restBoundarySeconds) return { intent: 'strength', ...base };
+  // Very short effective rest inside a superset or circuit is density work.
+  if (grouped && gap.seconds <= DENSE_REST_SECONDS) return { intent: 'conditioning', ...base };
+  return { intent: 'hypertrophy', ...base };
 }
 
 /**
