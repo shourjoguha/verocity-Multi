@@ -33,8 +33,10 @@ import {
   addSubroutine,
   groupWithAcrossSections,
   mergeWithNext,
+  detachItem,
   moveGroup,
   moveGroupToSection,
+  moveItemInGroup,
   patchSetActual,
   removeGroup,
   removeItem,
@@ -49,7 +51,6 @@ import {
   setSubroutine,
   swapItemMovement,
   toggleItemNotation,
-  detachItem,
 } from '@/lib/logEdits';
 import { isSubroutine } from '@/lib/subroutine';
 import { inToCm, markKindOf } from '@/lib/jumpMark';
@@ -1870,6 +1871,9 @@ export default function Logger() {
               if (!item) return null;
               const sub = isSubroutine(item);
               const groups = doc.sections[si].groups;
+              const inGroup = groups[gi].items.length > 1;
+              const groupWord = groups[gi].kind === 'circuit' ? 'circuit' : 'superset';
+              const restRows = inGroup ? item.sets : item.sets.slice(0, -1);
               const currentKey = doc.sections[si].key;
               const supersetTargets = doc.sections.flatMap((s, tsi) =>
                 s.groups
@@ -1914,6 +1918,7 @@ export default function Logger() {
                         <TrashGlyph className={GLYPH} />
                       </button>
                     </div>
+                    {inGroup ? <div className="mt-2 t-label text-muted">Whole {groupWord}</div> : null}
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -1941,6 +1946,50 @@ export default function Logger() {
                         ↓ Down
                       </button>
                     </div>
+                    {/* Inside a superset: the order of its movements is the
+                        order the sets alternate in, which decides whose rest
+                        falls between which sets — so it is editable here, and
+                        the movement can be taken back out. The row above still
+                        moves the whole group. */}
+                    {inGroup ? (
+                      <>
+                        <div className="mt-2 t-label text-muted">In this {groupWord}</div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={ii === 0}
+                            onClick={() => {
+                              setDoc((d) => moveItemInGroup(d, si, gi, ii, -1));
+                              setOptionsFor({ si, gi, ii: ii - 1 });
+                            }}
+                            className={`flex-1 ${rowClass}`}
+                          >
+                            ↑ Earlier
+                          </button>
+                          <button
+                            type="button"
+                            disabled={ii >= groups[gi].items.length - 1}
+                            onClick={() => {
+                              setDoc((d) => moveItemInGroup(d, si, gi, ii, 1));
+                              setOptionsFor({ si, gi, ii: ii + 1 });
+                            }}
+                            className={`flex-1 ${rowClass}`}
+                          >
+                            ↓ Later
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDoc((d) => detachItem(d, si, gi, ii));
+                            setOptionsFor({ si, gi: gi + 1, ii: 0 });
+                          }}
+                          className={rowClass}
+                        >
+                          Remove from {groupWord}
+                        </button>
+                      </>
+                    ) : null}
                   </div>
 
                   {/* Two one-shot pickers. Native <select>: it costs no JS
@@ -2043,7 +2092,7 @@ export default function Logger() {
 
                   <div className="mt-5">
                     <div className="mb-2 t-label text-muted">
-                      Rest between sets
+                      Rest after each set
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {TIMERS.restPresets.map((sec) => (
@@ -2062,12 +2111,15 @@ export default function Logger() {
                         </button>
                       ))}
                     </div>
-                    {/* Vary by set. Rest often climbs through a movement (60s for
-                        the early sets, 180s before the last), so a set can carry its
-                        own rest BEFORE it. Collapsed by default to keep the sheet
-                        short; native selects keep each row one line on a phone.
-                        Set 1 has no rest before it, so rows start at set 2. */}
-                    {item.sets.length > 1 ? (
+                    {/* Vary by set. Rest often climbs through a movement (60s
+                        after the early sets, 180s before the last), so a set can
+                        carry its own rest AFTER it. Collapsed by default to keep
+                        the sheet short; native selects keep each row one line on
+                        a phone. A lone movement's last set has nothing after it,
+                        so it gets no row; in a superset it can still precede a
+                        partner's set (5 pull-ups against 6 dips), so every set
+                        keeps one. */}
+                    {restRows.length > 0 ? (
                       (() => {
                         const varied = item.sets.some((st) => st.actual.rest != null);
                         const open = varyRest || varied;
@@ -2085,19 +2137,18 @@ export default function Logger() {
                             </button>
                             {open ? (
                               <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-                                {item.sets.slice(1).map((st, j) => {
-                                  const ki = j + 1;
+                                {restRows.map((st, ki) => {
                                   const base = item.restSeconds;
                                   return (
                                     <label key={ki} className="flex min-w-0 items-center gap-2 t-control text-muted">
-                                      <span className="shrink-0 tabular-nums">Set {ki + 1}</span>
+                                      <span className="shrink-0 tabular-nums">After {ki + 1}</span>
                                       <select
                                         value={st.actual.rest ?? ''}
                                         onChange={(e) => {
                                           const v = e.target.value;
                                           setDoc((d) => setSetRest(d, si, gi, ii, ki, v === '' ? null : Number(v)));
                                         }}
-                                        aria-label={`Rest before set ${ki + 1}`}
+                                        aria-label={`Rest after set ${ki + 1}`}
                                         className="min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-xs tabular-nums text-fg"
                                       >
                                         <option value="">{base != null ? `Same (${base}s)` : 'Same'}</option>

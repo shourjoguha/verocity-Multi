@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   DENSE_REST_SECONDS,
-  RELATED_OVERLAP,
   UNLOGGED_REST_SECONDS,
   classifyIntent,
   countIntent,
   emptyMix,
   mixShares,
   regionOverlap,
+  restGap,
 } from '@/lib/coach/intent';
-import { TIMERS } from '@/app.config';
+import { LOAD, TIMERS } from '@/app.config';
 import { TRAINING } from '@/lib/coach/knowledge';
 import { isLoadedSet, meaningfulRegionShare } from '@/lib/bodyLoad';
 import { classifyMovement } from '@/lib/movementTaxonomy';
@@ -36,8 +36,12 @@ const item = (movement: string, over: Partial<LogItem> = {}): LogItem =>
 const group = (kind: LogGroup['kind'], items: LogItem[], restSeconds?: number): LogGroup =>
   ({ id: 'g', kind, items, restSeconds }) as LogGroup;
 
-const verdict = (it: LogItem, g: LogGroup) =>
-  classifyIntent({ item: it, group: g, restBoundarySeconds: BOUNDARY });
+const verdict = (it: LogItem, g: LogGroup, setIndex = 0) =>
+  classifyIntent({ item: it, group: g, setIndex, restBoundarySeconds: BOUNDARY });
+
+/** `n` completed sets of `reps`, each with rest-after `rest` when given. */
+const sets = (n: number, reps = 5, rest?: number): LogSet[] =>
+  Array.from({ length: n }, () => set({ weight: 20, reps, ...(rest != null ? { rest } : {}) }));
 
 describe('regionOverlap', () => {
   it('is 1 for a movement against itself', () => {
@@ -54,7 +58,67 @@ describe('regionOverlap', () => {
   it('is high for two movements that train the same legs', () => {
     const squat = classifyMovement('Back Squat').profile.regions;
     const lunge = classifyMovement('Reverse Lunge').profile.regions;
-    expect(regionOverlap(squat, lunge)).toBeGreaterThan(RELATED_OVERLAP);
+    expect(regionOverlap(squat, lunge)).toBeGreaterThan(0.5);
+  });
+});
+
+describe('restGap — a superset alternates its sets', () => {
+  const W = (reps: number) => reps * LOAD.repSeconds;
+  const opts = { unloggedRestSeconds: 0 };
+  const ov = regionOverlap(
+    classifyMovement('Pull-Up').profile.regions,
+    classifyMovement('Weighted Dips').profile.regions,
+  );
+
+  it('counts the partner set and its rest, discounted only where muscles are shared', () => {
+    // pull-up 1, rest 60, dips 1 (8 reps), rest 90, pull-up 2.
+    const pu = item('Pull-Up', { sets: sets(2, 5), restSeconds: 60 });
+    const dp = item('Weighted Dips', { sets: sets(2, 8), restSeconds: 90 });
+    const g = group('superset', [pu, dp]);
+    const full = 60 + W(8) + 90;
+    expect(restGap(g, 0, 0, opts).seconds).toBe(Math.round(full - ov * (60 + W(8))));
+  });
+
+  it('5 pull-ups against 4 dips: pull-up 5 follows dip 4, dip 4 is the last', () => {
+    const pu = item('Pull-Up', { sets: sets(5), restSeconds: 60 });
+    const dp = item('Weighted Dips', { sets: sets(4, 8), restSeconds: 90 });
+    const g = group('superset', [pu, dp]);
+    // Gap pull-up 4 -> 5 still has dip 4 (and its 90s) in it.
+    expect(restGap(g, 0, 3, opts).seconds).toBeGreaterThan(60 + 90 - ov * (60 + W(8)) - 1);
+    expect(restGap(g, 0, 3, opts).seconds).toBe(restGap(g, 0, 0, opts).seconds);
+    // Dip 4 is the last dip: it reads the gap that led into it (dip 3 -> 4),
+    // which has pull-up 4 in it.
+    expect(restGap(g, 1, 3, opts).seconds).toBe(restGap(g, 1, 2, opts).seconds);
+    expect(restGap(g, 1, 2, opts).seconds).toBeGreaterThan(90);
+  });
+
+  it('5 pull-ups against 6 dips: dip 5 -> 6 had no pull-up between, so only its own rest', () => {
+    const pu = item('Pull-Up', { sets: sets(5), restSeconds: 60 });
+    const dp = item('Weighted Dips', { sets: sets(6, 8), restSeconds: 90 });
+    const g = group('superset', [pu, dp]);
+    expect(restGap(g, 1, 4, opts).seconds).toBe(90);
+    expect(restGap(g, 1, 3, opts).seconds).toBeGreaterThan(90);
+  });
+
+  it('reads a per-set rest as the rest AFTER that set', () => {
+    const pu = item('Pull-Up', { sets: [...sets(1, 5, 180), ...sets(1)], restSeconds: 60 });
+    expect(restGap(group('single', [pu]), 0, 0, opts).seconds).toBe(180);
+  });
+
+  it('follows the movement order: reordering changes whose rest sits where', () => {
+    const pu = item('Pull-Up', { sets: sets(2), restSeconds: 60 });
+    const dp = item('Weighted Dips', { sets: sets(2, 8), restSeconds: 90 });
+    const a = restGap(group('superset', [pu, dp]), 0, 0, opts).seconds;
+    const b = restGap(group('superset', [dp, pu]), 1, 0, opts).seconds;
+    // Same rests either way round; what moves is which partner set falls in
+    // the gap (k vs k+1), and with equal set counts the total is the same.
+    expect(a).toBe(b);
+  });
+
+  it('ignores a partner set that was not completed', () => {
+    const pu = item('Pull-Up', { sets: sets(2), restSeconds: 60 });
+    const dp = item('Weighted Dips', { sets: [set({ weight: 20, reps: 8, completed: false }), ...sets(1, 8)], restSeconds: 90 });
+    expect(restGap(group('superset', [pu, dp]), 0, 0, opts).seconds).toBe(60);
   });
 });
 
@@ -64,27 +128,47 @@ describe('classifyIntent', () => {
     expect(verdict(squat, group('single', [squat])).intent).toBe('strength');
   });
 
-  it('keeps it strength when the superset partner is unrelated', () => {
-    // The corpus's own caveat: Galpin "explicitly allows the rest to be filled
-    // by supersetting an unrelated muscle group — resting is not the same as
-    // standing still." A flat "superset means not-strength" rule is wrong.
-    const squat = item('Back Squat', { restSeconds: BOUNDARY });
-    const press = item('Bench Press');
+  it('never reads a push/pull superset with real rests as conditioning', () => {
+    // The bug that removed the cutoff: Pull-Up and Dips overlap by exactly the
+    // old 0.3 line, so 60s on the pull-up read as loaded conditioning — for a
+    // pairing whose real spacing between pull-ups was 60 + a dip set + 60.
+    // That spacing now lands at ~119s effective: hypertrophy, on the line.
+    const pu = item('Pull-Up', { sets: sets(5), restSeconds: 60 });
+    const dp = item('Weighted Dips', { sets: sets(4, 8), restSeconds: 60 });
+    expect(verdict(pu, group('superset', [pu, dp])).intent).toBe('hypertrophy');
+    // 90s each way is strength spacing.
+    const pu90 = item('Pull-Up', { sets: sets(5), restSeconds: 90 });
+    const dp90 = item('Weighted Dips', { sets: sets(4, 8), restSeconds: 90 });
+    expect(verdict(pu90, group('superset', [pu90, dp90])).intent).toBe('strength');
+  });
+
+  it('keeps it strength when the partner is unrelated (filled rest)', () => {
+    const squat = item('Back Squat', { sets: sets(3), restSeconds: 90 });
+    const press = item('Bench Press', { sets: sets(3, 8), restSeconds: 60 });
     expect(verdict(squat, group('superset', [squat, press])).intent).toBe('strength');
   });
 
-  it('demotes it when the partner fatigues the same muscles', () => {
-    const squat = item('Back Squat', { restSeconds: BOUNDARY });
-    const lunge = item('Reverse Lunge');
-    const v = verdict(squat, group('superset', [squat, lunge]));
-    expect(v.partnerOverlap).toBeGreaterThanOrEqual(RELATED_OVERLAP);
-    expect(v.intent).toBe('hypertrophy');
+  it('a same-muscle partner buys less rest than an unrelated one, with no cutoff', () => {
+    const squat = (r: number) => item('Back Squat', { sets: sets(3), restSeconds: r });
+    const lunge = item('Reverse Lunge', { sets: sets(3, 8), restSeconds: 60 });
+    const press = item('Bench Press', { sets: sets(3, 8), restSeconds: 60 });
+    const sq = squat(60);
+    const related = verdict(sq, group('superset', [sq, lunge])).restSeconds;
+    const unrelated = verdict(sq, group('superset', [sq, press])).restSeconds;
+    expect(related).toBeLessThan(unrelated);
   });
 
-  it('reads short rest against a related partner as loaded conditioning', () => {
-    const squat = item('Back Squat', { restSeconds: DENSE_REST_SECONDS });
-    const lunge = item('Reverse Lunge');
-    expect(verdict(squat, group('superset', [squat, lunge])).intent).toBe('conditioning');
+  it('reads near-zero rest inside a superset as loaded conditioning', () => {
+    const squat = item('Back Squat', { sets: sets(3), restSeconds: 0 });
+    const lunge = item('Reverse Lunge', { sets: sets(3, 8), restSeconds: 0 });
+    const v = verdict(squat, group('superset', [squat, lunge]));
+    expect(v.restSeconds).toBeLessThanOrEqual(DENSE_REST_SECONDS);
+    expect(v.intent).toBe('conditioning');
+  });
+
+  it('never calls a lone movement conditioning, however short its rest', () => {
+    const squat = item('Back Squat', { sets: sets(3), restSeconds: 0 });
+    expect(verdict(squat, group('single', [squat])).intent).toBe('hypertrophy');
   });
 
   it('reads the middle as hypertrophy', () => {
@@ -105,6 +189,12 @@ describe('classifyIntent', () => {
     expect(v.intent).toBe('hypertrophy');
   });
 
+  it('marks the verdict assumed when only the partner rest was untouched', () => {
+    const pu = item('Pull-Up', { sets: sets(2), restSeconds: 60 });
+    const dp = item('Weighted Dips', { sets: sets(2, 8) });
+    expect(verdict(pu, group('superset', [pu, dp])).restAssumed).toBe(true);
+  });
+
   it('never calls an unlogged set strength work', () => {
     // The trap this constant exists to avoid: TIMERS.defaultRestSeconds is 120
     // and belongs to the on-screen countdown, not to what was rested. Reaching
@@ -118,22 +208,14 @@ describe('classifyIntent', () => {
 
   it('treats a picked 0s as a real choice, not an absent one', () => {
     const squat = item('Back Squat', { restSeconds: 0 });
-    const lunge = item('Reverse Lunge');
-    const v = verdict(squat, group('superset', [squat, lunge]));
+    const v = verdict(squat, group('single', [squat]));
     expect(v.restAssumed).toBe(false);
-    expect(v.intent).toBe('conditioning');
+    expect(v.restSeconds).toBe(0);
   });
 
   it('marks a logged rest as not assumed', () => {
     const squat = item('Back Squat', { restSeconds: BOUNDARY });
     expect(verdict(squat, group('single', [squat])).restAssumed).toBe(false);
-  });
-
-  it('takes the most related partner in a circuit, not the first', () => {
-    const squat = item('Back Squat', { restSeconds: BOUNDARY });
-    const press = item('Bench Press');
-    const lunge = item('Reverse Lunge');
-    expect(verdict(squat, group('circuit', [squat, press, lunge])).intent).toBe('hypertrophy');
   });
 
   it('grounds its boundary in the pack rather than inventing one', () => {

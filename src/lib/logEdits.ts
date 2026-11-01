@@ -149,7 +149,7 @@ export function setItemMark(doc: LogDocument, si: number, gi: number, ii: number
   );
 }
 
-// Rest before ONE set, when it differs from the movement's tag ("vary by set").
+// Rest after ONE set, when it differs from the movement's tag ("vary by set").
 // null clears the override so the set follows the movement's tag again.
 export function setSetRest(
   doc: LogDocument,
@@ -169,8 +169,8 @@ export function setSetRest(
   }));
 }
 
-/** The rest that applied before set `ki`: its own override, else the movement's tag. */
-export function restBeforeSet(item: LogItem, ki: number): number | undefined {
+/** The rest taken after set `ki`: its own override, else the movement's tag. */
+export function restAfterSet(item: LogItem, ki: number): number | undefined {
   return item.sets[ki]?.actual.rest ?? item.restSeconds;
 }
 
@@ -300,20 +300,30 @@ export function ungroup(doc: LogDocument, si: number, gi: number): LogDocument {
   }));
 }
 
-// Unlink one movement from a superset/circuit, leaving the rest grouped. The
-// first member lands just before the group and any other just after it, so
-// the session order only changes for a middle member. With two members this
-// is the same as ungroup.
+// Move one movement up (dir -1) or down (dir +1) inside its superset/circuit.
+// Item order IS the order the sets alternate in, so this changes which rest
+// falls between which sets (see `restGap` in lib/coach/intent.ts).
+export function moveItemInGroup(doc: LogDocument, si: number, gi: number, ii: number, dir: -1 | 1): LogDocument {
+  return mapGroup(doc, si, gi, (g) => {
+    const j = ii + dir;
+    if (j < 0 || j >= g.items.length) return g;
+    const items = [...g.items];
+    [items[ii], items[j]] = [items[j], items[ii]];
+    return { ...g, items };
+  });
+}
+
+// Take one movement out of its superset/circuit as a single, placed right after
+// the group. A group left with one movement becomes a single too.
 export function detachItem(doc: LogDocument, si: number, gi: number, ii: number): LogDocument {
-  const group = doc.sections[si]?.groups[gi];
-  if (!group || group.items.length < 2) return doc;
-  if (group.items.length === 2) return ungroup(doc, si, gi);
-  const single = restampGroup({ id: newId(), kind: 'single', items: [group.items[ii]] });
-  const rest = restampGroup({ ...group, items: group.items.filter((_, i) => i !== ii) });
-  return mapSection(doc, si, (s) => ({
-    ...s,
-    groups: s.groups.flatMap((g, i) => (i !== gi ? [g] : ii === 0 ? [single, rest] : [rest, single])),
-  }));
+  return mapSection(doc, si, (s) => {
+    const g = s.groups[gi];
+    if (!g || g.items.length < 2 || !g.items[ii]) return s;
+    const rest = g.items.filter((_, i) => i !== ii);
+    const kept = restampGroup({ ...g, kind: rest.length > 1 ? g.kind : 'single', items: rest });
+    const out = restampGroup({ id: newId(), kind: 'single', items: [g.items[ii]] });
+    return { ...s, groups: s.groups.flatMap((x, i) => (i === gi ? [kept, out] : [x])) };
+  });
 }
 
 // Move a group up (dir -1) or down (dir +1) within its section.

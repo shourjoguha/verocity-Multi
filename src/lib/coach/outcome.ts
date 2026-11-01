@@ -115,6 +115,16 @@ export const DEFINITION_CHANGES: readonly DefinitionChange[] = [
     on: '2026-10-16',
     what: 'the run of training days it reads is the one still going, not the longest in four weeks',
   },
+  {
+    ruleId: 'training.strength.rest-too-short',
+    on: '2026-11-01',
+    what: 'rest in a superset now counts the time spent on the other movement and its rest, weighted by how much of the same muscle it works, and a per-set rest means the rest after that set',
+  },
+  {
+    ruleId: 'training.intent.loaded-too-light',
+    on: '2026-11-01',
+    what: 'how loaded work is spaced now counts a superset partner’s set and rest as recovery, in proportion to how unrelated its muscles are, with no hard cutoff for “same muscles”',
+  },
 ];
 
 /** Changes recorded for a rule on or after the day it was decided. */

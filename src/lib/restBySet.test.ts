@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TIMERS } from '@/app.config';
-import { addSet, restBeforeSet, setSetRest } from '@/lib/logEdits';
+import { addSet, detachItem, moveItemInGroup, restAfterSet, setSetRest } from '@/lib/logEdits';
 import { classifyIntent } from '@/lib/coach/intent';
 import { logsToCsv } from '@/lib/exportData';
 import type { LogDocument, LogGroup, LogItem, LogSet, WorkoutLog } from '@/lib/types';
@@ -31,7 +31,7 @@ describe('vary rest by set', () => {
 
   it("falls back to the movement's tag", () => {
     const it = item([set(), set(), set(180)], 60);
-    expect([0, 1, 2].map((k) => restBeforeSet(it, k))).toEqual([60, 60, 180]);
+    expect([0, 1, 2].map((k) => restAfterSet(it, k))).toEqual([60, 60, 180]);
   });
 
   it('carries a set rest onto a set added with +', () => {
@@ -51,10 +51,37 @@ describe('coach reads the set rest first', () => {
 
   it('a long rest on one set makes that set strength work', () => {
     const it = item([set()], 60);
-    expect(classifyIntent({ item: it, group: group(it), restBoundarySeconds: 120 }).intent).not.toBe('strength');
-    const v = classifyIntent({ item: it, group: group(it), setRestSeconds: 180, restBoundarySeconds: 120 });
+    expect(classifyIntent({ item: it, group: group(it), setIndex: 0, restBoundarySeconds: 120 }).intent).not.toBe('strength');
+    const long = item([set(180), set()], 60);
+    const v = classifyIntent({ item: long, group: group(long), setIndex: 0, restBoundarySeconds: 120 });
     expect(v.intent).toBe('strength');
     expect(v.restSeconds).toBe(180);
     expect(v.restAssumed).toBe(false);
+  });
+});
+
+describe('superset editing', () => {
+  const mv = (id: string): LogItem => ({ id, movement: id, primaryMetric: 'reps', sets: [set()] });
+  const ss = (...ids: string[]): LogDocument => ({
+    sections: [{ key: 'primary', groups: [{ id: 'g', kind: 'superset', items: ids.map(mv) }, { id: 'h', kind: 'single', items: [mv('Z')] }] }],
+  });
+  const names = (d: LogDocument) => d.sections[0].groups.map((g) => g.items.map((i) => i.id).join('+'));
+
+  it('reorders a movement inside its superset', () => {
+    expect(names(moveItemInGroup(ss('A', 'B', 'C'), 0, 0, 2, -1))).toEqual(['A+C+B', 'Z']);
+    expect(names(moveItemInGroup(ss('A', 'B'), 0, 0, 0, -1))).toEqual(['A+B', 'Z']);
+  });
+
+  it('takes one movement out as a single right after the group', () => {
+    const d = detachItem(ss('A', 'B', 'C'), 0, 0, 1);
+    expect(names(d)).toEqual(['A+C', 'B', 'Z']);
+    expect(d.sections[0].groups[0].kind).toBe('superset');
+    expect(d.sections[0].groups[1].kind).toBe('single');
+  });
+
+  it('turns a two-movement superset into two singles', () => {
+    const d = detachItem(ss('A', 'B'), 0, 0, 0);
+    expect(names(d)).toEqual(['B', 'A', 'Z']);
+    expect(d.sections[0].groups.map((g) => g.kind)).toEqual(['single', 'single', 'single']);
   });
 });
