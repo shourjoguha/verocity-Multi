@@ -1775,7 +1775,8 @@ not strength work" is wrong: `TRAINING.strengthRest`'s own caveat has Galpin
 group". So a superset only argues against strength when the partner fatigues
 the **same** muscles — which the region profiles already know, via
 `regionOverlap`. **A rule that ignores a claim's caveat is a rule the claim does
-not support.**
+not support.** (The hard 0.3 "same muscles" cutoff this first shipped with is
+gone — see "A push/pull superset reads as loaded conditioning" below.)
 No new threshold was invented: 120s arrives from both directions, as
 `strengthRest`'s floor and `hypertrophyRest`'s ceiling.
 **An untouched rest picker resolves to `UNLOGGED_REST_SECONDS` (30s), not to a
@@ -1796,6 +1797,28 @@ run over the live log: assuming 30s, 60s or 90s gives an identical split
 assumption is robust anywhere below the boundary and catastrophic exactly at the
 value a careless reach would have picked.
 -> `src/lib/coach/intent.ts`, `src/lib/coach/signals.ts` (`loadedIntent`)
+
+### A push/pull superset reads as loaded conditioning
+`[2026-11-01]`
+Pull-Up against Weighted Dips has a `regionOverlap` of exactly **0.30** — the
+old RELATED_OVERLAP constant (since removed) — so a 60s tag on the pull-up classified the
+textbook unrelated pairing as density work. Two errors stacked: a hard cutoff
+on a continuous quantity, and reading the item's own tag as its rest when, in a
+superset, the time between a movement's own sets is its rest **plus the
+partner's set plus the partner's rest**.
+**Now `restGap` walks the alternation** (item order = the order sets alternate
+in) and the partner's set counts as recovery in proportion to `1 − overlap`;
+there is no cutoff. Uneven counts are handled by presence: 5 pull-ups against
+4 dips puts dip 4 between pull-ups 4 and 5; 5 against 6 leaves dip 5→6 with
+its own rest only. With 60s/60s the pull-up lands at ~119s effective —
+hypertrophy, on the line; 90s/90s is strength.
+**Per-set rest meant "before" in the code and "Set N" on screen.** The athlete
+entered it as rest *after* the set, which is also how the item tag reads, so
+the stored meaning was flipped to "after" **without shifting values** — the
+visible label never said "before", so existing entries were most likely made in
+the "after" sense. If a log predates 2026-11-01 and its per-set rests look one
+set off, this is why.
+-> `src/lib/coach/intent.ts` (`restGap`), `src/lib/coach/signals.ts`, `DEFINITION_CHANGES`
 
 ### A lift reads as stalled or dropping when the athlete made it harder
 
