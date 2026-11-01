@@ -61,7 +61,7 @@ Operational detail lives in `docs/HANDOVER.md`.
 - [x] Build from plan day (`logBuilder`) + last-performance prefill; custom (blank) session
 - [x] Create/resume/finish/cancel session; write mutations (`createLog`/`updateLog`)
 - [x] Entry points: dashboard "Start workout" + per-day "Start" in Plan view
-- [x] Voice input (Web Speech, feature-detected; parser unit-tested), grouping (superset/circuit merge/ungroup + kind toggle), metric swap
+- [x] ~~Voice input~~ — retired 2026-11: never usable in practice; the mic button, its speech hook and transcript parser were removed. Grouping (superset/circuit merge/ungroup + kind toggle), metric swap
 - [x] Movement swap/add/remove via library picker, substitution suggestions (`bump_movement_sub` RPC + getMovementSubs)
 - [x] VibeCheck on start, ActivityLogger (`/app/activity`, lightweight non-strength)
 - [x] Leave a session running: Logger Home button (flushes, keeps `in_progress`),

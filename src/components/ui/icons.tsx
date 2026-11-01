@@ -87,15 +87,6 @@ export function RpeGlyph({ className }: GlyphProps) {
 
 /* ---- action glyphs ---- */
 
-export function VoiceGlyph({ className }: GlyphProps) {
-  return (
-    <Glyph className={className}>
-      <rect x="9.25" y="2.5" width="5.5" height="11" rx="2.75" />
-      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5" />
-    </Glyph>
-  );
-}
-
 export function PlusGlyph({ className }: GlyphProps) {
   return (
     <Glyph className={className}>

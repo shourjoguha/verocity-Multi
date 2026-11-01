@@ -530,7 +530,7 @@ Function, which validates the token and performs scoped read-only queries.
   preview; save (activates, deactivates prior); **adopt** another user's plan.
 - **Logger (core)** — sectioned, grouped (single/superset/circuit) movement
   logging; per-set weight/reps|time|distance/RPE/notes; completion checks;
-  **WeightWheel** drum picker, **RepsStepper**, voice input; per-movement rest tag
+  **WeightWheel** drum picker, **RepsStepper** (voice input was retired 2026-11); per-movement rest tag
   (tap a preset: 0/30/45/60/75/90/120/180/300s — logged, not timed; no countdown),
   optionally varied per set ("Vary by set": `SetActual.rest`, rest before that set); clone-forward on long-press; multi-select grouping; metric swapping;
   movement swap/add/remove via library; substitution suggestions; VibeCheck on
@@ -726,7 +726,7 @@ animated transform. One owner, one place to change.
   read-only, so it validates the data + RLS + visuals early).
 - **Phase 2 — Logger (core write path).** Full logging engine, autosave, timers,
   pickers, grouping, substitutions, custom workouts. Shipped as `logBuilder.ts`,
-  `lastPerformance.ts`, `week.ts`, `useTimer.ts`, `voice.ts` — long-press was
+  `lastPerformance.ts`, `week.ts`, `useTimer.ts` (and a voice-input module, since retired) — long-press was
   dropped in the mobile pass (rows became tap-to-open sheets instead).
 - **Phase 3 — Plan authoring.** PlanUpload (strict parser), Plan edit mode, adopt.
 - **Phase 4 — Polish.** View Transitions, PWA/offline, perf pass, accessibility,

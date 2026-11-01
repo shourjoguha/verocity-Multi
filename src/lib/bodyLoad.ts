@@ -368,8 +368,9 @@ export function setVolume(
   // its old value, so unmapped work is unchanged.
   //
   // `|| 0` and not `?? 0`: a set logged with 0 is bodyweight, the same as one
-  // logged with no weight at all. voice.ts has always written 0 for "bodyweight",
-  // and under the old `??` that priced the set at zero work.
+  // logged with no weight at all. The retired voice input wrote 0 for
+  // "bodyweight" (stored logs still carry it), and under the old `??` that
+  // priced the set at zero work.
   const borne = unweightedKg * (bwLoad / VOLUME.bodyweightFraction);
   const external = a.weight || 0;
   // A completed set is never zero work. `borne` is 0 for a movement that carries

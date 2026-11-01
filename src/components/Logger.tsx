@@ -62,7 +62,6 @@ import { lastPerformance, plannedReps, plannedTarget, repAdjustedWeight } from '
 import { bestE1rmByTrack, isPrSet } from '@/lib/prs';
 import { trackName } from '@/lib/notations';
 import { useStopwatch } from '@/lib/useTimer';
-import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
 import { weekFromDate } from '@/lib/week';
 import { blockForWeek, nextWeekForDay, planWeekByLog, planWeekCount } from '@/lib/progression';
 import {
@@ -111,7 +110,6 @@ import {
   PlusGlyph,
   TrashGlyph,
   UnlinkGlyph,
-  VoiceGlyph,
 } from '@/components/ui/icons';
 import { toast } from '@/lib/toast';
 
@@ -263,7 +261,6 @@ export default function Logger() {
   // they were costing ~120px (three wrapped rows at 375px) above the first set.
   const [showDetails, setShowDetails] = useState(false);
   const [showVibe, setShowVibe] = useState(false);
-  const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
   const [logDate, setLogDate] = useState<string>(today());
   const [tags, setTags] = useState<string[]>([]);
   // Pre-session all-time best e1RM per movement, for the PR ring on completion.
@@ -286,7 +283,6 @@ export default function Logger() {
   const [blockedBy, setBlockedBy] = useState<{ log: WorkoutLog; label: string } | null>(null);
 
   const stopwatch = useStopwatch(0, false);
-  const voice = useVoiceInput();
 
   const docRef = useRef(doc);
   const secondsRef = useRef(stopwatch.seconds);
@@ -690,20 +686,6 @@ export default function Logger() {
       const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
       if (idRef.current) updateLog(idRef.current, { tags: next });
       return next;
-    });
-  }
-
-  function listen(itemId: string, si: number, gi: number, ii: number) {
-    setVoiceTarget(itemId);
-    voice.start((transcript) => {
-      const parsed = parseVoiceSet(transcript);
-      setVoiceTarget(null);
-      if (Object.keys(parsed).length === 0) return;
-      setDoc((d) => {
-        const item = d.sections[si]?.groups[gi]?.items[ii];
-        const ki = item ? Math.max(0, item.sets.length - 1) : 0;
-        return patchSetActual(d, si, gi, ii, ki, parsed.rpe != null ? { ...parsed, rpeRated: true } : parsed);
-      });
     });
   }
 
@@ -1234,7 +1216,7 @@ export default function Logger() {
             );
           })}
         </div>
-        {/* BAND 5 — every control, one line: add set, superset, voice and
+        {/* BAND 5 — every control, one line: add set, superset and
             metric, with remove pushed hard right so the destructive control
             is not flush against the one tapped between every set. The
             group-level link/unlink/remove arrive via `footer`: a standalone
@@ -1252,24 +1234,6 @@ export default function Logger() {
             <PlusGlyph className={GLYPH} />
           </button>
           {footer?.link}
-          {/* Voice stays visible at every width — hiding a control on the
-              primary target platform is removing a feature, not compacting a
-              layout. Listening state is the teal signal token plus
-              aria-pressed, not a text swap. */}
-          {voice.supported && !editing ? (
-            <button
-              onClick={() => {
-                activate(groupId);
-                listen(item.id, si, gi, ii);
-              }}
-              aria-pressed={voiceTarget === item.id}
-              aria-label={voiceTarget === item.id ? 'Listening — stop voice input' : 'Log this movement by voice'}
-              title={voiceTarget === item.id ? 'Listening…' : 'Voice'}
-              className={`${ICON_BTN} ${voiceTarget === item.id ? 'text-teal' : 'hover:text-fg'}`}
-            >
-              <VoiceGlyph className={GLYPH} />
-            </button>
-          ) : null}
           {/* The metric is written out, not drawn: its glyph was the only
               place the current metric showed, and the Distance arrow read as
               "swap". Tapping still cycles it; ↻ says so. */}
