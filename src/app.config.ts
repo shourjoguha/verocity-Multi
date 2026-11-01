@@ -343,7 +343,10 @@ export const ACTIVITY_TAGS = {
 // Each is written VERBATIM as the log's movement name, so each is classifier
 // input as much as a label (asserted in movementTaxonomy.test.ts). With no
 // court sport on offer, padel was logged as 'Run' and read as sagittal running.
-// Tennis resolves through the same rule:racket-sport as Padel.
+// Tennis resolves through the same rule:racket-sport as Padel. Sauna is the one
+// deliberate exception: passive heat trains no muscle, so it resolves to nothing
+// and shades nothing on the body map; its Recovery tag below keeps it out of the
+// coach's training-day counts (isRecovery in lib/coach/signals.ts).
 export const ACTIVITY_TYPES = [
   'Run',
   'Walk',
@@ -355,15 +358,18 @@ export const ACTIVITY_TYPES = [
   'Tennis',
   'Yoga',
   'Mobility',
+  'Sauna',
 ] as const;
 
 // The tag a quick-pick switches on by itself in the ActivityLogger. Court sports
-// only: they were always tagged Sport by hand, and the tag was the ONLY thing
-// that told a padel session from a run while both were typed 'Run'. Types with
-// no entry leave the tags alone.
+// and Sauna: court sports were always tagged Sport by hand, and the tag was the
+// ONLY thing that told a padel session from a run while both were typed 'Run'.
+// Sauna is Recovery so a heat session never counts as a training day. Types
+// with no entry leave the tags alone.
 export const ACTIVITY_TYPE_TAGS: Partial<Record<(typeof ACTIVITY_TYPES)[number], ActivityTagKey>> = {
   Padel: 'sport',
   Tennis: 'sport',
+  Sauna: 'recovery',
 };
 
 // ----------------------------------------------------------------
