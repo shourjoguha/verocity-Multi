@@ -49,7 +49,7 @@ import {
   setSubroutine,
   swapItemMovement,
   toggleItemNotation,
-  ungroup,
+  detachItem,
 } from '@/lib/logEdits';
 import { isSubroutine } from '@/lib/subroutine';
 import { inToCm, markKindOf } from '@/lib/jumpMark';
@@ -110,6 +110,7 @@ import {
   MoreGlyph,
   PlusGlyph,
   TrashGlyph,
+  UnlinkGlyph,
   VoiceGlyph,
 } from '@/components/ui/icons';
 import { toast } from '@/lib/toast';
@@ -1042,16 +1043,15 @@ export default function Logger() {
     setDoc((d) => copyForward(d, si, gi, ii, ki).doc);
   }
 
-  // `footerTrailing` rides in the SAME row as Add set rather than a band of its
-  // own — the group-level actions (superset / remove) belong on one line with
-  // it. Only a single-movement group passes it; inside a superset each member
-  // keeps a bare Add set row and the group owns its own actions.
+  // `footer` rides in the SAME row as Add set rather than a band of its own —
+  // the group-level actions belong on one line with it. A single-movement group
+  // passes link + remove; each superset member passes unlink + remove.
   function renderItem(
     si: number,
     gi: number,
     ii: number,
     grouped: boolean,
-    footer?: { link?: ReactNode; remove?: ReactNode },
+    footer?: { link?: ReactNode; unlink?: ReactNode; remove?: ReactNode },
   ) {
     const group = doc.sections[si].groups[gi];
     const groupId = group.id;
@@ -1237,8 +1237,8 @@ export default function Logger() {
         {/* BAND 5 — every control, one line: add set, superset, voice and
             metric, with remove pushed hard right so the destructive control
             is not flush against the one tapped between every set. The
-            group-level superset/remove arrive via `footer` because only a
-            standalone movement has them. */}
+            group-level link/unlink/remove arrive via `footer`: a standalone
+            movement gets link + remove, a superset member unlink + remove. */}
         <div className="flex items-center border-t border-border-soft px-2 text-muted">
           <button
             onClick={() => {
@@ -1293,6 +1293,7 @@ export default function Logger() {
             </span>
           </button>
           <span className="flex-1" />
+          {footer?.unlink}
           {footer?.remove}
         </div>
         </>
@@ -1363,16 +1364,43 @@ export default function Logger() {
                   {k}
                 </button>
               ))}
-              <button
-                onClick={() => setDoc((d) => ungroup(d, si, gi))}
-                className="flex min-h-11 items-center px-2 text-muted hover:text-fg"
-              >
-                Ungroup
-              </button>
             </div>
             )}
           </div>
-          {isCollapsed ? null : group.items.map((_, ii) => renderItem(si, gi, ii, true))}
+          {isCollapsed
+            ? null
+            : group.items.map((_, ii) =>
+                // Each member carries its own unlink and remove, with remove
+                // in the same far-right slot as on a standalone card, so that
+                // position always means "remove". Unlinking down to one
+                // member dissolves the group, which is why the header no
+                // longer needs an Ungroup of its own.
+                renderItem(si, gi, ii, true, {
+                  unlink: (
+                    <button
+                      onClick={() => {
+                        activate(group.id);
+                        setDoc((d) => detachItem(d, si, gi, ii));
+                      }}
+                      className={`${ICON_BTN} hover:text-fg`}
+                      aria-label="Unlink this movement from the superset"
+                      title="Unlink from superset"
+                    >
+                      <UnlinkGlyph className={GLYPH} />
+                    </button>
+                  ),
+                  remove: (
+                    <button
+                      onClick={() => setDoc((d) => removeItem(d, si, gi, ii))}
+                      className={`${ICON_BTN} text-danger`}
+                      aria-label="Remove movement"
+                      title="Remove movement"
+                    >
+                      <TrashGlyph className={GLYPH} />
+                    </button>
+                  ),
+                }),
+              )}
         </div>
       );
     }

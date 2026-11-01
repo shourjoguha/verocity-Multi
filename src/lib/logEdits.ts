@@ -300,6 +300,22 @@ export function ungroup(doc: LogDocument, si: number, gi: number): LogDocument {
   }));
 }
 
+// Unlink one movement from a superset/circuit, leaving the rest grouped. The
+// first member lands just before the group and any other just after it, so
+// the session order only changes for a middle member. With two members this
+// is the same as ungroup.
+export function detachItem(doc: LogDocument, si: number, gi: number, ii: number): LogDocument {
+  const group = doc.sections[si]?.groups[gi];
+  if (!group || group.items.length < 2) return doc;
+  if (group.items.length === 2) return ungroup(doc, si, gi);
+  const single = restampGroup({ id: newId(), kind: 'single', items: [group.items[ii]] });
+  const rest = restampGroup({ ...group, items: group.items.filter((_, i) => i !== ii) });
+  return mapSection(doc, si, (s) => ({
+    ...s,
+    groups: s.groups.flatMap((g, i) => (i !== gi ? [g] : ii === 0 ? [single, rest] : [rest, single])),
+  }));
+}
+
 // Move a group up (dir -1) or down (dir +1) within its section.
 export function moveGroup(doc: LogDocument, si: number, gi: number, dir: -1 | 1): LogDocument {
   return mapSection(doc, si, (s) => {

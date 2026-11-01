@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addSet, addSubroutine, copyForward, isGroupComplete, patchSetActual, setSubroutine } from '@/lib/logEdits';
+import { addSet, addSubroutine, copyForward, detachItem, isGroupComplete, patchSetActual, setSubroutine } from '@/lib/logEdits';
 import { isSubroutine, safeHref } from '@/lib/subroutine';
 import type { LogDocument, LogGroup } from '@/lib/types';
 
@@ -143,5 +143,31 @@ describe('safeHref', () => {
     expect(safeHref('javascript:alert(1)')).toBeNull();
     expect(safeHref('')).toBeNull();
     expect(safeHref(undefined)).toBeNull();
+  });
+});
+
+describe('detachItem', () => {
+  const names = (d: LogDocument) => d.sections[0].groups.map((g) => g.items.map((it) => it.movement).join('+'));
+
+  it('splits a two-movement superset into two singles, order kept', () => {
+    const d = detachItem(docWith(1, 2), 0, 0, 1);
+    expect(names(d)).toEqual(['m0', 'm1']);
+    expect(d.sections[0].groups.every((g) => g.kind === 'single')).toBe(true);
+  });
+
+  it('puts a detached first member before the remaining group', () => {
+    expect(names(detachItem(docWith(1, 3), 0, 0, 0))).toEqual(['m0', 'm1+m2']);
+  });
+
+  it('puts any other detached member right after the remaining group', () => {
+    const d = detachItem(docWith(1, 4), 0, 0, 1);
+    expect(names(d)).toEqual(['m0+m2+m3', 'm1']);
+    expect(d.sections[0].groups[0].kind).toBe('superset');
+    expect(d.sections[0].groups[1].kind).toBe('single');
+  });
+
+  it('leaves a single-movement group untouched', () => {
+    const doc = docWith(1, 1);
+    expect(detachItem(doc, 0, 0, 0)).toBe(doc);
   });
 });

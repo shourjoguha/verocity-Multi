@@ -125,6 +125,19 @@ export function LinkGlyph({ className }: GlyphProps) {
   );
 }
 
+// Unlink — "unlink this movement from its superset". LinkGlyph struck
+// through: a broken chain at this size read as a question mark.
+export function UnlinkGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M9.5 14.5l5-5" />
+      <path d="M13.25 6.75L14.75 5.25a3.9 3.9 0 0 1 5.5 5.5L18.75 12.25" />
+      <path d="M10.75 17.25L9.25 18.75a3.9 3.9 0 0 1-5.5-5.5L5.25 11.75" />
+      <path d="M4 4l16 16" />
+    </Glyph>
+  );
+}
+
 // Play — "start this session". Stroked, not filled, so it sits at the same
 // weight as the pencil beside it.
 export function PlayGlyph({ className }: GlyphProps) {

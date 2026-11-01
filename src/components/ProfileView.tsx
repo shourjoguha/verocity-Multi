@@ -94,12 +94,15 @@ function dayBadge(i: number): string {
 // the strip, so scrolling rescales the bars without re-rendering them.
 //
 // Within a day column: rest is a hairline, a session's height is its duration,
-// and a day with MORE than one session splits the column into adjacent bars,
-// each at its own height, marked as one day by a PEDESTAL — a solid
-// `--color-fg` foot in a reserved lane below the baseline. A frame around the
-// cluster was tried first and did not read (the today column is already a
-// framed box), and the gap between days is wider than the seam inside a day so
-// proximity carries most of the grouping.
+// and a day with MORE than one session is WIDER — each session gets
+// MULTI_SESSION_SHARE of a single day's width, flush against the next with no
+// seam, marked as one day by a PEDESTAL — a solid `--color-fg` foot in a
+// reserved lane below the baseline. Squeezing every session into one day's
+// width made a three-session day read as less training than a single one.
+// The base width is solved so the LATEST window still fits exactly; scrolled
+// back, an older stretch with more doubles shows a day or two fewer, and the
+// scroller reports what is actually in view (ui/HistoryScroller). Weekly
+// columns are unaffected.
 const ACTIVITY_WINDOWS = [
   { key: '2w', label: 'Last 2 weeks', days: 14 },
   { key: '4w', label: 'Last 4 weeks', days: 28 },
@@ -116,9 +119,12 @@ const DAILY_MAX_DAYS = 84;
 const STRIP_HEIGHT = 44;
 // Undated logs (total_seconds null → 0) still deserve a mark.
 const BAR_MIN = 8;
-// Inside a multi-session day. This is a seam, not a gap: it keeps two bars of
-// the same tone from merging, and must stay under the gap between days.
-const SUB_GAP = 1;
+// Inside a multi-session day: each session's width as a share of a single
+// day's. No seam between them, so two adjacent sessions of the SAME colour
+// would fuse into one wide bar; the second of such a pair is drawn at
+// SAME_TONE_OPACITY instead — a tone step, not a gap.
+const MULTI_SESSION_SHARE = 0.8;
+const SAME_TONE_OPACITY = 0.72;
 // The pedestal lane, reserved below the baseline on EVERY column so a group
 // never shifts its neighbours' bars. Only multi-session days paint into it.
 const FOOT_H = 2.5;
@@ -238,7 +244,18 @@ function ActivityStrip({
   );
 
   const gap = columnGap(n);
-  const colW = n > 0 ? Math.max(1, (width - gap * (n - 1)) / n) : 0;
+  // Width units per column: 1 for a day (or week), MULTI_SESSION_SHARE per
+  // session on a multi-session day. colW is one unit, solved so the latest n
+  // columns fill the strip exactly.
+  const unitsOf = useMemo(
+    () =>
+      daily
+        ? points.map((p) => (p.state === 'done' && p.sessions.length > 1 ? MULTI_SESSION_SHARE * p.sessions.length : 1))
+        : null,
+    [daily, points],
+  );
+  const latestUnits = unitsOf ? unitsOf.slice(count - n).reduce((a, u) => a + u, 0) : n;
+  const colW = n > 0 ? Math.max(1, (width - gap * (n - 1)) / latestUnits) : 0;
   // Tallest column per column, so the in-view maximum is a slice, not a walk
   // over every session.
   const colMax = useMemo(
@@ -298,7 +315,8 @@ function ActivityStrip({
     if (daily) {
       return points.map((p, i) => {
         const multi = p.state === 'done' && p.sessions.length > 1;
-        const subW = multi ? (colW - SUB_GAP * (p.sessions.length - 1)) / p.sessions.length : colW;
+        const dayW = colW * (unitsOf?.[i] ?? 1);
+        const subW = multi ? colW * MULTI_SESSION_SHARE : colW;
         return (
           <button
             key={p.date}
@@ -307,20 +325,25 @@ function ActivityStrip({
             className="relative flex h-full shrink-0 cursor-pointer flex-col justify-end"
             // paddingBottom is the pedestal lane: every column reserves it
             // so the baseline stays one straight line.
-            style={{ width: colW, paddingBottom: FOOT_LANE }}
+            style={{ width: dayW, paddingBottom: FOOT_LANE }}
             aria-label={`${p.date} ${p.fullLabel}`}
             title={`${p.fullLabel} · ${p.date}`}
           >
             {p.state !== 'done' ? (
               <span className="h-0.5 w-full bg-border" aria-hidden />
             ) : (
-              <span className="flex items-end" style={{ gap: SUB_GAP }} aria-hidden>
+              <span className="flex items-end" aria-hidden>
                 {p.sessions.map((colors, si) => (
                   // A session's tags stack inside its own bar.
                   <span
                     key={si}
                     className="flex flex-col"
-                    style={{ width: subW, height: heightOf(p.sessionSeconds[si]) }}
+                    style={{
+                      width: subW,
+                      height: heightOf(p.sessionSeconds[si]),
+                      opacity:
+                        si > 0 && colors.join() === p.sessions[si - 1].join() ? SAME_TONE_OPACITY : undefined,
+                    }}
                   >
                     {colors.map((c, ci) => (
                       <span key={ci} style={{ flex: 1, backgroundColor: c }} />
@@ -362,7 +385,7 @@ function ActivityStrip({
         {w.isCurrent ? todayFrame : null}
       </button>
     ));
-  }, [width, daily, points, weeks, colW]);
+  }, [width, daily, points, weeks, colW, unitsOf]);
 
   return (
     <div ref={containerRef} className="relative">
@@ -1190,6 +1213,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
         open={quickLog !== null}
         onClose={() => setQuickLog(null)}
         readOnly={readOnly}
+        plan={plan}
         onUpdated={(updated) => {
           applyLogChange((ls) => ls.map((l) => (l.id === updated.id ? updated : l)));
           setQuickLog(updated);

@@ -13,9 +13,12 @@ const clampBpm = (n: number) => Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(n
 export function HeartRate({
   log,
   onUpdate,
+  compact = false,
 }: {
   log: WorkoutLog;
   onUpdate: (patch: { hr_avg: number | null; hr_max: number | null }) => void;
+  // LogQuickView's meta line: "♥ 136 / 198", dotted rule, 44px hit box.
+  compact?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [avg, setAvg] = useState('');
@@ -43,6 +46,24 @@ export function HeartRate({
     onUpdate(patch);
     setEditing(false);
     toast('Heart rate updated', 'success');
+  }
+
+  if (!editing && compact) {
+    const has = log.hr_avg != null || log.hr_max != null;
+    return (
+      <button
+        type="button"
+        onClick={start}
+        className="inline-flex min-h-11 items-center text-sm tabular-nums text-muted transition-colors hover:text-fg"
+        title="Edit heart rate"
+        aria-label={has ? `Heart rate ${log.hr_avg ?? 'unknown'} average, ${log.hr_max ?? 'unknown'} max. Edit` : 'Add heart rate'}
+      >
+        <span className="border-b border-dotted border-faint">
+          <span aria-hidden="true">♥ </span>
+          {has ? `${log.hr_avg ?? '—'}${log.hr_max != null ? ` / ${log.hr_max}` : ''}` : 'Add HR'}
+        </span>
+      </button>
+    );
   }
 
   if (!editing) {
