@@ -51,7 +51,6 @@ import {
   setSubroutine,
   swapItemMovement,
   toggleItemNotation,
-  ungroup,
 } from '@/lib/logEdits';
 import { isSubroutine } from '@/lib/subroutine';
 import { inToCm, markKindOf } from '@/lib/jumpMark';
@@ -64,7 +63,6 @@ import { lastPerformance, plannedReps, plannedTarget, repAdjustedWeight } from '
 import { bestE1rmByTrack, isPrSet } from '@/lib/prs';
 import { trackName } from '@/lib/notations';
 import { useStopwatch } from '@/lib/useTimer';
-import { parseVoiceSet, useVoiceInput } from '@/lib/voice';
 import { weekFromDate } from '@/lib/week';
 import { blockForWeek, nextWeekForDay, planWeekByLog, planWeekCount } from '@/lib/progression';
 import {
@@ -112,7 +110,7 @@ import {
   MoreGlyph,
   PlusGlyph,
   TrashGlyph,
-  VoiceGlyph,
+  UnlinkGlyph,
 } from '@/components/ui/icons';
 import { toast } from '@/lib/toast';
 
@@ -264,7 +262,6 @@ export default function Logger() {
   // they were costing ~120px (three wrapped rows at 375px) above the first set.
   const [showDetails, setShowDetails] = useState(false);
   const [showVibe, setShowVibe] = useState(false);
-  const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
   const [logDate, setLogDate] = useState<string>(today());
   const [tags, setTags] = useState<string[]>([]);
   // Pre-session all-time best e1RM per movement, for the PR ring on completion.
@@ -287,7 +284,6 @@ export default function Logger() {
   const [blockedBy, setBlockedBy] = useState<{ log: WorkoutLog; label: string } | null>(null);
 
   const stopwatch = useStopwatch(0, false);
-  const voice = useVoiceInput();
 
   const docRef = useRef(doc);
   const secondsRef = useRef(stopwatch.seconds);
@@ -694,20 +690,6 @@ export default function Logger() {
     });
   }
 
-  function listen(itemId: string, si: number, gi: number, ii: number) {
-    setVoiceTarget(itemId);
-    voice.start((transcript) => {
-      const parsed = parseVoiceSet(transcript);
-      setVoiceTarget(null);
-      if (Object.keys(parsed).length === 0) return;
-      setDoc((d) => {
-        const item = d.sections[si]?.groups[gi]?.items[ii];
-        const ki = item ? Math.max(0, item.sets.length - 1) : 0;
-        return patchSetActual(d, si, gi, ii, ki, parsed.rpe != null ? { ...parsed, rpeRated: true } : parsed);
-      });
-    });
-  }
-
   // A movement typed into the picker's "Add …" row exists only inside this
   // workout unless it is written to the library — which is why a custom swap
   // could not be searched for in the next session. Not awaited: the pick has
@@ -1044,16 +1026,15 @@ export default function Logger() {
     setDoc((d) => copyForward(d, si, gi, ii, ki).doc);
   }
 
-  // `footerTrailing` rides in the SAME row as Add set rather than a band of its
-  // own — the group-level actions (superset / remove) belong on one line with
-  // it. Only a single-movement group passes it; inside a superset each member
-  // keeps a bare Add set row and the group owns its own actions.
+  // `footer` rides in the SAME row as Add set rather than a band of its own —
+  // the group-level actions belong on one line with it. A single-movement group
+  // passes link + remove; each superset member passes unlink + remove.
   function renderItem(
     si: number,
     gi: number,
     ii: number,
     grouped: boolean,
-    footer?: { link?: ReactNode; remove?: ReactNode },
+    footer?: { link?: ReactNode; unlink?: ReactNode; remove?: ReactNode },
   ) {
     const group = doc.sections[si].groups[gi];
     const groupId = group.id;
@@ -1236,11 +1217,11 @@ export default function Logger() {
             );
           })}
         </div>
-        {/* BAND 5 — every control, one line: add set, superset, voice and
+        {/* BAND 5 — every control, one line: add set, superset and
             metric, with remove pushed hard right so the destructive control
             is not flush against the one tapped between every set. The
-            group-level superset/remove arrive via `footer` because only a
-            standalone movement has them. */}
+            group-level link/unlink/remove arrive via `footer`: a standalone
+            movement gets link + remove, a superset member unlink + remove. */}
         <div className="flex items-center border-t border-border-soft px-2 text-muted">
           <button
             onClick={() => {
@@ -1254,24 +1235,6 @@ export default function Logger() {
             <PlusGlyph className={GLYPH} />
           </button>
           {footer?.link}
-          {/* Voice stays visible at every width — hiding a control on the
-              primary target platform is removing a feature, not compacting a
-              layout. Listening state is the teal signal token plus
-              aria-pressed, not a text swap. */}
-          {voice.supported && !editing ? (
-            <button
-              onClick={() => {
-                activate(groupId);
-                listen(item.id, si, gi, ii);
-              }}
-              aria-pressed={voiceTarget === item.id}
-              aria-label={voiceTarget === item.id ? 'Listening — stop voice input' : 'Log this movement by voice'}
-              title={voiceTarget === item.id ? 'Listening…' : 'Voice'}
-              className={`${ICON_BTN} ${voiceTarget === item.id ? 'text-teal' : 'hover:text-fg'}`}
-            >
-              <VoiceGlyph className={GLYPH} />
-            </button>
-          ) : null}
           {/* The metric is written out, not drawn: its glyph was the only
               place the current metric showed, and the Distance arrow read as
               "swap". Tapping still cycles it; ↻ says so. */}
@@ -1295,6 +1258,7 @@ export default function Logger() {
             </span>
           </button>
           <span className="flex-1" />
+          {footer?.unlink}
           {footer?.remove}
         </div>
         </>
@@ -1365,16 +1329,43 @@ export default function Logger() {
                   {k}
                 </button>
               ))}
-              <button
-                onClick={() => setDoc((d) => ungroup(d, si, gi))}
-                className="flex min-h-11 items-center px-2 text-muted hover:text-fg"
-              >
-                Ungroup
-              </button>
             </div>
             )}
           </div>
-          {isCollapsed ? null : group.items.map((_, ii) => renderItem(si, gi, ii, true))}
+          {isCollapsed
+            ? null
+            : group.items.map((_, ii) =>
+                // Each member carries its own unlink and remove, with remove
+                // in the same far-right slot as on a standalone card, so that
+                // position always means "remove". Unlinking down to one
+                // member dissolves the group, which is why the header no
+                // longer needs an Ungroup of its own.
+                renderItem(si, gi, ii, true, {
+                  unlink: (
+                    <button
+                      onClick={() => {
+                        activate(group.id);
+                        setDoc((d) => detachItem(d, si, gi, ii));
+                      }}
+                      className={`${ICON_BTN} hover:text-fg`}
+                      aria-label="Unlink this movement from the superset"
+                      title="Unlink from superset"
+                    >
+                      <UnlinkGlyph className={GLYPH} />
+                    </button>
+                  ),
+                  remove: (
+                    <button
+                      onClick={() => setDoc((d) => removeItem(d, si, gi, ii))}
+                      className={`${ICON_BTN} text-danger`}
+                      aria-label="Remove movement"
+                      title="Remove movement"
+                    >
+                      <TrashGlyph className={GLYPH} />
+                    </button>
+                  ),
+                }),
+              )}
         </div>
       );
     }

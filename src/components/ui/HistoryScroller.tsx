@@ -5,9 +5,12 @@ import { HISTORY_SCROLL } from '@/app.config';
 // activity bars (ProfileView) and the Stats consistency grid.
 //
 // - The children are the columns, oldest first, as DIRECT children of the
-//   scroller (it is the flex row). The caller sizes them so `visible` of them
-//   fill the width; this component never changes a column's width, so the
-//   number in view is the same at every scroll position.
+//   scroller (it is the flex row). The caller sizes them so the latest
+//   `visible` of them fill the width; this component never changes a column's
+//   width. Columns may differ in width (Home's multi-session days are wider),
+//   so the in-view range is read from where the columns actually sit — a
+//   column is in view when its centre is — not from a uniform pitch, and an
+//   older stretch can hold a column more or fewer than `visible`.
 // - Native overflow scrolling with per-column snap — no JS drag, no transform.
 //   overflow-y is hidden and touch-action left at its default, so a vertical
 //   swipe that starts on the chart still scrolls the page.
@@ -34,6 +37,33 @@ export function formatDateRange(from: string, to: string): string {
   const fmt = (s: string) =>
     `${Number(s.slice(8, 10))} ${MONTHS[Number(s.slice(5, 7)) - 1]}${showYear ? ` ${s.slice(0, 4)}` : ''}`;
   return `${fmt(from)} – ${fmt(to)}`;
+}
+
+// Column centres in scroll coordinates rise monotonically, so the first and
+// last centred-in-view columns are two binary searches over offsetLeft/Width
+// (layout reads only, once per frame).
+function rangeInView(el: HTMLElement, count: number): HistoryRange {
+  const cols = el.children as HTMLCollectionOf<HTMLElement>;
+  const n = Math.min(count, cols.length);
+  if (n === 0) return { start: 0, end: 0 };
+  const origin = cols[0].offsetLeft;
+  const centre = (i: number) => cols[i].offsetLeft - origin + cols[i].offsetWidth / 2;
+  const lo = el.scrollLeft;
+  const hi = lo + el.clientWidth;
+  // First column whose centre is at or past `x`.
+  const firstAtOrAfter = (x: number) => {
+    let a = 0;
+    let b = n;
+    while (a < b) {
+      const m = (a + b) >> 1;
+      if (centre(m) < x) a = m + 1;
+      else b = m;
+    }
+    return a;
+  };
+  const start = Math.min(n - 1, firstAtOrAfter(lo));
+  const end = Math.max(start, firstAtOrAfter(hi) - 1);
+  return { start, end: Math.min(n - 1, end) };
 }
 
 export function HistoryScroller({
@@ -102,17 +132,7 @@ export function HistoryScroller({
         programmatic.current = false;
         return;
       }
-      const cols = el.children;
-      const step =
-        cols.length > 1
-          ? cols[1].getBoundingClientRect().left - cols[0].getBoundingClientRect().left
-          : el.clientWidth;
-      const fromRight = Math.max(0, el.scrollWidth - el.clientWidth - el.scrollLeft);
-      const end = Math.min(
-        count - 1,
-        Math.max(visible - 1, count - 1 - Math.round(fromRight / Math.max(1, step))),
-      );
-      const start = Math.max(0, end - visible + 1);
+      const { start, end } = rangeInView(el, count);
       pinned.current = end === count - 1;
       const key = `${start}:${end}`;
       if (key !== last) {

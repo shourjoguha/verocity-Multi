@@ -87,15 +87,6 @@ export function RpeGlyph({ className }: GlyphProps) {
 
 /* ---- action glyphs ---- */
 
-export function VoiceGlyph({ className }: GlyphProps) {
-  return (
-    <Glyph className={className}>
-      <rect x="9.25" y="2.5" width="5.5" height="11" rx="2.75" />
-      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5" />
-    </Glyph>
-  );
-}
-
 export function PlusGlyph({ className }: GlyphProps) {
   return (
     <Glyph className={className}>
@@ -121,6 +112,19 @@ export function LinkGlyph({ className }: GlyphProps) {
       <path d="M9.5 14.5l5-5" />
       <path d="M13.25 6.75L14.75 5.25a3.9 3.9 0 0 1 5.5 5.5L18.75 12.25" />
       <path d="M10.75 17.25L9.25 18.75a3.9 3.9 0 0 1-5.5-5.5L5.25 11.75" />
+    </Glyph>
+  );
+}
+
+// Unlink — "unlink this movement from its superset". LinkGlyph struck
+// through: a broken chain at this size read as a question mark.
+export function UnlinkGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M9.5 14.5l5-5" />
+      <path d="M13.25 6.75L14.75 5.25a3.9 3.9 0 0 1 5.5 5.5L18.75 12.25" />
+      <path d="M10.75 17.25L9.25 18.75a3.9 3.9 0 0 1-5.5-5.5L5.25 11.75" />
+      <path d="M4 4l16 16" />
     </Glyph>
   );
 }

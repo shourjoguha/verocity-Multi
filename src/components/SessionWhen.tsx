@@ -11,9 +11,13 @@ import { toast } from '@/lib/toast';
 export function SessionWhen({
   log,
   onUpdate,
+  compact = false,
 }: {
   log: WorkoutLog;
   onUpdate: (patch: Partial<WorkoutLog>) => void;
+  // LogQuickView's meta line: the sheet title already says the date, so show
+  // the start time alone (the editor still changes both), no "edit" word.
+  compact?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [date, setDate] = useState('');
@@ -21,7 +25,9 @@ export function SessionWhen({
   const [saving, setSaving] = useState(false);
 
   const shownTime = localTimeOf(log.started_at);
-  const label = `${formatDate(log.log_date)}${shownTime ? ` · ${shownTime}` : ''}`;
+  const label = compact
+    ? shownTime || 'Add start'
+    : `${formatDate(log.log_date)}${shownTime ? ` · ${shownTime}` : ''}`;
 
   if (log.status === 'in_progress') {
     return <span className="text-sm tabular-nums text-muted">{label}</span>;
@@ -46,6 +52,14 @@ export function SessionWhen({
     onUpdate(patch);
     setEditing(false);
     toast('Session start updated', 'success');
+  }
+
+  if (!editing && compact) {
+    return (
+      <button type="button" onClick={start} className="inline-flex min-h-11 items-center text-sm tabular-nums text-muted transition-colors hover:text-fg" title="Edit when this session started">
+        <span className="border-b border-dotted border-faint">{label}</span>
+      </button>
+    );
   }
 
   if (!editing) {

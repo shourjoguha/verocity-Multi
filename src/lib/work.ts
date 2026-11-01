@@ -51,8 +51,8 @@ export function workBodyWeight(stats: UserStats | null): number {
  *
  * `forceFactor` before `bwLoad` is the whole reason that field exists — see
  * MovementProfile. `|| 0` and not `?? 0` on the external weight, because
- * voice.ts has always written 0 to mean "bodyweight", the same as writing
- * nothing.
+ * the retired voice input wrote 0 to mean "bodyweight" (stored logs still
+ * carry it), the same as writing nothing.
  */
 function forceKg(set: LogSet, profile: MovementProfile | null, bodyWeightKg: number): number {
   const fraction = profile?.forceFactor ?? profile?.bwLoad ?? VOLUME.bodyweightFraction;

@@ -261,6 +261,7 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
             log={quickLog}
             open={quickLog !== null}
             onClose={() => setQuickLog(null)}
+            plan={plan}
             onUpdated={(updated) => {
               setLogs((ls) => ls.map((l) => (l.id === updated.id ? updated : l)));
               setQuickLog(updated);

@@ -10,9 +10,13 @@ import { toast } from '@/lib/toast';
 export function SessionTime({
   log,
   onUpdate,
+  compact = false,
 }: {
   log: WorkoutLog;
   onUpdate: (seconds: number) => void;
+  // LogQuickView's meta line: no "edit" word, a dotted rule carries the
+  // affordance instead, and the trigger keeps a 44px hit box.
+  compact?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [h, setH] = useState(0);
@@ -41,6 +45,13 @@ export function SessionTime({
   }
 
   if (!editing) {
+    if (compact) {
+      return (
+        <button type="button" onClick={start} className="inline-flex min-h-11 items-center text-sm tabular-nums text-muted transition-colors hover:text-fg" title="Edit session time">
+          <span className="border-b border-dotted border-faint">{formatDuration(log.total_seconds)}</span>
+        </button>
+      );
+    }
     return (
       <button
         type="button"
