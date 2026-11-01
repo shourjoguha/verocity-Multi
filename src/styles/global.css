@@ -277,6 +277,31 @@ html[data-theme='dark'] {
   --spr-flash: hsl(48 100% 55%);
 }
 
+/* Activity-tag colours (ACTIVITY_TAGS in app.config.ts reads these). DATA,
+   not chrome: calendar fills, session stripes, the stats heatmap, tag chips.
+   Light keeps the original brand hexes; dark lifts the three that sat near
+   1.3:1 on carbon (strength, sport, hyrox) and the two dull ones, because a
+   tinted calendar cell in those colours was indistinguishable from an empty
+   one. Both themes define every token. */
+:root {
+  --tag-strength: hsl(145 80% 16%);
+  --tag-recovery: hsl(19 100% 68%);
+  --tag-endurance: hsl(43 63% 32%);
+  --tag-mobility: hsl(162 73% 43%);
+  --tag-sport: hsl(209 100% 29%);
+  --tag-hyrox: hsl(261 48% 35%);
+  --tag-crossfit: hsl(5 59% 44%);
+}
+html[data-theme='dark'] {
+  --tag-strength: hsl(145 54% 39%);
+  --tag-recovery: hsl(19 100% 68%);
+  --tag-endurance: hsl(43 50% 48%);
+  --tag-mobility: hsl(162 73% 43%);
+  --tag-sport: hsl(211 72% 56%);
+  --tag-hyrox: hsl(261 52% 61%);
+  --tag-crossfit: hsl(5 70% 58%);
+}
+
 /* Thermal body-map ramp (BodyMap.tsx, Settings → Body map → Thermal). DATA
    colour, legal under "colour only on data": fill is
    color-mix(in oklab, --heat-hi p%, --heat-lo). Lightness is MONOTONIC in both

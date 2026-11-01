@@ -1,6 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { WorkoutLog } from '@/lib/types';
-import { sessionTagColors, stripeBackground } from '@/lib/tags';
+import { sessionTagColors, tagWash } from '@/lib/tags';
+import { LOG_CALENDAR, TOUCH } from '@/app.config';
 import { formatDuration } from '@/lib/format';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 
@@ -171,7 +172,16 @@ export function MonthCalendar({
           const activate = () => {
             if (interactive && onDayClick) onDayClick(key, sessions);
           };
-          const cellStyle: CSSProperties | undefined = undefined;
+          // Fill level: a faint wash says "trained", and a stronger fill rises
+          // from the bottom with the day's logged time (LOG_CALENDAR). Several
+          // tags split both diagonally. The fill lives in the area BELOW the
+          // number, so the number never sits on a dark fill.
+          const colors = [...new Set(sessions.flatMap((s) => sessionTagColors(s.tags, s.activity_type)))];
+          const seconds = sessions.reduce((a, s) => a + (s.total_seconds ?? 0), 0);
+          const frac = Math.max(LOG_CALENDAR.minFill, Math.min(1, seconds / LOG_CALENDAR.fullFillSeconds));
+          const cellStyle: CSSProperties | undefined = colors.length
+            ? { background: tagWash(colors, LOG_CALENDAR.washPct), minHeight: TOUCH.minTargetPx }
+            : { minHeight: TOUCH.minTargetPx };
           return (
             <div
               key={key}
@@ -180,7 +190,7 @@ export function MonthCalendar({
               aria-label={
                 interactive
                   ? sessions.length > 0
-                    ? `${key} — view session`
+                    ? `${key}, ${formatDuration(seconds)} — view session`
                     : `${key} — add session`
                   : undefined
               }
@@ -196,62 +206,30 @@ export function MonthCalendar({
                   : undefined
               }
               style={cellStyle}
-              className={`flex flex-col items-center justify-center gap-0.5 bg-surface py-1 ${
+              className={`relative flex flex-col bg-surface px-1.5 pt-1 ${
                 isToday ? 'ring-1 ring-inset ring-teal' : ''
               } ${
                 interactive
                   ? 'cursor-pointer transition-colors hover:bg-elevated focus:outline-none focus-visible:ring-1 focus-visible:ring-teal'
                   : ''
               }`}
-              style={{ minHeight: 30 }}
             >
               <div
-                className={`text-[0.6rem] leading-none tabular-nums ${
-                  isToday ? 'font-semibold text-teal' : 'text-muted'
+                className={`relative z-[1] text-[0.75rem] leading-none tabular-nums ${
+                  isToday ? 'font-semibold text-teal' : sessions.length ? 'font-semibold text-fg' : 'text-muted'
                 }`}
               >
                 {day}
               </div>
               {sessions.length > 0 ? (
-                // The cell can't grow (it would break the grid), so multiple
-                // logs split it into side-by-side sections instead of collapsing
-                // to one dot. Each section is its own bar: height carries that
-                // session's volume/intensity, and its fill is 45° stripes of the
-                // session's tag colours (a solid where there's only one tag). Cap
-                // at three sections; a "+N" notes any beyond.
-                <div
-                  className="flex items-end justify-center gap-px"
-                  style={{ height: 12, width: '82%' }}
-                  aria-hidden
-                >
-                  {sessions.slice(0, 3).map((s) => {
-                    const colors = sessionTagColors(s.tags, s.activity_type);
-                    const stripe = stripeBackground(colors, 3);
-                    // Volume as a fraction of a 2h reference, floored so a short
-                    // or undated session still shows a mark.
-                    const frac = Math.max(0.2, Math.min(1, (s.total_seconds ?? 0) / 7200));
-                    return (
-                      <span
-                        key={s.id}
-                        title={formatDuration(s.total_seconds)}
-                        className="relative h-full flex-1 overflow-hidden"
-                        style={{ maxWidth: 8 }}
-                      >
-                        <span
-                          className="absolute inset-x-0 bottom-0"
-                          style={{
-                            height: `${Math.round(frac * 100)}%`,
-                            background: stripe ?? colors[0] ?? 'var(--color-fg)',
-                          }}
-                        />
-                      </span>
-                    );
-                  })}
-                  {sessions.length > 3 ? (
-                    <span className="self-center text-[0.4rem] leading-none text-muted">
-                      +{sessions.length - 3}
-                    </span>
-                  ) : null}
+                <div className="relative mt-1 flex-1" aria-hidden>
+                  <span
+                    className="absolute inset-x-[-0.375rem] bottom-0"
+                    style={{
+                      height: `${Math.round(frac * 100)}%`,
+                      background: tagWash(colors, LOG_CALENDAR.fillPct),
+                    }}
+                  />
                 </div>
               ) : null}
             </div>

@@ -328,16 +328,23 @@ export const STATS_LIMITS = {
 export const HR_MAX_FROM_AGE = { base: 220 } as const;
 
 // Activity tags with accent colors — used to shade activities across the app
-// (progress ribbon, stats heatmap). Five categories, fixed brand hexes.
+// (progress ribbon, stats heatmap, calendar fills). The colours are --tag-*
+// tokens in global.css, one value per theme: the original brand hexes in
+// light, lifted values in dark where the hexes vanished on carbon.
 export const ACTIVITY_TAGS = {
-  strength: { label: 'Strength', color: '#084A24' },
-  recovery: { label: 'Recovery', color: '#FF8F5C' },
-  endurance: { label: 'Endurance', color: '#77612A' },
-  mobility: { label: 'Mobility', color: '#1DBD8E' },
-  sport: { label: 'Sport', color: '#004C94' },
-  hyrox: { label: 'Hyrox', color: '#4B2E83' },
-  crossfit: { label: 'CrossFit', color: '#B23A2E' },
+  strength: { label: 'Strength', color: 'var(--tag-strength)' },
+  recovery: { label: 'Recovery', color: 'var(--tag-recovery)' },
+  endurance: { label: 'Endurance', color: 'var(--tag-endurance)' },
+  mobility: { label: 'Mobility', color: 'var(--tag-mobility)' },
+  sport: { label: 'Sport', color: 'var(--tag-sport)' },
+  hyrox: { label: 'Hyrox', color: 'var(--tag-hyrox)' },
+  crossfit: { label: 'CrossFit', color: 'var(--tag-crossfit)' },
 } as const;
+
+// Log tab calendar + month chart (MonthCalendar, MonthArea).
+// fullFillSeconds: a day's cell fills completely at this much logged time.
+// minFill: floor so a short or undated session still shows a fill.
+export const LOG_CALENDAR = { fullFillSeconds: 7200, minFill: 0.2, washPct: 14, fillPct: 72 } as const;
 
 // Quick-pick activity types for the lightweight non-strength ActivityLogger.
 // Each is written VERBATIM as the log's movement name, so each is classifier

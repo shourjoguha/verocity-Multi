@@ -34,8 +34,9 @@ import {
   SectionHeader,
   TickProgress,
 } from '@/components/ui/primitives';
-import { LogList } from '@/components/LogList';
-import { SessionShapeLegend } from '@/components/SessionShape';
+import { DayList } from '@/components/DayList';
+import { MonthArea } from '@/components/MonthArea';
+import { summarizeDays } from '@/lib/dayLog';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { DayPreviewDialog } from '@/components/DayPreviewDialog';
@@ -719,6 +720,10 @@ export default function ProfileView({ mode }: { mode: Surface }) {
       .filter((log) => log.log_date.slice(0, 7) === prefix)
       .sort((a, b) => b.log_date.localeCompare(a.log_date));
   }, [allLogs, calendarMonth]);
+  // The list and the month chart read DAYS: several sessions on one date are
+  // one card (lib/dayLog.ts).
+  const monthDays = useMemo(() => summarizeDays(thisMonthLogs), [thisMonthLogs]);
+  const recentDays = useMemo(() => summarizeDays(logs), [logs]);
 
   if (loading) {
     return <LoadingScreen />;
@@ -1122,50 +1127,42 @@ export default function ProfileView({ mode }: { mode: Surface }) {
               size="sm"
             />
           </div>
-          <SessionShapeLegend />
           {sessionsTab === 'month' ? (
-            thisMonthLogs.length === 0 ? (
+            monthDays.length === 0 ? (
               <EmptyState>No sessions logged in this month.</EmptyState>
             ) : (
               <>
-                <LogList
-                  logs={showAllMonth ? thisMonthLogs : thisMonthLogs.slice(0, 5)}
-                  history={allLogs}
-                  onSelect={setQuickLog}
-                />
-                {thisMonthLogs.length > 5 ? (
+                <MonthArea key={calendarMonth.toISOString()} days={monthDays} month={calendarMonth} />
+                <DayList days={showAllMonth ? monthDays : monthDays.slice(0, 5)} onSelect={setQuickLog} />
+                {monthDays.length > 5 ? (
                   <button
                     type="button"
                     onClick={() => setShowAllMonth((v) => !v)}
                     aria-expanded={showAllMonth}
                     className="t-control flex min-h-11 w-full items-center justify-center text-muted transition-colors hover:text-fg"
                   >
-                    {showAllMonth ? 'Show less' : `Show more (${thisMonthLogs.length - 5})`}
+                    {showAllMonth ? 'Show less' : `Show more (${monthDays.length - 5})`}
                   </button>
                 ) : null}
               </>
             )
-          ) : logs.length === 0 ? (
+          ) : recentDays.length === 0 ? (
             <EmptyState>No sessions logged yet.</EmptyState>
           ) : (
             <>
-              <LogList
-                logs={logs.slice(0, showAllRecent ? 12 : 5)}
-                history={allLogs}
-                onSelect={setQuickLog}
-              />
+              <DayList days={recentDays.slice(0, showAllRecent ? 12 : 5)} onSelect={setQuickLog} />
               {/* A plain text button, deliberately not a card and not a
                   Disclosure: this is one list that grows, not a second
                   container stacked under the first. min-h-11 keeps it a legal
                   tap target even though it reads as a link. */}
-              {logs.length > 5 ? (
+              {recentDays.length > 5 ? (
                 <button
                   type="button"
                   onClick={() => setShowAllRecent((v) => !v)}
                   aria-expanded={showAllRecent}
                   className="t-control flex min-h-11 w-full items-center justify-center text-muted transition-colors hover:text-fg"
                 >
-                  {showAllRecent ? 'Show less' : `Show more (${Math.min(logs.length, 12) - 5})`}
+                  {showAllRecent ? 'Show less' : `Show more (${Math.min(recentDays.length, 12) - 5})`}
                 </button>
               ) : null}
             </>
