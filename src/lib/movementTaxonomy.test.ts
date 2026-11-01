@@ -511,13 +511,23 @@ describe('court and racket sports', () => {
 // name, so this list is classifier input. An option that resolves to nothing is
 // a way to log training the body map and the coach cannot see.
 describe('ActivityLogger quick-picks', () => {
-  it.each([...ACTIVITY_TYPES])('classifies %s', (name) => {
+  // Sauna is passive heat: no muscle is trained, so it must resolve to nothing.
+  const PASSIVE = ['Sauna'];
+  const training = ACTIVITY_TYPES.filter((t) => !PASSIVE.includes(t));
+
+  it.each(training)('classifies %s', (name) => {
     expect(isClassified(classifyMovement(name))).toBe(true);
+  });
+
+  it.each(PASSIVE)('leaves %s unclassified, so it shades no muscle', (name) => {
+    expect(ACTIVITY_TYPES).toContain(name);
+    expect(classifyMovement(name).source).toBe('unknown');
+    expect(isClassified(classifyMovement(name))).toBe(false);
   });
 
   // Log Activity is the NON-strength logger, so no quick-pick may land in the
   // strength lens. 'Row' did: a rowing session was filed as barbell rows.
-  it.each([...ACTIVITY_TYPES])('keeps %s out of the strength lens', (name) => {
+  it.each(training)('keeps %s out of the strength lens', (name) => {
     const { modality } = classifyMovement(name).profile;
     expect(BODY_LENSES.strength.modalities).not.toContain(modality);
   });

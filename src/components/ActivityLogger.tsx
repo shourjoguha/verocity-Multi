@@ -4,6 +4,7 @@ import { createLog } from '@/lib/queries';
 import { track } from '@/lib/analytics';
 import { ACTIVITY_TAGS, ACTIVITY_TYPE_TAGS, ACTIVITY_TYPES, METRICS, SORENESS } from '@/app.config';
 import { retagForType } from '@/lib/tags';
+import { retimeLog } from '@/lib/logWhen';
 import type { LogDocument, VibeCheck } from '@/lib/types';
 import { Button, LoadingScreen } from '@/components/ui/primitives';
 import { Disclosure } from '@/components/ui/Disclosure';
@@ -78,6 +79,8 @@ export default function ActivityLogger() {
     if (typeof window === 'undefined') return today();
     return new URLSearchParams(window.location.search).get('date') ?? today();
   });
+  // Optional local start time ('HH:MM'). Empty keeps the old date-only save.
+  const [time, setTime] = useState('');
   const [minutes, setMinutes] = useState('');
   const [distance, setDistance] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -144,13 +147,19 @@ export default function ActivityLogger() {
     }
     const hr_avg = hrAvg.trim() === '' ? null : clampBpm(Number(hrAvg));
     const hr_max = hrMax.trim() === '' ? null : clampBpm(Number(hrMax));
+    // Same date+time -> started_at/ended_at rule SessionWhen uses after the fact.
+    const when = retimeLog(
+      { started_at: null, ended_at: null, total_seconds: durationSec || null },
+      date,
+      time,
+    );
     const created = await createLog({
       log_date: date,
       status: 'done',
       activity_type: type.trim(),
       total_seconds: durationSec || null,
-      started_at: null,
-      ended_at: new Date().toISOString(),
+      started_at: when.started_at ?? null,
+      ended_at: time ? (when.ended_at ?? null) : new Date().toISOString(),
       hr_avg,
       hr_max,
       tags,
@@ -209,17 +218,26 @@ export default function ActivityLogger() {
           />
         </div>
         <div>
-          <label className="mb-2 block t-control text-muted">Minutes</label>
+          <label className="mb-2 block t-control text-muted">Start time</label>
           <input
-            type="number"
-            inputMode="decimal"
-            value={minutes}
-            onChange={(e) => setMinutes(e.target.value)}
-            placeholder="30"
-            className="min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            aria-label="Start time (optional)"
+            className="min-h-11 w-full min-w-0 border border-border bg-surface px-3 text-base tabular-nums text-fg outline-none focus:border-subtle"
           />
         </div>
       </div>
+
+      <label className="mb-2 block t-control text-muted">Minutes</label>
+      <input
+        type="number"
+        inputMode="decimal"
+        value={minutes}
+        onChange={(e) => setMinutes(e.target.value)}
+        placeholder="30"
+        className="mb-5 min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
+      />
 
       <label className="mb-2 block t-control text-muted">
         Distance ({METRICS.distance.unit}, optional)

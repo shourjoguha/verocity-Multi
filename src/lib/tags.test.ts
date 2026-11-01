@@ -51,6 +51,11 @@ describe('retagForType', () => {
     expect(retagForType([], null, 'sport')).toEqual({ tags: ['sport'], autoTag: 'sport' });
   });
 
+  // Recovery is what keeps a sauna out of the coach's training-day counts.
+  it('switches Recovery on for Sauna', () => {
+    expect(ACTIVITY_TYPE_TAGS.Sauna).toBe('recovery');
+  });
+
   it('takes an automatic tag back off when the type changes away', () => {
     // Padel, then Run: the run must not be saved tagged Sport.
     expect(retagForType(['sport'], 'sport', null)).toEqual({ tags: [], autoTag: null });
