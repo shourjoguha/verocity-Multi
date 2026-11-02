@@ -50,6 +50,19 @@ export function stripeBackground(colors: string[], bandPx = 4): string | undefin
   return `repeating-linear-gradient(45deg, ${stops})`;
 }
 
+// A tag colour mixed into the surface at `pct`%, split diagonally into equal
+// hard-edged parts when a day carries several tags. Mixing toward
+// --color-surface (not alpha) keeps the result opaque in both themes, so the
+// fill reads the same over any backdrop.
+export function tagWash(colors: string[], pct: number): string {
+  const mix = (c: string) => `color-mix(in srgb, ${c} ${pct}%, var(--color-surface))`;
+  if (colors.length === 0) return 'transparent';
+  if (colors.length === 1) return mix(colors[0]);
+  const step = 100 / colors.length;
+  const stops = colors.map((c, i) => `${mix(c)} ${i * step}% ${(i + 1) * step}%`).join(', ');
+  return `linear-gradient(135deg, ${stops})`;
+}
+
 // Classify a plan day's label into an activity tag — used to tint upcoming
 // ("planned") days on the plan-progress ribbon, where there is no log to color by.
 export function dayTagFromLabel(label: string): ActivityTagKey {

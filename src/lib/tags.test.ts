@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ACTIVITY_TAGS, ACTIVITY_TYPE_TAGS } from '@/app.config';
-import { retagForType, sessionTagColors, stripeBackground, tagColor } from '@/lib/tags';
+import { retagForType, sessionTagColors, stripeBackground, tagColor, tagWash } from '@/lib/tags';
 
 describe('stripeBackground', () => {
   it('returns undefined below two colors, so the caller stays on a solid fill', () => {
@@ -81,5 +81,23 @@ describe('retagForType', () => {
       tags: ['recovery'],
       autoTag: null,
     });
+  });
+});
+
+describe('tagWash', () => {
+  it('mixes one colour into the surface', () => {
+    expect(tagWash(['var(--tag-sport)'], 14)).toBe('color-mix(in srgb, var(--tag-sport) 14%, var(--color-surface))');
+  });
+
+  it('splits several colours into equal hard-edged diagonal parts', () => {
+    expect(tagWash(['#a', '#b'], 50)).toBe(
+      'linear-gradient(135deg, color-mix(in srgb, #a 50%, var(--color-surface)) 0% 50%, color-mix(in srgb, #b 50%, var(--color-surface)) 50% 100%)',
+    );
+  });
+});
+
+describe('ACTIVITY_TAGS colours', () => {
+  it('are theme tokens, never raw hexes', () => {
+    for (const { color } of Object.values(ACTIVITY_TAGS)) expect(color).toMatch(/^var\(--tag-[a-z]+\)$/);
   });
 });
