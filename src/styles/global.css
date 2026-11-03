@@ -326,6 +326,60 @@ html[data-theme='dark'] {
   --bm-mango: hsl(36 92% 58%);
 }
 
+/* Holiday scenes (HolidayScene.tsx, lib/holidayScene.ts). A planned break is
+   DATA — it names why a stretch of the calendar is empty — and its kind also
+   rides a monochrome glyph, so the scene never relies on hue. Mono is the
+   default ink (the --hs-m-* greys plus --color-*); Colour is opt-in per device
+   in Settings → Holidays, same pattern as the coach icon and the body map.
+   Both themes define every token. --hs-hatch marks a holiday cell. */
+:root {
+  --hs-hatch: hsl(0 0% 12% / 0.1);
+  --hs-m-far: hsl(0 0% 50% / 0.13);
+  --hs-m-near: hsl(0 0% 50% / 0.24);
+  --hs-m-sun: hsl(0 0% 50% / 0.24);
+  --hs-m-water: hsl(0 0% 50% / 0.08);
+  --hs-m-water-deep: hsl(0 0% 50% / 0.3);
+  --hs-m-sand: hsl(0 0% 50% / 0.22);
+  --hs-sky: hsl(200 70% 92%);
+  --hs-far: hsl(150 20% 80%);
+  --hs-near: hsl(110 28% 64%);
+  --hs-tree: hsl(140 35% 28%);
+  --hs-sun: hsl(40 95% 58%);
+  --hs-water: hsl(195 75% 74%);
+  --hs-water-deep: hsl(210 70% 36%);
+  --hs-sand: hsl(40 55% 78%);
+  --hs-shark: hsl(210 12% 40%);
+  --hs-weed: hsl(150 45% 30%);
+  --hs-gear: hsl(40 95% 50%);
+  --hs-snow: hsl(210 40% 98%);
+  --hs-snowline: hsl(210 20% 58%);
+}
+html[data-theme='dark'] {
+  --hs-hatch: hsl(0 0% 100% / 0.1);
+  --hs-m-far: hsl(0 0% 50% / 0.13);
+  --hs-m-near: hsl(0 0% 50% / 0.24);
+  --hs-m-sun: hsl(0 0% 50% / 0.24);
+  --hs-m-water: hsl(0 0% 50% / 0.08);
+  --hs-m-water-deep: hsl(0 0% 50% / 0.3);
+  --hs-m-sand: hsl(0 0% 50% / 0.22);
+  --hs-sky: hsl(220 35% 14%);
+  --hs-far: hsl(160 15% 20%);
+  --hs-near: hsl(120 20% 28%);
+  --hs-tree: hsl(140 30% 55%);
+  --hs-sun: hsl(40 90% 62%);
+  --hs-water: hsl(195 55% 30%);
+  --hs-water-deep: hsl(215 60% 12%);
+  --hs-sand: hsl(38 30% 32%);
+  --hs-shark: hsl(210 12% 68%);
+  --hs-weed: hsl(150 40% 48%);
+  --hs-gear: hsl(40 90% 58%);
+  --hs-snow: hsl(215 20% 86%);
+  --hs-snowline: hsl(215 15% 55%);
+}
+.holiday-hatch {
+  background-image: repeating-linear-gradient(135deg, var(--hs-hatch) 0 1px, transparent 1px 6px);
+}
+
 html,
 body {
   color: var(--color-fg);

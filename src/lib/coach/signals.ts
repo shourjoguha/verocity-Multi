@@ -28,6 +28,7 @@ import {
   type RegionKey,
 } from '@/app.config';
 import { summarizeBodyLoad } from '@/lib/bodyLoad';
+import { holidayContext, type HolidayContext, type HolidayRange } from '@/lib/holidays';
 import { bestE1rmByMovement } from '@/lib/prs';
 import { completedLogs, workingSections } from '@/lib/stats';
 import { explainSoreness, type AreaExplanation } from '@/lib/soreness';
@@ -166,7 +167,15 @@ function measured<T>(value: T, samples: number, floor: number, shortfall: string
 
 export interface TrainingSignals {
   windowDays: number;
+  /** Weeks the athlete was AVAILABLE to train: the window minus planned
+   *  holiday days (migration 0049), never under one. Every weekly rate in this
+   *  file divides by it, so a week away does not read as a week of not
+   *  training. */
   weeks: number;
+  /** Planned breaks inside the window, and how many of those days were spent
+   *  moving (hike / dive / ski) rather than resting. Context, never training:
+   *  nothing here enters a volume or a rate. */
+  holiday: HolidayContext;
   /** Completed sessions inside the window. */
   sessions: number;
   sessionsPerWeek: Measured<number>;
@@ -428,6 +437,8 @@ export interface TrainingOptions {
   unweightedKg?: number;
   /** Calendar days back the evidence puts peak soreness at. */
   sorenessPeakDays?: readonly number[];
+  /** Planned breaks. Their days leave every weekly denominator. */
+  holidays?: readonly HolidayRange[];
 }
 
 /** The activity tag that marks a session as recovery rather than training. */
@@ -484,7 +495,13 @@ export function measureTraining(
 ): TrainingSignals {
   const start = windowStart(today, windowDays);
   const logs = completedLogs(allLogs).filter((l) => l.log_date.slice(0, 10) >= start);
-  const weeks = windowDays / 7;
+  // Days on a planned break are days the athlete was not available to train,
+  // so they leave the denominator rather than counting as zeros. Floored at one
+  // week so a window that was nearly all holiday cannot divide a single session
+  // into a flattering rate; `sessionsPerWeek` is marked insufficient below.
+  const holiday = holidayContext(opts.holidays ?? [], start, ymd(today));
+  const availableDays = windowDays - holiday.days;
+  const weeks = Math.max(availableDays, 7) / 7;
   const overrides = opts.overrides ?? {};
 
   const body = summarizeBodyLoad(logs, overrides, { unweightedKg: opts.unweightedKg });
@@ -768,16 +785,27 @@ export function measureTraining(
   return {
     windowDays,
     weeks,
+    holiday,
     // Training sessions only: recovery is logged, not trained (see isRecovery).
     sessions: trainingSessions,
     // Four sessions is the floor for a weekly rate over four weeks: below one a
     // week there is no rate, only a handful of events.
-    sessionsPerWeek: measured(
-      trainingSessions / weeks,
-      trainingSessions,
-      4,
-      `only ${trainingSessions} sessions in the last ${windowDays} days`,
-    ),
+    // Below two available weeks there is no weekly habit to read — the window
+    // was mostly a planned break — whatever the session count says.
+    sessionsPerWeek:
+      availableDays < 14
+        ? {
+            value: trainingSessions / weeks,
+            samples: trainingSessions,
+            sufficiency: 'insufficient',
+            shortfall: `${holiday.days} of the last ${windowDays} days were a planned break`,
+          }
+        : measured(
+            trainingSessions / weeks,
+            trainingSessions,
+            4,
+            `only ${trainingSessions} sessions in the last ${windowDays} days`,
+          ),
     sessionMinutesPerWeek: measured(
       sessionPerWeek,
       logs.length,

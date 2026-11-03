@@ -8,6 +8,7 @@ import {
   getCoachBriefs,
   getCoachObservations,
   getCoachRuleNotes,
+  getHolidays,
   getMealLogs,
   getMovements,
   getRecentLogs,
@@ -20,6 +21,8 @@ import {
   upsertCoachObservations,
 } from '@/lib/queries';
 import { runCoach } from '@/lib/coach/evaluate';
+import { COACH_WINDOW_DAYS } from '@/lib/coach/signals';
+import { addDays, holidayContext } from '@/lib/holidays';
 import { groupByTheme, type Theme } from '@/lib/coach/themes';
 import {
   briefAgeDays,
@@ -47,6 +50,7 @@ import type {
   CoachBrief,
   CoachObservation,
   CoachRuleNote,
+  Holiday,
   Recommendation,
   RecDisposition,
 } from '@/lib/types';
@@ -554,6 +558,9 @@ export default function CoachView() {
   // The trajectory memory (0042), read on open so the page can draw where each
   // finding has been — previously it was only loaded inside a check-in.
   const [observations, setObservations] = useState<CoachObservation[]>([]);
+  // Planned breaks (0049): passed to the engine so their days leave every
+  // weekly rate, and named on the page so the athlete can see that they did.
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [noting, setNoting] = useState(false);
   const [activeBrief, setActiveBrief] = useState<CoachBrief | null>(null);
   // Null = no filter. Kept apart from the slider position so the default stays
@@ -573,13 +580,15 @@ export default function CoachView() {
         window.location.href = '/login';
         return;
       }
-      const [rows, briefRows, noteRows, athleteRows, obsRows] = await Promise.all([
+      const [rows, briefRows, noteRows, athleteRows, obsRows, holidayRows] = await Promise.all([
         getRecommendations(),
         getCoachBriefs(),
         getCoachRuleNotes(),
         getCoachAthleteNotes(),
         getCoachObservations(),
+        getHolidays(),
       ]);
+      setHolidays(holidayRows);
       setRecs(rows);
       setBriefs(briefRows);
       setRuleNotes(noteRows);
@@ -645,6 +654,7 @@ export default function CoachView() {
           overrides,
           existing,
           observations,
+          holidays,
           // Governed here, once. runCoach does not re-validate: one enforcement
           // point or there are two places to tighten and one gets missed.
           edges: governEdges(ruleNotes),
@@ -856,6 +866,19 @@ export default function CoachView() {
     return s.length > 0 ? s[s.length - 1].sessions : null;
   };
 
+  // What the engine is told about breaks in its window, said back plainly. The
+  // window is the engine's own (UTC days, like every date the coach reads).
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const away = holidayContext(holidays, addDays(todayKey, 1 - COACH_WINDOW_DAYS), todayKey);
+  const holidayNote =
+    away.days > 0
+      ? `${away.breaks
+          .map((b) => `${b.label} (${b.active ? 'active' : 'rest'})`)
+          .join(', ')}: ${away.days} day${away.days === 1 ? '' : 's'} on a planned break, left out of every weekly rate${
+          away.activeDays > 0 ? `. ${away.activeDays === away.days ? 'All' : away.activeDays} of them on the move, not sedentary` : ''
+        }.`
+      : null;
+
   return (
     <>
       <PageStagger className="mx-auto max-w-3xl px-4 pb-10 pt-5 sm:px-6">
@@ -873,6 +896,12 @@ export default function CoachView() {
             </div>
           </header>
         </Item>
+
+        {holidayNote ? (
+          <Item>
+            <p className="-mt-3 mb-6 text-sm text-muted">{holidayNote}</p>
+          </Item>
+        ) : null}
 
         {delta ? (
           <Item>

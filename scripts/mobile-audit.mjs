@@ -300,8 +300,21 @@ const coachBriefs = [
   brief('b2', 30, { status: 'snoozed', snooze_until: daysAgo(-3) }),
 ];
 
+// Planned breaks (0049): one just ended, one ahead, so Home's calendar draws
+// ribbons, Stats hatches grid cells and Settings → Holidays lists both groups.
+const holiday = (id, kind, from, to, name) => ({
+  id, owner_user_id: session.user.id, kind, name,
+  starts_on: daysAgo(from).slice(0, 10), ends_on: daysAgo(to).slice(0, 10),
+  created_at: daysAgo(40), updated_at: daysAgo(40),
+});
+const holidays = [
+  holiday('h1', 'dive', 12, 5, 'A long holiday name that has to truncate'),
+  holiday('h2', 'hike', -20, -27, null),
+];
+
 function fixtureFor(url) {
   const path = new URL(url).pathname;
+  if (path.includes('/holidays')) return holidays;
   if (path.includes('/recommendations')) return recommendations;
   if (path.includes('/coach_briefs')) return coachBriefs;
   if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog, doneLog];
@@ -330,7 +343,9 @@ const ROUTES = [
   '/app/sessions',
   '/app/library',
   '/app/settings',
+  '/app/settings?tab=holidays',
   '/app/activity',
+  '/app/activity?mode=holiday',
   '/app/onboarding',
   `/app/log?logId=${LOG_ID}`,
 ];

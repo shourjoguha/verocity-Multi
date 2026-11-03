@@ -195,6 +195,12 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   (`src/lib/activeSession.ts`). A row is only offered for resume inside
   `TIMERS.maxWorkoutSeconds` of `started_at`, so a session left behind by a
   closed tab ages out rather than shimmering forever. `paused` is unused.
+- **`holidays`** (0049) — planned breaks: `owner_user_id, kind
+  (hike|dive|ski|beach), name, starts_on, ends_on` (inclusive), owner-only RLS on
+  all four verbs and **no anon policy**. An exclusion constraint forbids two
+  overlapping holidays per owner. A holiday is never training and is never a
+  `workout_logs` row: only the week streak, the coach's weekly denominators and
+  the calendar / consistency-grid drawing read it (`src/lib/holidays.ts`).
 - **`movement_subs`** — substitution memory: `(owner, plan, day_key, original,
   replacement, count, last_used_at, dismissed_at)` with the `bump_movement_sub`
   RPC. Drives Logger's "you usually swap X→Y" suggestion.

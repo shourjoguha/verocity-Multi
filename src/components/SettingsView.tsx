@@ -4,7 +4,7 @@
 // Data (export + share), Account (email + sign out). Every group composes a
 // component that owns its own state and writes — this file stays a layout.
 // "You" is the one group that was new rather than relocated.
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { signOut } from '@/lib/auth';
 import { getAllLogs, getAllPlans, getCurrentProfile, getSessions, getUserStats } from '@/lib/queries';
@@ -25,6 +25,21 @@ import { CoachSpritePicker } from '@/components/CoachSpritePicker';
 import { BodyMapStylePicker } from '@/components/BodyMapStylePicker';
 import { GarminPanel } from '@/components/GarminPanel';
 import { UserStatsPanel } from '@/components/UserStatsPanel';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { HolidaysSettings } from '@/components/HolidaysSettings';
+
+// Two tabs. General is everything that was here before; Holidays has its own
+// tab because it is a list you edit, not a preference. ?tab=holidays deep-links
+// it (Log Activity's Holiday mode points here).
+const TABS = [
+  { key: 'general', label: 'General' },
+  { key: 'holidays', label: 'Holidays' },
+];
+// Read in a layout effect, not in useState: the server renders General, and a
+// first client render that differs is React #418 (see useAuthedQuery).
+function tabFromUrl(): 'general' | 'holidays' {
+  return new URLSearchParams(window.location.search).get('tab') === 'holidays' ? 'holidays' : 'general';
+}
 
 const exportBtn =
   'hill-btn min-h-11 border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg disabled:opacity-40';
@@ -32,6 +47,8 @@ const exportBtn =
 export default function SettingsView() {
   const [email, setEmail] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'json' | 'csv' | null>(null);
+  const [tab, setTab] = useState<'general' | 'holidays'>('general');
+  useLayoutEffect(() => setTab(tabFromUrl()), []);
 
   useEffect(() => {
     let active = true;
@@ -84,6 +101,29 @@ export default function SettingsView() {
         />
       </Item>
 
+      <Item>
+        <SegmentedTabs
+          tabs={TABS}
+          active={tab}
+          onChange={(k) => {
+            const next = k as 'general' | 'holidays';
+            setTab(next);
+            const url = new URL(window.location.href);
+            if (next === 'holidays') url.searchParams.set('tab', 'holidays');
+            else url.searchParams.delete('tab');
+            window.history.replaceState(null, '', url);
+          }}
+          ariaLabel="Settings sections"
+          className="mb-6"
+        />
+      </Item>
+
+      {tab === 'holidays' ? (
+        <Item>
+          <HolidaysSettings />
+        </Item>
+      ) : (
+      <>
       <Item>
         <section className="mb-6">
           <SectionHeader>You</SectionHeader>
@@ -160,6 +200,8 @@ export default function SettingsView() {
           </div>
         </section>
       </Item>
+      </>
+      )}
     </PageStagger>
   );
 }

@@ -1,13 +1,15 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, supabasePublic } from '@/lib/supabase';
-import { getAllLogs, getLogsInRange, getUserStats } from '@/lib/queries';
+import { getAllLogs, getHolidays, getLogsInRange, getUserStats } from '@/lib/queries';
 import { bodyweightMultiple } from '@/lib/userStats';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { loadAllLogs, logsBetween } from '@/lib/logStore';
 import { useAspectProfile } from '@/lib/useAspectProfile';
 import { setPeriod, usePeriod } from '@/lib/periodPrefs';
-import type { WorkoutLog } from '@/lib/types';
+import type { Holiday, WorkoutLog } from '@/lib/types';
+import { holidayLabel, holidayOn } from '@/lib/holidays';
+import { HolidayGlyph } from '@/components/HolidayScene';
 import { e1rm } from '@/lib/e1rm';
 import { completedLogs, flattenWorkingSets, familyOf } from '@/lib/stats';
 import { trackName } from '@/lib/notations';
@@ -64,6 +66,9 @@ import { Item, PageStagger } from '@/components/anim';
 // That is how many weeks are IN VIEW; the grid scrolls sideways back to the
 // first logged session (deriveGrid, ui/HistoryScroller).
 const GRID_WEEKS = 8;
+
+// Stable empty list so the memoised grid does not re-render while holidays load.
+const EMPTY_HOLIDAYS: Holiday[] = [];
 
 // "the last 6 weeks", "the last 6 months" — the empty state's wording.
 function periodPhrase(key: TrainingPeriodKey): string {
@@ -471,6 +476,7 @@ const ConsistencyGrid = memo(function ConsistencyGrid({
   weekStarts,
   weekFoot,
   dayMap,
+  holidays,
   visible,
   todayKey,
   onTip,
@@ -478,6 +484,9 @@ const ConsistencyGrid = memo(function ConsistencyGrid({
   weekStarts: GridData['weekStarts'];
   weekFoot: GridData['weekFoot'];
   dayMap: GridData['dayMap'];
+  /** Planned breaks (0049): a day off on one is hatched with its glyph, not
+   *  left as an empty cell — a pause, not a miss. Never counted as work. */
+  holidays: Holiday[];
   visible: number;
   todayKey: string;
   onTip: (e: { clientX: number; clientY: number }, label: string) => void;
@@ -517,6 +526,21 @@ const ConsistencyGrid = memo(function ConsistencyGrid({
               timeZone: 'UTC',
             });
             if (!cell) {
+              const away = key <= todayKey ? holidayOn(holidays, key) : null;
+              if (away) {
+                const label = `${dateLabel} · ${holidayLabel(away)} — planned break`;
+                return (
+                  <div
+                    key={row}
+                    className="hill holiday-hatch flex aspect-square items-center justify-center border border-border text-subtle"
+                    data-tip-target
+                    aria-label={label}
+                    onMouseMove={(e) => onTip(e, label)}
+                  >
+                    <HolidayGlyph kind={away.kind} className="h-[60%] w-[60%]" />
+                  </div>
+                );
+              }
               return (
                 <div key={row} className="hill aspect-square bg-fg/[0.05]" />
               );
@@ -637,6 +661,11 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   });
 
   const adherence = useActivePlanAdherence(mode === 'app');
+  // Owner-only (0049, no anon policy): the showcase never asks.
+  const { data: holidays } = useAuthedQuery(() => (mode === 'app' ? getHolidays() : Promise.resolve([])), {
+    auth: mode === 'app',
+    key: mode === 'app' ? 'holidays' : undefined,
+  });
   const { data: stats, loading: statsLoading } = useAuthedQuery(
     () => (mode === 'app' ? getUserStats() : Promise.resolve(null)),
     { auth: mode === 'app', key: mode === 'app' ? 'userStats' : undefined },
@@ -881,6 +910,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               weekStarts={gridCols.weekStarts}
               weekFoot={gridCols.weekFoot}
               dayMap={grid.dayMap}
+              holidays={holidays ?? EMPTY_HOLIDAYS}
               visible={visibleWeeks}
               todayKey={ymd(today)}
               onTip={showTip}

@@ -78,6 +78,7 @@ import { SOURCES, CLAIMS } from '@/lib/coach/knowledge';
 import { RPE_LADDER } from '@/app.config';
 import { unweightedRepKg } from '@/lib/userStats';
 import type { OverrideMap } from '@/lib/movementTaxonomy';
+import type { HolidayRange } from '@/lib/holidays';
 import type {
   CoachObservation,
   CoachObservationInput,
@@ -130,6 +131,10 @@ export interface CoachInput {
    *  two places to tighten and one of them will be missed. */
   edges?: Map<string, Set<string>>;
   overrides?: OverrideMap;
+  /** Planned breaks (migration 0049). Their days leave every weekly rate, and
+   *  the signals say how many were active. Optional: without them every day of
+   *  the window is a day the athlete could have trained, as before. */
+  holidays?: readonly HolidayRange[];
   today?: Date;
   windowDays?: number;
   /** Measurement changelog. Defaults to DEFINITION_CHANGES in ./outcome.ts;
@@ -371,6 +376,7 @@ export function runCoach(input: CoachInput): {
       // there is no bodyweight on file.
       unweightedKg: unweightedRepKg(input.stats),
       sorenessPeakDays: hoursToDays(R.domsPeak.value),
+      holidays: input.holidays,
     },
     today,
     windowDays,
