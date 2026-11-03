@@ -3,6 +3,9 @@
 // session. Weeks, not days: a lifter on a 3–4 day split breaks a day streak by
 // design every rest day, so the day count only ever read 1 or 2.
 // Pure + timezone-injectable for tests. Powers the Home streak chip.
+import { HOLIDAY } from '@/app.config';
+import { holidayDayKeys, type HolidayRange } from '@/lib/holidays';
+
 interface DatedLog {
   log_date: string;
   status: string;
@@ -23,7 +26,11 @@ function mondayKey(d: Date): string {
   return ymdLocal(m);
 }
 
-export function currentWeekStreak(logs: DatedLog[], today: Date = new Date()): number {
+export function currentWeekStreak(
+  logs: DatedLog[],
+  today: Date = new Date(),
+  holidays: readonly HolidayRange[] = [],
+): number {
   const weeks = new Set<string>();
   for (const l of logs) {
     if (l.status !== 'done' || !l.log_date) continue;
@@ -32,17 +39,28 @@ export function currentWeekStreak(logs: DatedLog[], today: Date = new Date()): n
   }
   if (weeks.size === 0) return 0;
 
-  // Anchor at this week; if nothing logged yet this week, the streak is still
-  // alive through last week. Anything older means it is broken.
+  // A planned break PAUSES the streak: a week with HOLIDAY.streakPauseDays or
+  // more holiday days and no session neither counts nor breaks it. A week away
+  // that still holds a session counts like any other.
+  const away = holidayDayKeys(holidays);
+  const paused = (monday: Date): boolean => {
+    let n = 0;
+    for (let i = 0; i < 7; i++) {
+      if (away.has(ymdLocal(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)))) n++;
+    }
+    return n >= HOLIDAY.streakPauseDays;
+  };
+
+  // Anchor at this week; if nothing is logged yet this week, the streak is
+  // still alive through last week. Then walk back over logged weeks, stepping
+  // over paused ones, until a week that is neither.
   const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
-  if (!weeks.has(ymdLocal(cursor))) {
-    cursor.setDate(cursor.getDate() - 7);
-    if (!weeks.has(ymdLocal(cursor))) return 0;
-  }
+  if (!weeks.has(ymdLocal(cursor))) cursor.setDate(cursor.getDate() - 7);
 
   let streak = 0;
-  while (weeks.has(ymdLocal(cursor))) {
-    streak++;
+  for (;;) {
+    if (weeks.has(ymdLocal(cursor))) streak++;
+    else if (!paused(cursor)) break;
     cursor.setDate(cursor.getDate() - 7);
   }
   return streak;

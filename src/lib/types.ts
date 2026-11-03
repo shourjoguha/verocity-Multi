@@ -793,6 +793,20 @@ export type MealLogInput = Partial<
  * meal_presets (0047). A saved meal: the fields a meal draft is prefilled
  * from. Copied on log, so editing or deleting one never touches history.
  */
+/** A planned break (migration 0049). Inclusive ymd dates. Never training —
+ *  see src/lib/holidays.ts for every reader it is allowed to change. */
+export type HolidayKind = 'hike' | 'dive' | 'ski' | 'beach';
+export interface Holiday {
+  id: string;
+  owner_user_id: string;
+  kind: HolidayKind;
+  name: string | null;
+  starts_on: string;
+  ends_on: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MealPreset {
   id: string;
   owner_user_id: string;

@@ -1,5 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
-import type { WorkoutLog } from '@/lib/types';
+import type { Holiday, WorkoutLog } from '@/lib/types';
+import { holidayLabel, holidayOn } from '@/lib/holidays';
+import { HolidayScene } from '@/components/HolidayScene';
 import { sessionTagColors, tagWash } from '@/lib/tags';
 import { LOG_CALENDAR, TOUCH } from '@/app.config';
 import { formatDuration } from '@/lib/format';
@@ -28,18 +30,21 @@ function mondayIndex(date: Date): number {
 
 export interface MonthCalendarProps {
   logs: WorkoutLog[];
+  /** Planned breaks (0049). Their days are hatched and carry a scene ribbon. */
+  holidays?: Holiday[];
   initialMonth?: Date;
   interactive?: boolean;
   headerVariant?: 'compact' | 'full';
   // Fired for any day cell tap. Receives the ISO date (YYYY-MM-DD) and the
   // logs on that day so the parent can decide whether to preview or add.
-  onDayClick?: (date: string, sessions: WorkoutLog[]) => void;
+  onDayClick?: (date: string, sessions: WorkoutLog[], holiday: Holiday | null) => void;
   onMonthChange?: (month: Date) => void;
   className?: string;
 }
 
 export function MonthCalendar({
   logs,
+  holidays = [],
   initialMonth,
   interactive = true,
   headerVariant = 'compact',
@@ -92,6 +97,29 @@ export function MonthCalendar({
   const todayKey = ymd(
     new Date(Date.UTC(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate())),
   );
+
+  // One ribbon per (holiday, week row) inside this month, placed on the grid
+  // over the cells it spans. A holiday crossing a week boundary becomes several
+  // segments of one chain, so its figure walks out of one row into the next;
+  // a flat inner edge says "continues".
+  const monthKey = ymd(month).slice(0, 7);
+  const ribbons: { h: Holiday; row: number; c0: number; c1: number; contL: boolean; contR: boolean; index: number }[] = [];
+  cells.forEach((day, i) => {
+    if (day == null) return;
+    const key = ymd(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), day)));
+    const h = holidayOn(holidays, key);
+    if (!h) return;
+    const row = Math.floor(i / 7) + 1;
+    const col = (i % 7) + 1;
+    const last = ribbons[ribbons.length - 1];
+    if (last && last.h.id === h.id && last.row === row) {
+      last.c1 = col;
+      last.contR = key < h.ends_on && col === 7;
+    } else {
+      const index = ribbons.filter((r) => r.h.id === h.id).length;
+      ribbons.push({ h, row, c0: col, c1: col, contL: key > h.starts_on, contR: key < h.ends_on && col === 7, index });
+    }
+  });
 
   const shift = (delta: number) => {
     const next = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + delta, 1));
@@ -165,12 +193,16 @@ export function MonthCalendar({
           corners. */}
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded-card border border-border bg-border-soft">
         {cells.map((day, i) => {
-          if (day == null) return <div key={`b${i}`} className="bg-bg" style={{ minHeight: 30 }} />;
+          // Every cell is placed explicitly so the holiday ribbons below can
+          // share its grid area without disturbing auto-placement.
+          const place = { gridRow: Math.floor(i / 7) + 1, gridColumn: (i % 7) + 1 };
+          if (day == null) return <div key={`b${i}`} className="bg-bg" style={{ minHeight: 30, ...place }} />;
           const key = ymd(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), day)));
           const sessions = byDay.get(key) ?? [];
+          const holiday = holidayOn(holidays, key);
           const isToday = key === todayKey;
           const activate = () => {
-            if (interactive && onDayClick) onDayClick(key, sessions);
+            if (interactive && onDayClick) onDayClick(key, sessions, holiday);
           };
           // Fill level: a faint wash says "trained", and a stronger fill rises
           // from the bottom with the day's logged time (LOG_CALENDAR). Several
@@ -180,8 +212,8 @@ export function MonthCalendar({
           const seconds = sessions.reduce((a, s) => a + (s.total_seconds ?? 0), 0);
           const frac = Math.max(LOG_CALENDAR.minFill, Math.min(1, seconds / LOG_CALENDAR.fullFillSeconds));
           const cellStyle: CSSProperties | undefined = colors.length
-            ? { background: tagWash(colors, LOG_CALENDAR.washPct), minHeight: TOUCH.minTargetPx }
-            : { minHeight: TOUCH.minTargetPx };
+            ? { background: tagWash(colors, LOG_CALENDAR.washPct), minHeight: TOUCH.minTargetPx, ...place }
+            : { minHeight: TOUCH.minTargetPx, ...place };
           return (
             <div
               key={key}
@@ -191,7 +223,9 @@ export function MonthCalendar({
                 interactive
                   ? sessions.length > 0
                     ? `${key}, ${formatDuration(seconds)} — view session`
-                    : `${key} — add session`
+                    : holiday
+                      ? `${key}, ${holidayLabel(holiday)} — edit holiday`
+                      : `${key} — add session`
                   : undefined
               }
               onClick={interactive ? activate : undefined}
@@ -206,7 +240,7 @@ export function MonthCalendar({
                   : undefined
               }
               style={cellStyle}
-              className={`relative flex flex-col bg-surface px-1.5 pt-1 ${
+              className={`relative flex flex-col bg-surface px-1.5 pt-1 ${holiday ? 'holiday-hatch' : ''} ${
                 isToday ? 'ring-1 ring-inset ring-teal' : ''
               } ${
                 interactive
@@ -235,6 +269,18 @@ export function MonthCalendar({
             </div>
           );
         })}
+        {ribbons.map((r) => (
+          <div
+            key={`${r.h.id}-${r.row}`}
+            aria-hidden
+            className={`pointer-events-none relative z-[2] mb-1 h-5 self-end overflow-hidden border border-border bg-surface ${
+              r.contL ? 'border-l-0' : 'ml-1 rounded-l-control'
+            } ${r.contR ? 'border-r-0' : 'mr-1 rounded-r-control'}`}
+            style={{ gridRow: r.row, gridColumn: `${r.c0} / ${r.c1 + 1}` }}
+          >
+            <HolidayScene kind={r.h.kind} chain={{ id: `${r.h.id}:${monthKey}`, index: r.index }} />
+          </div>
+        ))}
       </div>
     </div>
   );

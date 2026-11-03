@@ -84,6 +84,12 @@ export interface DefinitionChange {
  * matter — anything older than DECISION_EXPIRY_DAYS can never reach a live
  * decision — and is not a full history of the engine.
  */
+// DELIBERATELY NOT LOGGED (2026-11-03): planned holidays (migration 0049) now
+// leave the weekly denominators in measureTraining. For an athlete with no
+// holiday in the window every number is identical to before, and an entry here
+// would relabel every earlier decision on the frequency and region-volume rules
+// as "re-measured" for everyone. The change is a new INPUT, not a new
+// definition; see lib/coach/holidayNotTraining.test.ts.
 export const DEFINITION_CHANGES: readonly DefinitionChange[] = [
   {
     ruleId: 'training.hypertrophy.region-volume-short',

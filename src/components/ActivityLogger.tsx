@@ -1,16 +1,32 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { createLog } from '@/lib/queries';
+import { createLog, getHolidays } from '@/lib/queries';
 import { track } from '@/lib/analytics';
 import { ACTIVITY_TAGS, ACTIVITY_TYPE_TAGS, ACTIVITY_TYPES, METRICS, SORENESS } from '@/app.config';
 import { retagForType } from '@/lib/tags';
 import { retimeLog } from '@/lib/logWhen';
-import type { LogDocument, VibeCheck } from '@/lib/types';
+import type { Holiday, LogDocument, VibeCheck } from '@/lib/types';
 import { Button, LoadingScreen } from '@/components/ui/primitives';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { SoreAreaPicker } from '@/components/logger/SoreAreaPicker';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { HolidayForm } from '@/components/HolidayForm';
+
+// Log Activity has two modes. Session is the single-day logger below; Holiday
+// records a planned break as a date range (migration 0049) — deliberately NOT
+// an activity type, because every activity type writes a workout log and every
+// workout log is training. ?mode=holiday opens on it; ?holiday=<id> edits one.
+const MODES = [
+  { key: 'session', label: 'Session' },
+  { key: 'holiday', label: 'Holiday' },
+];
+function initialMode(): 'session' | 'holiday' {
+  if (typeof window === 'undefined') return 'session';
+  const q = new URLSearchParams(window.location.search);
+  return q.get('mode') === 'holiday' || q.has('holiday') ? 'holiday' : 'session';
+}
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -94,6 +110,8 @@ export default function ActivityLogger() {
   const [vibe, setVibe] = useState<PartialVibe>({ sleep: null, energy: null, soreness: null });
   const [hrAvg, setHrAvg] = useState('');
   const [hrMax, setHrMax] = useState('');
+  const [mode, setMode] = useState<'session' | 'holiday'>(initialMode);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -102,6 +120,8 @@ export default function ActivityLogger() {
         window.location.href = '/login';
         return;
       }
+      // Holidays are needed for the overlap check and for ?holiday=<id>.
+      setHolidays(await getHolidays());
       setReady(true);
     })();
   }, []);
@@ -190,6 +210,21 @@ export default function ActivityLogger() {
         />
       </Item>
 
+      <Item>
+        <SegmentedTabs
+          tabs={MODES}
+          active={mode}
+          onChange={(k) => setMode(k as 'session' | 'holiday')}
+          ariaLabel="What to log"
+          className="mb-6"
+        />
+      </Item>
+
+      {mode === 'holiday' ? (
+        <Item>
+          <HolidayPanel holidays={holidays} />
+        </Item>
+      ) : (
       <Item>
       <label className="mb-2 block t-control text-muted">Type</label>
       <div className="mb-5 flex flex-wrap gap-2">
@@ -364,6 +399,30 @@ export default function ActivityLogger() {
         </Button>
       </div>
       </Item>
+      )}
     </PageStagger>
+  );
+}
+
+function HolidayPanel({ holidays }: { holidays: Holiday[] }) {
+  const id = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('holiday');
+  const editing = id ? (holidays.find((h) => h.id === id) ?? null) : null;
+  return (
+    <>
+      <HolidayForm
+        key={editing?.id ?? 'new'}
+        holiday={editing}
+        others={holidays}
+        onSaved={() => (window.location.href = '/app')}
+        onDeleted={() => (window.location.href = '/app')}
+        onCancel={() => (window.location.href = '/app')}
+      />
+      <a
+        href="/app/settings?tab=holidays"
+        className="mt-4 flex min-h-11 items-center t-control text-muted transition-colors hover:text-fg"
+      >
+        All holidays in Settings →
+      </a>
+    </>
   );
 }

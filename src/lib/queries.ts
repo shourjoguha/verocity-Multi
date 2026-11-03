@@ -25,6 +25,8 @@ import type {
   GarminActivity,
   GarminConnectionInfo,
   GarminHealthDaily,
+  Holiday,
+  HolidayKind,
   ItemKind,
   MealLog,
   MealLogInput,
@@ -1042,6 +1044,73 @@ export async function updateMealPreset(id: string, input: MealPresetInput): Prom
 /** Logged meals keep their values; their preset_id is nulled by the FK. */
 export async function deleteMealPreset(id: string): Promise<boolean> {
   const { error } = await supabase.from('meal_presets').delete().eq('id', id);
+  if (!error) clearQueryCache();
+  return !error;
+}
+
+// ---- Holidays (0049) ----
+// A planned break is a date range, not a log — see the migration header. Reads
+// degrade to [] on ANY error, including the table not existing yet: the
+// migration ships in the same change as the UI, and every reader of holidays
+// must keep working for an account (or a database) that has none.
+
+export async function getHolidays(client: SupabaseClient = supabase): Promise<Holiday[]> {
+  const { data, error } = await client
+    .from('holidays')
+    .select('*')
+    .order('starts_on', { ascending: true });
+  if (error) return [];
+  return (data as Holiday[]) ?? [];
+}
+
+export type HolidayInput = {
+  kind: HolidayKind;
+  name: string | null;
+  starts_on: string;
+  ends_on: string;
+};
+
+/** `overlap` is the exclusion constraint refusing the range. */
+export type HolidayWrite =
+  | { ok: true; holiday: Holiday }
+  | { ok: false; error: 'overlap' | 'failed' };
+
+const PG_EXCLUSION_VIOLATION = '23P01';
+
+function holidayRow(input: HolidayInput): HolidayInput {
+  const name = input.name?.trim() ?? '';
+  return { ...input, name: name.length > 0 ? name : null };
+}
+
+export async function createHoliday(input: HolidayInput): Promise<HolidayWrite> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'failed' };
+  const { data, error } = await supabase
+    .from('holidays')
+    .insert({ ...holidayRow(input), owner_user_id: user.id })
+    .select('*')
+    .single();
+  if (error) return { ok: false, error: error.code === PG_EXCLUSION_VIOLATION ? 'overlap' : 'failed' };
+  clearQueryCache();
+  return { ok: true, holiday: data as Holiday };
+}
+
+export async function updateHoliday(id: string, input: HolidayInput): Promise<HolidayWrite> {
+  const { data, error } = await supabase
+    .from('holidays')
+    .update({ ...holidayRow(input), updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error) return { ok: false, error: error.code === PG_EXCLUSION_VIOLATION ? 'overlap' : 'failed' };
+  clearQueryCache();
+  return { ok: true, holiday: data as Holiday };
+}
+
+export async function deleteHoliday(id: string): Promise<boolean> {
+  const { error } = await supabase.from('holidays').delete().eq('id', id);
   if (!error) clearQueryCache();
   return !error;
 }

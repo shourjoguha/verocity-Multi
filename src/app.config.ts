@@ -380,6 +380,31 @@ export const ACTIVITY_TYPE_TAGS: Partial<Record<(typeof ACTIVITY_TYPES)[number],
 };
 
 // ----------------------------------------------------------------
+// Holidays (migration 0049) — planned breaks, stored as date ranges
+// ----------------------------------------------------------------
+// A holiday is never training: no volume, no body map, no sessionLens. It
+// changes exactly two things — the week streak treats a mostly-away week as
+// a pause, and the coach leaves the days out of every weekly rate and is told
+// whether the break was ACTIVE (moving, not sedentary) or plain rest.
+// Keys must match the CHECK on holidays.kind.
+export const HOLIDAY_KINDS = {
+  hike: { label: 'Hiking', active: true },
+  dive: { label: 'Diving', active: true },
+  ski: { label: 'Skiing', active: true },
+  beach: { label: 'Beach', active: false },
+} as const;
+export type HolidayKindKey = keyof typeof HOLIDAY_KINDS;
+
+export const HOLIDAY = {
+  // Mirrors the holidays_length CHECK. A longer break is split in two.
+  maxDays: 60,
+  // A Mon–Sun week with at least this many holiday days and no session neither
+  // extends nor breaks the streak. Three, not one: a long weekend away is not
+  // a reason to skip a week, a half-week abroad is.
+  streakPauseDays: 3,
+} as const;
+
+// ----------------------------------------------------------------
 // Meals
 // ----------------------------------------------------------------
 // Three INDEPENDENT axes, deliberately not one list. "Takeaway" is a source,

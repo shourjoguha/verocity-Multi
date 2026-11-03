@@ -488,6 +488,29 @@ PRs #255 and #256. Reads: `docs/LESSONS.md` Decisions (shade is % of total).
   scrolling on WebKit (momentum, snap, vertical swipe from the chart)
 - [ ] Tap-to-peek on Home's activity columns cancels itself on touch (LESSONS)
 
+### Phase 16 — Holidays (planned breaks)  `[shipped, migration pending]`
+Reads: `src/lib/holidays.ts` header, `supabase/migrations/0049_holidays.sql`.
+- [x] `holidays` table (0049): kind (hike / dive / ski / beach), optional name,
+  inclusive dates, owner-only RLS, exclusion constraint against overlaps.
+  A date range, never a `workout_logs` row, so it can never be read as training
+- [x] Entry points: Log Activity's Session / Holiday switch (`?mode=holiday`,
+  `?holiday=<id>` edits), Settings → Holidays tab (`?tab=holidays`), and tapping
+  a holiday day on the Home calendar. One form, `HolidayForm.tsx`
+- [x] Animated scenes (`lib/holidayScene.ts`, `HolidayScene.tsx`): calendar
+  ribbons that wrap at the week boundary, hatched + glyph cells on the Stats
+  consistency grid. Mono / Colour ink and On / Still motion per device
+  (`lib/holidayPrefs.ts`); reduced motion always draws still
+- [x] Week streak: a week with `HOLIDAY.streakPauseDays`+ holiday days and no
+  session pauses rather than breaks it
+- [x] Coach: holiday days leave every weekly denominator in `measureTraining`;
+  a window under two available weeks has no frequency reading; the page names
+  the break and whether it was active. Deliberately not a `DEFINITION_CHANGES`
+  entry (see the comment there)
+- [ ] Apply 0049 to the live project, then run the advisors
+- [ ] Radar `consistency` axis still divides by calendar weeks: excluding
+  holidays there means a new `ASPECT_METRICS_VERSION` and a re-backfill
+- [ ] The deep coach edge function does not see holidays yet
+
 ## Backlog
 
 Open work that has been scoped but not started. Move an item into a phase when

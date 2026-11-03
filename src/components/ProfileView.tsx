@@ -5,6 +5,7 @@ import {
   getAllLogs,
   getCurrentProfile,
   getMealLogsInRange,
+  getHolidays,
   getMealPresets,
   getRecentLogs,
   getRecommendations,
@@ -13,7 +14,7 @@ import { getCached, setCached } from '@/lib/queryCache';
 import { invalidateLogs, loadAllLogs, newestLogs } from '@/lib/logStore';
 import { todayLocal } from '@/lib/mealPhoto';
 import { draftFor, type MealDraft, type MealOpener } from '@/lib/mealDraft';
-import type { MealLog, MealPreset } from '@/lib/types';
+import type { Holiday, MealLog, MealPreset } from '@/lib/types';
 import { MealChipRail } from '@/components/meals/MealChipRail';
 import { TodaysMeals } from '@/components/meals/TodaysMeals';
 import { MealDrawer } from '@/components/meals/MealDrawer';
@@ -567,6 +568,8 @@ export default function ProfileView({ mode }: { mode: Surface }) {
   // one dialog, one focus trap, one scroll lock (docs/MEAL_LOGGING.md §11.3).
   const [mealDraft, setMealDraft] = useState<MealDraft | null>(null);
   const [mealPresets, setMealPresets] = useState<MealPreset[]>([]);
+  // Planned breaks (0049): pause the streak and draw on the calendar.
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
   useLayoutEffect(() => {
     if (mode !== 'app') return;
     const seeded = getCached<Profile>('profile');
@@ -582,6 +585,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
     setAllLogs(getCached<WorkoutLog[]>('logs:all') ?? []);
     setMealsToday(getCached<MealLog[]>('meals:today') ?? []);
     setMealPresets(getCached<MealPreset[]>('meals:presets') ?? []);
+    setHolidays(getCached<Holiday[]>('holidays') ?? []);
     setLoading(false);
   }, [mode]);
   const [savedMealsOpen, setSavedMealsOpen] = useState(false);
@@ -621,7 +625,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           mode === 'app'
             ? loadAllLogs().then((all) => [newestLogs(all, 30), all] as const)
             : Promise.all([getRecentLogs(30, client), getAllLogs(client)]);
-        const [p, pl, [lg, all], meals, presets] = await Promise.all([
+        const [p, pl, [lg, all], meals, presets, hols] = await Promise.all([
           getCurrentProfile(client),
           getActivePlan(client),
           logReads,
@@ -632,6 +636,8 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           mode === 'app' ? getMealLogsInRange(today, today, client) : Promise.resolve([]),
           // Same reason: meal_presets is owner-only with no anon policy (0047).
           mode === 'app' ? getMealPresets(client) : Promise.resolve([]),
+          // Same again: holidays are owner-only with no anon policy (0049).
+          mode === 'app' ? getHolidays(client) : Promise.resolve([]),
         ]);
         if (!active) return;
         if (mode === 'app') {
@@ -641,6 +647,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           setCached('logs:all', all);
           setCached('meals:today', meals);
           setCached('meals:presets', presets);
+          setCached('holidays', hols);
         }
         setProfile(p);
         setPlan(pl);
@@ -648,6 +655,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
         setAllLogs(all);
         setMealsToday(meals);
         setMealPresets(presets);
+        setHolidays(hols);
         setFailed(false);
       } catch {
         // Without this the rejection escaped the async IIFE unhandled and none
@@ -795,7 +803,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
   };
 
   const top = topE1rm(done);
-  const streak = currentWeekStreak(allLogs);
+  const streak = currentWeekStreak(allLogs, new Date(), holidays);
   const totalWeeks = plan ? planWeekCount(plan.parsed) : 0;
   const week = plan ? currentProgramWeek(plan.id, allLogs, totalWeeks) : null;
   const todayDayName = DAY_NAMES[new Date().getDay()];
@@ -1119,9 +1127,11 @@ export default function ProfileView({ mode }: { mode: Surface }) {
         <section className="mb-8">
           <MonthCalendar
             logs={allLogs}
+            holidays={holidays}
             onMonthChange={setCalendarMonth}
-            onDayClick={(date, sessions) => {
+            onDayClick={(date, sessions, holiday) => {
               if (sessions.length > 0) setQuickLog(sessions[0]);
+              else if (holiday && !readOnly) window.location.href = `/app/activity?holiday=${holiday.id}`;
               else if (readOnly) toast(READ_ONLY_NOTICE, 'error');
               else {
                 setAddDate(date);
