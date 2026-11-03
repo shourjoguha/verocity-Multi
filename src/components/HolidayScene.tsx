@@ -7,7 +7,7 @@ import {
   type SceneInk,
   type ScenePalette,
 } from '@/lib/holidayScene';
-import { useHolidayInk, useHolidayMotion } from '@/lib/holidayPrefs';
+import { holidayAnimates, useHolidayInk, useHolidayMotion } from '@/lib/holidayPrefs';
 
 // An animated holiday scene on a <canvas>. The drawing is lib/holidayScene.ts;
 // this owns the clock, sizing and visibility.
@@ -15,8 +15,9 @@ import { useHolidayInk, useHolidayMotion } from '@/lib/holidayPrefs';
 // ONE requestAnimationFrame loop for every scene on the page, not one per
 // canvas, and a scene off screen (IntersectionObserver) is not drawn at all —
 // the calendar can hold several ribbon segments plus the consistency grid's
-// strip. Under Still, or prefers-reduced-motion, each scene draws one frame and
-// redraws only on resize, theme or ink change.
+// strip. Under Still — or Auto on a device that asks for reduced motion — each
+// scene draws one frame and redraws only on resize, theme or ink change.
+// Motion: On animates even then; the athlete chose it explicitly in Settings.
 //
 // `chain` splits one traveller across several canvases — a calendar ribbon
 // that wraps at the week boundary. Segments of a chain share their widths here
@@ -88,7 +89,7 @@ export function HolidayScene({
     if (!canvas || !ctx) return;
     watchTheme();
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    animate = motion === 'on' && !reduced;
+    animate = holidayAnimates(motion, reduced);
 
     let w = 0;
     let h = 0;
