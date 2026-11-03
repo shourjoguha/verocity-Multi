@@ -24,7 +24,7 @@ import { HolidayGlyph, HolidayScene } from '@/components/HolidayScene';
 // Editing happens inline with the same form Log Activity uses.
 
 const INK_LABEL: Record<HolidayInk, string> = { mono: 'Mono', colour: 'Colour' };
-const MOTION_LABEL: Record<HolidayMotion, string> = { on: 'On', still: 'Still' };
+const MOTION_LABEL: Record<HolidayMotion, string> = { auto: 'Auto', on: 'On', still: 'Still' };
 
 function Row({ h, onEdit }: { h: Holiday; onEdit: () => void }) {
   return (
@@ -56,9 +56,13 @@ export function HolidaysSettings() {
   const [editing, setEditing] = useState<string | null>(null);
   const ink = useHolidayInk();
   const motion = useHolidayMotion();
+  // Read after mount, never during render: the server cannot know it, and a
+  // first client render that differs is React #418.
+  const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
     getHolidays().then(setHolidays);
+    setReducedMotion(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }, []);
 
   if (holidays === null) return <LoadingScreen />;
@@ -164,8 +168,14 @@ export function HolidaysSettings() {
             <HolidayScene kind={preview?.kind ?? 'dive'} seed={4} />
           </div>
           <p className="text-xs text-muted">
-            This device only. Scenes appear on the calendar and the Stats consistency grid. Reduced motion in your
-            system settings always draws them still.
+            This device only. Scenes appear on the calendar and the Stats consistency grid.{' '}
+            {reducedMotion
+              ? motion === 'auto'
+                ? 'Your device asks for reduced motion, so Auto keeps them still. Pick On to animate anyway.'
+                : motion === 'on'
+                  ? 'Animating even though your device asks for reduced motion.'
+                  : ''
+              : 'Auto follows your device’s reduced-motion setting.'}
           </p>
         </div>
       </section>

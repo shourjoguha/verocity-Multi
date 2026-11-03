@@ -75,3 +75,13 @@ describe('vocabulary stays in step with the database', () => {
     expect(Object.keys(HOLIDAY_KINDS).sort()).toEqual(dbKinds.sort());
   });
 });
+
+describe('holiday scene motion', () => {
+  it('Auto follows the device; On and Still are explicit', async () => {
+    const { holidayAnimates } = await import('@/lib/holidayPrefs');
+    expect(holidayAnimates('auto', false)).toBe(true);
+    expect(holidayAnimates('auto', true)).toBe(false);
+    expect(holidayAnimates('on', true)).toBe(true);
+    expect(holidayAnimates('still', false)).toBe(false);
+  });
+});

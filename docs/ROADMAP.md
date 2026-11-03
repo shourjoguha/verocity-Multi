@@ -488,7 +488,7 @@ PRs #255 and #256. Reads: `docs/LESSONS.md` Decisions (shade is % of total).
   scrolling on WebKit (momentum, snap, vertical swipe from the chart)
 - [ ] Tap-to-peek on Home's activity columns cancels itself on touch (LESSONS)
 
-### Phase 16 — Holidays (planned breaks)  `[shipped, migration pending]`
+### Phase 16 — Holidays (planned breaks)  `[shipped]`
 Reads: `src/lib/holidays.ts` header, `supabase/migrations/0049_holidays.sql`.
 - [x] `holidays` table (0049): kind (hike / dive / ski / beach), optional name,
   inclusive dates, owner-only RLS, exclusion constraint against overlaps.
@@ -506,7 +506,8 @@ Reads: `src/lib/holidays.ts` header, `supabase/migrations/0049_holidays.sql`.
   a window under two available weeks has no frequency reading; the page names
   the break and whether it was active. Deliberately not a `DEFINITION_CHANGES`
   entry (see the comment there)
-- [ ] Apply 0049 to the live project, then run the advisors
+- [x] 0049 applied to the live project (2026-11-03); advisors show no new findings beyond the new, not-yet-used indexes
+- [x] Motion is Auto / On / Still: Auto follows the device's reduced motion, On overrides it. On used to be silently ignored under Reduce Motion
 - [ ] Radar `consistency` axis still divides by calendar weeks: excluding
   holidays there means a new `ASPECT_METRICS_VERSION` and a re-backfill
 - [ ] The deep coach edge function does not see holidays yet
