@@ -68,4 +68,7 @@ relying on it); auth leaked-password protection is off.
 Owner profile `8a8078c4-2aa8-4136-9e0d-5c2620b4614c` ("Shourjo"), email
 `guha.shourjo@gmail.com`, flagged as the showcase profile. Signup is
 invite-gated: insert sha-256 `code_hash` rows into `invites` to let anyone else
-register.
+register. Use the `invite-user` skill (`scripts/invites/`), which mints the
+code, renders the welcome page and records a label and last-4 hint.
+`invite_ledger` / `invite_capacity` (0051) report open, used and expired codes
+and spots left.
