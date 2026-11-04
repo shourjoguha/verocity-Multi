@@ -327,6 +327,10 @@ function fixtureFor(url) {
   if (path.includes('/user_stats')) return null;
   // getActivePlan uses .maybeSingle(), so the is_active lookup must resolve to
   // an OBJECT; the unfiltered list query still wants an array.
+  // The Ready-plan picker on /app/plan/upload: one curated row reusing the
+  // active plan's document, so the dropdown, preview and sticky bar render.
+  if (path.includes('/plan_templates'))
+    return [{ id: 'tpl-1', name: activePlan.name, summary: null, parsed: activePlan.parsed, sort_order: 1, retired: false, created_at: '2026-01-01T00:00:00Z' }];
   if (path.includes('/plans')) return url.includes('is_active=eq.true') ? activePlan : [activePlan];
   return [];
 }
@@ -339,6 +343,7 @@ const ROUTES = [
   '/app/coach',
   '/app/plan',
   '/app/plan/view',
+  '/app/plan/upload',
   '/app/review',
   '/app/sessions',
   '/app/library',

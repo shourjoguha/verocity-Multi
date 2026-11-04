@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { adoptPlan, createPlan, createSession, getMovements, getUserStats } from '@/lib/queries';
+import { adoptPlan, createPlan, createSession, getMovements, getPlanTemplates, getUserStats } from '@/lib/queries';
 import type { SessionInput } from '@/lib/queries';
 import { parsePlanMarkdown, PLAN_FORMAT_HELP } from '@/lib/planParser';
 import {
@@ -21,15 +21,62 @@ import {
   parseSessionTabular,
   parseSessionWorkbook,
 } from '@/lib/sessionTemplate';
-import type { Movement, ParsedPlan, UserStats } from '@/lib/types';
+import type { Movement, ParsedPlan, PlanTemplate, UserStats } from '@/lib/types';
 import { track } from '@/lib/analytics';
 import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import PlanTemplatePicker from '@/components/PlanTemplatePicker';
 
 type Source = 'markdown' | 'csv';
 type Target = 'plan' | 'session';
+type Mode = 'ready' | 'build';
+type Method = 'ai' | 'sheet' | 'markdown';
+
+// One authoring method row: a flat, full-width toggle with its panel below.
+// Controlled rather than ui/Disclosure because opening a method also picks the
+// editor's source (Markdown vs CSV), and only one is open at a time.
+function MethodRow({
+  open,
+  onToggle,
+  title,
+  sub,
+  icon,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  title: string;
+  sub: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-card border border-border bg-surface">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left text-fg"
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control border border-border">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+            {icon}
+          </svg>
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-[0.9375rem] font-semibold">{title}</span>
+          <span className="text-xs text-muted">{sub}</span>
+        </span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+          <path d={open ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} />
+        </svg>
+      </button>
+      {open ? <div className="border-t border-border-soft px-4 pb-4 pt-3">{children}</div> : null}
+    </section>
+  );
+}
 
 function downloadFile(name: string, content: string, mime: string) {
   const blob = new Blob([content], { type: mime });
@@ -60,6 +107,9 @@ export default function PlanUpload() {
   // mount rather than inside the copy handler so the click stays instant. The
   // movement library rides along: the "Download context" buttons need both and
   // fetching in parallel avoids a second round-trip when the user clicks.
+  const [templates, setTemplates] = useState<PlanTemplate[]>([]);
+  const [mode, setMode] = useState<Mode>('build');
+  const [method, setMethod] = useState<Method | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [movements, setMovements] = useState<Movement[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -82,6 +132,12 @@ export default function PlanUpload() {
       // /app/plan/upload stuck on LoadingScreen with no way to author a plan at
       // all. Authoring works without a profile; the prompt just asks more
       // questions.
+      // The catalogue decides which tab opens, so it is the one read the page
+      // waits on — opening on Build and jumping to Ready would be a flash.
+      // A failed read just means no Ready tab.
+      const list = await getPlanTemplates().catch(() => [] as PlanTemplate[]);
+      setTemplates(list);
+      setMode(list.length > 0 ? 'ready' : 'build');
       setReady(true);
       getUserStats()
         .then(setStats)
@@ -107,6 +163,14 @@ export default function PlanUpload() {
   function selectTarget(t: Target) {
     setTarget(t);
     if (t === 'session') setSource('csv');
+    setIssues([]);
+    setError(null);
+  }
+
+  function openMethod(m: Method) {
+    const next = method === m ? null : m;
+    setMethod(next);
+    if (next) setSource(next === 'markdown' ? 'markdown' : 'csv');
     setIssues([]);
     setError(null);
   }
@@ -244,74 +308,161 @@ export default function PlanUpload() {
   // CSV-format instructions and an empty echo for a file they wrote by hand.
   const canRepair = target === 'session' || source === 'csv';
 
-  return (
-    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
-      <Item>
-        <EchoText
-          text="NEW PLAN"
-          as="h1"
-          className={`mb-8 ${ECHO_APP_TITLE}`}
+  // The authoring editor, shared by whichever method is open (only one is).
+  const editor = (
+    <div className="mt-3">
+      {source === 'markdown' && target === 'plan' ? (
+        <textarea
+          value={markdown}
+          onChange={(e) => setMarkdown(e.target.value)}
+          placeholder={PLAN_FORMAT_HELP}
+          spellCheck={false}
+          rows={12}
+          aria-label="Plan in Markdown"
+          className="w-full rounded-control border border-border bg-bg p-3 font-mono text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
         />
+      ) : (
+        <textarea
+          value={csvText}
+          onChange={(e) => setCsvText(e.target.value)}
+          placeholder={target === 'session' ? buildSessionCsvTemplate() : buildPlanCsvTemplate()}
+          spellCheck={false}
+          rows={10}
+          aria-label="Paste CSV or TSV"
+          className="w-full rounded-control border border-border bg-bg p-3 font-mono text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
+        />
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="ghost" onClick={parse}>
+          Parse
+        </Button>
+        {hasParsed ? (
+          <Button onClick={save} disabled={saving || issues.length > 0}>
+            {saving ? 'Saving…' : target === 'session' ? 'Save sessions' : 'Save & activate'}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const uploadButton = (
+    <Button variant="ghost" onClick={() => fileInput.current?.click()}>
+      Upload file
+    </Button>
+  );
+
+  return (
+    <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 pt-5">
+      <Item>
+        <EchoText text="NEW PLAN" as="h1" className={`mb-6 ${ECHO_APP_TITLE}`} />
       </Item>
 
-      {target === 'plan' ? (
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".csv,.tsv,.xlsx,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        onChange={onFile}
+        className="hidden"
+      />
+
+      {templates.length > 0 ? (
         <Item>
-          <PlanTemplatePicker />
+          <SegmentedTabs
+            tabs={[
+              { key: 'ready', label: 'Ready plan' },
+              { key: 'build', label: 'Build my own' },
+            ]}
+            active={mode}
+            onChange={(k) => setMode(k as Mode)}
+            ariaLabel="How to start"
+            className="mb-5"
+          />
         </Item>
       ) : null}
 
-      <Item>
-        <div className="mb-6 border border-border bg-surface p-4">
-          <SectionHeader>Generate with an outside AI</SectionHeader>
-          {target === 'session' ? (
-            <p className="mt-2 text-sm text-muted">
-              Copy the prompt, paste it into an outside AI chat (Claude, ChatGPT, Gemini or similar), and attach the CSV wireframe if that chat lets you upload a file. Ask the AI to produce the sessions, then paste its CSV back in below or upload the file. Every session in the file is saved standalone. Compatibility is checked before save.
-            </p>
-          ) : (
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
-              <li>
-                Download your <strong className="font-semibold text-fg">context file</strong> — it carries your profile and every movement in your library, so the AI knows what you own and what you can perform.
-              </li>
-              <li>
-                Copy the <strong className="font-semibold text-fg">AI prompt</strong> and paste it into an outside AI chat (Claude, ChatGPT, Gemini). Attach the context file, or paste its contents into the same message.
-              </li>
-              <li>
-                The AI will ask a few questions and then send back a CSV. Paste that CSV below, or upload the file.
-              </li>
-            </ol>
-          )}
-          {target === 'plan' && !profileIsUsable ? (
-            <p className="mt-2 text-sm text-muted">
-              Nothing is on file about you yet, so the AI will ask for all of it. Filling in{' '}
-              <a href="/app/you" className="underline">
-                your profile and goals
-              </a>{' '}
-              first makes the plan it proposes specific to you.
-            </p>
-          ) : null}
-
-          <div className="mt-3 flex gap-2 text-xs uppercase tracking-wider">
-            <button
-              type="button"
-              onClick={() => selectTarget('plan')}
-              aria-pressed={target === 'plan'}
-              className={`hill-btn border bg-surface px-3 py-1 ${target === 'plan' ? 'border-fg text-fg' : 'border-border text-muted'}`}
+      {mode === 'ready' && templates.length > 0 ? (
+        <Item>
+          <PlanTemplatePicker templates={templates} onBuild={() => setMode('build')} />
+        </Item>
+      ) : target === 'session' ? (
+        <Item>
+          <div className="pb-10">
+            <SectionHeader
+              action={
+                <button
+                  type="button"
+                  onClick={() => selectTarget('plan')}
+                  className="-my-3 inline-flex min-h-11 items-center text-sm text-muted underline underline-offset-4 hover:text-fg"
+                >
+                  Back to plans
+                </button>
+              }
             >
-              Plan
-            </button>
-            <button
-              type="button"
-              onClick={() => selectTarget('session')}
-              aria-pressed={target === 'session'}
-              className={`hill-btn border bg-surface px-3 py-1 ${target === 'session' ? 'border-fg text-fg' : 'border-border text-muted'}`}
-            >
-              Sessions
-            </button>
+              Import sessions
+            </SectionHeader>
+            <div className="rounded-card border border-border bg-surface p-4">
+              <p className="text-sm text-muted">
+                Copy the prompt into an outside AI chat (Claude, ChatGPT, Gemini), attach the CSV wireframe if it takes
+                files, then paste its CSV back here or upload the file. Every session is saved standalone.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={copyPrompt}>
+                  {promptCopied ? 'Prompt copied' : 'Copy AI prompt'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => downloadFile('verocity-sessions-template.csv', buildSessionCsvTemplate(), 'text/csv')}
+                >
+                  Template (CSV)
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    downloadFile('verocity-sessions-template.tsv', buildSessionTsvTemplate(), 'text/tab-separated-values')
+                  }
+                >
+                  Template (TSV)
+                </Button>
+                {uploadButton}
+              </div>
+              {editor}
+            </div>
+            {error ? <p className="mt-3 text-sm text-accent">{error}</p> : null}
           </div>
+        </Item>
+      ) : (
+        <Item>
+          <div className="flex flex-col gap-2 pb-4">
+            <span className="t-label text-muted">Pick a method</span>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {target === 'plan' ? (
-              <>
+            <MethodRow
+              open={method === 'ai'}
+              onToggle={() => openMethod('ai')}
+              title="Generate with an AI"
+              sub="Claude, ChatGPT or Gemini writes it for you"
+              icon={<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />}
+            >
+              <ol className="list-decimal space-y-1.5 pl-5 text-sm text-subtle">
+                <li>
+                  Download your <strong className="font-semibold text-fg">context file</strong>: your profile and every
+                  movement in your library.
+                </li>
+                <li>
+                  Copy the <strong className="font-semibold text-fg">prompt</strong> into an AI chat with the file
+                  attached.
+                </li>
+                <li>Paste the CSV it sends back below, or upload it.</li>
+              </ol>
+              {!profileIsUsable ? (
+                <p className="mt-2 text-sm text-muted">
+                  Nothing is on file about you yet, so the AI will ask for all of it. Filling in{' '}
+                  <a href="/app/you" className="underline">
+                    your profile and goals
+                  </a>{' '}
+                  first makes the plan specific to you.
+                </p>
+              ) : null}
+              <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   variant="ghost"
                   onClick={() =>
@@ -322,116 +473,73 @@ export default function PlanUpload() {
                     )
                   }
                 >
-                  Download context (CSV)
+                  Context file
+                </Button>
+                <Button variant="ghost" onClick={copyPrompt}>
+                  {promptCopied ? 'Prompt copied' : 'Copy prompt'}
+                </Button>
+                {uploadButton}
+              </div>
+              {editor}
+            </MethodRow>
+
+            <MethodRow
+              open={method === 'sheet'}
+              onToggle={() => openMethod('sheet')}
+              title="Upload a spreadsheet"
+              sub="CSV, TSV or XLSX from our template"
+              icon={
+                <>
+                  <rect x="4" y="4" width="16" height="16" rx="1" />
+                  <path d="M4 10h16M10 4v16" />
+                </>
+              }
+            >
+              <p className="text-sm text-subtle">Fill in the template, then upload it or paste its rows below.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => downloadFile('verocity-plan-template.csv', buildPlanCsvTemplate(), 'text/csv')}
+                >
+                  Template (CSV)
                 </Button>
                 <Button
                   variant="ghost"
                   onClick={() =>
-                    downloadFile(
-                      'verocity-context.tsv',
-                      buildPlanContextFile({ stats, movements, delimiter: '\t' }),
-                      'text/tab-separated-values',
-                    )
+                    downloadFile('verocity-plan-template.tsv', buildPlanTsvTemplate(), 'text/tab-separated-values')
                   }
                 >
-                  Download context (TSV)
+                  Template (TSV)
                 </Button>
-              </>
-            ) : null}
-            <Button
-              variant="ghost"
-              onClick={() =>
-                target === 'session'
-                  ? downloadFile('verocity-sessions-template.csv', buildSessionCsvTemplate(), 'text/csv')
-                  : downloadFile('verocity-plan-template.csv', buildPlanCsvTemplate(), 'text/csv')
-              }
-            >
-              {target === 'plan' ? 'Download template (CSV)' : 'Download CSV'}
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() =>
-                target === 'session'
-                  ? downloadFile('verocity-sessions-template.tsv', buildSessionTsvTemplate(), 'text/tab-separated-values')
-                  : downloadFile('verocity-plan-template.tsv', buildPlanTsvTemplate(), 'text/tab-separated-values')
-              }
-            >
-              {target === 'plan' ? 'Download template (TSV)' : 'Download TSV'}
-            </Button>
-            <Button variant="ghost" onClick={copyPrompt}>
-              {promptCopied ? 'Prompt copied' : 'Copy AI prompt'}
-            </Button>
-            <Button variant="ghost" onClick={() => fileInput.current?.click()}>
-              Upload CSV / TSV / XLSX
-            </Button>
-            <input
-              ref={fileInput}
-              type="file"
-              accept=".csv,.tsv,.xlsx,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              onChange={onFile}
-              className="hidden"
-            />
-          </div>
-        </div>
-      </Item>
+                {uploadButton}
+              </div>
+              {editor}
+            </MethodRow>
 
-      <Item>
-        {target === 'plan' ? (
-          <div className="mb-3 flex gap-2 text-xs uppercase tracking-wider">
+            <MethodRow
+              open={method === 'markdown'}
+              onToggle={() => openMethod('markdown')}
+              title="Write it in Markdown"
+              sub="Type or paste the plan by hand"
+              icon={<path d="M5 19h14M7 15l8.5-8.5 2 2L9 17H7z" />}
+            >
+              {editor}
+            </MethodRow>
+
+            {error ? <p className="mt-1 text-sm text-accent">{error}</p> : null}
+
             <button
               type="button"
-              onClick={() => setSource('markdown')}
-              aria-pressed={source === 'markdown'}
-              className={`hill-btn border bg-surface px-3 py-1 ${source === 'markdown' ? 'border-fg text-fg' : 'border-border text-muted'}`}
+              onClick={() => selectTarget('session')}
+              className="mt-1 inline-flex min-h-11 items-center self-start text-sm text-subtle underline underline-offset-4 hover:text-fg"
             >
-              Markdown
-            </button>
-            <button
-              type="button"
-              onClick={() => setSource('csv')}
-              aria-pressed={source === 'csv'}
-              className={`hill-btn border bg-surface px-3 py-1 ${source === 'csv' ? 'border-fg text-fg' : 'border-border text-muted'}`}
-            >
-              CSV / TSV
+              Importing single sessions instead?
             </button>
           </div>
-        ) : null}
+        </Item>
+      )}
 
-        {source === 'markdown' ? (
-          <textarea
-            value={markdown}
-            onChange={(e) => setMarkdown(e.target.value)}
-            placeholder={PLAN_FORMAT_HELP}
-            spellCheck={false}
-            rows={14}
-            className="w-full border border-border bg-surface p-3 font-mono text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
-          />
-        ) : (
-          <textarea
-            value={csvText}
-            onChange={(e) => setCsvText(e.target.value)}
-            placeholder={target === 'session' ? buildSessionCsvTemplate() : buildPlanCsvTemplate()}
-            spellCheck={false}
-            rows={14}
-            className="w-full border border-border bg-surface p-3 font-mono text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
-          />
-        )}
-
-        <div className="mt-4 flex gap-3">
-          <Button variant="ghost" onClick={parse}>
-            Parse
-          </Button>
-          {hasParsed ? (
-            <Button onClick={save} disabled={saving || issues.length > 0}>
-              {saving ? 'Saving…' : target === 'session' ? 'Save sessions' : 'Save & activate'}
-            </Button>
-          ) : null}
-        </div>
-
-        {error ? <p className="mt-3 text-sm text-accent">{error}</p> : null}
-      </Item>
-
-      {issues.length > 0 ? (
+      {mode === 'build' && issues.length > 0 ? (
         <Item>
           <div className="mt-6 border border-accent/60 bg-surface p-4">
             <SectionHeader>Compatibility · {issues.length} issue{issues.length === 1 ? '' : 's'}</SectionHeader>
@@ -457,7 +565,7 @@ export default function PlanUpload() {
         </Item>
       ) : null}
 
-      {target === 'plan' && parsedPlan ? (
+      {mode === 'build' && target === 'plan' && parsedPlan ? (
         <Item>
           <div className="mt-8">
             <SectionHeader>
@@ -487,7 +595,7 @@ export default function PlanUpload() {
         </Item>
       ) : null}
 
-      {target === 'session' && parsedSessions ? (
+      {mode === 'build' && target === 'session' && parsedSessions ? (
         <Item>
           <div className="mt-8">
             <SectionHeader>

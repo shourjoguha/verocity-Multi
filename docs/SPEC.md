@@ -189,6 +189,8 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
 - **`plan_templates`** (0050) — curated, read-only catalogue of `ParsedPlan`
   snapshots (`name, summary, parsed, sort_order, retired`). Authenticated
   SELECT only, no write policies; seeded by `scripts/plan-templates/seed.sql`.
+  `/app/plan/upload` opens on a **Ready plan | Build my own** switch; the
+  picker's default is the first row by `sort_order` (curation lives in data).
   Adopting copies `parsed` into a new owned `plans` row with dates re-based to
   today (`src/lib/planRebase.ts`). Deliberately **not** `plans.is_public`:
   every `plans` read relies on RLS for owner scoping, so a public row would
