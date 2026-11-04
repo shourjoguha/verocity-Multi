@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BLOCKS } from '@/app.config';
 import { adoptPlanTemplate, getActivePlan } from '@/lib/queries';
 import { planWeeks } from '@/lib/planRebase';
+import { digestDay, regularWeeks } from '@/lib/planSummary';
 import type { Plan, PlanTemplate } from '@/lib/types';
 import { track } from '@/lib/analytics';
 import { Button } from '@/components/ui/primitives';
@@ -62,6 +63,7 @@ export default function PlanTemplatePicker({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<Plan | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [openDays, setOpenDays] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -97,11 +99,22 @@ export default function PlanTemplatePicker({
   if (!t) return null;
 
   const weeks = planWeeks(t.parsed);
+  const regular = regularWeeks(t.parsed);
+
+  function toggleDay(key: string) {
+    setOpenDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
   const starts = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
   function pick(id: string) {
     setSelectedId(id);
     setOpen(false);
+    setOpenDays(new Set());
     setConfirming(false);
     setError(null);
     triggerRef.current?.focus();
@@ -237,22 +250,62 @@ export default function PlanTemplatePicker({
           </ul>
         </div>
         <div className="border-t border-border-soft">
-          <div className="px-3.5 pb-1.5 pt-3 t-label text-muted">Your week</div>
+          <div className="flex items-baseline justify-between gap-3 px-3.5 pb-1.5 pt-3">
+            <span className="t-label text-muted">Your week</span>
+            {regular.length < weeks ? <span className="text-[0.6875rem] text-muted">Sets excl. deload</span> : null}
+          </div>
           <ol>
-            {t.parsed.days.map((d, i) => (
-              <li
-                key={d.dayKey}
-                className="flex min-h-10 items-center gap-3 border-t border-border-soft px-3.5 text-sm text-fg"
-              >
-                <span className="w-6 shrink-0 text-[0.6875rem] font-semibold text-muted tabular-nums">D{i + 1}</span>
-                <span className="min-w-0 truncate">{d.label}</span>
-              </li>
-            ))}
+            {t.parsed.days.map((d, i) => {
+              const expanded = openDays.has(d.dayKey);
+              const digest = expanded ? digestDay(d, regular) : null;
+              return (
+                <li key={d.dayKey} className="border-t border-border-soft">
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    onClick={() => toggleDay(d.dayKey)}
+                    className="flex min-h-11 w-full items-center gap-3 px-3.5 text-left text-sm text-fg hover:bg-bg"
+                  >
+                    <span className="w-6 shrink-0 text-[0.6875rem] font-semibold text-muted tabular-nums">D{i + 1}</span>
+                    <span className="min-w-0 flex-1 truncate">{d.label}</span>
+                    <span className="text-muted">
+                      <ChevronIcon up={expanded} />
+                    </span>
+                  </button>
+                  {digest ? (
+                    <div className="pb-3 pl-[3.125rem] pr-3.5">
+                      {digest.rows.length > 0 ? (
+                        <ul className="flex flex-col gap-1 text-[0.8125rem]">
+                          {digest.rows.map((r, k) => (
+                            <li key={k} className="flex items-baseline justify-between gap-3">
+                              <span className="min-w-0 truncate text-subtle">{r.movement}</span>
+                              <span className="shrink-0 tabular-nums text-fg">{r.prescription ?? '—'}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {digest.prepCount > 0 ? (
+                        <p className="mt-1.5 text-xs text-muted">
+                          + {digest.prepCount} warm-up / cooldown item{digest.prepCount === 1 ? '' : 's'}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ol>
         </div>
       </section>
 
-      <div className="pb-safe sticky bottom-0 -mx-4 mt-6 flex flex-col gap-2.5 border-t border-border bg-surface px-4 pt-3 sm:-mx-6 sm:px-6">
+      {/* Keyed on the selection so a new plan REMOUNTS the bar rather than
+          patching its label: on an iPhone the label stayed on the previous
+          plan after a pick (not reproducible in Chromium). A fresh node gives
+          WebKit a fresh sticky layer to paint. */}
+      <div
+        key={t.id}
+        className="pb-safe sticky bottom-0 -mx-4 mt-6 flex flex-col gap-2.5 border-t border-border bg-surface px-4 pt-3 sm:-mx-6 sm:px-6"
+      >
         {confirming && active ? (
           <>
             <p className="text-sm text-subtle">
