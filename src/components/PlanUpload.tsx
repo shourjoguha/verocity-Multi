@@ -26,6 +26,7 @@ import { track } from '@/lib/analytics';
 import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
+import PlanTemplatePicker from '@/components/PlanTemplatePicker';
 
 type Source = 'markdown' | 'csv';
 type Target = 'plan' | 'session';
@@ -252,6 +253,12 @@ export default function PlanUpload() {
           className={`mb-8 ${ECHO_APP_TITLE}`}
         />
       </Item>
+
+      {target === 'plan' ? (
+        <Item>
+          <PlanTemplatePicker />
+        </Item>
+      ) : null}
 
       <Item>
         <div className="mb-6 border border-border bg-surface p-4">

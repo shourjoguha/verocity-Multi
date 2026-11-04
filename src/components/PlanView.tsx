@@ -61,7 +61,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               href="/app/plan/upload"
               className="hill-btn mt-4 inline-flex min-h-11 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
             >
-              Create one
+              Pick or build a plan
             </a>
           )}
         </EmptyState>

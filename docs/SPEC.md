@@ -186,6 +186,13 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   carry no FK here. See §8.1.
 - **`plans`** — `owner_user_id, name, start_date, end_date, source_markdown,
   parsed jsonb, is_active`. (Multi-week structured program.)
+- **`plan_templates`** (0050) — curated, read-only catalogue of `ParsedPlan`
+  snapshots (`name, summary, parsed, sort_order, retired`). Authenticated
+  SELECT only, no write policies; seeded by `scripts/plan-templates/seed.sql`.
+  Adopting copies `parsed` into a new owned `plans` row with dates re-based to
+  today (`src/lib/planRebase.ts`). Deliberately **not** `plans.is_public`:
+  every `plans` read relies on RLS for owner scoping, so a public row would
+  leak into every user's active plan and history.
 - **`workout_logs`** — `owner_user_id, plan_id, log_date, day_key, week_number,
   status (planned|in_progress|paused|done|cancelled), started_at, ended_at,
   total_seconds, notes, activity_type, tags[], data jsonb`. Realtime enabled.

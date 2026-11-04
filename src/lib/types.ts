@@ -131,6 +131,18 @@ export interface Plan {
   created_at: string;
 }
 
+// Curated ParsedPlan snapshot a user can adopt (0050). Read-only; adopting
+// copies `parsed` into a new owned `plans` row with re-based dates.
+export interface PlanTemplate {
+  id: string;
+  name: string;
+  summary: string | null;
+  parsed: ParsedPlan;
+  sort_order: number;
+  retired: boolean;
+  created_at: string;
+}
+
 export interface WorkoutLog {
   id: string;
   owner_user_id: string;
