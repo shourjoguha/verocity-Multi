@@ -12,6 +12,7 @@ import {
   type MetricKey,
 } from '@/app.config';
 import { normalizeMovementName } from '@/lib/movementTaxonomy';
+import { rebasePlanDates } from '@/lib/planRebase';
 import type {
   AspectScores,
   AspectSnapshot,
@@ -38,6 +39,7 @@ import type {
   MovementTaxonomyOverride,
   ParsedPlan,
   Plan,
+  PlanTemplate,
   Profile,
   Recommendation,
   RxDeepResult,
@@ -585,6 +587,25 @@ export async function adoptPlan(planId: string): Promise<Plan | null> {
   if (!data) return null;
   const src = data as Plan;
   return createPlan(src.parsed, src.source_markdown ?? '');
+}
+
+// ---- plan templates (0050): the curated catalogue a new user can start from
+// instead of authoring a plan. Separate from `plans` on purpose — see the
+// migration header. ----
+
+export async function getPlanTemplates(): Promise<PlanTemplate[]> {
+  const { data } = await supabase
+    .from('plan_templates')
+    .select('*')
+    .order('sort_order', { ascending: true });
+  return (data as PlanTemplate[]) ?? [];
+}
+
+// Copy a template into a new owned plan and activate it. The template's dates
+// are the author's; the Logger derives the program week from start_date, so
+// they are re-based to today or a new user would open the plan mid-program.
+export async function adoptPlanTemplate(template: PlanTemplate): Promise<Plan | null> {
+  return createPlan(rebasePlanDates(template.parsed, new Date()), '');
 }
 
 // ---- share tokens (SPEC §7B). The client stores only the token_hash; the raw
