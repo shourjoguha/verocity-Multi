@@ -1,0 +1,341 @@
+<title>Welcome to Verocity</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap">
+<style>
+/* Layout: one narrow column, a two-way switch (Get started / Reference). Mirrors the app's own look: monochrome, hairlines, 4/6px radius. */
+:root {
+  --bg: hsl(0 0% 95%);
+  --surface: hsl(0 0% 100%);
+  --fg: hsl(0 0% 7%);
+  --muted: hsl(0 0% 40%);
+  --border: hsl(0 0% 12% / 0.14);
+  --border-soft: hsl(0 0% 12% / 0.07);
+  --up: hsl(147 46% 30%);
+  --font-display: "Archivo Black", "Arial Black", Impact, sans-serif;
+  --font-body: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --r-control: 4px;
+  --r-card: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: hsl(0 0% 2%); --surface: hsl(0 0% 8%); --fg: hsl(0 0% 100%); --muted: hsl(0 0% 58%);
+    --border: hsl(0 0% 100% / 0.14); --border-soft: hsl(0 0% 100% / 0.07); --up: hsl(137 44% 50%);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: hsl(0 0% 2%); --surface: hsl(0 0% 8%); --fg: hsl(0 0% 100%); --muted: hsl(0 0% 58%);
+  --border: hsl(0 0% 100% / 0.14); --border-soft: hsl(0 0% 100% / 0.07); --up: hsl(137 44% 50%);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(2rem, 7vw, 3rem); line-height: 1; text-transform: uppercase; }
+h2 { font-size: 1.35rem; text-transform: uppercase; }
+h3 { font-size: 1rem; }
+p { margin: 0; }
+.label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+a { color: var(--fg); text-underline-offset: 3px; }
+code, .mono { font-variant-numeric: tabular-nums; font-family: var(--font-body); font-weight: 700; }
+
+header { display: flex; flex-direction: column; gap: 12px; }
+.lede { font-size: 1.05rem; max-width: 60ch; }
+
+/* invite card */
+.invite {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card);
+  padding: 18px; display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center;
+}
+.invite .code { font-family: var(--font-display); font-size: clamp(1.5rem, 6vw, 2rem); letter-spacing: 0.06em; user-select: all; }
+.invite .meta { grid-column: 1 / -1; font-size: 0.9rem; }
+button, .btn {
+  font: inherit; font-weight: 700; font-size: 0.9rem; color: var(--fg); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--r-control); min-height: 44px; padding: 0 16px;
+  cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+}
+button:hover, .btn:hover { border-color: var(--fg); }
+button:focus-visible, .btn:focus-visible, summary:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+/* view switch */
+.switch { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: var(--r-card); padding: 3px; gap: 3px; background: var(--surface); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
+.switch button { border: 0; background: transparent; min-height: 44px; display: flex; flex-direction: column; line-height: 1.2; gap: 2px; }
+.switch button small { font-weight: 400; font-size: 0.75rem; color: var(--muted); }
+.switch button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.switch button[aria-pressed="true"] small { color: var(--bg); opacity: 0.7; }
+
+/* steps */
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; counter-reset: s; }
+.step { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 18px; display: grid; grid-template-columns: 40px 1fr; gap: 4px 14px; counter-increment: s; }
+.step::before { content: counter(s); font-family: var(--font-display); font-size: 1.6rem; line-height: 1; grid-row: 1 / span 3; }
+.step > * { min-width: 0; }
+.step ul, .step ol { margin: 8px 0 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 4px; }
+.tip { border-top: 1px solid var(--border-soft); margin-top: 10px; padding-top: 10px; font-size: 0.92rem; color: var(--muted); }
+.ui { font-weight: 700; white-space: nowrap; border: 1px solid var(--border); border-radius: var(--r-control); padding: 0 6px; font-size: 0.88em; }
+
+.choices { display: grid; gap: 8px; margin-top: 10px; }
+.choice { border: 1px solid var(--border-soft); border-radius: var(--r-control); padding: 10px 12px; }
+.choice b { display: block; }
+
+/* reference */
+.ref { display: flex; flex-direction: column; gap: 24px; }
+.group { display: flex; flex-direction: column; gap: 8px; }
+details { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); }
+summary { cursor: pointer; list-style: none; padding: 14px 16px; min-height: 44px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-weight: 700; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; font-family: var(--font-display); }
+details[open] summary::after { content: "–"; }
+summary .where { font-weight: 400; font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
+.body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+dl { margin: 0; display: grid; grid-template-columns: minmax(90px, 150px) 1fr; }
+dt, dd { margin: 0; padding: 8px 0; border-top: 1px solid var(--border-soft); }
+dt { font-weight: 700; padding-right: 12px; }
+dd { min-width: 0; }
+@media (max-width: 460px) {
+  dl { grid-template-columns: 1fr; }
+  dd { border-top: 0; padding-top: 0; }
+  summary { flex-wrap: wrap; }
+}
+.navmap { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); text-align: center; font-size: 0.8rem; }
+.navmap div { padding: 10px 4px; border-left: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 2px; }
+.navmap div:first-child { border-left: 0; }
+.navmap b { font-size: 0.85rem; }
+.navmap .log b { border: 1px solid var(--fg); border-radius: 50%; width: 30px; height: 30px; display: inline-grid; place-items: center; margin: 0 auto; font-family: var(--font-display); }
+footer { font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--border); padding-top: 16px; }
+@media (prefers-reduced-motion: no-preference) { button, .btn { transition: border-color .15s, background .15s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="label">Verocity · strength &amp; training log</span>
+    <h1>Welcome to Verocity</h1>
+    <p class="lede">You've been invited. The first half of this page gets you from zero to your first logged workout in about ten minutes. The second half is a map of the app you can come back to.</p>
+  </header>
+
+  <section class="invite" aria-label="Your invite code">
+    <span class="label" style="grid-column:1/-1">Your invite code</span>
+    <span class="code" id="code">{{CODE}}</span>
+    <button type="button" id="copy">Copy</button>
+    <p class="meta muted">Single use. Valid until <b>{{EXPIRES_LONG}}</b>. Sign up at <a href="https://{{SITE}}/signup" target="_blank" rel="noopener"><b>{{SITE}}/signup</b></a></p>
+  </section>
+
+  <nav class="switch" aria-label="Guide sections">
+    <button type="button" data-view="start" aria-pressed="true">Get started<small>Register · plan · details</small></button>
+    <button type="button" data-view="reference" aria-pressed="false">Reference<small>Where everything is</small></button>
+  </nav>
+
+  <!-- ============ GET STARTED ============ -->
+  <section id="view-start" class="ref">
+    <ol class="steps">
+      <li class="step">
+        <h2>Create your account</h2>
+        <p>Open <a href="https://{{SITE}}/signup" target="_blank" rel="noopener">{{SITE}}/signup</a> and fill in four fields:</p>
+        <ul>
+          <li><b>Display name</b> — what the app calls you.</li>
+          <li><b>Invite code</b> — paste <span class="mono">{{CODE}}</span>.</li>
+          <li><b>Email</b> and <b>Password</b> (8 characters or more).</li>
+        </ul>
+        <p class="tip">No confirmation email to wait for. You're signed in straight away. If it says the code is invalid, check for a stray space or letter O vs zero; the code has no O, I, 0 or 1.</p>
+      </li>
+
+      <li class="step">
+        <h2>Tell it about you</h2>
+        <p>Onboarding opens next. Every step is optional and has <span class="ui">Skip for now</span>, but the more you fill in, the better the coach can read your training.</p>
+        <ul>
+          <li><b>The basics</b> — height (cm), bodyweight (kg), birth year, sex.</li>
+          <li><b>How do you train?</b> — days per week, experience (Beginner / Intermediate / Advanced), preferred plan length (6–12 weeks).</li>
+          <li><b>What are you chasing?</b> — tap goals <i>in order of priority</i>: Strength, Hypertrophy, Endurance, Mobility, Skill work.</li>
+          <li><b>Disciplines</b> — e.g. Powerlifting, Hyrox, Calisthenics, Running.</li>
+          <li><b>Equipment</b> — what you actually have access to.</li>
+          <li><b>Anything to work around?</b> — sore or injured areas, plus a notes box.</li>
+        </ul>
+        <p class="tip">Each step saves as you go. Change any of it later in <b>You → Settings → You</b>.</p>
+      </li>
+
+      <li class="step">
+        <h2>Pick a plan</h2>
+        <p>The last onboarding screen has <span class="ui">Go to Plans →</span>. Later, it's <b>Training → Plan → Add plan</b>. You get two tabs:</p>
+        <div class="choices">
+          <div class="choice"><b>Ready plan — fastest</b>Choose from the <span class="ui">Program</span> list: {{READY_PLANS}}. Check the weeks and days per week in the preview, then tap <span class="ui">Start …</span>. It's copied into your account, so edit anything afterwards.</div>
+          <div class="choice"><b>Build my own</b>Three ways in:
+            <ul>
+              <li><b>Generate with an AI</b> — download the context file, tap <span class="ui">Copy prompt</span>, paste both into Claude, ChatGPT or Gemini, then paste the answer back.</li>
+              <li><b>Upload a spreadsheet</b> — download the CSV/TSV template, fill it in, upload.</li>
+              <li><b>Write it in Markdown</b> — type the plan by hand.</li>
+            </ul>
+            Check the preview, then <span class="ui">Save &amp; activate</span>. If anything's off, a <i>Compatibility</i> list explains what, and <span class="ui">Copy fix request</span> gives your AI the corrections.</div>
+        </div>
+        <p class="tip">Not sure? Start a ready plan. You can replace it any time, and your logged history stays.</p>
+      </li>
+
+      <li class="step">
+        <h2>Set it up your way</h2>
+        <p>Open <b>You → Settings</b>. Worth a minute on day one:</p>
+        <ul>
+          <li><b>Theme</b> — Light, Dark or System.</li>
+          <li><b>Backdrop</b> — Off, Notebook, Dotted, Hairlines, Topography or Depth.</li>
+          <li><b>Coach icon</b> — pick a character (Gorilla, Hedgehog, Commando), colour or mono.</li>
+          <li><b>Body map</b> — Plates, Engraved or Thermal.</li>
+          <li><b>Garmin</b> — optional. Connect with your Garmin login, or import an export ZIP. Accounts with two-factor sign-in aren't supported yet.</li>
+        </ul>
+        <p class="tip">Appearance and body-map choices are saved on each device separately. Weights are in kg.</p>
+      </li>
+
+      <li class="step">
+        <h2>Log your first workout</h2>
+        <p>Tap the round <b>Log</b> button in the middle of the bottom bar. Pick today's day from your plan and choose a length: <b>Full</b>, <b>Express</b> or <b>Half</b>. Enter weight, reps and how hard it felt (RPE), then finish.</p>
+        <p class="tip">No plan day fits? Use <span class="ui">Blank workout</span>, or <span class="ui">Log activity</span> for a run, ride or class.</p>
+      </li>
+    </ol>
+    <p class="muted">That's everything you need. Switch to <a href="#reference" data-goto="reference">Reference</a> when you want to know what a screen or a word means.</p>
+  </section>
+
+  <!-- ============ REFERENCE ============ -->
+  <section id="view-reference" class="ref" hidden>
+    <div class="group">
+      <h2>Getting around</h2>
+      <p class="muted">The bottom bar, left to right. Training and Progress reopen whichever tab you used last. The <b>Menu</b> button at the top opens the same places as a list, plus Meals.</p>
+      <div class="navmap" aria-label="Bottom bar">
+        <div><b>Home</b><span class="muted">today</span></div>
+        <div><b>Training</b><span class="muted">plan · sessions · library</span></div>
+        <div class="log"><b>+</b><span class="muted">log</span></div>
+        <div><b>Progress</b><span class="muted">stats · body · coach</span></div>
+        <div><b>You</b><span class="muted">profile · settings</span></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="label">Screens</span>
+
+      <details><summary>Home <span class="where">bottom bar</span></summary><div class="body">
+        <p>Your active plan, a <b>Start workout</b> or <b>Resume workout</b> button, recent activity over a range you pick (last 2 weeks to all time), and your top estimated maxes.</p>
+      </div></details>
+
+      <details><summary>Log <span class="where">centre button</span></summary><div class="body">
+        <p>Opens <i>Start something</i>:</p>
+        <dl>
+          <dt>Plan days</dt><dd>The days of your active plan. Pick one to start it.</dd>
+          <dt>Full / Express / Half</dt><dd>Run the whole day, a shortened version, or half of it when you're short on time.</dd>
+          <dt>Past plans &amp; saved sessions</dt><dd>Repeat something you've done before.</dd>
+          <dt>Blank workout</dt><dd>Start empty and add movements as you go.</dd>
+          <dt>Log activity</dt><dd>A session outside the plan, or sleep, soreness, energy or a holiday.</dd>
+        </dl>
+      </div></details>
+
+      <details><summary>Training → Plan <span class="where">Training tab</span></summary><div class="body">
+        <p>A review of how your plan is going, with <b>View plan</b> and <b>Add plan</b>. Inside View plan: a week strip, <b>Edit</b> (change phases, sections and movements; saves automatically) and <b>New plan</b>.</p>
+      </div></details>
+
+      <details><summary>Training → Sessions <span class="where">Training tab</span></summary><div class="body">
+        <p>Reusable single workouts you've saved, plus days from your plans. Filter by workout type, duration and movements included or excluded. Good for "I have 30 minutes and a pull-up bar".</p>
+      </div></details>
+
+      <details><summary>Training → Library <span class="where">Training tab</span></summary><div class="body">
+        <p>Every movement the app knows: its category, how it's measured, default rest, and which muscles it works. <b>Shared library</b> is everyone's; <b>Yours</b> is movements you added.</p>
+      </div></details>
+
+      <details><summary>Progress → Stats <span class="where">Progress tab</span></summary><div class="body">
+        <p>Sessions, time and sets over your chosen period, by movement or by family (squat, hinge, press…).</p>
+      </div></details>
+
+      <details><summary>Progress → Body <span class="where">Progress tab</span></summary><div class="body">
+        <p>A muscle map shaded by how much of your training each muscle got, with a <i>Most worked</i> list. Darker means a bigger share of your total, not "trained hard". Switch between <b>Work</b> and <b>Volume</b>, and between Strength, Cardio and Mobility.</p>
+      </div></details>
+
+      <details><summary>Progress → Coach <span class="where">Progress tab</span></summary><div class="body">
+        <p>Tap <b>Check-in</b> to scan your recent sessions. Each finding says what it's based on and whether there's enough data to trust it. Act on it, <b>snooze</b> it, or mark it <b>decided</b>. Findings live under Open / Snoozed / Decided.</p>
+      </div></details>
+
+      <details><summary>Review <span class="where">Training → Plan</span></summary><div class="body">
+        <p>The longer view: lifts per week, active days, hours, where your time went, hard sets per muscle per week, effort, and how your staple lifts moved from first to latest.</p>
+      </div></details>
+
+      <details><summary>Meals <span class="where">Menu</span></summary><div class="body">
+        <p>Log meals and see their history.</p>
+      </div></details>
+
+      <details><summary>You &amp; Settings <span class="where">bottom bar</span></summary><div class="body">
+        <dl>
+          <dt>Profile</dt><dd>Private. Shows how complete your profile is ("plan readiness").</dd>
+          <dt>You</dt><dd>Everything from onboarding: body stats, experience, days per week, equipment, disciplines, past injuries.</dd>
+          <dt>Appearance</dt><dd>Theme, backdrop, coach icon, body-map style. Saved per device.</dd>
+          <dt>Integrations</dt><dd>Garmin connect or ZIP import.</dd>
+          <dt>Data</dt><dd><b>Export JSON</b> is a complete backup; <b>Export CSV</b> is one row per set.</dd>
+          <dt>Share links</dt><dd>See below.</dd>
+          <dt>Holidays</dt><dd>A second Settings tab for seasonal scenes.</dd>
+        </dl>
+      </div></details>
+
+      <details><summary>Share links <span class="where">You → Sharing</span></summary><div class="body">
+        <p>Create a read-only link to your whole profile, one plan, or one workout. Add a label and an expiry in days. Anyone with the link can look but never edit. The full link is shown once, so copy it then. Revoke it any time from <i>Your links</i>.</p>
+        <p class="muted">Everything else you log is private to you.</p>
+      </div></details>
+    </div>
+
+    <div class="group">
+      <span class="label">Words you'll see</span>
+      <details open><summary>Glossary</summary><div class="body">
+        <dl>
+          <dt>RPE</dt><dd>How hard a set felt, 5–10. <b>7</b> ≈ three more reps left in you, <b>8</b> ≈ the last good rep, <b>9</b> ≈ almost failure, <b>10</b> = nothing left. The logger starts at 7.</dd>
+          <dt>e1RM</dt><dd>Estimated one-rep max: the heaviest single you could probably lift, worked out from your sets. In kg.</dd>
+          <dt>Sections</dt><dd>A workout's parts: warm-up, primary, secondary, accessory, conditioning, cooldown.</dd>
+          <dt>Prep</dt><dd>Warm-up and cooldown. Logged and counted towards following your plan, but left out of volume, set counts, e1RM and RPE, so light warm-up sets don't drag your numbers down.</dd>
+          <dt>Phases</dt><dd>Stretches of a plan with one job: Accumulation (build volume), Intensification (heavier), Realization (peak), Deload (back off and recover).</dd>
+          <dt>Adherence</dt><dd>How much of your plan you actually did, shown as <i>Plan X% · main Y%</i>. Split into done as written, swapped for something similar, made up later, and missed. Extra work on one lift doesn't make up for skipping another.</dd>
+          <dt>Work</dt><dd>Body-map measure: each working set counts once, shared across the muscles it trains.</dd>
+          <dt>Volume</dt><dd>Body-map measure: load × reps × range of motion. Rewards heavy work more than Work does.</dd>
+          <dt>Period</dt><dd>The window Body and Stats look at: 4W, 6W, 8W (default), 12W or 6M. Set it once, both pages follow.</dd>
+          <dt>Check-in</dt><dd>The coach's scan of your recent training. Runs on your device; every finding names the rule behind it.</dd>
+          <dt>Express / Half</dt><dd>Shorter versions of a plan day for when time is tight.</dd>
+        </dl>
+      </div></details>
+    </div>
+  </section>
+
+  <footer>Invite code is single-use and expires {{EXPIRES_SHORT}}. Lost it or it expired? Ask whoever sent you this page for a new one.</footer>
+</div>
+
+<script>
+(function () {
+  var copy = document.getElementById('copy');
+  copy.addEventListener('click', function () {
+    var t = document.getElementById('code').textContent;
+    var done = function () { copy.textContent = 'Copied'; setTimeout(function () { copy.textContent = 'Copy'; }, 1600); };
+    try {
+      navigator.clipboard.writeText(t).then(done, function () { selectCode(); });
+    } catch (e) { selectCode(); }
+  });
+  function selectCode() {
+    var r = document.createRange(); r.selectNodeContents(document.getElementById('code'));
+    var s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    copy.textContent = 'Selected — copy it';
+  }
+  var views = ['start', 'reference'];
+  function show(v) {
+    if (views.indexOf(v) < 0) v = 'start';
+    views.forEach(function (k) { document.getElementById('view-' + k).hidden = k !== v; });
+    document.querySelectorAll('.switch button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.view === v)); });
+  }
+  document.querySelectorAll('[data-view],[data-goto]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.preventDefault();
+      var v = el.dataset.view || el.dataset.goto;
+      if (location.hash !== '#' + v) location.hash = v; else show(v);
+      window.scrollTo(0, 0);
+    });
+  });
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+  show(location.hash.slice(1));
+})();
+</script>

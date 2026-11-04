@@ -32,6 +32,7 @@ intent, LESSONS describes what actually happened.
 | **Change the Body page's measure, shading, or the shared period**        | `src/lib/bodyLoad.ts`, `src/lib/bodyMapShade.ts`, `src/lib/periodPrefs.ts`, then the hard rules below |
 | Write coach output from a Claude Code session                            | `src/lib/coach/governor.ts` (the boundary), `supabase/migrations/0043_coach_briefs_notes.sql` |
 | **Run or change the weekly coach-tuning routine**                        | `docs/COACH_TUNING.md` (budget + boundary), `scripts/coach-tuning/scorecard.sql` |
+| **Give someone an invite/promo code, or check how many signups are left** | skill invite-user — `.claude/skills/invite-user/SKILL.md` |
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
 | **Change a component, sheet, token or layout**                           | skill ui-change — `.claude/skills/ui-change/SKILL.md` |
 | **Add a migration, RLS policy, edge function or query helper**           | skill db-change — `.claude/skills/db-change/SKILL.md` |
