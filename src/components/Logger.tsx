@@ -61,7 +61,7 @@ import { SubroutineBody } from '@/components/SubroutineBody';
 import { DemoIconButton, MovementDemoSheet } from '@/components/MovementDemo';
 import { lastPerformance, plannedReps, plannedTarget, repAdjustedWeight } from '@/lib/lastPerformance';
 import { bestE1rmByTrack, isPrSet } from '@/lib/prs';
-import { trackName } from '@/lib/notations';
+import { notationLabel, trackName } from '@/lib/notations';
 import { useStopwatch } from '@/lib/useTimer';
 import { weekFromDate } from '@/lib/week';
 import { blockForWeek, nextWeekForDay, planWeekByLog, planWeekCount } from '@/lib/progression';
@@ -69,6 +69,7 @@ import {
   ACTIVITY_TAGS,
   METRICS,
   NOTATIONS,
+  VARIATION_KINDS,
   PRIMARY_METRICS,
   SECTIONS,
   TIMERS,
@@ -1476,7 +1477,7 @@ export default function Logger() {
                 </span>
                 {tags.length > 0 ? (
                   <span className="shrink-0 translate-y-[0.15em] text-[0.6rem] leading-none tracking-wide text-faint">
-                    {tags.join(' ')}
+                    {tags.map(notationLabel).join(' ')}
                   </span>
                 ) : null}
               </span>
@@ -2088,6 +2089,37 @@ export default function Logger() {
                         );
                       })}
                     </div>
+                    {/* What the variation changes. Shown only while [v] is on,
+                        because a kind is a note ON a variation; turning [v] off
+                        clears them (toggleItemNotation). Multi-select, so
+                        toggle buttons, not SegmentedTabs. Annotation only —
+                        nothing that measures reads a kind. */}
+                    {item.sets.length > 0 && item.sets.every((s) => s.notations.includes('(v)')) ? (
+                      <div className="mt-3">
+                        <div className="mb-2 t-label text-muted">
+                          Variation — different muscles? Rename the movement instead
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(VARIATION_KINDS).map(([sym, { label, desc }]) => {
+                            const on = item.sets.every((s) => s.notations.includes(sym));
+                            return (
+                              <button
+                                key={sym}
+                                type="button"
+                                title={desc}
+                                onClick={() => setDoc((d) => toggleItemNotation(d, si, gi, ii, sym))}
+                                aria-pressed={on}
+                                className={`hill-btn border bg-surface px-2 py-1 text-xs transition-colors ${
+                                  on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="mt-5">

@@ -30,6 +30,7 @@ import {
 import { summarizeBodyLoad } from '@/lib/bodyLoad';
 import { holidayContext, type HolidayContext, type HolidayRange } from '@/lib/holidays';
 import { bestE1rmByMovement } from '@/lib/prs';
+import { isVariant } from '@/lib/notations';
 import { completedLogs, workingSections } from '@/lib/stats';
 import { explainSoreness, type AreaExplanation } from '@/lib/soreness';
 import { buildDayInsights, summarizeTiming, toHours } from '@/lib/mealInsights';
@@ -692,7 +693,9 @@ export function measureTraining(
               }
 
               if (a.weight != null && a.reps != null) {
-                const best = bests.get(item.movement);
+                // A variation has no 1RM reference (bestE1rmByMovement leaves it
+                // out), so it is not a fraction of the plain lift's either.
+                const best = isVariant(set.notations) ? undefined : bests.get(item.movement);
                 // No best for this movement means no denominator. Skipping is
                 // the only honest read — assuming the set was light would
                 // invent one.

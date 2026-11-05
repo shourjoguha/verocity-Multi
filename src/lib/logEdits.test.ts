@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addSet, addSubroutine, copyForward, isGroupComplete, patchSetActual, setSubroutine } from '@/lib/logEdits';
+import { addSet, addSubroutine, copyForward, isGroupComplete, patchSetActual, setSubroutine, toggleItemNotation } from '@/lib/logEdits';
 import { isSubroutine, safeHref } from '@/lib/subroutine';
 import type { LogDocument, LogGroup } from '@/lib/types';
 
@@ -143,5 +143,26 @@ describe('safeHref', () => {
     expect(safeHref('javascript:alert(1)')).toBeNull();
     expect(safeHref('')).toBeNull();
     expect(safeHref(undefined)).toBeNull();
+  });
+});
+
+describe('toggleItemNotation', () => {
+  const notes = (d: LogDocument) =>
+    d.sections[0].groups[0].items[0].sets.map((s) => (s as { notations: string[] }).notations);
+
+  it('turning (v) off also clears what the variation changed', () => {
+    let d = toggleItemNotation(docWith(2), 0, 0, 0, '(v)');
+    d = toggleItemNotation(d, 0, 0, 0, '(v:rom-)');
+    d = toggleItemNotation(d, 0, 0, 0, '(p)');
+    expect(notes(d)).toEqual([['(v)', '(v:rom-)', '(p)'], ['(v)', '(v:rom-)', '(p)']]);
+    d = toggleItemNotation(d, 0, 0, 0, '(v)');
+    expect(notes(d)).toEqual([['(p)'], ['(p)']]);
+  });
+
+  it('a kind toggles on its own without touching (v)', () => {
+    let d = toggleItemNotation(docWith(1), 0, 0, 0, '(v)');
+    d = toggleItemNotation(d, 0, 0, 0, '(v:assist)');
+    d = toggleItemNotation(d, 0, 0, 0, '(v:assist)');
+    expect(notes(d)).toEqual([['(v)']]);
   });
 });

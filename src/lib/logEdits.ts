@@ -4,6 +4,7 @@
 import { RPE, type MetricKey } from '@/app.config';
 import type { GroupKind, ItemMarkKind, LogDocument, LogGroup, LogItem, SetActual } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
+import { isVariationKind } from '@/lib/notations';
 
 function newId(): string {
   return crypto.randomUUID();
@@ -406,6 +407,8 @@ export function groupWith(
 }
 
 // Toggle a notation across all of an item's sets (on if any set lacks it).
+// Turning `(v)` off also drops its `(v:<kind>)` tokens: a kind without the
+// variation it describes would be read by nothing and shown as if it meant one.
 export function toggleItemNotation(
   doc: LogDocument,
   si: number,
@@ -421,7 +424,7 @@ export function toggleItemNotation(
       sets: it.sets.map((set) => ({
         ...set,
         notations: allHave
-          ? set.notations.filter((n) => n !== note)
+          ? set.notations.filter((n) => n !== note && !(note === '(v)' && isVariationKind(n)))
           : Array.from(new Set([...set.notations, note])),
       })),
     };

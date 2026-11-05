@@ -3,7 +3,7 @@
 // *before now*. Pure; built from the LogDocument JSONB so it works off the same
 // data the Logger already loads (getAllLogs).
 import { e1rm } from '@/lib/e1rm';
-import { trackName } from '@/lib/notations';
+import { isVariant, trackName } from '@/lib/notations';
 import { workingSections } from '@/lib/stats';
 import type { SetActual, WorkoutLog } from '@/lib/types';
 
@@ -12,7 +12,12 @@ export function e1rmOf(a: Pick<SetActual, 'weight' | 'reps'>): number | null {
   return e1rm(a.weight, a.reps);
 }
 
-/** Max estimated 1RM per movement across all completed sets in `logs`. */
+/**
+ * Max estimated 1RM per movement across all completed sets in `logs` — the
+ * 1RM reference the coach and the strength axis measure intensity against.
+ * Variation sets are left out: a box squat or a pin press can move more than
+ * the full lift, and counting it made every plain set read lighter than it was.
+ */
 export function bestE1rmByMovement(logs: WorkoutLog[]): Map<string, number> {
   const best = new Map<string, number>();
   for (const log of logs) {
@@ -20,7 +25,7 @@ export function bestE1rmByMovement(logs: WorkoutLog[]): Map<string, number> {
       for (const group of section.groups ?? []) {
         for (const item of group.items ?? []) {
           for (const set of item.sets ?? []) {
-            if (!set.actual?.completed) continue;
+            if (!set.actual?.completed || isVariant(set.notations)) continue;
             const v = e1rmOf(set.actual);
             if (v == null) continue;
             const cur = best.get(item.movement);

@@ -8,7 +8,13 @@
 //     (VOLUME.pauseFactor, time under tension); the review page's staple lifts
 //     credit them (LOAD_EQUIVALENCE); personal records deliberately do not.
 //   - `(v)` is a different variation of the lift. It is never priced, only
-//     kept apart — some variations are easier at the same load.
+//     kept apart — some variations are easier at the same load. It also has
+//     no 1RM reference: a variation neither feeds the plain lift's best
+//     (bestE1rmByMovement) nor is measured as a fraction of it.
+//   - `(v:<kind>)` (VARIATION_KINDS) says what the variation changes. Written
+//     beside `(v)`, never instead of it, and read by nothing that measures.
+
+import { VARIATION_KINDS } from '@/app.config';
 
 export type NotationLetter = 'p' | 't' | 'v';
 
@@ -34,4 +40,14 @@ export function isVariant(notations: readonly string[] | undefined): boolean {
  */
 export function trackName(movement: string, notations: readonly string[] | undefined): string {
   return isVariant(notations) ? `${movement} (v)` : movement;
+}
+
+/** A `(v:<kind>)` token — what a variation changes, not a notation of its own. */
+export function isVariationKind(notation: string): boolean {
+  return notation.startsWith('(v:');
+}
+
+/** How a notation reads on screen: a kind by its label, everything else as written. */
+export function notationLabel(notation: string): string {
+  return (VARIATION_KINDS as Record<string, { label: string }>)[notation]?.label ?? notation;
 }

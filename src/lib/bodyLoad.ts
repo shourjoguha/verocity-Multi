@@ -38,7 +38,7 @@ import {
   type SectionKey,
 } from '@/app.config';
 import { classifyMovement, isPlaceholder, type OverrideMap } from '@/lib/movementTaxonomy';
-import { isHeld } from '@/lib/notations';
+import { isHeld, isVariant } from '@/lib/notations';
 import { workingSections } from '@/lib/stats';
 import { isSubroutine } from '@/lib/subroutine';
 import type { LogItem, LogSet, WorkoutLog } from '@/lib/types';
@@ -504,7 +504,7 @@ export function summarizeTrainingVolume(
             if (base <= 0) continue;
             const weighted =
               modality === 'resistance'
-                ? base * intensityFactor(s.actual, best)
+                ? base * intensityFactor(s.actual, isVariant(s.notations) ? undefined : best)
                 : modality === 'plyometric'
                   ? base * explosiveFactor(s.actual)
                   : base;
