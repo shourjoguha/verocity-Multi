@@ -21,6 +21,7 @@
 import { RPE_LADDER } from '@/app.config';
 import { parsePlanned } from '@/lib/logBuilder';
 import { normalizeMovementName } from '@/lib/movementTaxonomy';
+import { isVariant } from '@/lib/notations';
 import { workingSections } from '@/lib/stats';
 import { blockForWeek, byLoggedOrder, planWeekByLog, planWeekCount } from '@/lib/progression';
 import type { Measured } from '@/lib/coach/types';
@@ -131,7 +132,12 @@ export function summarize(
   logDate: string,
   week: number,
 ): RangedSession | null {
-  const done = item.sets.filter((s) => s.actual.completed && s.actual.reps != null);
+  // A variation is not a point on the plain lift's progression: a harder one
+  // held at the same load read as a missed step, an easier one topping the
+  // range read as a step due. Its sets are invisible here, like a deload.
+  const done = item.sets.filter(
+    (s) => s.actual.completed && s.actual.reps != null && !isVariant(s.notations),
+  );
   if (done.length === 0) return null;
   const reps = done.map((s) => s.actual.reps as number);
   const rpes = done.map((s) => s.actual.rpe).filter((r): r is number => r != null);

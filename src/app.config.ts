@@ -1032,6 +1032,19 @@ export const NOTATIONS = {
   '→': 'then / superset into',
 } as const;
 
+// What a `(v)` variation changes, picked under the [v] notation. Annotation
+// only: a kind is written ALONGSIDE `(v)`, never instead of it, so every
+// reader that keeps variations apart keeps reading `(v)` and none of these is
+// ever priced. A variation that trains different muscles (heel-elevated squat,
+// machine-assisted pull-up) is a different movement — rename it instead, so the
+// taxonomy classifies it.
+export const VARIATION_KINDS = {
+  '(v:rom-)': { label: 'ROM−', desc: 'shorter range — partial, box, pins' },
+  '(v:rom+)': { label: 'ROM+', desc: 'longer range — deficit, elevated' },
+  '(v:assist)': { label: 'Assisted', desc: 'band assisted' },
+  '(v:unstable)': { label: 'Unstable', desc: 'unstable surface or stance' },
+} as const;
+
 // e1RM estimate uses Brzycki (see src/lib/e1rm.ts).
 export const E1RM = { formula: 'brzycki' } as const;
 

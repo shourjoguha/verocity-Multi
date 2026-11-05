@@ -25,6 +25,7 @@ import { LogShareControl } from '@/components/LogShareControl';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Item, PageStagger } from '@/components/anim';
 import { clientFor, hrefFor, isReadOnly, type Surface } from '@/lib/surface';
+import { notationLabel } from '@/lib/notations';
 
 const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
 
@@ -294,7 +295,7 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
                                 {formatSetActual(set.actual)}
                               </span>
                               <span className="text-[0.7rem] text-muted">
-                                {set.notations.join(' ')}
+                                {set.notations.map(notationLabel).join(' ')}
                                 {set.actual.completed ? ' ✓' : ''}
                               </span>
                             </li>

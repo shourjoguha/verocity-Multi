@@ -55,6 +55,19 @@ describe('prs', () => {
     expect(isPrSet({ completed: true, weight: 200, reps: 5 } as SetActual, null)).toBe(false); // no prior
   });
 
+  it('bestE1rmByMovement leaves variation sets out of the 1RM reference', () => {
+    const logs = [
+      log('Back Squat', [{ weight: 100, reps: 5 }]),
+      log('Back Squat', [{ weight: 140, reps: 5 }], ['(v)', '(v:rom-)']),
+      log('Back Squat', [{ weight: 130, reps: 5 }], ['v']),
+      log('Box Squat Only', [{ weight: 120, reps: 5 }], ['(v)']),
+    ];
+    const best = bestE1rmByMovement(logs);
+    expect(best.get('Back Squat')).toBe(e1rmOf({ weight: 100, reps: 5 }));
+    // Done only as a variation: no reference at all, rather than an invented one.
+    expect(best.has('Box Squat Only')).toBe(false);
+  });
+
   it('bestE1rmByTrack keeps a variation apart and does not credit a pause', () => {
     const logs = [
       log('Back Squat', [{ weight: 100, reps: 5 }]),

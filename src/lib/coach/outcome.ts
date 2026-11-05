@@ -131,6 +131,21 @@ export const DEFINITION_CHANGES: readonly DefinitionChange[] = [
     on: '2026-11-01',
     what: 'how loaded work is spaced now counts a superset partner’s set and rest as recovery, in proportion to how unrelated its muscles are, with no hard cutoff for “same muscles”',
   },
+  {
+    ruleId: 'training.intent.loaded-too-light',
+    on: '2026-11-05',
+    what: 'sets marked as a variation no longer set your best for the lift, and are not measured against it',
+  },
+  {
+    ruleId: 'training.strength.rest-too-short',
+    on: '2026-11-05',
+    what: 'sets marked as a variation no longer set your best for the lift, so they no longer decide which sets count as heavy',
+  },
+  {
+    ruleId: 'training.progression.load-step-due',
+    on: '2026-11-05',
+    what: 'a session done as a variation is no longer read as a step on the plain lift’s progression',
+  },
 ];
 
 /** Changes recorded for a rule on or after the day it was decided. */

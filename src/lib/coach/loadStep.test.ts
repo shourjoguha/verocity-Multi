@@ -128,6 +128,25 @@ describe('measureLoadSteps', () => {
     expect(m.value.entries).toEqual([]);
   });
 
+  it('does not read a variation session as a step on the plain lift', () => {
+    const v = (s: LogSet[]): LogSet[] => s.map((x) => ({ ...x, notations: ['(v)', '(v:unstable)'] }));
+    // Harder variation, same load, reps back down: not a missed step...
+    const harder = measureLoadSteps(
+      [log('2026-10-07', 'Incline DB Bench', sets(4, 30, 12)), log('2026-10-14', 'Incline DB Bench', v(sets(4, 30, 12)))],
+      plan([ranged()]),
+      TODAY,
+    );
+    expect(harder.value.entries[0]?.state).toBe('due');
+    expect(harder.value.entries[0]?.last.logDate).toBe('2026-10-07');
+    // ...and an easier one topping the range is not a step due.
+    const easier = measureLoadSteps(
+      [log('2026-10-07', 'Incline DB Bench', sets(4, 30, 10)), log('2026-10-14', 'Incline DB Bench', v(sets(4, 30, 12)))],
+      plan([ranged()]),
+      TODAY,
+    );
+    expect(easier.value.entries).toEqual([]);
+  });
+
   it('skips deload sessions entirely', () => {
     // Weeks come from logged order: sessions 1-4 build, 5 is the deload, 6 resumes.
     const logs = [
