@@ -840,6 +840,13 @@ export const COMPOUND = {
 export const LOAD = {
   repSeconds: 3,
   metersPerMinute: 150,
+  // An erg piece logged in calories, as time. Calibrated, not chosen: one
+  // athlete's ski-erg sets logged both ways averaged 13 cal and 33 s, which is
+  // ~2.5 s a calorie at the intensity intervals are done at. Without it a
+  // calorie-logged set fell through to `fallbackSetMinutes` for its minutes
+  // and to ONE rep-equivalent for its volume — the same 30 s on the same
+  // machine priced ~10x apart depending on which box the logger filled.
+  secondsPerCalorie: 2.5,
   fallbackSetMinutes: 0.5,
 } as const;
 
@@ -924,6 +931,11 @@ export const VOLUME = {
 // TWO LANES, never summed for display:
 //   resistance  reps  -> force x romMetres x reps x side x tempo
 //   cardio      distance or calories -> force x metres x horizFactor
+// ...in `addSetWork`. The Stats cardio LANE no longer reads kg.m at all: it is
+// conditioning load, working minutes x RPE (lib/conditioningLoad.ts), because
+// kg.m made a sled dwarf a ski interval of the same effort. The cardio formula
+// above still prices distance work booked to the LIFTING lane (a carry in an
+// accessory block).
 // A run and a bench press are both kg.m, but an 8km run would swamp a strength
 // week in a single total, so Stats reports them side by side.
 export const WORK = {
@@ -1476,4 +1488,11 @@ export interface MovementProfile {
   horizFactor?: number;
   /** Equivalent metres per calorie, for erg work scored in calories. */
   calMetres?: number;
+  /**
+   * Metres per minute WHILE WORKING, for turning a distance-logged set into
+   * time (conditioning load, lib/conditioningLoad.ts). Only for movements far
+   * off `LOAD.metersPerMinute`, which is a running pace: a heavy sled at that
+   * pace priced a 20 m push at 8 s. Absent → that default.
+   */
+  paceMpm?: number;
 }

@@ -6,7 +6,7 @@
 // from becoming a weekly recital of the same four complaints — see the cooldown
 // in ../evaluate.ts for the other half of that problem.
 
-import { ALL_OUT_HR, RPE, RPE_LADDER, SORENESS } from '@/app.config';
+import { ALL_OUT_HR, RPE, RPE_LADDER, SORENESS, type RegionKey } from '@/app.config';
 import { RPE_DRIFT_SPAN, below, share as shareOf, shortfall } from '@/lib/coach/impact';
 import { READINESS, TRAINING } from '@/lib/coach/knowledge';
 import type { Finding } from '@/lib/coach/types';
@@ -346,6 +346,21 @@ export function hypertrophyVolumeShort(
   // There is no honest single number for "sets to add" here, because one added
   // squat fills several regions at once, so the finding names the regions and
   // lets the athlete place the work.
+  // Short of SETS is not the same as idle. Conditioning stations and activities
+  // (sled, padel, a ride) stay out of the set count on purpose — they train for
+  // something else — but their muscles still worked, and that work is fatigue
+  // the added sets will land on. Named per short region, in minutes, so the
+  // finding reads "short of sets, not untrained" rather than "missed".
+  const outside = short
+    .slice(0, 3)
+    .map(([k]) => [k, s.regionOutsideSets?.[k as RegionKey]] as const)
+    .filter(([, o]) => o != null && Math.round(o.minutesPerWeek) >= 1)
+    .map(([k, o]) => `${k} ~${Math.round(o!.minutesPerWeek)} min/week (${o!.sources.join(', ')})`);
+  const outsideNote = outside.length
+    ? ` Outside those sets they were also worked through conditioning and activities: ${outside.join('; ')}. That is time, not sets, so it does not count toward the floor — but they are not untrained, and the added sets land on that fatigue.`
+    : '';
+  const ramp = outside.length ? ' Build it over the next two or three weeks rather than all at once.' : '';
+
   const meanPerRegion = trained
     ? Object.values(per).filter((v) => v > 0).reduce((a, b) => a + b, 0) / trained
     : 0;
@@ -359,11 +374,11 @@ export function hypertrophyVolumeShort(
       ? `No muscle group reaches ${floor} sets/week`
       : `${short.length} muscle group${short.length > 1 ? 's' : ''} under ${floor} sets/week`,
     action: global
-      ? `Add a second resistance session a week, or extend the ones you do — start with ${short.slice(0, 2).map(([k]) => k).join(' and ')}, the furthest back.`
-      : `Add a set or two per session to ${short.slice(0, 2).map(([k]) => k).join(' and ')} until each clears ${floor} hard sets a week.`,
+      ? `Add a second resistance session a week, or extend the ones you do — start with ${short.slice(0, 2).map(([k]) => k).join(' and ')}, the furthest back.${ramp}`
+      : `Add a set or two per session to ${short.slice(0, 2).map(([k]) => k).join(' and ')} until each clears ${floor} hard sets a week.${ramp}`,
     body: global
-      ? `None of the ${trained} muscle groups you trained in the last ${s.windowDays} days reached ${floor} hard sets a week — they average ${round(meanPerRegion, 1)} each, and the lowest is ${named}. The figure the guest series settles on for an all-round trainee is "${TRAINING.hypertrophyWeeklySets.quote}". When every group is short the constraint is total resistance volume, not any one muscle, so this is one finding rather than ${trained}. Counts a whole set for every muscle a movement meaningfully trains, loaded carries and swings included. You ranked hypertrophy at ${weight}/100.`
-      : `Averaged over the last ${s.windowDays} days: ${named} hard sets per week. The figure the guest series settles on for an all-round trainee is "${TRAINING.hypertrophyWeeklySets.quote}" — a floor for maintaining or building, not an optimum. You ranked hypertrophy at ${weight}/100. Note this counts only work the movement taxonomy could place; ${pct(s.coverage)} of your logged minutes were classifiable.`,
+      ? `None of the ${trained} muscle groups you trained in the last ${s.windowDays} days reached ${floor} hard sets a week — they average ${round(meanPerRegion, 1)} each, and the lowest is ${named}. The figure the guest series settles on for an all-round trainee is "${TRAINING.hypertrophyWeeklySets.quote}". When every group is short the constraint is total resistance volume, not any one muscle, so this is one finding rather than ${trained}. Counts a whole set for every muscle a movement meaningfully trains, loaded carries and swings included, and leaves conditioning-block stations out. You ranked hypertrophy at ${weight}/100.${outsideNote}`
+      : `Averaged over the last ${s.windowDays} days: ${named} hard sets per week. The figure the guest series settles on for an all-round trainee is "${TRAINING.hypertrophyWeeklySets.quote}" — a floor for maintaining or building, not an optimum. You ranked hypertrophy at ${weight}/100. Note this counts only work the movement taxonomy could place; ${pct(s.coverage)} of your logged minutes were classifiable.${outsideNote}`,
     drift: shortfall(worst, floor),
     confidence: s.regionSetsPerWeek.sufficiency === 'ok' ? 0.6 : 0.4,
     sufficiency: s.regionSetsPerWeek.sufficiency,

@@ -294,6 +294,18 @@ UI audit have both run.
   (`isLoadedSet`). A region's cutoff is **relative to that movement's own
   primary region**, because a flat one drops Back Squat's glutes (0.18) and a
   carry's whole profile (top region 0.35).
+  **A conditioning station is not a hard set**: a `systemic` movement in a
+  conditioning block (sled, snatch, swing, carry) lands in the body map's
+  cardio lens and out of `hardSetsByRegion`, by the owner's decision. Its
+  muscles' minutes go to `cardioSourcesByRegion`, which the set-floor finding
+  names alongside the shortfall. Local work placed in a circuit (ab wheel,
+  landmine row) still counts — "the whole block" took one athlete's core from
+  14.8 sets a week to 3.3.
+- **Conditioning load is effort x time, not kg.m.** The Stats cardio lane is
+  working minutes x per-set RPE (`src/lib/conditioningLoad.ts`, `RPE·min`);
+  kg.m made a 20 m sled push read ~2.5x a ski interval of the same effort and
+  a time-logged interval read zero. Distance work needs a working pace
+  (`paceMpm` in the taxonomy) — `LOAD.metersPerMinute` is a running pace.
 - **The body map's Work measure is a third count, not either of those.**
   `regionWork` / `muscleWork` / `byLens.work` in `src/lib/bodyLoad.ts`: each
   `isLoadedSet` working set (prep excluded) is ONE unit, split by the movement's

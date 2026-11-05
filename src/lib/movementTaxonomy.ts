@@ -1745,12 +1745,25 @@ const CAL_METRES: Record<string, number> = {
   'rule:ski-erg'                      : 22.5,
 };
 
+// Working pace for distance-logged movements that are nowhere near a run (see
+// MovementProfile.paceMpm). Estimates, reviewable as estimates: a heavy 20 m
+// sled push takes roughly 15-25 s, a loaded 40 m carry roughly 25-30 s.
+const PACE_MPM: Record<string, number> = {
+  'sled push'                         : 60,
+  'sled drag'                         : 60,
+  'rule:sled'                         : 60,
+  'farmer carry'                      : 90,
+  'rule:carry'                        : 90,
+  'rule:suitcase-carry'               : 90,
+};
+
 const withEstimates = (key: string, profile: MovementProfile): MovementProfile => ({
   ...profile,
   ...(BW_LOAD[key] != null ? { bwLoad: BW_LOAD[key] } : {}),
   ...(FORCE_FACTOR[key] != null ? { forceFactor: FORCE_FACTOR[key] } : {}),
   ...(HORIZ_FACTOR[key] != null ? { horizFactor: HORIZ_FACTOR[key] } : {}),
   ...(CAL_METRES[key] != null ? { calMetres: CAL_METRES[key] } : {}),
+  ...(PACE_MPM[key] != null ? { paceMpm: PACE_MPM[key] } : {}),
 });
 
 export const EXACT: Record<string, MovementProfile> = Object.fromEntries(
@@ -1865,6 +1878,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
   const forceParts: number[] = [];
   const horizParts: number[] = [];
   const calParts: number[] = [];
+  const paceParts: number[] = [];
 
   for (const m of matched) {
     for (const [k, v] of Object.entries(m.profile.regions)) {
@@ -1888,6 +1902,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
     if (m.profile.forceFactor != null) forceParts.push(m.profile.forceFactor);
     if (m.profile.horizFactor != null) horizParts.push(m.profile.horizFactor);
     if (m.profile.calMetres != null) calParts.push(m.profile.calMetres);
+    if (m.profile.paceMpm != null) paceParts.push(m.profile.paceMpm);
   }
 
   const firstModality = matched.find((m) => m.profile.modality)?.profile.modality ?? null;
@@ -1922,6 +1937,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
   const forceFactor = meanOrNull(forceParts);
   const horizFactor = meanOrNull(horizParts);
   const calMetres = meanOrNull(calParts);
+  const paceMpm = meanOrNull(paceParts);
 
   let profile: MovementProfile = {
     regions: normalizeWeights(regionAcc),
@@ -1938,6 +1954,7 @@ export function classifyMovement(raw: string, ctx: ClassifyContext = {}): Classi
     ...(forceFactor != null ? { forceFactor } : {}),
     ...(horizFactor != null ? { horizFactor } : {}),
     ...(calMetres != null ? { calMetres } : {}),
+    ...(paceMpm != null ? { paceMpm } : {}),
   };
 
   let source: ClassificationSource;

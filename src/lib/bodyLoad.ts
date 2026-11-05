@@ -28,6 +28,7 @@ import {
   RPE,
   SESSION_CLOCK,
   VOLUME,
+  WORK,
   type BodyLensKey,
   type ModalityKey,
   type MovementProfile,
@@ -111,6 +112,13 @@ export interface BodyLoadSummary {
    * once for quads and once for glutes. Never total it.
    */
   hardSetsByRegion: Record<RegionKey, number>;
+  /**
+   * Minutes each region spent in the cardio lens (conditioning blocks and
+   * endurance activities — sled, ski, padel, a ride), by movement. The work
+   * hard sets deliberately leave out, kept so the coach can say a region short
+   * of its set floor was not idle. Sums per region to `byLens.cardio.minutes`.
+   */
+  cardioSourcesByRegion: Record<RegionKey, Record<string, number>>;
   resistanceTonnage: Record<RegionKey, number>;
   /**
    * WORK — the body map's default currency. Every loaded working set (see
@@ -198,6 +206,7 @@ export function setMinutes(set: LogSet): number {
   if (a.time != null) return a.time / 60;
   if (a.reps != null) return (a.reps * LOAD.repSeconds) / 60;
   if (a.distance != null) return a.distance / LOAD.metersPerMinute;
+  if (a.calories != null) return (a.calories * LOAD.secondsPerCalorie) / 60;
   return LOAD.fallbackSetMinutes;
 }
 
@@ -319,6 +328,7 @@ function repEquivalents(a: LogSet['actual']): number {
   if (a.reps != null) return a.reps;
   if (a.time != null) return a.time / LOAD.repSeconds;
   if (a.distance != null) return (a.distance / LOAD.metersPerMinute) * 60 / LOAD.repSeconds;
+  if (a.calories != null) return (a.calories * LOAD.secondsPerCalorie) / LOAD.repSeconds;
   return 1;
 }
 
@@ -569,6 +579,31 @@ function inferModality(
 
 // Which lens a modality belongs to. Null for an un-inferrable modality, which
 // is deliberate — see the note at the accumulation site.
+/**
+ * A CONDITIONING STATION: a whole-body (`systemic`) movement inside a
+ * conditioning block — a sled push, a snatch, a swing, a carry. It is trained
+ * for the conditioning, whatever its modality says, so it lands in the cardio
+ * lens and is not a hard set. Lensing by modality alone booked one athlete's
+ * stations as a third of their Strength sets and 42% of the quads.
+ *
+ * Systemic, and not "anything in the block", on purpose: the same athlete puts
+ * ab-wheel rollouts, toes-to-bar and landmine rows in their circuits as rested,
+ * progressed strength work, and dropping the whole block took their core from
+ * 14.8 hard sets a week to 3.3.
+ */
+function isConditioningStation(section: string, profile: MovementProfile): boolean {
+  return (WORK.cardioSections as readonly string[]).includes(section) && profile.systemic;
+}
+
+function itemLens(
+  modality: ModalityKey | null,
+  section: string,
+  profile: MovementProfile,
+): BodyLensKey | null {
+  if (isConditioningStation(section, profile) && modality !== 'mobility') return 'cardio';
+  return lensFor(modality);
+}
+
 function lensFor(modality: ModalityKey | null): BodyLensKey | null {
   if (!modality) return null;
   for (const key of BODY_LENS_KEYS) {
@@ -862,6 +897,9 @@ export function summarizeBodyLoad(
   const rotaryMinutes = zeroed(['rotational', 'antiRotational'] as const);
   const resistanceSets = zeroed(MUSCLE_REGION_KEYS);
   const hardSetsByRegion = zeroed(MUSCLE_REGION_KEYS);
+  const cardioSourcesByRegion = Object.fromEntries(
+    MUSCLE_REGION_KEYS.map((k) => [k, {} as Record<string, number>]),
+  ) as Record<RegionKey, Record<string, number>>;
   const resistanceTonnage = zeroed(MUSCLE_REGION_KEYS);
   const regionWork = zeroed(MUSCLE_REGION_KEYS);
   const byLens = Object.fromEntries(
@@ -916,7 +954,7 @@ export function summarizeBodyLoad(
 
     // PASS 3 — attribute the allocated minutes.
     for (const { item, section, profile, hasRegions, modality, minutes } of walk) {
-      const lens = lensFor(modality);
+      const lens = itemLens(modality, section, profile);
 
       // WORK, before the minutes gate on purpose: it counts sets, not clock,
       // so an item the allocation happened to leave at zero minutes still
@@ -959,6 +997,11 @@ export function summarizeBodyLoad(
       // movement's own profile shape.
       const regionCutoff = meaningfulRegionShare(profile.regions);
       const isLoad = loadSections.has(section);
+      // Hard sets are the hypertrophy currency, and a conditioning station is
+      // not one: twenty metres of sled between ski intervals is trained for
+      // something else. Its muscles still did the work — that is in the cardio
+      // lens's minutes and in `cardioSourcesByRegion`, which the coach reads.
+      const countsHard = isLoad && !isConditioningStation(section, profile);
       const itemVolume = isLoad
         ? item.sets.reduce((acc, s) => acc + setVolume(s, unweightedKg, rom, bw), 0)
         : 0;
@@ -970,6 +1013,10 @@ export function summarizeBodyLoad(
         if (lens) {
           byLens[lens].minutes[region] += minutes * weight;
           byLens[lens].volume[region] += itemVolume * weight;
+        }
+        if (lens === 'cardio') {
+          const src = cardioSourcesByRegion[region];
+          src[item.movement] = (src[item.movement] ?? 0) + minutes * weight;
         }
 
         if (isLoad && modality === 'resistance') {
@@ -984,7 +1031,7 @@ export function summarizeBodyLoad(
         // region taking a meaningful share. Outside the `resistance` branch on
         // purpose: a loaded carry is endurance by modality and still trains the
         // muscles holding the weight.
-        if (isLoad && weight >= regionCutoff) {
+        if (countsHard && weight >= regionCutoff) {
           for (const s of item.sets) {
             if (isLoadedSet(s, profile)) hardSetsByRegion[region] += 1;
           }
@@ -997,7 +1044,7 @@ export function summarizeBodyLoad(
       const authored = profile.muscleSource === 'authored';
       const muscleCutoff = meaningfulMuscleShare(profile.muscles);
       const completedSets = item.sets.filter((s) => s.actual.completed).length;
-      const loadedSets = isLoad ? item.sets.filter((s) => isLoadedSet(s, profile)).length : 0;
+      const loadedSets = countsHard ? item.sets.filter((s) => isLoadedSet(s, profile)).length : 0;
       for (const [muscle, weight] of Object.entries(profile.muscles) as [MuscleKey, number][]) {
         const m = minutes * weight;
         const v = itemVolume * weight;
@@ -1047,6 +1094,7 @@ export function summarizeBodyLoad(
     systemicMinutes,
     resistanceSets,
     hardSetsByRegion,
+    cardioSourcesByRegion,
     resistanceTonnage,
     regionWork,
     muscleMinutes,

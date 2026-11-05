@@ -972,8 +972,10 @@ describe('per-muscle twins', () => {
   });
 
   it('counts a loaded carry toward muscle hard sets though it is not resistance', () => {
+    // In an accessory block: a conditioning-block carry is a station, not a
+    // hard set (next test). What this pins is that MODALITY does not gate it.
     const s = summarizeBodyLoad([
-      log([{ key: 'conditioning', items: [item('Farmer Carry', 'distance', [set({ weight: 32, distance: 40 })])] }]),
+      log([{ key: 'accessory', items: [item('Farmer Carry', 'distance', [set({ weight: 32, distance: 40 })])] }]),
     ]);
     // Row 'farmer carry': forearms 0.25 and gluteMed 0.12 both clear the 0.0875
     // cutoff; abs (0.06) and gluteMax (0.05) do not.
@@ -981,6 +983,48 @@ describe('per-muscle twins', () => {
     expect(s.hardSetsByMuscle.gluteMed).toBe(1);
     expect(s.hardSetsByMuscle.abs).toBe(0);
     expect(Object.values(s.resistanceSetsByMuscle).every((v) => v === 0)).toBe(true);
+  });
+
+  it('keeps conditioning-block stations out of hard sets and in the cardio lens, by source', () => {
+    const s = summarizeBodyLoad([
+      log([
+        { key: 'primary', items: [item('Back Squat', 'reps', [set({ weight: 100, reps: 5 })])] },
+        { key: 'conditioning', items: [item('Sled Push', 'distance', [set({ weight: 120, distance: 20 }), set({ weight: 120, distance: 20 })])] },
+      ]),
+    ]);
+    // The squat's set counts; the two pushes do not.
+    expect(s.hardSetsByRegion.quads).toBe(1);
+    expect(s.hardSetsByRegion.calves).toBe(0);
+    expect(s.hardSetsByMuscle.quads).toBe(1);
+    // The pushes are conditioning on the map, whatever their modality says…
+    expect(s.byLens.strength.work.quads).toBeCloseTo(classifyMovement('Back Squat').profile.regions.quads ?? 0, 5);
+    expect(s.byLens.cardio.work.quads).toBeGreaterThan(0);
+    // …and the coach can name them as the work the set count left out.
+    expect(s.cardioSourcesByRegion.quads['Sled Push']).toBeGreaterThan(0);
+    expect(s.cardioSourcesByRegion.quads['Back Squat']).toBeUndefined();
+    const sum = Object.values(s.cardioSourcesByRegion.quads).reduce((a, b) => a + b, 0);
+    expect(sum).toBeCloseTo(s.byLens.cardio.minutes.quads, 6);
+  });
+
+  it('keeps local strength work in a circuit as hard sets — only whole-body stations leave', () => {
+    const s = summarizeBodyLoad([
+      log([{ key: 'conditioning', items: [item('Ab Wheel Rollout', 'reps', [set({ reps: 12 }), set({ reps: 12 })])] }]),
+    ]);
+    expect(classifyMovement('Ab Wheel Rollout').profile.systemic).toBe(false);
+    expect(s.hardSetsByRegion.core).toBe(2);
+    expect(s.byLens.strength.work.core).toBeGreaterThan(0);
+    expect(Object.keys(s.cardioSourcesByRegion.core)).toHaveLength(0);
+  });
+
+  it('prices an erg interval logged in calories like the same interval logged in time', () => {
+    const byCal = summarizeBodyLoad([
+      log([{ key: 'conditioning', items: [item('Ski Erg Interval', 'cal', [set({ calories: 12 })])] }]),
+    ]);
+    const byTime = summarizeBodyLoad([
+      log([{ key: 'conditioning', items: [item('Ski Erg Interval', 'time', [set({ time: 30 })])] }]),
+    ]);
+    const tot = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
+    expect(tot(byCal.regionVolume)).toBeCloseTo(tot(byTime.regionVolume), 6);
   });
 
   // Phase C2 authored every built-in, so the estimated case is made with region-only
