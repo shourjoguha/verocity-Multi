@@ -1299,7 +1299,7 @@ describe('machine locomotion keeps the erg-style estimates', () => {
 describe('split rules and new entries price like the entry they were copied from', () => {
   const est = (n: string) => {
     const p = classifyMovement(n).profile;
-    return [p.bwLoad, p.forceFactor, p.horizFactor, p.calMetres, p.rom];
+    return [p.bwLoad, p.forceFactor, p.horizFactor, p.calMetres, p.paceMpm, p.rom];
   };
   it('rule:ski-erg = ski erg interval', () => {
     expect(est('Ski Erg')).toEqual(est('Ski-Erg Intervals'));

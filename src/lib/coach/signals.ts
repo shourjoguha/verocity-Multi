@@ -211,6 +211,13 @@ export interface TrainingSignals {
    */
   regionSetsPerWeek: Measured<Record<RegionKey, number>>;
   /**
+   * What each region did OUTSIDE hard sets: minutes per week in the cardio lens
+   * (conditioning stations, rides, padel), and the movements that supplied most
+   * of it. Context for `regionSetsPerWeek`, never added to it — a minute is not
+   * a set, and the floor is stated in sets.
+   */
+  regionOutsideSets: Record<RegionKey, { minutesPerWeek: number; sources: string[] }>;
+  /**
    * How resistance sets distribute across the rep bands the evidence names.
    * Counted only over sets that recorded reps — a set with no rep count is
    * absent data, never a zero.
@@ -521,6 +528,19 @@ export function measureTraining(
     MUSCLE_REGION_KEYS.map((k) => [k, body.hardSetsByRegion[k] / weeks]),
   ) as Record<RegionKey, number>;
 
+  const regionOutsideSets = Object.fromEntries(
+    MUSCLE_REGION_KEYS.map((k) => [
+      k,
+      {
+        minutesPerWeek: body.byLens.cardio.minutes[k] / weeks,
+        sources: Object.entries(body.cardioSourcesByRegion[k])
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([name]) => name),
+      },
+    ]),
+  ) as TrainingSignals['regionOutsideSets'];
+
   // Rep bands and primary intensity need the raw sets, and need to know which
   // section a set came from — flattenSets drops `section`, so walk it here.
   // Elapsed-time attribution now happens ONCE, inside summarizeBodyLoad: every
@@ -815,6 +835,7 @@ export function measureTraining(
       6,
       'a training-time split needs more sessions to be stable',
     ),
+    regionOutsideSets,
     regionSetsPerWeek: measured(
       regionPerWeek,
       logs.length,

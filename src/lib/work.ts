@@ -18,12 +18,18 @@
 
 import { CONSISTENCY, VOLUME, WORK, type MovementProfile } from '@/app.config';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
+import { conditioningLoad } from '@/lib/conditioningLoad';
 import { isHeld } from '@/lib/notations';
 import { workingSections } from '@/lib/stats';
 import { isSubroutine } from '@/lib/subroutine';
 import type { LogSet, UserStats, WorkoutLog } from '@/lib/types';
 
-/** kg.m of work, split by lane. Never summed for display — see WORK. */
+/**
+ * A session's two lanes. Never summed for display — see WORK — and now not
+ * even the same unit: `resistance` is kg.m, `cardio` is conditioning load in
+ * RPE·min (lib/conditioningLoad.ts) when it comes from `sessionWork`.
+ * `addSetWork` alone still prices both lanes in kg.m.
+ */
 export interface WorkTotals {
   resistance: number;
   cardio: number;
@@ -54,11 +60,13 @@ export function workBodyWeight(stats: UserStats | null): number {
  * the retired voice input wrote 0 to mean "bodyweight" (stored logs still
  * carry it), the same as writing nothing.
  */
-function forceKg(set: LogSet, profile: MovementProfile | null, bodyWeightKg: number): number {
+function forceParts(
+  set: LogSet,
+  profile: MovementProfile | null,
+  bodyWeightKg: number,
+): { borne: number; external: number } {
   const fraction = profile?.forceFactor ?? profile?.bwLoad ?? VOLUME.bodyweightFraction;
-  const borne = bodyWeightKg * fraction;
-  const external = set.actual.weight || 0;
-  return borne + external;
+  return { borne: bodyWeightKg * fraction, external: set.actual.weight || 0 };
 }
 
 /**
@@ -100,7 +108,8 @@ export function addSetWork(
   const lane = laneOf(a);
   if (lane == null) return;
 
-  const force = forceKg(set, profile, bodyWeightKg);
+  const { borne, external } = forceParts(set, profile, bodyWeightKg);
+  const force = borne + external;
   if (force <= 0) return;
 
   if (lane === 'resistance') {
@@ -117,7 +126,17 @@ export function addSetWork(
   // the distance, which was measured rather than converted.
   const metres =
     a.distance != null ? a.distance : (a.calories ?? 0) * (profile?.calMetres ?? WORK.defaultCalMetres);
-  into[bookTo ?? lane] += force * metres * (profile?.horizFactor ?? WORK.defaultHorizFactor);
+  const horiz = profile?.horizFactor ?? WORK.defaultHorizFactor;
+  // A movement's horizFactor describes what it DRAGS when something external
+  // is logged — a sled's friction. The athlete's own body walking behind it is
+  // ordinary locomotion. Pricing both at the sled's 0.5 made the walking half
+  // of a 20 m push cost five times a running metre, and was most of why a push
+  // read ~2.5x a ski interval of the same effort. With nothing external (a
+  // stairmaster, a run) the factor IS the body's, and applies to all of it.
+  into[bookTo ?? lane] +=
+    external > 0
+      ? metres * (external * horiz + borne * WORK.defaultHorizFactor)
+      : force * metres * horiz;
 }
 
 /** The lane a block books its work to, or undefined to let the metric decide. */
@@ -148,7 +167,15 @@ export function sessionWork(
         // of the taxonomy follows. Absence is never a penalty.
         const c = classifyMovement(item.movement, { overrides });
         const profile = c.source === 'unknown' ? null : c.profile;
-        for (const set of item.sets) addSetWork(set, profile, bodyWeightKg, totals, bookTo);
+        for (const set of item.sets) {
+          // The cardio lane is priced in effort x time, not kg.m — see
+          // lib/conditioningLoad.ts for why a sled must not dwarf a ski. A set
+          // with no lane of its own (a timed hold) still counts there when the
+          // block puts it there.
+          const lane = bookTo ?? laneOf(set.actual);
+          if (lane === 'cardio') totals.cardio += conditioningLoad(set, profile);
+          else addSetWork(set, profile, bodyWeightKg, totals, bookTo);
+        }
       }
     }
   }
@@ -195,8 +222,9 @@ export function percentile(sorted: number[], q: number): number {
  * plan that repeats the same conditioning every week ties AT the maximum every
  * week — which is how every recent Hyrox and strength day read as full.
  *
- * NEVER sum the lanes. Both are kg.m, so `resistance + cardio` is dimensionally
- * legal and was shipped on that reasoning; it is still wrong, because the lanes
+ * NEVER sum the lanes. They are no longer even one unit (kg.m and RPE·min).
+ * When both were kg.m, `resistance + cardio` was dimensionally legal and was
+ * shipped on that reasoning; it was still wrong, because the lanes
  * have never been calibrated against each other: a 10 x 20m sled push is
  * ~18,000 against ~4,000 for the lifting around it, so a summed score is just a
  * sled meter. The grid shows the two lanes as two bars instead.

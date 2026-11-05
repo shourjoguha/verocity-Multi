@@ -12,7 +12,7 @@ import {
   type WorkTotals,
 } from '@/lib/work';
 import { classifyMovement } from '@/lib/movementTaxonomy';
-import { VOLUME, WORK, type SectionKey } from '@/app.config';
+import { LOAD, RPE, VOLUME, WORK, type SectionKey } from '@/app.config';
 import type { LogItem, LogSet, UserStats, WorkoutLog } from '@/lib/types';
 
 const BW = 86;
@@ -138,6 +138,15 @@ describe('the cardio lane', () => {
     expect(sled / run).toBeGreaterThan(4);
   });
 
+  it('prices the sled at its friction and the athlete behind it as walking', () => {
+    const p = classifyMovement('Sled Push').profile;
+    const borne = BW * (p.forceFactor ?? p.bwLoad ?? VOLUME.bodyweightFraction);
+    expect(work('Sled Push', set({ distance: 20, weight: 120 })).cardio).toBeCloseTo(
+      20 * (120 * (p.horizFactor as number) + borne * WORK.defaultHorizFactor),
+      4,
+    );
+  });
+
   it('counts the load on a carry', () => {
     const loaded = work('Farmer Carry', set({ distance: 200, weight: 48 })).cardio;
     const empty = work('Farmer Carry', set({ distance: 200 })).cardio;
@@ -220,7 +229,20 @@ describe('sessionWork', () => {
       BW,
     );
     expect(w.resistance).toBeCloseTo(86 * 0.6 * 10, 4);
-    expect(w.cardio).toBeCloseTo(86 * 0.65 * 1000 * 0.1, 4);
+    // Cardio is conditioning load: working minutes x RPE (unrated → default).
+    expect(w.cardio).toBeCloseTo((1000 / LOAD.metersPerMinute) * RPE.default, 4);
+  });
+
+  it('prices a sled push and a ski interval by effort and time, not by what was moved', () => {
+    const at = (it: LogItem) => sessionWork(log([{ key: 'conditioning', items: [it] }]), BW).cardio;
+    // 20 m at the sled's working pace is 20 s; 8 cal on the ski is 20 s.
+    const sled = at(item('Sled push', 'distance', [set({ weight: 115, distance: 20, rpe: 8 })]));
+    const ski = at(item('Ski Erg Intervals', 'cal', [set({ calories: 8, rpe: 8 })]));
+    const skiTimed = at(item('Ski Erg Intervals', 'time', [set({ time: 20, rpe: 8 })]));
+    expect(sled).toBeCloseTo((20 / 60) * 8, 4);
+    expect(ski).toBeCloseTo(sled, 4);
+    // Logged by time it no longer scores zero.
+    expect(skiTimed).toBeCloseTo(sled, 4);
   });
 
   it('scores a bodyweight-and-erg session that tonnage read as zero', () => {
@@ -246,7 +268,7 @@ describe('sessionWork', () => {
       BW,
     );
     expect(w.resistance).toBeGreaterThan(2000);
-    expect(w.cardio).toBeGreaterThan(20000);
+    expect(w.cardio).toBeCloseTo((60 * LOAD.secondsPerCalorie / 60 + 4000 / LOAD.metersPerMinute) * RPE.default, 4);
   });
 });
 
@@ -367,16 +389,22 @@ describe('sessionWork books work to the block it was logged in', () => {
   const snatch = item('Dumbbell Snatch', 'reps', [set({ weight: 16, reps: 10 })]);
   const carry = item('Farmer carry', 'distance', [set({ weight: 48, distance: 50 })]);
 
-  it('counts rep work in a conditioning block as cardio, priced as reps', () => {
+  it('counts rep work in a conditioning block as cardio, priced as effort x time', () => {
     const inCond = sessionWork(log([{ key: 'conditioning', items: [snatch] }]), BW);
     const inMain = sessionWork(log([{ key: 'accessory', items: [snatch] }]), BW);
-    expect(inCond).toEqual({ resistance: 0, cardio: inMain.resistance });
+    expect(inMain.cardio).toBe(0);
+    expect(inMain.resistance).toBeGreaterThan(0);
+    expect(inCond).toEqual({ resistance: 0, cardio: ((10 * LOAD.repSeconds) / 60) * RPE.default });
   });
 
   it('counts distance work in a lifting block as lifting, priced as distance', () => {
     const inMain = sessionWork(log([{ key: 'accessory', items: [carry] }]), BW);
     const inCond = sessionWork(log([{ key: 'conditioning', items: [carry] }]), BW);
-    expect(inMain).toEqual({ resistance: inCond.cardio, cardio: 0 });
+    const kgm = { resistance: 0, cardio: 0 };
+    addSetWork(carry.sets[0], classifyMovement('Farmer carry').profile, BW, kgm, 'resistance');
+    expect(inMain).toEqual({ resistance: kgm.resistance, cardio: 0 });
+    expect(inCond.resistance).toBe(0);
+    expect(inCond.cardio).toBeGreaterThan(0);
   });
 
   it('lets the metric decide for a session that is nothing but prep', () => {

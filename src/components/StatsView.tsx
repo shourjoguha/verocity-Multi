@@ -27,6 +27,7 @@ import {
   type LaneScore,
   type WorkTotals,
 } from '@/lib/work';
+import { CONDITIONING_UNIT } from '@/lib/conditioningLoad';
 import { sessionClockSeconds, sessionLens } from '@/lib/bodyLoad';
 import { buildLoadIndex, formatLoadChanges, loadChanges, type LoadChange } from '@/lib/loadChange';
 import { aspectWindows, logsInWindow } from '@/lib/aspects';
@@ -93,7 +94,9 @@ function laneLines(work: WorkTotals, lift: LaneScore, cardio: LaneScore): string
   const lines: string[] = [];
   if (work.resistance > 0) lines.push(`Lift ${formatWork(work.resistance)} ${WORK_UNIT}${vs(lift)}`);
   if (work.cardio > 0) {
-    lines.push(`Cardio ${formatWork(work.cardio)}${lines.length ? '' : ` ${WORK_UNIT}`}${vs(cardio)}`);
+    // Its own unit, always shown: cardio is conditioning load (effort x time),
+    // not kg.m, so it can no longer borrow the lifting line's.
+    lines.push(`Cardio ${formatWork(work.cardio)} ${CONDITIONING_UNIT}${vs(cardio)}`);
   }
   return lines.length > 0 ? lines.join('\n') : 'No work logged';
 }

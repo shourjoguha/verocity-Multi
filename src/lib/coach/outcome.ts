@@ -142,6 +142,16 @@ export const DEFINITION_CHANGES: readonly DefinitionChange[] = [
     what: 'sets marked as a variation no longer set your best for the lift, so they no longer decide which sets count as heavy',
   },
   {
+    ruleId: 'training.hypertrophy.region-volume-short',
+    on: '2026-11-05',
+    what: 'whole-body conditioning stations (sled, snatch, swings, carries) in a conditioning block no longer count as sets per muscle group; the work they did is named alongside instead',
+  },
+  {
+    ruleId: 'training.hypertrophy.total-volume-short',
+    on: '2026-11-05',
+    what: 'whole-body conditioning stations (sled, snatch, swings, carries) in a conditioning block no longer count as sets per muscle group; the work they did is named alongside instead',
+  },
+  {
     ruleId: 'training.progression.load-step-due',
     on: '2026-11-05',
     what: 'a session done as a variation is no longer read as a step on the plain lift’s progression',
