@@ -261,6 +261,10 @@ export const GOAL_DEFAULTS = [
 
 export const GOAL_WEIGHT = { min: 0, max: 100, step: 5, default: 40 } as const;
 
+// First-run onboarding asks for a primary and a secondary goal only; ranking
+// all of them is what GoalsEditor in Settings is for.
+export const ONBOARDING = { maxGoals: 2 } as const;
+
 // Training age. `blurb` is the helper text under the Settings select AND the
 // gloss sent to the AI, so the athlete and the model are told the same thing.
 export const EXPERIENCE_LEVELS = {

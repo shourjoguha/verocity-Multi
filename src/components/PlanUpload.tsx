@@ -137,7 +137,9 @@ export default function PlanUpload() {
       // A failed read just means no Ready tab.
       const list = await getPlanTemplates().catch(() => [] as PlanTemplate[]);
       setTemplates(list);
-      setMode(list.length > 0 ? 'ready' : 'build');
+      // `?tab=build` is onboarding's "Bring my own plan" hand-off.
+      const wantsBuild = new URLSearchParams(window.location.search).get('tab') === 'build';
+      setMode(list.length > 0 && !wantsBuild ? 'ready' : 'build');
       setReady(true);
       getUserStats()
         .then(setStats)
