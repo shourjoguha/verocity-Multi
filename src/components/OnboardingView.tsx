@@ -1,35 +1,39 @@
 // First-run onboarding — the guided takeover a new user lands on straight after
-// signup (SignupForm redirects here). It fills the same `user_stats` row that
-// Settings' UserStatsPanel edits, one phase at a time, so the AI plan prompt and
-// the personalization surfaces start out tuned instead of empty.
+// signup (SignupForm redirects here), and that Home's SetupCard links back to
+// for anyone who has not finished it. It fills the same `user_stats` row that
+// Settings' UserStatsPanel edits.
 //
-// Design contract: this is built from the app's own system — .hill-btn chips
-// (invert on aria-pressed), EchoText hero, tokens only, CSS-first stagger, the
+// WHAT IT ASKS, AND WHY ONLY THIS. Bodyweight and experience change numbers the
+// app computes (volume pricing, the coach's set floor); days, goals, equipment
+// and areas shape a plan. Height, birth year, sex, disciplines and plan length
+// used to be asked here too — they reach only the AI plan prompt, which already
+// asks for whatever is missing, so they live in Settings and are not asked up
+// front. The flow ends on a choice of where to start rather than a diagram of
+// where the New plan button is.
+//
+// Design contract: built from the app's own system — .hill-btn chips (invert on
+// aria-pressed), EchoText hero, tokens only, CSS-first stagger, the
 // non-scrolling app-shell with a pinned nav. Nothing here is required (every
-// user_stats column is nullable), so every phase — and the whole flow — skips.
+// user_stats column is nullable), so every phase skips.
 //
 // Persistence is a partial upsert per phase (upsertUserStats only SETs the keys
-// present), so a user who drops off keeps whatever they had already entered.
-// `onboarded_at` is stamped when the flow is finished OR skipped, which is what
-// stops the post-signup redirect bringing them back.
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+// present), and ONLY for a phase the user actually changed: an existing user
+// arriving from the Home card must be able to page through without the flow
+// rewriting goals or injuries they tuned in Settings. `onboarded_at` is stamped
+// when the flow is finished OR skipped, which is what retires the Home card.
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  DISCIPLINES,
   EQUIPMENT,
   EXPERIENCE_LEVELS,
   EXPERIENCE_KEYS,
-  GENDERS,
-  GENDER_KEYS,
   GOALS,
   GOAL_WEIGHT,
   MUSCLE_REGIONS,
   MUSCLE_REGION_KEYS,
-  PLAN_LENGTH,
+  ONBOARDING,
   STATS_LIMITS,
-  type DisciplineKey,
   type EquipmentKey,
   type ExperienceKey,
-  type GenderKey,
   type GoalKey,
   type RegionKey,
 } from '@/app.config';
@@ -41,22 +45,20 @@ import { EchoText } from '@/components/EchoText';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { ProgressBar } from '@/components/onboarding/ProgressBar';
 
-// Step indices. Named so the nav logic and the progress count read clearly and
-// don't drift when a phase is inserted.
-const STEPS = [
-  'welcome',
-  'about',
-  'rhythm',
-  'goals',
-  'disciplines',
-  'equipment',
-  'areas',
-  'summary',
-  'guide',
+// Named so the nav logic and the progress count read clearly and don't drift
+// when a phase is inserted.
+const STEPS = ['welcome', 'basics', 'goals', 'equipment', 'areas', 'start'] as const;
+const START = STEPS.indexOf('start');
+const QUESTIONS = START - 1;
+
+// Where the last screen can send someone. `?tab=build` is read by PlanUpload,
+// which otherwise opens on the Ready tab whenever templates exist.
+const STARTS = [
+  { key: 'ready', title: 'Start from a ready-made plan', blurb: 'Pick a program, adjust it later.', href: '/app/plan/upload', cta: 'See plans →' },
+  { key: 'own', title: 'Bring my own plan', blurb: 'Upload a spreadsheet or generate one with the AI prompt.', href: '/app/plan/upload?tab=build', cta: 'Open plan upload →' },
+  { key: 'log', title: 'Just log a session', blurb: 'No plan. Open the logger now.', href: '/app/log', cta: 'Open logger →' },
 ] as const;
-const SUMMARY = STEPS.indexOf('summary');
-const GUIDE = STEPS.indexOf('guide');
-const LAST_QUESTION = SUMMARY - 1;
+type StartKey = (typeof STARTS)[number]['key'];
 
 const field =
   'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none focus:border-fg';
@@ -67,14 +69,9 @@ const fieldLabel = 'mb-2 mt-6 block t-label text-muted first:mt-0';
 
 interface Draft {
   weight: string;
-  height: string;
-  birthYear: string;
-  gender: GenderKey | '';
   days: number | null;
   experience: ExperienceKey | '';
-  planWeeks: number | null;
   goals: GoalKey[];
-  disciplines: DisciplineKey[];
   equipment: EquipmentKey[];
   regions: RegionKey[];
   regionNote: string;
@@ -82,14 +79,9 @@ interface Draft {
 
 const EMPTY: Draft = {
   weight: '',
-  height: '',
-  birthYear: '',
-  gender: '',
   days: null,
   experience: '',
-  planWeeks: null,
   goals: [],
-  disciplines: [],
   equipment: [],
   regions: [],
   regionNote: '',
@@ -101,14 +93,9 @@ function toDraft(s: UserStats | null): Draft {
   return {
     ...EMPTY,
     weight: s.body_weight_kg?.toString() ?? '',
-    height: s.height_cm?.toString() ?? '',
-    birthYear: s.birth_year?.toString() ?? '',
-    gender: s.gender ?? '',
     days: s.days_per_week,
     experience: s.experience ?? '',
-    planWeeks: s.preferred_plan_weeks,
     goals: goalIds,
-    disciplines: s.disciplines ?? [],
     equipment: s.equipment ?? [],
     regions: (s.injuries ?? [])
       .map((i) => i.region)
@@ -134,22 +121,20 @@ function goalsPayload(keys: GoalKey[]): Goal[] {
   }));
 }
 
-// Selected regions → Injury[]. One row per region, labelled by the region so the
-// prompt renders something meaningful; the shared note rides on the first row.
-function injuriesPayload(regions: RegionKey[], note: string): Injury[] {
+// Selected regions → Injury[], MERGED into what is already stored: a row the
+// athlete detailed in Settings (year, notes) survives as long as its region is
+// still selected, and unlocalised rows are never touched. The note becomes its
+// own unlocalised row, so it is kept even when no region is picked.
+function injuriesPayload(existing: Injury[], regions: RegionKey[], note: string): Injury[] {
+  const kept = existing.filter((i) => i.region == null || regions.includes(i.region));
+  const added = regions
+    .filter((r) => !existing.some((i) => i.region === r))
+    .map((r) => ({ id: crypto.randomUUID(), region: r, label: MUSCLE_REGIONS[r].label }));
   const trimmed = note.trim();
-  return regions.map((r, i) => ({
-    id: crypto.randomUUID(),
-    region: r,
-    label: MUSCLE_REGIONS[r].label,
-    ...(i === 0 && trimmed ? { notes: trimmed } : {}),
-  }));
+  const noteRow = trimmed ? [{ id: crypto.randomUUID(), region: null, label: trimmed }] : [];
+  return [...kept, ...added, ...noteRow];
 }
 
-const planWeekOptions = Array.from(
-  { length: PLAN_LENGTH.maxWeeks - PLAN_LENGTH.minWeeks + 1 },
-  (_, i) => PLAN_LENGTH.minWeeks + i,
-);
 const dayOptions = Array.from(
   { length: STATS_LIMITS.daysPerWeek.max - STATS_LIMITS.daysPerWeek.min + 1 },
   (_, i) => STATS_LIMITS.daysPerWeek.min + i,
@@ -171,7 +156,7 @@ function Chip({
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`hill-btn inline-flex min-h-11 items-center gap-2 border bg-surface px-4 text-sm ${
+      className={`hill-btn inline-flex min-h-11 min-w-11 items-center justify-center gap-2 border bg-surface px-4 text-sm ${
         on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
       }`}
     >
@@ -189,8 +174,16 @@ export function OnboardingView() {
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [start, setStart] = useState<StartKey | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  // Phases the user changed. An untouched phase is never written — see header.
+  const touched = useRef(new Set<number>());
+  const storedInjuries = useRef<Injury[]>([]);
 
-  const set = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
+  const set = (p: Partial<Draft>) => {
+    touched.current.add(step);
+    setDraft((d) => ({ ...d, ...p }));
+  };
 
   // Guard: no session → login. Already onboarded → the flow is behind them, so
   // the URL should not re-open it. Otherwise seed the draft from any partial row.
@@ -208,6 +201,7 @@ export function OnboardingView() {
         window.location.href = '/app';
         return;
       }
+      storedInjuries.current = stats?.injuries ?? [];
       setDraft(toDraft(stats));
       setLoading(false);
     })();
@@ -216,37 +210,28 @@ export function OnboardingView() {
     };
   }, []);
 
-  // The fields this phase owns, or null for phases that collect nothing (welcome
-  // / summary / guide). Persisted on Continue and on Skip, partial by design.
+  // The fields this phase owns, or null for phases that collect nothing.
   function phasePayload(i: number): UserStatsInput | null {
     switch (STEPS[i]) {
-      case 'about':
+      case 'basics':
         return {
           body_weight_kg: bounded(draft.weight, STATS_LIMITS.weightKg),
-          height_cm: bounded(draft.height, STATS_LIMITS.heightCm),
-          birth_year: bounded(draft.birthYear, STATS_LIMITS.birthYear),
-          gender: draft.gender === '' ? null : draft.gender,
-        };
-      case 'rhythm':
-        return {
           days_per_week: draft.days,
           experience: draft.experience === '' ? null : draft.experience,
-          preferred_plan_weeks: draft.planWeeks,
         };
       case 'goals':
         return { goals: goalsPayload(draft.goals) };
-      case 'disciplines':
-        return { disciplines: draft.disciplines };
       case 'equipment':
         return { equipment: draft.equipment };
       case 'areas':
-        return { injuries: injuriesPayload(draft.regions, draft.regionNote) };
+        return { injuries: injuriesPayload(storedInjuries.current, draft.regions, draft.regionNote) };
       default:
         return null;
     }
   }
 
   async function persist(i: number) {
+    if (!touched.current.has(i)) return;
     const payload = phasePayload(i);
     if (!payload) return;
     // A rejected upsert used to be completely silent here — no toast, no retry,
@@ -257,28 +242,33 @@ export function OnboardingView() {
 
   function next() {
     void persist(step); // save this phase, don't block the transition on it
-    setStep((s) => Math.min(s + 1, GUIDE));
+    setStep((s) => Math.min(s + 1, START));
   }
   function back() {
     setStep((s) => Math.max(s - 1, 0));
   }
-  function skipPhase() {
-    setStep((s) => Math.min(s + 1, GUIDE));
+  function skip() {
+    setStep((s) => Math.min(s + 1, START));
   }
 
-  // Finish or skip-all: stamp the flag (so the redirect never brings them back)
-  // and land on the plan guide, which every user sees regardless of path.
-  async function complete() {
-    void persist(step);
+  // Finish or leave early: stamp the flag (which retires Home's SetupCard) and
+  // go. The navigation waits on the write so the card is not there on arrival.
+  async function leave(href: string) {
+    setLeaving(true);
     const ok = await upsertUserStats({ onboarded_at: new Date().toISOString() });
-    if (!ok) toast('Saved locally — we could not reach the server', 'error');
-    setStep(GUIDE);
+    if (!ok) toast('Could not save — try again', 'error');
+    window.location.href = href;
   }
 
   const toggle = <K,>(arr: K[], v: K): K[] =>
     arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
 
-  const summary = useMemo(() => buildSummary(draft), [draft]);
+  // Up to ONBOARDING.maxGoals, first tap is the priority. At the cap a new tap
+  // replaces the LAST pick, so the primary goal never moves under the thumb.
+  const toggleGoal = (k: GoalKey): GoalKey[] => {
+    if (draft.goals.includes(k)) return draft.goals.filter((g) => g !== k);
+    return [...draft.goals.slice(0, ONBOARDING.maxGoals - 1), k];
+  };
 
   if (loading) {
     return (
@@ -288,39 +278,21 @@ export function OnboardingView() {
     );
   }
 
-  const isQuestion = step > 0 && step < SUMMARY;
+  const isQuestion = step > 0 && step < START;
+  const chosen = STARTS.find((s) => s.key === start);
+  const primary =
+    'hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-5 text-sm font-semibold uppercase tracking-wider text-bg disabled:opacity-40';
 
   return (
     <div className="flex h-[100dvh] flex-col bg-surface">
-      {/* Top: progress + per-phase skip */}
-      <header className="flex flex-col gap-3 border-b border-border px-5 pb-3 pt-4">
+      <header className="flex flex-col gap-3 border-b border-border px-5 pb-4 pt-4">
         <div className="flex items-center justify-between">
-          <span className="font-display text-xs font-semibold uppercase tracking-[0.16em] text-muted">
-            Verocity
-          </span>
+          <span className="font-display text-xs uppercase tracking-[0.16em] text-muted">Verocity</span>
           <span className="text-xs tabular-nums text-subtle">
-            {step === 0 ? 'Welcome' : step === GUIDE ? 'First plan' : `${step} / ${LAST_QUESTION}`}
+            {step === 0 ? 'Welcome' : step === START ? 'Start' : `${step} / ${QUESTIONS}`}
           </span>
         </div>
         <ProgressBar total={STEPS.length} current={step} />
-        <div className="flex min-h-5 items-center justify-between">
-          <span className="text-xs text-subtle">
-            {step === 0
-              ? 'Set up your profile — skip anything you like'
-              : step === GUIDE
-                ? "You're all set — here's how to start"
-                : 'Every step is optional'}
-          </span>
-          {isQuestion ? (
-            <button
-              type="button"
-              onClick={skipPhase}
-              className="p-1 text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-fg"
-            >
-              Skip this →
-            </button>
-          ) : null}
-        </div>
       </header>
 
       {/* Scroller — the app-shell rule: the document doesn't scroll, this does */}
@@ -332,72 +304,36 @@ export function OnboardingView() {
                 <EchoText
                   text="Train"
                   as="span"
-                  className="font-display text-6xl font-semibold uppercase leading-[0.92] tracking-[-0.02em]"
+                  className="font-display text-6xl uppercase leading-[0.92] tracking-[-0.02em]"
                 />
               </div>
               <p className={`${eyebrow} stagger-item mt-5`}>Welcome to Verocity</p>
-              <h1 className={`${heading} stagger-item mt-2`}>Let&apos;s shape your training around you.</h1>
+              <h1 className={`${heading} stagger-item mt-2`}>Let&apos;s tune this to you.</h1>
               <p className={`${sub} stagger-item`}>
-                A few quick questions so your plans, coaching and body map start out tuned to your
-                goals, kit and history. Every step is optional — skip whatever you want, change it
-                later in Settings.
+                Four short screens, then you pick where to start. Skip any of them and change
+                everything later in Settings.
               </p>
             </div>
           )}
 
-          {STEPS[step] === 'about' && (
+          {STEPS[step] === 'basics' && (
             <>
               <p className={`${eyebrow} stagger-item`}>About you</p>
               <h1 className={`${heading} stagger-item`}>The basics</h1>
-              <p className={`${sub} stagger-item`}>Used to scale loads and estimate effort. Leave any of it blank.</p>
-              <div className="stagger-item grid grid-cols-2 gap-4">
-                <label className="block">
-                  <span className={fieldLabel}>Height (cm)</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={draft.height}
-                    onChange={(e) => set({ height: e.target.value })}
-                    className={`${field} tabular-nums`}
-                  />
-                </label>
-                <label className="block">
-                  <span className={fieldLabel}>Bodyweight (kg)</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={draft.weight}
-                    onChange={(e) => set({ weight: e.target.value })}
-                    className={`${field} tabular-nums`}
-                  />
-                </label>
-                <label className="block">
-                  <span className={fieldLabel}>Birth year</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={draft.birthYear}
-                    onChange={(e) => set({ birthYear: e.target.value })}
-                    className={`${field} tabular-nums`}
-                  />
-                </label>
-              </div>
-              <span className={`${fieldLabel} stagger-item`}>Sex</span>
-              <div className="stagger-item flex flex-wrap gap-2">
-                {GENDER_KEYS.map((k) => (
-                  <Chip key={k} on={draft.gender === k} onClick={() => set({ gender: draft.gender === k ? '' : k })}>
-                    {GENDERS[k].label}
-                  </Chip>
-                ))}
-              </div>
-            </>
-          )}
-
-          {STEPS[step] === 'rhythm' && (
-            <>
-              <p className={`${eyebrow} stagger-item`}>Training rhythm</p>
-              <h1 className={`${heading} stagger-item`}>How do you train?</h1>
-              <p className={`${sub} stagger-item`}>Sets the shape and volume of a generated plan.</p>
+              <p className={`${sub} stagger-item`}>
+                Bodyweight prices pull-ups and push-ups; experience sets the coach&apos;s weekly
+                targets.
+              </p>
+              <label className="stagger-item mt-6 block max-w-[12rem]">
+                <span className={fieldLabel}>Bodyweight (kg)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={draft.weight}
+                  onChange={(e) => set({ weight: e.target.value })}
+                  className={`${field} tabular-nums`}
+                />
+              </label>
               <span className={`${fieldLabel} stagger-item`}>Days per week</span>
               <div className="stagger-item flex flex-wrap gap-2">
                 {dayOptions.map((d) => (
@@ -418,18 +354,6 @@ export function OnboardingView() {
                   <p className="mt-2 text-xs text-subtle">{EXPERIENCE_LEVELS[draft.experience].blurb}</p>
                 ) : null}
               </div>
-              <span className={`${fieldLabel} stagger-item`}>Preferred plan length</span>
-              <div className="stagger-item flex flex-wrap gap-2">
-                {planWeekOptions.map((w) => (
-                  <Chip
-                    key={w}
-                    on={draft.planWeeks === w}
-                    onClick={() => set({ planWeeks: draft.planWeeks === w ? null : w })}
-                  >
-                    {w} wk
-                  </Chip>
-                ))}
-              </div>
             </>
           )}
 
@@ -438,7 +362,7 @@ export function OnboardingView() {
               <p className={`${eyebrow} stagger-item`}>Your goals</p>
               <h1 className={`${heading} stagger-item`}>What are you chasing?</h1>
               <p className={`${sub} stagger-item`}>
-                Tap in priority order — the number is the rank we&apos;ll weight them by.
+                Pick up to {ONBOARDING.maxGoals}. The first is your priority.
               </p>
               <div className="stagger-item mt-6 flex flex-wrap gap-2">
                 {(Object.keys(GOALS) as GoalKey[]).map((k) => {
@@ -448,31 +372,12 @@ export function OnboardingView() {
                       key={k}
                       on={idx >= 0}
                       rank={idx >= 0 ? idx + 1 : undefined}
-                      onClick={() => set({ goals: toggle(draft.goals, k) })}
+                      onClick={() => set({ goals: toggleGoal(k) })}
                     >
                       {GOALS[k].label}
                     </Chip>
                   );
                 })}
-              </div>
-            </>
-          )}
-
-          {STEPS[step] === 'disciplines' && (
-            <>
-              <p className={`${eyebrow} stagger-item`}>Disciplines</p>
-              <h1 className={`${heading} stagger-item`}>What do you like to train?</h1>
-              <p className={`${sub} stagger-item`}>Pick any that fit — we&apos;ll bias suggestions toward them.</p>
-              <div className="stagger-item mt-6 flex flex-wrap gap-2">
-                {DISCIPLINES.map((d) => (
-                  <Chip
-                    key={d.key}
-                    on={draft.disciplines.includes(d.key)}
-                    onClick={() => set({ disciplines: toggle(draft.disciplines, d.key) })}
-                  >
-                    {d.label}
-                  </Chip>
-                ))}
               </div>
             </>
           )}
@@ -501,8 +406,7 @@ export function OnboardingView() {
               <p className={`${eyebrow} stagger-item`}>Sensitive areas</p>
               <h1 className={`${heading} stagger-item`}>Anything to work around?</h1>
               <p className={`${sub} stagger-item`}>
-                Old injuries or areas to go easy on, so we can substitute the right movements.
-                Optional.
+                Old injuries or areas to go easy on, so a plan can substitute the right movements.
               </p>
               <div className="stagger-item mt-6 flex flex-wrap gap-2">
                 {MUSCLE_REGION_KEYS.map((k) => (
@@ -515,7 +419,7 @@ export function OnboardingView() {
                   </Chip>
                 ))}
               </div>
-              <label className="block">
+              <label className="mt-6 block">
                 <span className={fieldLabel}>
                   Notes <span className="font-normal normal-case tracking-normal text-subtle">(optional)</span>
                 </span>
@@ -531,29 +435,31 @@ export function OnboardingView() {
             </>
           )}
 
-          {STEPS[step] === 'summary' && (
+          {STEPS[step] === 'start' && (
             <>
-              <p className={`${eyebrow} stagger-item`}>All set</p>
-              <h1 className={`${heading} stagger-item`}>Here&apos;s your starting point.</h1>
-              <p className={`${sub} stagger-item`}>Saved to your profile. Change any of it anytime in Settings.</p>
-              <dl className="stagger-item mt-5 grid grid-cols-[auto_1fr] gap-px border border-border bg-border">
-                {summary.map(([k, v]) => (
-                  <div key={k} className="contents">
-                    <dt className="bg-surface px-4 py-3 t-label text-muted">{k}</dt>
-                    <dd className={`bg-surface px-4 py-3 text-right text-sm ${v ? 'text-fg' : 'italic text-subtle'}`}>
-                      {v || 'Skipped'}
-                    </dd>
-                  </div>
+              <p className={`${eyebrow} stagger-item`}>Last step</p>
+              <h1 className={`${heading} stagger-item`}>Where do you want to start?</h1>
+              <div className="stagger-item mt-6 flex flex-col gap-2">
+                {STARTS.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    aria-pressed={start === s.key}
+                    onClick={() => setStart(s.key)}
+                    className="hill-btn flex min-h-11 flex-col items-start border border-border bg-surface px-4 py-3 text-left"
+                  >
+                    <span className="text-sm font-semibold">{s.title}</span>
+                    <span className="mt-0.5 text-sm opacity-70">{s.blurb}</span>
+                  </button>
                 ))}
-              </dl>
+              </div>
             </>
           )}
-
-          {STEPS[step] === 'guide' && <PlanGuide />}
         </div>
       </div>
 
-      {/* Bottom: floating nav, pinned inside the scroller shell */}
+      {/* Bottom nav: the last flex child of the viewport-sized column, never
+          anchored to the viewport (CLAUDE.md, "the app chrome does not scroll"). */}
       <nav className="flex items-center justify-between gap-3 border-t border-border px-5 py-3 pb-safe">
         <button
           type="button"
@@ -564,179 +470,35 @@ export function OnboardingView() {
         >
           ←
         </button>
-        {step < SUMMARY ? (
+        {/* ONE skip per screen. It used to be two — "Skip this" up top for the
+            screen, "Skip for now" down here for the whole flow — and the labels
+            did not say which was which. Leaving entirely is offered on the
+            welcome and start screens only. min-h-11 is TOUCH.minTargetPx. */}
+        <button
+          type="button"
+          disabled={leaving}
+          onClick={isQuestion ? skip : () => void leave('/app')}
+          className="inline-flex min-h-11 items-center px-2 text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-fg"
+        >
+          {step === 0 ? 'Skip setup' : 'Skip'}
+        </button>
+        {step === START ? (
           <button
             type="button"
-            onClick={complete}
-            // min-h-11, not p-2: this measured 36px and was the last sub-44px
-            // target in the app (TOUCH.minTargetPx, audit:mobile rule 2). It
-            // reads as a text link, which is exactly why it is easy to miss —
-            // a link still has to be tappable.
-            className="inline-flex min-h-11 items-center px-2 text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-fg"
+            disabled={!chosen || leaving}
+            onClick={() => chosen && void leave(chosen.href)}
+            className={primary}
           >
-            Skip for now
-          </button>
-        ) : null}
-        {step === GUIDE ? (
-          <button
-            type="button"
-            onClick={() => (window.location.href = '/app/plan')}
-            className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-5 text-sm font-semibold uppercase tracking-wider text-bg"
-          >
-            Go to Plans →
-          </button>
-        ) : step === SUMMARY ? (
-          <button
-            type="button"
-            onClick={complete}
-            className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-5 text-sm font-semibold uppercase tracking-wider text-bg"
-          >
-            Finish →
+            {chosen ? chosen.cta : 'Choose one'}
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={next}
-            className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-5 text-sm font-semibold uppercase tracking-wider text-bg"
-          >
+          <button type="button" onClick={next} className={primary}>
             {step === 0 ? 'Get started →' : 'Continue →'}
           </button>
         )}
       </nav>
     </div>
   );
-}
-
-// The closing coach-mark. A faithful, token-built miniature of the plan page —
-// monochrome like the rest of the app — with the three targets ringed and
-// numbered, matched to a legend. (A literal screenshot would need an authed
-// running app with a plan on file; this representation always tracks the design
-// system and both themes for free.) Ring = the target, the rest is dimmed.
-function PlanGuide() {
-  return (
-    <>
-      <p className={`${eyebrow} stagger-item`}>One last thing</p>
-      <h1 className={`${heading} stagger-item`}>Make your first plan.</h1>
-      <p className={`${sub} stagger-item`}>
-        Head to Plans to upload a spreadsheet or generate one with the AI prompt. Here&apos;s where
-        to look:
-      </p>
-
-      <div className="stagger-item mx-auto mt-5 w-full max-w-[280px]">
-        <div className="relative overflow-hidden rounded-xl border border-border bg-bg">
-          {/* header */}
-          <div className="flex items-center justify-between border-b border-border bg-surface px-3 py-2 text-muted">
-            <span className="text-sm">☰</span>
-            <span className="font-display text-[8px] font-semibold uppercase tracking-[0.16em]">Verocity</span>
-            <span className="h-4 w-4 rounded-full border border-border bg-bg" />
-          </div>
-          {/* top tabs — Plan ringed */}
-          <div className="grid grid-cols-3 gap-px px-3 pt-3 text-[10px] font-semibold">
-            <span className="relative z-10 rounded-[3px] bg-fg py-1.5 text-center text-bg ring-2 ring-fg ring-offset-2 ring-offset-bg">
-              Plan
-              <Badge n={2} />
-            </span>
-            <span className="py-1.5 text-center text-subtle opacity-50">Sessions</span>
-            <span className="py-1.5 text-center text-subtle opacity-50">Library</span>
-          </div>
-          {/* body — New plan ringed */}
-          <div className="px-3 py-3">
-            <div className="flex items-center justify-between">
-              <div className="opacity-50">
-                <div className="font-display text-[13px] font-semibold text-fg">Your plan</div>
-                <div className="text-[8px] text-subtle">Push · Pull · Legs — Week 3</div>
-              </div>
-              <span className="relative z-10 rounded-[3px] border border-fg bg-fg px-2 py-1 font-display text-[9px] font-semibold text-bg ring-2 ring-fg ring-offset-2 ring-offset-bg">
-                ＋ New plan
-                <Badge n={3} />
-              </span>
-            </div>
-            <div className="mt-2 space-y-2 opacity-50">
-              <div className="h-6 rounded border border-border bg-surface" />
-              <div className="h-6 rounded border border-border bg-surface" />
-            </div>
-          </div>
-          {/* bottom ribbon — Training ringed */}
-          <div className="grid grid-cols-5 items-center border-t border-border bg-surface py-1.5 text-subtle">
-            <Slot glyph="⌂" label="Home" dim />
-            <div className="relative z-10 flex flex-col items-center rounded-[3px] py-0.5 text-fg ring-2 ring-fg ring-offset-2 ring-offset-surface">
-              <span className="text-[13px] leading-none">▤</span>
-              <small className="text-[7px]">Training</small>
-              <Badge n={1} />
-            </div>
-            <div className="flex justify-center">
-              <span className="-mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-fg text-[11px] text-bg">＋</span>
-            </div>
-            <Slot glyph="◔" label="Progress" dim />
-            <Slot glyph="☺" label="You" dim />
-          </div>
-        </div>
-      </div>
-
-      <ol className="stagger-item mt-6 flex flex-col gap-3">
-        {[
-          ['Tap Training', 'in the bottom bar.'],
-          ['Open the Plan tab', 'at the top.'],
-          ['Hit New plan', 'to upload a spreadsheet or copy the AI prompt to generate one.'],
-        ].map(([b, rest], i) => (
-          <li key={i} className="flex items-start gap-3">
-            <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-fg font-display text-xs font-bold text-bg">
-              {i + 1}
-            </span>
-            <span className="text-sm leading-snug text-fg">
-              <b className="font-semibold">{b}</b> <span className="text-muted">{rest}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-    </>
-  );
-}
-
-function Badge({ n }: { n: number }) {
-  return (
-    <span className="absolute -left-2 -top-2 flex h-[16px] w-[16px] items-center justify-center rounded-full bg-fg font-display text-[10px] font-bold text-bg ring-1 ring-bg">
-      {n}
-    </span>
-  );
-}
-
-function Slot({ glyph, label, dim }: { glyph: string; label: string; dim?: boolean }) {
-  return (
-    <div className={`flex flex-col items-center gap-0.5 ${dim ? 'opacity-50' : ''}`}>
-      <span className="text-[13px] leading-none">{glyph}</span>
-      <small className="text-[7px]">{label}</small>
-    </div>
-  );
-}
-
-function buildSummary(d: Draft): [string, string][] {
-  const nm = <K extends string>(arr: K[], lookup: (k: K) => string) => arr.map(lookup).join(', ');
-  const basics = [d.height && `${d.height}cm`, d.weight && `${d.weight}kg`, d.birthYear]
-    .filter(Boolean)
-    .join(' · ');
-  const rhythm = [
-    d.days && `${d.days} days/wk`,
-    d.experience && EXPERIENCE_LEVELS[d.experience].label,
-    d.planWeeks && `plan ${d.planWeeks}wk`,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-  const eq = d.equipment;
-  return [
-    ['Basics', basics],
-    ['Sex', d.gender ? GENDERS[d.gender].label : ''],
-    ['Rhythm', rhythm],
-    ['Goals', nm(d.goals, (k) => GOALS[k].label)],
-    ['Disciplines', nm(d.disciplines, (k) => DISCIPLINES.find((x) => x.key === k)?.label ?? k)],
-    [
-      'Equipment',
-      eq.length > 6
-        ? `${nm(eq.slice(0, 6), (k) => EQUIPMENT.find((x) => x.key === k)?.label ?? k)} +${eq.length - 6}`
-        : nm(eq, (k) => EQUIPMENT.find((x) => x.key === k)?.label ?? k),
-    ],
-    ['Work around', nm(d.regions, (k) => MUSCLE_REGIONS[k].label)],
-  ];
 }
 
 export default OnboardingView;

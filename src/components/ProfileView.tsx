@@ -39,6 +39,7 @@ import { DayList } from '@/components/DayList';
 import { MonthArea } from '@/components/MonthArea';
 import { summarizeDays } from '@/lib/dayLog';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
+import SetupCard from '@/components/SetupCard';
 import { Item, PageStagger } from '@/components/anim';
 import { DayPreviewDialog } from '@/components/DayPreviewDialog';
 import { AddSessionMenu } from '@/components/AddSessionMenu';
@@ -877,6 +878,10 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           </div>
         </header>
       </Item>
+
+      {/* App only: user_stats has no anon policy, and the showcase has nobody to
+          onboard. Outside <Item> so an onboarded user gets no empty stagger slot. */}
+      {mode === 'app' ? <SetupCard /> : null}
 
       {failed ? (
         <Item>
