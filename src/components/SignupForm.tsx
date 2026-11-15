@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getSession, signIn, signUpWithInvite } from '@/lib/auth';
 import { track } from '@/lib/analytics';
-import { Button } from '@/components/ui/primitives';
+import { Button, FIELD } from '@/components/ui/primitives';
 import { Item, PageStagger } from '@/components/anim';
 
 const MESSAGES: Record<string, string> = {
@@ -28,8 +28,6 @@ export default function SignupForm() {
     });
   }, []);
 
-  const inputClass =
-    'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none focus:border-subtle';
   const labelClass = 'mt-2 t-label text-muted';
 
   return (
@@ -63,7 +61,7 @@ export default function SignupForm() {
             maxLength={40}
             autoComplete="nickname"
             required
-            className={inputClass}
+            className={FIELD}
           />
           <label className={labelClass}>Invite code</label>
           <input
@@ -71,7 +69,7 @@ export default function SignupForm() {
             onChange={(e) => setInviteCode(e.target.value)}
             autoComplete="off"
             required
-            className={inputClass}
+            className={FIELD}
           />
           <label className={labelClass}>Email</label>
           <input
@@ -80,7 +78,7 @@ export default function SignupForm() {
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
             required
-            className={inputClass}
+            className={FIELD}
           />
           <label className={labelClass}>Password</label>
           <input
@@ -90,7 +88,7 @@ export default function SignupForm() {
             autoComplete="new-password"
             minLength={8}
             required
-            className={inputClass}
+            className={FIELD}
           />
           {error ? <p className="text-sm text-accent">{error}</p> : null}
           <Button type="submit" disabled={busy} className="mt-4 w-full">

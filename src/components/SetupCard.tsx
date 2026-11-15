@@ -37,7 +37,7 @@ export default function SetupCard() {
   }
 
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border border-border bg-surface px-4 py-3">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-card border border-outline bg-surface px-4 py-3">
       <div className="min-w-0">
         <p className="text-sm font-semibold text-fg">Finish setup</p>
         <p className="text-sm text-muted">Four short screens, so plans and coaching start out tuned to you.</p>

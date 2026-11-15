@@ -159,19 +159,19 @@ export function LogQuickView({
               <button
                 type="button"
                 onClick={() => onAddSession(log.log_date)}
-                className="mt-5 flex min-h-11 w-full items-center justify-center border border-dashed border-border t-control text-muted transition-colors hover:border-fg hover:text-fg"
+                className="hill-btn mt-5 flex min-h-11 w-full items-center justify-center border border-transparent bg-tappable t-control text-fg transition-colors hover:bg-tappable-hover"
               >
                 + Add another session
               </button>
             ) : null}
 
             {!readOnly ? (
-              <div className="mt-6 border-t border-border pt-4">
+              <div className="mt-6 border-t border-border-soft pt-4">
                 <LogShareControl logId={log.id} defaultLabel={shareLabel(log, plan)} />
               </div>
             ) : null}
           </div>
-          <div className="flex items-center gap-2 border-t border-border p-4">
+          <div className="flex items-center gap-2 border-t border-border-soft p-4">
             <span className="mr-auto">
               {!readOnly ? (
                 <DeleteLogButton
@@ -185,14 +185,14 @@ export function LogQuickView({
             </span>
             <a
               href={`${hrefFor('/app/session')}?id=${log.id}`}
-              className="hill-btn inline-flex min-h-12 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+              className="hill-btn inline-flex min-h-12 items-center justify-center border border-transparent bg-tappable px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:bg-tappable-hover"
             >
               Open
             </a>
             {resumable && !readOnly ? (
               <a
                 href={`/app/log?logId=${log.id}`}
-                className="hill-btn inline-flex min-h-12 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+                className="hill-btn inline-flex min-h-12 items-center justify-center border border-accent bg-accent px-4 text-sm uppercase tracking-wider text-accent-fg transition-colors hover:bg-accent/85"
               >
                 Resume
               </a>

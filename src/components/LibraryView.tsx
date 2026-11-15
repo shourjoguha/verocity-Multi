@@ -13,7 +13,7 @@ import type { Movement, MovementTaxonomyOverride } from '@/lib/types';
 import { METRICS, type MetricKey, PRIMARY_METRICS } from '@/app.config';
 import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { isSubroutine } from '@/lib/subroutine';
-import { Button, EmptyState, FilterChip, ListCard, LoadingScreen } from '@/components/ui/primitives';
+import { Button, EmptyState, FIELD, FilterChip, ListCard, LoadingScreen } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
 import { PencilGlyph, PlusGlyph } from '@/components/ui/icons';
 import { ArmedDelete, SHEET_GLYPH, SHEET_ICON_BTN } from '@/components/ui/SheetActions';
@@ -27,8 +27,6 @@ import { TaxonomyEditor } from '@/components/TaxonomyEditor';
 // Only primary-eligible metrics are offered. A movement already stored as
 // weight/rpe-primary still renders (METRICS keeps both), it just cannot be chosen.
 const METRIC_KEYS = PRIMARY_METRICS as readonly MetricKey[];
-const inputClass =
-  'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle';
 
 type Draft = MovementInput;
 
@@ -46,6 +44,7 @@ function MovementForm({
   categories,
   customCat,
   setCustomCat,
+  nested = false,
 }: {
   draft: Draft;
   setDraft: (d: Draft) => void;
@@ -56,6 +55,9 @@ function MovementForm({
   categories: string[];
   customCat: boolean;
   setCustomCat: (v: boolean) => void;
+  // Editing happens inside a ListCard row, which is already a card: the form
+  // drops its own box there rather than nesting a card in a card.
+  nested?: boolean;
 }) {
   return (
     <form
@@ -63,13 +65,13 @@ function MovementForm({
         e.preventDefault();
         onSubmit();
       }}
-      className="flex flex-col gap-3 border border-border bg-surface p-4"
+      className={`flex flex-col gap-3 ${nested ? '' : 'rounded-card border border-outline bg-surface p-4'}`}
     >
       <input
         value={draft.name}
         onChange={(e) => setDraft({ ...draft, name: e.target.value })}
         placeholder="Movement name"
-        className={inputClass}
+        className={FIELD}
         aria-label="Movement name"
         autoFocus
       />
@@ -87,7 +89,7 @@ function MovementForm({
                 setDraft({ ...draft, category: v || null });
               }
             }}
-            className={inputClass}
+            className={FIELD}
             aria-label="Category"
           >
             <option value="">No category</option>
@@ -103,34 +105,39 @@ function MovementForm({
               value={draft.category ?? ''}
               onChange={(e) => setDraft({ ...draft, category: e.target.value })}
               placeholder="New category name"
-              className={inputClass}
+              className={FIELD}
               aria-label="New category name"
               autoFocus
             />
           ) : null}
         </div>
-        <select
-          value={draft.primary_metric}
-          onChange={(e) => setDraft({ ...draft, primary_metric: e.target.value as MetricKey })}
-          className={`${inputClass} w-36`}
-          aria-label="Primary metric"
-        >
-          {METRIC_KEYS.map((k) => (
-            <option key={k} value={k}>
-              {METRICS[k].label}
-            </option>
-          ))}
-        </select>
+        {/* FIELD is w-full; the wrappers give these two fields their widths. */}
+        <div className="w-36">
+          <select
+            value={draft.primary_metric}
+            onChange={(e) => setDraft({ ...draft, primary_metric: e.target.value as MetricKey })}
+            className={FIELD}
+            aria-label="Primary metric"
+          >
+            {METRIC_KEYS.map((k) => (
+              <option key={k} value={k}>
+                {METRICS[k].label}
+              </option>
+            ))}
+          </select>
+        </div>
         <label className="flex items-center gap-2 text-sm text-muted">
-          <input
-            type="number"
-            min={0}
-            step={5}
-            value={draft.default_rest_seconds}
-            onChange={(e) => setDraft({ ...draft, default_rest_seconds: Number(e.target.value) })}
-            className={`${inputClass} w-24 tabular-nums`}
-            aria-label="Default rest seconds"
-          />
+          <span className="w-24">
+            <input
+              type="number"
+              min={0}
+              step={5}
+              value={draft.default_rest_seconds}
+              onChange={(e) => setDraft({ ...draft, default_rest_seconds: Number(e.target.value) })}
+              className={`${FIELD} tabular-nums`}
+              aria-label="Default rest seconds"
+            />
+          </span>
           s rest
         </label>
       </div>
@@ -392,7 +399,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={`Search ${movements.length} movements`}
-          className="mb-1 min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
+          className={`${FIELD} mb-1`}
         />
 
         {categories.length > 0 ? (
@@ -431,6 +438,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
                     categories={categories}
                     customCat={customCat}
                     setCustomCat={setCustomCat}
+                    nested
                   />
                 </div>
               );
@@ -511,7 +519,7 @@ export default function LibraryView({ mode = 'app' }: { mode?: 'app' | 'showcase
                         setOpenId(null);
                         setMapEditingId(open.id);
                       }}
-                      className="hill-btn flex h-11 items-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg"
+                      className="hill-btn flex h-11 items-center border border-transparent bg-tappable px-3 t-control text-fg hover:bg-tappable-hover"
                       aria-label={`Muscle map for ${open.name}`}
                     >
                       Map

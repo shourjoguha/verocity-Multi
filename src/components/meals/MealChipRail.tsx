@@ -31,12 +31,13 @@ export function MealChipRail({
     <div className="flex min-h-10 gap-px border-t border-border-soft bg-border-soft">
       {/* Fixed left: never scrolls. Opens saved-meal management; the 6px
           pencil is the only cue that it edits rather than adds, so it stays.
-          Its surface-filled backing cuts it out of the bowl's rim. */}
+          Its backing takes the button's own fill, so it cuts the pencil out of
+          the bowl's rim. */}
       <button
         type="button"
         onClick={onManage}
         aria-label="Manage saved meals"
-        className="group flex w-10 shrink-0 items-center justify-center bg-surface text-muted transition-colors hover:bg-elevated hover:text-fg"
+        className="group flex w-10 shrink-0 items-center justify-center bg-tappable text-muted transition-colors hover:bg-tappable-hover hover:text-fg"
       >
         <span aria-hidden className="relative block h-4 w-4">
           <svg
@@ -53,7 +54,7 @@ export function MealChipRail({
           </svg>
           <svg
             viewBox="0 0 8 8"
-            className="absolute -bottom-px -right-px h-1.5 w-1.5 rounded-[1px] bg-surface transition-colors group-hover:bg-elevated"
+            className="absolute -bottom-px -right-px h-1.5 w-1.5 rounded-[1px] bg-tappable transition-colors group-hover:bg-tappable-hover"
             fill="none"
             stroke="currentColor"
             strokeWidth={1.1}
@@ -87,7 +88,7 @@ function Segment({ label, strong = false, onClick }: { label: string; strong?: b
       // "Add meal: …" names the action for AT, and is the prefix the mobile
       // audit's ALLOW list keys this strip's deliberate 40px height on.
       aria-label={`Add meal: ${label}`}
-      className={`flex min-h-10 shrink-0 grow items-center justify-center gap-1 bg-surface px-3.5 t-control transition-colors hover:bg-elevated ${
+      className={`flex min-h-10 shrink-0 grow items-center justify-center gap-1 bg-tappable px-3.5 t-control transition-colors hover:bg-tappable-hover ${
         strong ? 'text-fg' : 'text-muted hover:text-fg'
       }`}
     >

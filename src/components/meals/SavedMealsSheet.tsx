@@ -104,7 +104,7 @@ function SheetBody({
   }
 
   const header = (title: string, action: ReactNode) => (
-    <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+    <div className="flex items-center justify-between gap-2 border-b border-border-soft px-4 py-3">
       <div className="font-display text-sm uppercase tracking-[0.04em] text-fg">{title}</div>
       {action}
     </div>
@@ -173,12 +173,12 @@ function SheetBody({
             ) : null}
           </div>
         </div>
-        <div className="flex shrink-0 border-t border-border p-4">
+        <div className="flex shrink-0 border-t border-border-soft p-4">
           <button
             type="button"
             disabled={busy}
             onClick={() => save(v)}
-            className="hill-btn flex min-h-11 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85 disabled:opacity-40"
+            className="hill-btn flex min-h-11 flex-1 items-center justify-center border border-accent bg-accent px-4 text-sm uppercase tracking-wider text-accent-fg transition-colors hover:bg-accent/85 disabled:opacity-40"
           >
             {busy ? 'Saving…' : 'Save'}
           </button>
@@ -225,7 +225,7 @@ function SheetBody({
                     <button
                       type="button"
                       onClick={() => edit(p)}
-                      className="hill-btn flex min-h-11 shrink-0 items-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg"
+                      className="hill-btn flex min-h-11 shrink-0 items-center border border-transparent bg-tappable px-3 t-control text-fg transition-colors hover:bg-tappable-hover"
                     >
                       Edit
                     </button>
@@ -252,11 +252,11 @@ function SheetBody({
           </ul>
         )}
       </div>
-      <div className="flex shrink-0 border-t border-border p-4">
+      <div className="flex shrink-0 border-t border-border-soft p-4">
         <button
           type="button"
           onClick={() => edit(null)}
-          className="hill-btn flex min-h-11 flex-1 items-center justify-center border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg"
+          className="hill-btn flex min-h-11 flex-1 items-center justify-center border border-transparent bg-tappable px-4 t-control text-fg transition-colors hover:bg-tappable-hover"
         >
           + New saved meal
         </button>
@@ -277,7 +277,7 @@ function ConfirmDelete({
   onConfirm: () => void;
 }) {
   return (
-    <div className="mt-2 flex flex-col gap-2 rounded-control bg-elevated p-3 text-sm text-fg">
+    <div className="mt-2 flex flex-col gap-2 rounded-control bg-bg p-3 text-sm text-fg">
       <span>{text}</span>
       <div className="flex justify-end gap-2">
         <button
@@ -291,7 +291,7 @@ function ConfirmDelete({
           type="button"
           disabled={busy}
           onClick={onConfirm}
-          className="hill-btn flex min-h-11 items-center border border-danger bg-surface px-4 t-control text-danger disabled:opacity-40"
+          className="hill-btn flex min-h-11 items-center border border-danger bg-tappable px-4 t-control text-danger disabled:opacity-40"
         >
           Delete
         </button>

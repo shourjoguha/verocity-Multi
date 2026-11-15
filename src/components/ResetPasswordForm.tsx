@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { updatePassword } from '@/lib/auth';
-import { Button } from '@/components/ui/primitives';
+import { Button, FIELD } from '@/components/ui/primitives';
 import { Item, PageStagger } from '@/components/anim';
 
 type State = 'checking' | 'ready' | 'no-session' | 'done';
@@ -68,7 +68,7 @@ export default function ResetPasswordForm() {
         </p>
         <a
           href="/login"
-          className="hill-btn mt-2 inline-flex min-h-11 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+          className="hill-btn mt-2 inline-flex min-h-11 items-center justify-center border border-transparent bg-tappable px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:bg-tappable-hover"
         >
           ← Back to sign in
         </a>
@@ -79,9 +79,6 @@ export default function ResetPasswordForm() {
   if (state === 'done') {
     return <p className="text-sm text-fg">Password updated. Taking you in…</p>;
   }
-
-  const inputClass =
-    'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none focus:border-subtle';
 
   return (
     <PageStagger>
@@ -95,7 +92,7 @@ export default function ResetPasswordForm() {
             autoComplete="new-password"
             minLength={MIN_PASSWORD}
             required
-            className={inputClass}
+            className={FIELD}
           />
           <label className="mt-2 t-label text-muted">
             Confirm password
@@ -107,7 +104,7 @@ export default function ResetPasswordForm() {
             autoComplete="new-password"
             minLength={MIN_PASSWORD}
             required
-            className={inputClass}
+            className={FIELD}
           />
           {error ? <p className="text-sm text-accent">{error}</p> : null}
           <Button type="submit" disabled={busy} className="mt-4 w-full">

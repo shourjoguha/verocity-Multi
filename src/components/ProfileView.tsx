@@ -420,7 +420,7 @@ function ActivityStrip({
               </option>
             ))}
           </select>
-          <span className="t-label text-muted peer-focus-visible:rounded-sm peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-fg">
+          <span className="t-label text-muted peer-focus-visible:rounded-chip peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-fg">
             {win.label}
           </span>
         </label>
@@ -507,7 +507,7 @@ function DayAccordion({
             data-active={isActive}
             onClick={() => (isActive ? onPreview(d) : onSelect(d.dayKey))}
             className={`day-card relative h-16 overflow-hidden text-left ${
-              isActive ? 'bg-fg text-bg' : 'bg-surface text-fg hover:bg-elevated'
+              isActive ? 'bg-accent text-accent-fg' : 'bg-tappable text-fg hover:bg-tappable-hover'
             }`}
           >
             {/* Both faces are absolute, so only the BOX width animates — the
@@ -887,12 +887,12 @@ export default function ProfileView({ mode }: { mode: Surface }) {
         <Item>
           {/* Say so, rather than leaving last-known numbers on screen looking
               current. Everything below this is whatever the cache still holds. */}
-          <div className="mb-6 flex items-center justify-between gap-3 border border-border bg-surface px-4 py-3">
+          <div className="mb-6 flex items-center justify-between gap-3 rounded-card border border-outline bg-surface px-4 py-3">
             <span className="text-sm text-muted">Couldn't refresh — showing the last known numbers.</span>
             <button
               type="button"
               onClick={() => setReloadKey((k) => k + 1)}
-              className="hill-btn shrink-0 border border-border bg-surface px-3 py-1.5 t-control text-fg transition-colors hover:border-fg"
+              className="hill-btn -my-2 flex min-h-11 shrink-0 items-center border border-transparent bg-tappable px-3 t-control text-fg transition-colors hover:bg-tappable-hover"
             >
               Retry
             </button>
@@ -937,7 +937,10 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                     positioned from outside it. */}
                 <div className="relative">
                 {!readOnly ? <CoachRunner live={coach.live} unseen={coach.unseen} /> : null}
-                <div className="lift flex flex-col gap-px overflow-hidden border border-border bg-border-soft">
+                {/* bg-clip-padding: the 1px outline border is transparent, and
+                    without the clip it would show the gutter tone and draw a
+                    soft hairline round the card that no other card has. */}
+                <div className="flex flex-col gap-px overflow-hidden rounded-card border border-outline bg-border-soft bg-clip-padding">
                   {/* Row one: which block, how far into it, and the way out to
                       the full plan. The week now says "of N" and carries the
                       TickProgress dashes under it — a bare "Week 3" told you
@@ -957,7 +960,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                           reads. A bare text link measured 12px tall here. */}
                       <a
                         href={mode === 'app' ? '/app/plan/view' : hrefFor('/app/plan', mode)}
-                        className="t-eyebrow -my-2 inline-flex min-h-11 shrink-0 items-center text-muted transition-colors hover:text-fg"
+                        className="t-eyebrow -my-2 inline-flex min-h-11 shrink-0 items-center text-fg"
                       >
                         View →
                       </a>
@@ -1024,7 +1027,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                             : 'Start workout'
                       }
                       className={`relative flex min-h-11 flex-1 items-center justify-center gap-2 overflow-hidden px-4 transition-colors ${
-                        resumeHref ? resumeClass : 'bg-fg text-bg hover:bg-fg/85'
+                        resumeHref ? resumeClass : 'bg-accent text-accent-fg hover:bg-accent/85'
                       }`}
                     >
                       {!resumeHref && sheenKey > 0 ? (
@@ -1050,7 +1053,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                       type="button"
                       aria-label="Other ways to start a session"
                       {...(readOnly ? readOnlyProps(true) : { onClick: () => setAddOpen(true) })}
-                      className="flex min-h-11 w-8 items-center justify-center bg-surface text-muted transition-colors hover:bg-elevated hover:text-fg"
+                      className="flex min-h-11 w-8 items-center justify-center bg-tappable text-fg transition-colors hover:bg-tappable-hover"
                     >
                       <span aria-hidden className="text-base leading-none">⋮</span>
                     </button>
@@ -1083,21 +1086,21 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                   <button
                     type="button"
                     {...(readOnly ? readOnlyProps(true) : { onClick: () => setAddOpen(true) })}
-                    className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+                    className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-accent bg-accent px-4 text-sm uppercase tracking-wider text-accent-fg transition-colors hover:bg-accent/85"
                   >
                     Start workout
                   </button>
                   {!readOnly ? (
                     <a
                       href="/app/coach"
-                      className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+                      className="hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-transparent bg-tappable px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:bg-tappable-hover"
                     >
                       Coach
                     </a>
                   ) : null}
                 </div>
                 {!readOnly ? (
-                  <div className="mt-3 overflow-hidden rounded-card border border-border">
+                  <div className="mt-3 overflow-hidden rounded-card border border-outline">
                     <MealChipRail presets={mealPresets} onOpen={openMeal} onManage={() => setSavedMealsOpen(true)} />
                   </div>
                 ) : null}

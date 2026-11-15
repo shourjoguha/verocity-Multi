@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getSession, requestPasswordReset, signIn } from '@/lib/auth';
 import { track } from '@/lib/analytics';
-import { Button } from '@/components/ui/primitives';
+import { Button, FIELD } from '@/components/ui/primitives';
 import { Item, PageStagger } from '@/components/anim';
 
 type Mode = 'signin' | 'reset';
@@ -19,9 +19,6 @@ export default function LoginForm() {
       if (s) window.location.href = '/app';
     });
   }, []);
-
-  const inputClass =
-    'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none focus:border-subtle';
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -66,7 +63,7 @@ export default function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
             required
-            className={inputClass}
+            className={FIELD}
           />
 
           {mode === 'signin' ? (
@@ -87,7 +84,7 @@ export default function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 required
-                className={inputClass}
+                className={FIELD}
               />
             </>
           ) : (

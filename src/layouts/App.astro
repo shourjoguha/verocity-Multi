@@ -203,7 +203,7 @@ const tabActive = (t: Tab) =>
             </span>
             <a
               href="/login"
-              class="inline-flex h-9 items-center rounded-control border border-fg px-4 text-xs uppercase tracking-wider text-fg transition-colors duration-200 hover:bg-fg hover:text-bg"
+              class="hill-btn inline-flex h-9 items-center border border-transparent bg-tappable px-4 text-xs uppercase tracking-wider text-fg transition-colors duration-200 hover:bg-tappable-hover"
             >
               Sign in
             </a>
@@ -218,7 +218,7 @@ const tabActive = (t: Tab) =>
   <nav
     id="nav-menu"
     aria-label="Primary"
-    class="fixed left-0 top-0 z-[70] flex h-dvh w-64 -translate-x-full flex-col border-r border-border bg-bg shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-xl"
+    class="fixed left-0 top-0 z-[70] flex h-dvh w-64 -translate-x-full flex-col border-r border-border bg-bg transition-transform duration-300 ease-[cubic-bezier(0.77,0,0.175,1)] pointer-fine:bg-bg/90 pointer-fine:backdrop-blur-xl"
   >
     <div class="flex h-16 shrink-0 items-center px-6">
       <span class="font-display text-base uppercase tracking-[0.06em] text-fg">Verocity</span>
@@ -231,7 +231,7 @@ const tabActive = (t: Tab) =>
     <div class="pb-safe min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
       {
         groups.map((g, i) => (
-          <div class:list={[i > 0 && 'mt-2 border-t border-border pt-2']}>
+          <div class:list={[i > 0 && 'mt-2 border-t border-border-soft pt-2']}>
             <div
               class:list={['t-eyebrow px-3 py-2', groupActive(g) ? 'text-fg' : 'text-muted']}
             >
@@ -277,13 +277,13 @@ const tabActive = (t: Tab) =>
     </div>
     {
       showcase && (
-        <div class="shrink-0 border-t border-border px-6 py-4">
+        <div class="shrink-0 border-t border-border-soft px-6 py-4">
           <p class="text-[0.7rem] leading-relaxed text-muted">
             You're viewing a read-only demo profile. Nothing here can be edited.
           </p>
           <a
             href="/login"
-            class="mt-3 inline-flex h-10 items-center rounded-full bg-fg px-5 text-xs uppercase tracking-wider text-bg transition-transform duration-200 hover:scale-[1.03]"
+            class="mt-3 inline-flex h-10 items-center rounded-full bg-accent px-5 text-xs uppercase tracking-wider text-accent-fg transition-colors duration-200 hover:bg-accent/85"
           >
             Start your own
           </a>

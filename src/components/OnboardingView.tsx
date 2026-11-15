@@ -44,6 +44,7 @@ import { toast } from '@/lib/toast';
 import { EchoText } from '@/components/EchoText';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { ProgressBar } from '@/components/onboarding/ProgressBar';
+import { FIELD } from '@/components/ui/primitives';
 
 // Named so the nav logic and the progress count read clearly and don't drift
 // when a phase is inserted.
@@ -60,8 +61,6 @@ const STARTS = [
 ] as const;
 type StartKey = (typeof STARTS)[number]['key'];
 
-const field =
-  'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none focus:border-fg';
 const eyebrow = 't-eyebrow text-subtle';
 const heading = 'font-display text-3xl font-semibold leading-[1.06] tracking-[-0.015em] text-fg';
 const sub = 'mt-2 max-w-[40ch] text-muted';
@@ -156,12 +155,14 @@ function Chip({
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`hill-btn inline-flex min-h-11 min-w-11 items-center justify-center gap-2 border bg-surface px-4 text-sm ${
-        on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-      }`}
+      // Fills come from `.hill-btn[aria-pressed]` (on = accent, off =
+      // tappable); text-muted is the off state only — the pressed rule
+      // overrides it. The rank badge only renders on a pressed chip, so it is
+      // the INVERSE of the accent fill it sits on.
+      className="hill-btn inline-flex min-h-11 min-w-11 items-center justify-center gap-2 border px-4 text-sm text-muted hover:text-fg"
     >
       {rank != null ? (
-        <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-fg px-1 text-[11px] tabular-nums text-bg">
+        <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent-fg px-1 text-[11px] tabular-nums text-accent">
           {rank}
         </span>
       ) : null}
@@ -281,7 +282,7 @@ export function OnboardingView() {
   const isQuestion = step > 0 && step < START;
   const chosen = STARTS.find((s) => s.key === start);
   const primary =
-    'hill-btn inline-flex min-h-12 flex-1 items-center justify-center bg-fg px-5 text-sm font-semibold uppercase tracking-wider text-bg disabled:opacity-40';
+    'hill-btn inline-flex min-h-12 flex-1 items-center justify-center border border-accent bg-accent px-5 text-sm font-semibold uppercase tracking-wider text-accent-fg disabled:opacity-40';
 
   return (
     <div className="flex h-[100dvh] flex-col bg-surface">
@@ -331,16 +332,21 @@ export function OnboardingView() {
                   inputMode="decimal"
                   value={draft.weight}
                   onChange={(e) => set({ weight: e.target.value })}
-                  className={`${field} tabular-nums`}
+                  className={`${FIELD} tabular-nums`}
                 />
               </label>
               <span className={`${fieldLabel} stagger-item`}>Days per week</span>
-              <div className="stagger-item flex flex-wrap gap-2">
-                {dayOptions.map((d) => (
-                  <Chip key={d} on={draft.days === d} onClick={() => set({ days: draft.days === d ? null : d })}>
-                    {d}
-                  </Chip>
-                ))}
+              {/* One value of seven: the shared segmented control, not a row of
+                  detached toggles. Tapping the selected day again clears it,
+                  as before — SegmentedTabs reports every tap. */}
+              <div className="stagger-item">
+                <SegmentedTabs
+                  as="radiogroup"
+                  ariaLabel="Days per week"
+                  tabs={dayOptions.map((d) => ({ key: String(d), label: String(d) }))}
+                  active={draft.days == null ? '' : String(draft.days)}
+                  onChange={(k) => set({ days: draft.days === Number(k) ? null : Number(k) })}
+                />
               </div>
               <span className={`${fieldLabel} stagger-item`}>Experience</span>
               <div className="stagger-item">
@@ -429,7 +435,7 @@ export function OnboardingView() {
                   maxLength={STATS_LIMITS.injuryLabelChars}
                   onChange={(e) => set({ regionNote: e.target.value })}
                   placeholder="e.g. Left shoulder — avoid overhead pressing"
-                  className={`${field} resize-none py-2`}
+                  className={`${FIELD} resize-none py-2`}
                 />
               </label>
             </>
@@ -446,7 +452,10 @@ export function OnboardingView() {
                     type="button"
                     aria-pressed={start === s.key}
                     onClick={() => setStart(s.key)}
-                    className="hill-btn flex min-h-11 flex-col items-start border border-border bg-surface px-4 py-3 text-left"
+                    // A single-select list too long-winded for a segmented
+                    // control: a column of rows, filled by the central
+                    // `.hill-btn[aria-pressed]` rule (on = accent).
+                    className="hill-btn flex min-h-11 flex-col items-start border px-4 py-3 text-left text-fg"
                   >
                     <span className="text-sm font-semibold">{s.title}</span>
                     <span className="mt-0.5 text-sm opacity-70">{s.blurb}</span>
@@ -466,7 +475,7 @@ export function OnboardingView() {
           onClick={back}
           disabled={step === 0}
           aria-label="Back"
-          className="hill-btn inline-flex h-12 w-12 items-center justify-center border border-border bg-surface text-lg text-fg disabled:opacity-40"
+          className="hill-btn inline-flex h-12 w-12 items-center justify-center border border-transparent bg-tappable text-lg text-fg hover:bg-tappable-hover disabled:opacity-40"
         >
           ←
         </button>
