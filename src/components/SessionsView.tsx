@@ -19,7 +19,7 @@ import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { tagColor } from '@/lib/tags';
 import { distinctSessionMovements, formatSessionMeta, sessionMovementKeys, TYPE_SHORT } from '@/lib/sessionMeta';
 import { SessionSheet } from '@/components/SessionSheet';
-import { Button, EmptyState, FilterChip, ListCard, LoadingScreen } from '@/components/ui/primitives';
+import { Button, EmptyState, FIELD, FilterChip, ListCard, LoadingScreen } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
 import { Disclosure } from '@/components/ui/Disclosure';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
@@ -33,8 +33,6 @@ const TAG_KEYS = Object.keys(ACTIVITY_TAGS) as ActivityTagKey[];
 // still resolve through METRICS.
 const METRIC_KEYS = PRIMARY_METRICS as readonly MetricKey[];
 const SESSION_TYPES = Object.keys(TYPE_SHORT) as SessionType[];
-const inputClass =
-  'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle';
 
 // Effective length of a session for the duration filter: an actual duration
 // when known, else the format's time cap (AMRAP/EMOM etc. have no fixed
@@ -144,7 +142,7 @@ function MovementFilter({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search movements"
-          className={inputClass}
+          className={FIELD}
           aria-label="Search movements"
         />
       ) : null}
@@ -169,25 +167,15 @@ function TagPicker({ value, onChange }: { value: string[]; onChange: (tags: stri
   const toggle = (key: string) =>
     onChange(value.includes(key) ? value.filter((t) => t !== key) : [...value, key]);
   return (
-    <div className="flex flex-wrap gap-2">
-      {TAG_KEYS.map((key) => {
-        const on = value.includes(key);
-        const { label, color } = ACTIVITY_TAGS[key];
-        return (
-          <button
-            key={key}
-            type="button"
-            onClick={() => toggle(key)}
-            aria-pressed={on}
-            className={`hill-btn border bg-surface px-2 py-1 t-control transition-colors ${
-              on ? '' : 'border-border text-muted hover:text-fg'
-            }`}
-            style={on ? { borderColor: color, color } : undefined}
-          >
-            {label}
-          </button>
-        );
-      })}
+    <div className="flex flex-wrap gap-x-1.5">
+      {TAG_KEYS.map((key) => (
+        <FilterChip
+          key={key}
+          label={ACTIVITY_TAGS[key].label}
+          on={value.includes(key)}
+          onClick={() => toggle(key)}
+        />
+      ))}
     </div>
   );
 }
@@ -200,6 +188,7 @@ function SessionForm({
   onCancel,
   submitLabel,
   busy,
+  nested = false,
 }: {
   draft: Draft;
   setDraft: (d: Draft) => void;
@@ -208,6 +197,9 @@ function SessionForm({
   onCancel: () => void;
   submitLabel: string;
   busy: boolean;
+  // Editing happens inside a ListCard row, which is already a card: the form
+  // drops its own box there rather than nesting a card in a card.
+  nested?: boolean;
 }) {
   const [picking, setPicking] = useState(false);
 
@@ -258,13 +250,13 @@ function SessionForm({
         e.preventDefault();
         onSubmit();
       }}
-      className="flex flex-col gap-4 border border-border bg-surface p-4"
+      className={`flex flex-col gap-4 ${nested ? '' : 'rounded-card border border-outline bg-surface p-4'}`}
     >
       <input
         value={draft.name}
         onChange={(e) => setDraft({ ...draft, name: e.target.value })}
         placeholder="Session name"
-        className={inputClass}
+        className={FIELD}
         aria-label="Session name"
         autoFocus
       />
@@ -281,39 +273,46 @@ function SessionForm({
         ) : (
           <ul className="mb-3 flex flex-col gap-2">
             {draft.exercises.map((ex, i) => (
-              <li key={i} className="flex flex-wrap items-center gap-2 border border-border p-2">
+              <li key={i} className="flex flex-wrap items-center gap-2 rounded-control bg-bg p-2">
                 <span className="min-w-28 flex-1 capitalize text-fg">{ex.movement}</span>
-                <select
-                  value={ex.section}
-                  onChange={(e) => setEx(i, { section: e.target.value as SectionKey })}
-                  className="min-h-9 border border-border bg-bg px-2 text-xs uppercase tracking-wider text-fg outline-none focus:border-subtle"
-                  aria-label={`${ex.movement} section`}
-                >
-                  {SECTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={ex.primaryMetric}
-                  onChange={(e) => setEx(i, { primaryMetric: e.target.value as MetricKey })}
-                  className="min-h-9 border border-border bg-bg px-2 text-xs uppercase tracking-wider text-fg outline-none focus:border-subtle"
-                  aria-label={`${ex.movement} metric`}
-                >
-                  {METRIC_KEYS.map((m) => (
-                    <option key={m} value={m}>
-                      {METRICS[m].label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={ex.planned}
-                  onChange={(e) => setEx(i, { planned: e.target.value })}
-                  placeholder="3x5"
-                  className="min-h-9 w-20 border border-border bg-bg px-2 text-sm tabular-nums text-fg outline-none focus:border-subtle"
-                  aria-label={`${ex.movement} planned sets`}
-                />
+                {/* FIELD is w-full; the wrappers give each field its width. */}
+                <span className="w-32">
+                  <select
+                    value={ex.section}
+                    onChange={(e) => setEx(i, { section: e.target.value as SectionKey })}
+                    className={FIELD}
+                    aria-label={`${ex.movement} section`}
+                  >
+                    {SECTIONS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+                <span className="w-32">
+                  <select
+                    value={ex.primaryMetric}
+                    onChange={(e) => setEx(i, { primaryMetric: e.target.value as MetricKey })}
+                    className={FIELD}
+                    aria-label={`${ex.movement} metric`}
+                  >
+                    {METRIC_KEYS.map((m) => (
+                      <option key={m} value={m}>
+                        {METRICS[m].label}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+                <span className="w-20">
+                  <input
+                    value={ex.planned}
+                    onChange={(e) => setEx(i, { planned: e.target.value })}
+                    placeholder="3x5"
+                    className={`${FIELD} tabular-nums`}
+                    aria-label={`${ex.movement} planned sets`}
+                  />
+                </span>
                 <div className="flex shrink-0 items-center">
                   <button
                     type="button"
@@ -395,11 +394,11 @@ function PlansBrowser({
     <Item>
       <div className="mt-12">
         <div className="mb-4 t-eyebrow text-muted">From your plans</div>
-        <ul className="divide-y divide-border border border-border">
+        <ListCard>
           {withDays.map((plan) => {
             const open = openId === plan.id;
             return (
-              <li key={plan.id}>
+              <div key={plan.id}>
                 <button
                   type="button"
                   onClick={() => setOpenId(open ? null : plan.id)}
@@ -417,11 +416,11 @@ function PlansBrowser({
                   </span>
                 </button>
                 {open ? (
-                  <ul className="border-t border-border bg-bg/40">
+                  <ul className="border-t border-border-soft bg-bg/40">
                     {plan.parsed.days.map((day) => (
                       <li
                         key={day.dayKey}
-                        className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 pl-6 last:border-b-0"
+                        className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-2.5 pl-6 last:border-b-0"
                       >
                         <span className="text-sm text-fg">{day.label}</span>
                         <div className="flex items-center gap-3 t-control">
@@ -435,7 +434,7 @@ function PlansBrowser({
                           </button>
                           <a
                             href={`/app/log?plan=${encodeURIComponent(plan.id)}&day=${encodeURIComponent(day.dayKey)}`}
-                            className="text-muted hover:text-fg"
+                            className="text-fg"
                           >
                             Start →
                           </a>
@@ -444,10 +443,10 @@ function PlansBrowser({
                     ))}
                   </ul>
                 ) : null}
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </ListCard>
       </div>
     </Item>
   );
@@ -665,15 +664,13 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search sessions"
-            className="min-h-11 w-full flex-1 border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
+            className={`${FIELD} flex-1`}
           />
           <button
             type="button"
             onClick={() => setFiltersOpen(true)}
             aria-label="Filters"
-            className={`hill-btn flex min-h-11 shrink-0 items-center gap-1.5 border bg-surface px-3 t-control transition-colors ${
-              activeFilterCount > 0 ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-            }`}
+            className="hill-btn flex min-h-11 shrink-0 items-center gap-1.5 border border-transparent bg-tappable px-3 t-control text-fg hover:bg-tappable-hover"
           >
             <FilterIcon />
             Filters
@@ -712,6 +709,7 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
                       onCancel={cancel}
                       submitLabel="Save"
                       busy={busy}
+                      nested
                     />
                   </div>
                 );

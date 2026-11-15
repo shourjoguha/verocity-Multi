@@ -262,7 +262,7 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
               <SectionHeader>{sectionLabel(section.key)}</SectionHeader>
               <div className="flex flex-col gap-3">
                 {section.groups.map((group) => (
-                  <div key={group.id} className="lift border border-border bg-surface">
+                  <div key={group.id} className="lift rounded-card border border-outline bg-surface">
                     {group.kind !== 'single' ? (
                       <div className="border-b border-border-soft px-3 py-1 t-control text-muted">
                         {group.kind}

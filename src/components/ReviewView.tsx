@@ -17,12 +17,13 @@ import {
 } from '@/lib/review';
 import { formatRound } from '@/lib/format';
 import { ACTIVITY_TAGS, LOAD_EQUIVALENCE, RPE_LADDER } from '@/app.config';
-import { Delta, EmptyState, LoadingScreen, SectionHeader, StatCard } from '@/components/ui/primitives';
+import { Delta, EmptyState, FIELD, LoadingScreen, SectionHeader, StatCard } from '@/components/ui/primitives';
+import { ActionMenu } from '@/components/ui/ActionMenu';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { PlanAdherenceSection } from '@/components/PlanAdherence';
-import { EyeGlyph, PlusGlyph } from '@/components/ui/icons';
 
 // /app/plan (the Training ribbon's Plan tab) and /app/review — a look back over one period: all time, the last 13 weeks, or
 // one plan's life. Everything on it is measured by lib/review.ts from the logs;
@@ -91,9 +92,22 @@ export default function ReviewView() {
       <Item>
         <div className="mb-4 flex items-end justify-between gap-4">
           <EchoText text="REVIEW" as="h1" className={`min-w-0 ${ECHO_APP_TITLE}`} />
-          <div className="flex shrink-0 gap-1">
-            <HeroAction href="/app/plan/view" label="View plan" glyph={<EyeGlyph className="h-5 w-5" />} />
-            <HeroAction href="/app/plan/upload" label="Add plan" glyph={<PlusGlyph className="h-5 w-5" />} />
+          {/* "View plan" stays one tap — it is this tab's main route to the
+              plan. The rarer actions share PlanView's menu and vocabulary. */}
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href="/app/plan/view"
+              className="hill-btn t-control inline-flex min-h-11 items-center justify-center border border-transparent bg-tappable px-4 text-fg hover:bg-tappable-hover"
+            >
+              View plan
+            </a>
+            <ActionMenu
+              label="Plan actions"
+              items={[
+                { label: 'Edit plan', href: '/app/plan/edit' },
+                { label: 'Switch plan', href: '/app/plan/upload' },
+              ]}
+            />
           </div>
         </div>
       </Item>
@@ -111,7 +125,7 @@ export default function ReviewView() {
               value={chosenPlan ?? ''}
               onChange={(e) => setPlanId(e.target.value)}
               aria-label="Plan to review"
-              className="min-h-11 w-full rounded-control border border-border bg-surface px-3 text-base text-fg outline-none focus:border-subtle"
+              className={FIELD}
             >
               {plans.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -132,18 +146,6 @@ export default function ReviewView() {
         </Item>
       )}
     </PageStagger>
-  );
-}
-
-function HeroAction({ href, label, glyph }: { href: string; label: string; glyph: React.ReactNode }) {
-  return (
-    <a
-      href={href}
-      className="flex min-h-11 min-w-14 flex-col items-center justify-center gap-1 px-1 text-muted transition-colors hover:text-fg"
-    >
-      {glyph}
-      <span className="t-label">{label}</span>
-    </a>
   );
 }
 
@@ -168,14 +170,19 @@ function ReviewBody({ review: r }: { review: Review }) {
         <section className="mb-8">
           <SectionHeader
             action={
-              r.adherence ? (
-                <span className="text-xs text-muted tabular-nums">
-                  Plan adherence <span className="text-fg">{r.adherence.pct}%</span>
-                  {r.adherence.mainPct != null ? (
-                    <> · main <span className="text-fg">{r.adherence.mainPct}%</span></>
-                  ) : null}
-                </span>
-              ) : null
+              <span className="inline-flex items-center gap-3">
+                {r.adherence ? (
+                  <span className="text-xs text-muted tabular-nums">
+                    Plan adherence <span className="text-fg">{r.adherence.pct}%</span>
+                    {r.adherence.mainPct != null ? (
+                      <> · main <span className="text-fg">{r.adherence.mainPct}%</span></>
+                    ) : null}
+                  </span>
+                ) : null}
+                <InfoPopover label="How to read the calendar">
+                  Colour is the session's activity tag; the letter is its plan day or activity.
+                </InfoPopover>
+              </span>
             }
           >
             Frequency
@@ -198,7 +205,16 @@ function ReviewBody({ review: r }: { review: Review }) {
 
       <Item>
         <section className="mb-8">
-          <SectionHeader>Hard sets per muscle, per week</SectionHeader>
+          <SectionHeader
+            action={
+              <InfoPopover label="How to read hard sets per muscle">
+                Line = {r.setFloor} sets a week, the coach's hypertrophy floor; lighter bars sit under it. A set counts
+                for every muscle it meaningfully trains.
+              </InfoPopover>
+            }
+          >
+            Hard sets per muscle, per week
+          </SectionHeader>
           <h3 className="mb-3 text-base leading-snug text-fg">{volumeHeadline(r)}</h3>
           <VolumeChart review={r} />
         </section>
@@ -207,7 +223,15 @@ function ReviewBody({ review: r }: { review: Review }) {
       {effortHeadline(r) ? (
         <Item>
           <section className="mb-8">
-            <SectionHeader>Effort</SectionHeader>
+            <SectionHeader
+              action={
+                <InfoPopover label="How to read effort">
+                  Share of sets at RPE {RPE_LADDER.nearFailure}+, by plan day.
+                </InfoPopover>
+              }
+            >
+              Effort
+            </SectionHeader>
             <h3 className="mb-3 text-base leading-snug text-fg">{effortHeadline(r)}</h3>
             <EffortChart review={r} />
           </section>
@@ -217,7 +241,27 @@ function ReviewBody({ review: r }: { review: Review }) {
       {r.staples.length ? (
         <Item>
           <section className="mb-8">
-            <SectionHeader>Staple lifts</SectionHeader>
+            <SectionHeader
+              action={
+                <InfoPopover label="How to read staple lifts">
+                  <span className="block">
+                    1RM is the change in estimated 1RM: the median of the first few sessions against the last few. RPE
+                    counts (up to two reps in reserve) when both were rated.
+                  </span>
+                  <span className="mt-1 block">
+                    As much weight for more reps, or more weight for as many, is always up.
+                  </span>
+                  <span className="mt-1 block">
+                    A (v) variation is only compared with itself; isometric work like Pallof press is compared by reps.
+                    {r.staples.some((s) => s.first.held || s.last.held)
+                      ? ` (p) paused and (t) tempo sets count ${Math.round((LOAD_EQUIVALENCE.pauseTempo - 1) * 100)}% heavier.`
+                      : ''}
+                  </span>
+                </InfoPopover>
+              }
+            >
+              Staple lifts
+            </SectionHeader>
             <h3 className="mb-3 text-base leading-snug text-fg">{staplesHeadline(r)}</h3>
             <StaplesTable review={r} />
           </section>
@@ -239,7 +283,7 @@ function ReviewBody({ review: r }: { review: Review }) {
 // letter (its plan day or activity), so the grid still reads without colour.
 function Calendar({ review: r }: { review: Review }) {
   return (
-    <div className="rounded-card border border-border bg-surface p-3">
+    <div className="rounded-card border border-outline bg-surface p-3">
       <div className="grid grid-cols-[3.25rem_repeat(7,minmax(0,1fr))_2.75rem] gap-[3px] text-[0.65rem] text-muted">
         <span>Week</span>
         {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
@@ -252,9 +296,6 @@ function Calendar({ review: r }: { review: Review }) {
           <CalendarRow key={wk.start} week={wk} />
         ))}
       </div>
-      <p className="mt-2 text-[0.65rem] text-muted">
-        Colour is the session's activity tag; the letter is its plan day or activity.
-      </p>
     </div>
   );
 }
@@ -326,7 +367,7 @@ function GoalsChart({ review: r }: { review: Review }) {
   const max = Math.max(0.5, ...r.goals.flatMap((g) => [g.intent, g.actual]));
   const x = (v: number) => `${(v / max) * 100}%`;
   return (
-    <div className="rounded-card border border-border bg-surface p-3">
+    <div className="rounded-card border border-outline bg-surface p-3">
       <div className="mb-2 flex flex-wrap gap-x-4 text-[0.65rem] text-muted">
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-muted bg-surface" /> Goal weight
@@ -367,7 +408,7 @@ function VolumeChart({ review: r }: { review: Review }) {
   const max = Math.max(r.setFloor * 1.5, ...r.regionSets.map((g) => g.perWeek));
   const x = (v: number) => `${(v / max) * 100}%`;
   return (
-    <div className="rounded-card border border-border bg-surface p-3">
+    <div className="rounded-card border border-outline bg-surface p-3">
       {r.regionSets.map((g) => (
         <div key={g.key} className="grid grid-cols-[6.5rem_1fr] items-center gap-2 py-1">
           <span className="truncate text-sm text-subtle">{g.label}</span>
@@ -383,10 +424,6 @@ function VolumeChart({ review: r }: { review: Review }) {
           </div>
         </div>
       ))}
-      <p className="mt-2 text-[0.65rem] text-muted">
-        Line = {r.setFloor} sets a week, the coach's hypertrophy floor. Lighter bars sit under it. A set counts for every
-        muscle it meaningfully trains.
-      </p>
     </div>
   );
 }
@@ -394,7 +431,7 @@ function VolumeChart({ review: r }: { review: Review }) {
 function EffortChart({ review: r }: { review: Review }) {
   const e = r.effort;
   return (
-    <div className="rounded-card border border-border bg-surface p-3">
+    <div className="rounded-card border border-outline bg-surface p-3">
       {e.byGroup.map((g) => (
         <div key={g.label} className="grid grid-cols-[6.5rem_1fr] items-center gap-2 py-1">
           <span className="truncate text-sm text-subtle">{g.label}</span>
@@ -407,7 +444,7 @@ function EffortChart({ review: r }: { review: Review }) {
         </div>
       ))}
       <p className="mt-2 text-[0.65rem] text-muted">
-        Sets at RPE {RPE_LADDER.nearFailure}+ by plan day, over {e.ratedSessions} rated sessions.
+        Over {e.ratedSessions} rated sessions.
         {e.unratedSessions ? ` ${e.unratedSessions} left the RPE at its default and are not counted.` : ''}
       </p>
     </div>
@@ -429,9 +466,8 @@ function StapleEnd({ set, strong }: { set: StapleSet; strong?: boolean }) {
 }
 
 function StaplesTable({ review: r }: { review: Review }) {
-  const credited = r.staples.some((s) => s.first.held || s.last.held);
   return (
-    <div className="overflow-hidden rounded-card border border-border bg-surface">
+    <div className="overflow-hidden rounded-card border border-outline bg-surface">
       <table className="w-full text-sm">
         <thead>
           <tr className="t-label text-muted">
@@ -475,12 +511,6 @@ function StaplesTable({ review: r }: { review: Review }) {
           })}
         </tbody>
       </table>
-      <p className="border-t border-border-soft px-3 py-2 text-[0.65rem] text-muted">
-        Change in estimated 1RM, the median of the first few sessions against the median of the last few. RPE counts (up to two
-        reps in reserve) when both were rated, but as much weight for more reps, or more weight for as many, is always up.
-        {credited ? ` (p) paused and (t) tempo sets count ${Math.round((LOAD_EQUIVALENCE.pauseTempo - 1) * 100)}% heavier.` : ''}
-        {' '}A (v) variation is only compared with itself; isometric work like Pallof press is compared by reps.
-      </p>
     </div>
   );
 }

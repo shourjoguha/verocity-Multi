@@ -9,6 +9,7 @@ import { formatRound } from '@/lib/format';
 import { BLOCKS, type BlockKey } from '@/app.config';
 import type { PlanDay } from '@/lib/types';
 import { EmptyState, LoadingScreen } from '@/components/ui/primitives';
+import { ActionMenu } from '@/components/ui/ActionMenu';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { SubroutineBody } from '@/components/SubroutineBody';
@@ -59,7 +60,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           {showcase ? null : (
             <a
               href="/app/plan/upload"
-              className="hill-btn mt-4 inline-flex min-h-11 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+              className="hill-btn mt-4 inline-flex min-h-11 items-center justify-center border border-transparent bg-tappable px-4 text-sm uppercase tracking-wider text-fg hover:bg-tappable-hover"
             >
               Pick or build a plan
             </a>
@@ -69,7 +70,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           <div className="mt-4">
             <a
                   href="/app/plan"
-                  className="hill-btn flex min-h-11 items-center justify-between border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg"
+                  className="hill-btn flex min-h-11 items-center justify-between border border-transparent bg-tappable px-4 t-control text-fg hover:bg-tappable-hover"
                 >
                   Review past training
                   <span aria-hidden>→</span>
@@ -162,48 +163,45 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   return (
     <PageStagger className="mx-auto max-w-5xl px-4 sm:px-6 py-8">
       <Item>
-        <header className="mb-4">
-          <p className="t-eyebrow text-muted">
-            Plan · {(activeBlock && BLOCKS[activeBlock.type]?.label) ?? '—'}
-          </p>
-          <div className="mt-2 flex flex-col items-start gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+        {/* Title and meta take the full width; the plan's actions live behind
+            one menu so a long plan name is not squeezed, and replacing the plan
+            is no longer the loudest thing on a page whose job is reading it. */}
+        <header className="mb-4 flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="t-eyebrow text-muted">
+              Plan · {(activeBlock && BLOCKS[activeBlock.type]?.label) ?? '—'}
+            </p>
             <EchoText
               text={parsed.title}
               as="h1"
-              className={`min-w-0 break-words ${ECHO_APP_TITLE}`}
+              className={`mt-2 min-w-0 break-words ${ECHO_APP_TITLE}`}
             />
-            {showcase ? null : (
-              <div className="flex shrink-0 gap-2">
-                <a
-                  href="/app/plan/edit"
-                  className="hill-btn t-control inline-flex min-h-11 items-center justify-center border border-border bg-surface px-4 text-fg"
-                >
-                  Edit
-                </a>
-                <a
-                  href="/app/plan/upload"
-                  className="hill-btn t-control inline-flex min-h-11 items-center justify-center border border-fg bg-fg px-4 text-bg hover:bg-subtle"
-                >
-                  New plan
-                </a>
-              </div>
-            )}
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-            {activeBlock ? (
-              <span className="inline-flex items-center gap-2 t-control text-muted">
-                <span
-                  className="inline-block h-2 w-2"
-                  style={{ backgroundColor: BLOCKS[activeBlock.type]?.color }}
-                />
-                {BLOCKS[activeBlock.type]?.label ?? activeBlock.type} · W{activeBlock.startWeek}–
-                {activeBlock.endWeek}
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+              {activeBlock ? (
+                <span className="inline-flex items-center gap-2 t-control text-muted">
+                  <span
+                    className="inline-block h-2 w-2"
+                    style={{ backgroundColor: BLOCKS[activeBlock.type]?.color }}
+                  />
+                  {BLOCKS[activeBlock.type]?.label ?? activeBlock.type} · W{activeBlock.startWeek}–
+                  {activeBlock.endWeek}
+                </span>
+              ) : null}
+              <span className="t-control text-muted">
+                W{activeWeek} · {programmedDayCount} days · {movementsThisWeek} movements
               </span>
-            ) : null}
-            <span className="t-control text-muted">
-              W{activeWeek} · {programmedDayCount} days · {movementsThisWeek} movements
-            </span>
+            </div>
           </div>
+          {showcase ? null : (
+            <ActionMenu
+              label="Plan actions"
+              items={[
+                { label: 'Edit plan', href: '/app/plan/edit' },
+                { label: 'Switch plan', href: '/app/plan/upload' },
+                { label: 'Review past training', href: '/app/plan' },
+              ]}
+            />
+          )}
         </header>
 
         <div className="mb-6">
@@ -231,25 +229,24 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   type="button"
                   role="tab"
                   aria-selected={active}
+                  aria-pressed={active}
                   onClick={() => setWeekIndex(w)}
-                  className={`flex min-h-11 min-w-[3.5rem] flex-1 flex-col items-center justify-center gap-1 border bg-surface px-2 py-1 ${
-                    active ? 'border-fg' : 'border-border'
-                  }`}
+                  className="hill-btn flex min-h-11 min-w-[3.5rem] flex-1 flex-col items-center justify-center gap-1 border px-2 py-1 text-fg"
                 >
                   <span
                     aria-hidden
                     className="h-[3px] w-5"
                     style={{ backgroundColor: wBlock ? BLOCKS[wBlock].color : 'transparent', opacity: active ? 1 : 0.5 }}
                   />
-                  <span className={`t-control ${active ? 'font-medium text-fg' : 'text-muted'}`}>
+                  <span className={`t-control ${active ? 'font-medium' : 'text-muted'}`}>
                     W{w}
                     {parsed.weekNotes?.[w] ? (
-                      <span aria-label="has a note" className="ml-0.5 text-fg">
+                      <span aria-label="has a note" className={`ml-0.5 ${active ? '' : 'text-fg'}`}>
                         !
                       </span>
                     ) : null}
                   </span>
-                  <span className="t-label text-faint">{programmed ? 'set' : 'open'}</span>
+                  <span className={`t-label ${active ? 'opacity-70' : 'text-faint'}`}>{programmed ? 'set' : 'open'}</span>
                 </button>
               );
             })}
@@ -257,7 +254,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
         </div>
 
         {weekNote ? (
-          <div className="mb-6 rounded-card border border-border bg-surface px-4 py-3">
+          <div className="mb-6 rounded-card border border-outline bg-surface px-4 py-3">
             <p className="t-label text-muted">W{activeWeek} · how this week progresses</p>
             <p className="mt-1 text-sm text-fg">{weekNote}</p>
           </div>
@@ -276,7 +273,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
 
         return (
           <Item key={day.dayKey}>
-            <section className="mb-4 overflow-hidden rounded-card border border-border bg-surface">
+            <section className="mb-4 overflow-hidden rounded-card border border-outline bg-surface">
               {/* Bespoke, not `ui/Disclosure` — that primitive is a native
                   `<details>` whose entire `<summary>` IS the toggle, and this
                   header needs two more independently-interactive controls
@@ -327,16 +324,14 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                   type="button"
                   onClick={() => setMatrixDayId((prev) => (prev === day.dayKey ? null : day.dayKey))}
                   aria-pressed={isMatrix}
-                  className={`hill-btn t-control mr-2 inline-flex min-h-11 shrink-0 items-center self-center border px-3 ${
-                    isMatrix ? 'border-fg bg-fg text-bg' : 'border-border bg-surface text-muted'
-                  }`}
+                  className="hill-btn t-control mr-2 inline-flex min-h-11 shrink-0 items-center self-center border px-3 text-fg"
                 >
                   All weeks
                 </button>
                 {showcase ? null : (
                   <a
                     href={`/app/log?day=${encodeURIComponent(day.dayKey)}`}
-                    className="t-control -mr-1 inline-flex min-h-11 shrink-0 items-center self-center px-3 text-muted transition-colors hover:text-fg"
+                    className="t-control -mr-1 inline-flex min-h-11 shrink-0 items-center self-center px-3 text-fg"
                   >
                     Start →
                   </a>
@@ -344,7 +339,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               </div>
 
               {isCollapsed ? null : (
-                <div className="border-t border-border">
+                <div className="border-t border-border-soft">
                   {dayNote && hasContent ? (
                     <p className="border-b border-border-soft px-4 py-2 text-sm text-fg">
                       <span className="t-label text-muted">W{activeWeek} note · </span>
@@ -357,7 +352,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                       {showcase ? null : (
                         <a
                           href="/app/plan/edit"
-                          className="t-control inline-flex min-h-11 items-center px-3 text-muted transition-colors hover:text-fg"
+                          className="t-control inline-flex min-h-11 items-center px-3 text-fg"
                         >
                           Edit plan →
                         </a>
@@ -490,7 +485,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           {/* Every plan's history, not just this one — see ReviewView. */}
           <a
                 href="/app/plan"
-                className="hill-btn flex min-h-11 items-center justify-between border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg"
+                className="hill-btn flex min-h-11 items-center justify-between border border-transparent bg-tappable px-4 t-control text-fg hover:bg-tappable-hover"
               >
                 Review past training
                 <span aria-hidden>→</span>

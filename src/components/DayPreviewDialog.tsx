@@ -56,7 +56,7 @@ export function DayPreviewDialog({
       <div className="border-t border-border p-4">
         <a
           href={day ? `/app/log?day=${encodeURIComponent(day.dayKey)}` : '#'}
-          className="inline-flex min-h-12 w-full items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+          className="hill-btn inline-flex min-h-12 w-full items-center justify-center border border-accent bg-accent px-4 text-sm uppercase tracking-wider text-accent-fg"
         >
           Start workout
         </a>
