@@ -192,6 +192,42 @@ type SubEditor =
   | { mode: 'add'; sectionKey: SectionKey }
   | { mode: 'edit'; si: number; gi: number; ii: number };
 
+// Brings the focus card into view when the focus moves to a DIFFERENT movement
+// group — after logging a movement's last set, or tapping an Up-next row. Not
+// on first render (the page opens where it opens), and not when the live set
+// moves between members of one superset: that card is already on screen.
+// scrollIntoView scrolls the nearest scrollable ancestor, which under the app
+// shell is `[data-scroll-root]`, never the document (see CLAUDE.md). The
+// scroll margin clears the sticky app header. Reduced motion jumps instead of
+// gliding. No focus() call: moving keyboard focus into a field here would
+// raise the iOS keyboard mid-layout.
+// `last` lives in the Logger, not here: the anchor remounts when the focus
+// crosses into another section, and a ref of its own would forget where the
+// focus had been and skip exactly that scroll.
+function FocusAnchor({
+  groupId,
+  last,
+  children,
+}: {
+  groupId: string;
+  last: { current: string | null };
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const prev = last.current;
+    last.current = groupId;
+    if (prev === null || prev === groupId) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    ref.current?.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+  }, [groupId, last]);
+  return (
+    <div ref={ref} data-focus-anchor className="scroll-mt-20">
+      {children}
+    </div>
+  );
+}
+
 export default function Logger() {
   const [ready, setReady] = useState(false);
   const [logId, setLogId] = useState<string | null>(null);
@@ -266,6 +302,8 @@ export default function Logger() {
   // drops the member pin so the card follows the round order across the group,
   // and finishing the group drops the pin entirely so the card advances.
   const [focus, setFocus] = useState<{ groupId: string; itemId?: string } | null>(null);
+  // The group the focus card last showed, for FocusAnchor's scroll-on-move.
+  const lastFocusGroup = useRef<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // Finish always asks for type / duration / HR in a sheet; `rowHr` is a
   // resumed row's heart rate, which the sheet starts on.
@@ -2050,7 +2088,9 @@ export default function Logger() {
                 "Up next" in the focused section, unlabelled elsewhere since
                 the section header already says what they are. */}
             <div className="flex flex-col gap-2">
-              {focused && focused.si === si ? renderFocusGroup(si, focused.gi, focusIi) : null}
+              {focused && focused.si === si ? (
+                <FocusAnchor groupId={focused.g.id} last={lastFocusGroup}>{renderFocusGroup(si, focused.gi, focusIi)}</FocusAnchor>
+              ) : null}
               {(() => {
                 const rest = groups
                   .map((g, gi) => ({ g, gi }))
