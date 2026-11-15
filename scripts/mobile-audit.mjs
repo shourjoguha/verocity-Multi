@@ -2,7 +2,9 @@
 // keep coming back on a phone-first app:
 //
 //   1. horizontal overflow (the document scrolls sideways), and
-//   2. tap targets below TOUCH.minTargetPx (44px, see app.config.ts).
+//   2. tap targets below TOUCH.minTargetPx (44px, see app.config.ts), and
+//   3. menu items that are painted underneath other content and cannot be
+//      tapped.
 //
 // Loads every /app route at two phone widths and fails the process if either
 // regresses. Auth is seeded into localStorage and Supabase REST traffic is
@@ -11,7 +13,8 @@
 // genuinely measured rather than skipped behind a redirect to /login.
 //
 // WHAT IT CANNOT SEE — read this before citing a green run as evidence:
-//   - It LOADS routes. It clicks nothing, opens no sheet, and triggers no
+//   - It LOADS routes. Apart from opening `[aria-haspopup="menu"]` triggers
+//     (rule 3, below) it clicks nothing, opens no sheet, and triggers no
 //     interaction. A bug that only appears on open/close is invisible to it.
 //     Four sheet-flicker fixes shipped citing "all 20 audit combinations pass"
 //     while the bug was live. Use `npm run audit:flicker` for overlays.
@@ -476,7 +479,38 @@ for (const vp of VIEWPORTS) {
       };
     }, { allowSrc: ALLOW.map(String), deviceWidth: vp.width });
 
-    results.push({ vp: vp.name, route, ...report });
+    // 3. An open menu's items must be the thing a tap actually hits. This is
+    // the audit's ONE interaction, added after the plan header's menu shipped
+    // painted underneath the content that followed it: every item was visible
+    // through nothing and tappable by no one, and a load-only audit could not
+    // tell. Opens each `[aria-haspopup="menu"]` (first 6 per route), and for
+    // every item inside the scroller's visible box asks what element is at its
+    // centre. Items that run past the scroller's edge are not counted — those
+    // are reachable by scrolling.
+    const coveredMenu = [];
+    const triggers = page.locator('[aria-haspopup="menu"]:visible');
+    const triggerCount = Math.min(await triggers.count(), 6);
+    for (let i = 0; i < triggerCount; i++) {
+      await triggers.nth(i).evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await triggers.nth(i).tap();
+      await page.waitForTimeout(120);
+      const covered = await page.evaluate(() => {
+        const box = (document.querySelector('[data-scroll-root]') ?? document.documentElement).getBoundingClientRect();
+        const out = [];
+        for (const it of document.querySelectorAll('[role="menu"] [role="menuitem"]')) {
+          const r = it.getBoundingClientRect();
+          if (r.top < box.top || r.bottom > box.bottom) continue;
+          const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!top || !(top === it || it.contains(top))) out.push((it.textContent || '').trim().slice(0, 30));
+        }
+        return out;
+      });
+      coveredMenu.push(...covered);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(60);
+    }
+
+    results.push({ vp: vp.name, route, ...report, coveredMenu });
   }
 
   await context.close();
@@ -488,8 +522,9 @@ let fail = 0;
 for (const r of results) {
   const overflowBad = r.overflow > 0;
   const targetsBad = r.smallCount > 0;
-  if (overflowBad || targetsBad) fail++;
-  const mark = overflowBad || targetsBad ? 'FAIL' : ' ok ';
+  const menuBad = r.coveredMenu.length > 0;
+  if (overflowBad || targetsBad || menuBad) fail++;
+  const mark = overflowBad || targetsBad || menuBad ? 'FAIL' : ' ok ';
   console.log(
     `[${mark}] ${r.vp}  ${r.route.padEnd(34)} scrollWidth=${r.scrollWidth} (vw ${r.innerWidth})  small-targets=${r.smallCount}`,
   );
@@ -497,6 +532,7 @@ for (const r of results) {
     console.log(`         overflow +${r.overflow}px, e.g.`, JSON.stringify(r.culprits));
   }
   if (targetsBad) console.log('        ', JSON.stringify(r.small));
+  if (menuBad) console.log('         menu items covered by other content:', JSON.stringify(r.coveredMenu));
 }
 console.log(fail === 0 ? '\nAll checks passed.' : `\n${fail} route/viewport combos failed.`);
 process.exit(fail === 0 ? 0 : 1);

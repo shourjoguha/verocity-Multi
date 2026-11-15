@@ -658,6 +658,18 @@ p {
     transform: none;
   }
 }
+/* An item holding an OPEN floating layer (ui/ActionMenu's menu, ui/InfoPopover's
+   bubble) is lifted above its later siblings. The entrance animation below
+   keeps every item a stacking context after it finishes (`both` fill on
+   opacity + transform), so a z-index set INSIDE one item can never rise above
+   the items that follow it: the plan header's menu opened underneath the
+   period tabs and the plan select, and its items could not be tapped because
+   the tap landed on whatever was painted over them. Only while open, so the
+   resting page stacks exactly as before. */
+.stagger > .stagger-item:has([role='menu'], [role='tooltip']) {
+  position: relative;
+  z-index: 30;
+}
 @media (prefers-reduced-motion: no-preference) {
   .stagger > .stagger-item {
     animation: stagger-in 0.6s var(--ease-editorial) both;

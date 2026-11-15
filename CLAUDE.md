@@ -417,7 +417,11 @@ UI audit have both run.
   (`TOUCH.minTargetPx`); no horizontal overflow at 375px; `pointer: coarse` and
   `pointer: fine` get different behaviour in several places (blur, the 3D
   backdrop, sheet focus, the scroll lock) — check both before assuming a fix
-  applies. `npm run audit:mobile` guards the first two only.
+  applies. `npm run audit:mobile` guards the first two, and a third thing: that an
+  open `[aria-haspopup="menu"]`'s items are not painted underneath other
+  content (a floating layer inside a `PageStagger` item sits below every later
+  item whatever its z-index — see LESSONS "A menu opens, its items are
+  visible").
   **It is green, and it is the first time it has been.** Keep it that way: it
   spent months red on a known set of failures, which meant every change had to
   argue "same failures, same counts" instead of "passing", and a genuinely new

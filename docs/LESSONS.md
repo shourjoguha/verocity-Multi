@@ -34,6 +34,58 @@ two live answers — see that section for why.
 
 ## Rendering & animation
 
+### A menu opens, its items are visible, and tapping them does nothing
+`[reproduced in Chromium, and the symptom observed to stop]`
+The plan header's ⋯ menu (`ui/ActionMenu`) opened and drew correctly, and
+"Edit plan" / "Switch plan" were dead. Nothing was wrong with the links: the
+menu was painted **underneath** the content that followed it, so the tap landed
+on a period tab or the plan select. Playwright says it in one line — `<span …>
+intercepts pointer events` — which is the fastest way to tell "handler missing"
+from "something is on top".
+
+**Why a `z-40` did not help.** Every `PageStagger` `Item` runs `stagger-in`
+with `both` fill on opacity and transform, and an element with such an
+animation in effect stays a **stacking context after it finishes**. A z-index
+set inside one item is ranked only against that item's own children, so no
+value can lift a menu above the items that come after it in the page.
+**Any absolutely-positioned layer inside a stagger item is under every later
+item**, whatever its z-index — the same trap was waiting for `ui/InfoPopover`.
+
+**The fix is one rule, not a portal:** an item that currently holds an open
+`[role='menu']` or `[role='tooltip']` gets `position: relative; z-index: 30`
+(`:has()`, in `global.css` beside the stagger rules). Only while open, so the
+resting page stacks as before.
+
+**Guarded now.** `audit:mobile` rule 3 opens every `[aria-haspopup="menu"]`
+and checks that each item is the element at its own centre. It was run against
+the broken build first and failed on `/app/plan` and `/app/review`, then passed
+on the fix — a check that has never been seen to fail proves nothing.
+What it cannot see: a menu that only exists behind another interaction, items
+that run past the scroller's edge (reachable by scrolling, deliberately not
+counted — the plan editor's card menus do this near the dock), and WebKit.
+
+**A second, unproven cause was closed at the same time.** The menu also closed
+itself on any blur whose `relatedTarget` was outside it — and a blur to
+*nothing* counted. iOS Safari does not focus a tapped link or button, so a tap
+on an item would blur the auto-focused first item to nothing and unmount the
+menu before the click landed. `[argued — not reproduced]`: Chromium does focus
+the tapped element, and the paint-order bug above masked it in every test. It
+now closes only when focus moves to a real element outside.
+→ `src/styles/global.css` (`.stagger > .stagger-item:has(…)`),
+`src/components/ui/ActionMenu.tsx`, `scripts/mobile-audit.mjs`
+
+### The Stats page paints the grid, then the radar drops in above it
+`[argued — not reproduced with the stub fixtures; reported on a real device]`
+`FitnessProfile` renders `null` while `useAspectProfile` is loading, and the
+page-level gate in `StatsView` did not wait for it, so on a first visit the
+consistency grid could paint first and the radar then pushed everything down.
+On later visits the snapshots are cached and the radar is there on frame one,
+which is why it only happened once per session. `profile.loading` is now part
+of the gate. The same shape — **a child that returns null while loading, under
+a parent that has already stopped showing its loader** — is the thing to look
+for when a page "rearranges itself".
+→ `src/components/StatsView.tsx`
+
 ### A tap-to-peek chart column shows nothing on touch, and works on hover
 `[measured in Chromium touch emulation; iOS not observed]`
 A touch tap fires `mouseenter` before `click`. With `onMouseEnter` setting the
