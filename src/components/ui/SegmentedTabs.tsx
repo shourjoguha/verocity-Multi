@@ -1,4 +1,8 @@
-export type SegTab = { key: string; label: string };
+// `strike` draws the label struck through, and `srNote` is appended to the
+// button's accessible name — the plan editor's week picker marks a skipped week this way,
+// so the state survives without colour (and the thumb's fill means "selected",
+// never "skipped").
+export type SegTab = { key: string; label: string; strike?: boolean; srNote?: string };
 
 // The app's segmented control: a filled SHELL (the tappable track) holding an
 // accent THUMB. Previously this rendered detached bordered buttons in a row,
@@ -69,6 +73,10 @@ export default function SegmentedTabs({
             aria-selected={as === 'radiogroup' ? undefined : on}
             aria-checked={as === 'radiogroup' ? on : undefined}
             aria-pressed={on}
+            // An aria-label, not an sr-only span: an absolutely positioned
+            // child inside a horizontally scrolling picker escapes its
+            // scroller and widens the page's scroll root.
+            aria-label={t.srNote ? `${t.label} ${t.srNote}` : undefined}
             onClick={() => onChange(t.key)}
             // Hit target stays 44px; -my collapses it to the 26px thumb in flow,
             // so the control reads slim without a sub-44px tap target. Focus ring
@@ -82,7 +90,7 @@ export default function SegmentedTabs({
                 on ? 'bg-accent text-accent-fg' : 'text-muted group-hover:text-fg'
               }`}
             >
-              {t.label}
+              <span className={`min-w-0 truncate ${t.strike ? 'line-through' : ''}`}>{t.label}</span>
             </span>
           </button>
         );

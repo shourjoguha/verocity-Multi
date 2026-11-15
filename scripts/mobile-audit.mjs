@@ -344,6 +344,9 @@ const ROUTES = [
   '/app/plan',
   '/app/plan/view',
   '/app/plan/upload',
+  // The plan editor: day picker, section tabs, one stepper card per exercise.
+  // Not measured until it stopped being a sideways-scrolling table.
+  '/app/plan/edit',
   '/app/review',
   '/app/sessions',
   '/app/library',
