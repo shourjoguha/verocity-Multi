@@ -19,12 +19,13 @@ export const THEME_PREFS: ThemePref[] = ['light', 'dark', 'system'];
 // Mirrors the meta[name=theme-color] swap done in the pre-paint script; keep in
 // sync with --color-bg in global.css.
 //
-// This pair is duplicated in FIVE places and they must all move together, or
+// This pair is duplicated in FOUR places and they must all move together, or
 // the PWA status bar / WebGL clear colour stops matching the page: here, the
 // literal <meta> in Base.astro, the pre-paint script in Base.astro, and the
-// `bgColor` in BackgroundScene3DCanvas.tsx + LoginHeroScene.tsx (both are the
-// three.js clear colour behind a full-viewport scene — a mismatch shows as a
-// seam at the edges of the backdrop). The light value is also the
+// `bgColor` in BackgroundScene3DCanvas.tsx (the three.js clear colour behind a
+// full-viewport scene — a mismatch shows as a seam at the edges of the
+// backdrop). LoginHeroScene.tsx used to be a fifth; it is Canvas 2D now and
+// clears to transparent over the page's own --color-bg. The light value is also the
 // `background_color` / `theme_color` in public/manifest.webmanifest.
 export const THEME_COLOR: Record<ResolvedTheme, string> = {
   light: '#f3f1ec',

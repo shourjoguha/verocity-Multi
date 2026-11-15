@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 
-// Defers three.js off the login LCP path. Hydrates idle, then dynamic-imports
-// the canvas; until then the page is a static editorial frame.
+// Keeps the backdrop off the login LCP path: hydrates idle, then
+// dynamic-imports the canvas; until then the page is a static editorial frame.
+// Under prefers-reduced-motion the scene still mounts, but draws one still
+// frame and never animates.
 
 export default function LoginHero() {
-  const [Scene, setScene] = useState<React.ComponentType | null>(null);
+  const [Scene, setScene] = useState<React.ComponentType<{ still?: boolean }> | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
-    const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReducedMotion(mql.matches);
-    if (mql.matches) return; // honor the user — leave the frame static
+    setReducedMotion(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     let cancelled = false;
     import('./LoginHeroScene').then((mod) => {
       if (!cancelled) setScene(() => mod.default);
@@ -20,6 +20,6 @@ export default function LoginHero() {
     };
   }, []);
 
-  if (reducedMotion || !Scene) return null;
-  return <Scene />;
+  if (!Scene) return null;
+  return <Scene still={reducedMotion} />;
 }
