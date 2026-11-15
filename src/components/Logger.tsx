@@ -98,6 +98,8 @@ import { Modal } from '@/components/ui/Modal';
 import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
 import { SetEntrySheet } from '@/components/logger/SetEntrySheet';
+import { FocusItem } from '@/components/logger/FocusItem';
+import { firstOpenSet, nextOpenSet } from '@/components/logger/focusSet';
 import { MovementPicker } from '@/components/logger/MovementPicker';
 import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
@@ -121,6 +123,13 @@ import { toast } from '@/lib/toast';
 // more: weight is an always-on field on reps/time/distance, and rpe was never a
 // primary that rendered anything. See PRIMARY_METRICS in app.config.ts.
 const METRIC_CYCLE: MetricKey[] = [...PRIMARY_METRICS];
+// The metric a tap on the metric button moves to. indexOf is -1 for a legacy
+// `weight`/`rpe` row, which would otherwise jump to index 1 and skip the first
+// option, so "not in the cycle" is treated as "before the start".
+const nextMetric = (current: MetricKey): MetricKey => {
+  const at = METRIC_CYCLE.indexOf(current);
+  return METRIC_CYCLE[at < 0 ? 0 : (at + 1) % METRIC_CYCLE.length];
+};
 
 // Shared by every icon-only control in a movement card's bands: a real 44px
 // target (TOUCH.minTargetPx) holding a ~18px glyph, with no gap between
@@ -251,6 +260,12 @@ export default function Logger() {
     setParked(addAll);
     setCollapsed(addAll);
   };
+  // Which movement the focus card shows. Null = follow the work: the first
+  // group, in section order, with a set still to log (nextOpenSet). Tapping an
+  // Up-next row pins a group (and, in a superset, a member); logging a set
+  // drops the member pin so the card follows the round order across the group,
+  // and finishing the group drops the pin entirely so the card advances.
+  const [focus, setFocus] = useState<{ groupId: string; itemId?: string } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // Finish always asks for type / duration / HR in a sheet; `rowHr` is a
   // resumed row's heart rate, which the sheet starts on.
@@ -992,6 +1007,48 @@ export default function Logger() {
     (n, { g }) => n + g.items.filter((it) => !isSubroutine(it)).length,
     0,
   );
+  // The focused movement. Groups in render order (sections by SECTIONS, then
+  // their own order), parked ones excluded — the Done pile keeps its own
+  // expand-to-full-card path. A pin that no longer resolves (group removed,
+  // or parked) falls back to following the work.
+  const liveGroups = ordered.flatMap((section) => {
+    const si = doc.sections.findIndex((s) => s.key === section.key);
+    return doc.sections[si].groups
+      .map((g, gi) => ({ si, gi, g }))
+      .filter(({ g }) => !parked.has(g.id));
+  });
+  const pinned = focus ? liveGroups.find(({ g }) => g.id === focus.groupId) : undefined;
+  const focused = pinned ?? liveGroups.find(({ g }) => nextOpenSet(g) !== null) ?? null;
+  // Which member of the focused group gets the live editor: a pinned member,
+  // else the one holding the group's next set in round order, else the first
+  // movement. -1 means the group is subroutines only.
+  const focusIi = (() => {
+    if (!focused) return -1;
+    const items = focused.g.items;
+    const byPin =
+      pinned && focus?.itemId ? items.findIndex((it) => it.id === focus.itemId && !isSubroutine(it)) : -1;
+    if (byPin >= 0) return byPin;
+    const next = nextOpenSet(focused.g);
+    if (next) return next.ii;
+    return items.findIndex((it) => !isSubroutine(it));
+  })();
+  const focusItemId = focused && focusIi >= 0 ? focused.g.items[focusIi].id : null;
+
+  // The session progress strip: one segment per movement in render order,
+  // sized by its set count and filled by sets logged.
+  const progress = ordered.flatMap((section) => {
+    const si = doc.sections.findIndex((s) => s.key === section.key);
+    return doc.sections[si].groups.flatMap((g) =>
+      g.items
+        .filter((it) => !isSubroutine(it) && it.sets.length > 0)
+        .map((it) => ({
+          id: it.id,
+          total: it.sets.length,
+          done: it.sets.filter((st) => st.actual.completed).length,
+        })),
+    );
+  });
+
   // The set the entry sheet is bound to, resolved fresh each render so the sheet
   // always shows current values. Any index that no longer exists (set deleted,
   // movement removed) resolves to null and closes the sheet.
@@ -1248,12 +1305,7 @@ export default function Logger() {
           <button
             onClick={() => {
               activate(groupId);
-              // indexOf is -1 for a legacy `weight`/`rpe` row, which would otherwise
-              // jump to index 1 and skip the first option. Treat "not in the
-              // cycle" as "before the start" so the first tap lands on reps.
-              const at = METRIC_CYCLE.indexOf(item.primaryMetric);
-              const nextMetric = METRIC_CYCLE[at < 0 ? 0 : (at + 1) % METRIC_CYCLE.length];
-              setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric));
+              setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric(item.primaryMetric)));
             }}
             className="hill-btn flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 px-2 t-control text-fg transition-colors"
             aria-label={`Metric: ${METRICS[item.primaryMetric].label}. Change metric`}
@@ -1514,6 +1566,189 @@ export default function Logger() {
     );
   }
 
+  // Log the focus card's live set. The write is the one SetEntrySheet's Log
+  // makes — `{ completed: true }` on that set, nothing else. What follows is
+  // only where the card goes next: if that set finished the group, the group
+  // parks into Done at once (the card is leaving it anyway, so parking now is
+  // one change on screen rather than two) and focus follows the work again;
+  // otherwise the member pin is dropped so a superset moves to its next set
+  // in round order.
+  function logFocusSet(si: number, gi: number, ii: number, ki: number) {
+    const groupId = doc.sections[si].groups[gi].id;
+    activate(groupId);
+    const after = patchSetActual(doc, si, gi, ii, ki, { completed: true });
+    setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: true }));
+    const g = after.sections[si].groups[gi];
+    if (nextOpenSet(g)) {
+      setFocus({ groupId });
+      return;
+    }
+    if (g.completedAt) {
+      const park = (prev: Set<string>) => (prev.has(groupId) ? prev : new Set([...prev, groupId]));
+      setParked(park);
+      setCollapsed(park);
+    }
+    setFocus(null);
+  }
+
+  // The focused group as a card: a single movement is FocusItem on a card
+  // with the in-progress stripe; a superset/circuit keeps its own card, header
+  // and ink stripe, and only the member holding the live set opens up — the
+  // others are one tappable row each, so the group stays visibly together.
+  // A subroutine-only group has nothing to log and keeps its ordinary card.
+  function renderFocusGroup(si: number, gi: number, focusAt: number) {
+    const group = doc.sections[si].groups[gi];
+    if (focusAt < 0) return renderGroup(si, gi);
+    const focusItem = (ii: number, grouped: boolean) => {
+      const item = group.items[ii];
+      const open = firstOpenSet(item);
+      // The live set is the group's next set when it falls in this member;
+      // a member pinned out of round order logs its own first open set.
+      const next = nextOpenSet(group);
+      const liveKi = next && next.ii === ii ? next.ki : open >= 0 ? open : null;
+      return (
+        <FocusItem
+          key={item.id}
+          item={item}
+          liveKi={liveKi}
+          markKind={markKindOf(item)}
+          grouped={grouped}
+          onPatchSet={(ki, patch) => {
+            activate(group.id);
+            setDoc((d) => patchSetActual(d, si, gi, ii, ki, patch));
+          }}
+          onLogSet={(ki) => logFocusSet(si, gi, ii, ki)}
+          onOpenSet={(ki) => {
+            activate(group.id);
+            setEntryFor({ si, gi, ii, ki });
+          }}
+          onToggleSet={(ki) => {
+            activate(group.id);
+            const was = item.sets[ki].actual.completed;
+            setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: !was }));
+          }}
+          onAddSet={() => {
+            activate(group.id);
+            setDoc((d) => addSet(d, si, gi, ii));
+          }}
+          onCycleMetric={() => {
+            activate(group.id);
+            setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric(item.primaryMetric)));
+          }}
+          onToggleAll={() => {
+            activate(group.id);
+            toggleItemComplete(si, gi, ii);
+          }}
+          onOptions={() => setOptionsFor({ si, gi, ii })}
+          onDemo={() => setDemoFor(item.movement)}
+        />
+      );
+    };
+    if (group.items.length === 1) {
+      return (
+        <div key={group.id} className="lift relative rounded-card border border-outline border-l-2 bg-surface">
+          {/* The in-progress marker: the same straight stripe as a superset's
+              (see renderGroup for why it is not the card's border-l), in the
+              in-progress accent rather than ink. */}
+          <span aria-hidden className="pointer-events-none absolute inset-y-3 -left-0.5 w-0.5 bg-teal" />
+          {focusItem(0, false)}
+        </div>
+      );
+    }
+    return (
+      <div key={group.id} className="lift relative rounded-card border border-outline border-l-2 bg-surface">
+        <span aria-hidden className="pointer-events-none absolute inset-y-3 -left-0.5 w-0.5 bg-accent" />
+        <div className="flex items-center justify-between gap-2 border-b border-border-soft px-4 t-control">
+          <span className="flex min-h-11 items-center text-muted">{group.items.length} movements</span>
+          <SegmentedTabs
+            as="radiogroup"
+            ariaLabel="Group kind"
+            className="shrink-0"
+            tabs={(['superset', 'circuit'] as GroupKind[]).map((k) => ({ key: k, label: k }))}
+            active={group.kind}
+            onChange={(k) => {
+              activate(group.id);
+              setDoc((d) => setGroupKind(d, si, gi, k as GroupKind));
+            }}
+          />
+        </div>
+        {group.items.map((item, ii) => {
+          if (ii === focusAt) {
+            return (
+              <div key={item.id} className={ii > 0 ? 'border-t border-border-soft' : ''}>
+                {focusItem(ii, true)}
+              </div>
+            );
+          }
+          if (isSubroutine(item)) return renderItem(si, gi, ii, true);
+          return movementRow(group.id, item, `px-4 ${ii > 0 ? 'border-t border-border-soft' : ''}`);
+        })}
+      </div>
+    );
+  }
+
+  // One movement as a one-line, genuinely 44px row (stacked, so no negative
+  // margins — LESSONS § "The slim-thumb trick does not transfer to a stacked
+  // list"): ✓ when every set is logged, the name, then the next set's values
+  // and done/total. Tapping it focuses that movement.
+  function movementRow(groupId: string, item: LogItem, pad: string) {
+    const sub = isSubroutine(item);
+    const done = sub ? 0 : item.sets.filter((st) => st.actual.completed).length;
+    const open = sub ? -1 : firstOpenSet(item);
+    const allDone = !sub && item.sets.length > 0 && open < 0;
+    return (
+      <button
+        key={item.id}
+        type="button"
+        onClick={() => {
+          activate(groupId);
+          setFocus({ groupId, itemId: sub ? undefined : item.id });
+        }}
+        className={`flex min-h-11 w-full items-center gap-2 text-left ${pad}`}
+      >
+        {allDone ? (
+          <span
+            aria-hidden
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-chip border border-accent bg-accent text-[0.5rem] text-accent-fg"
+          >
+            ✓
+          </span>
+        ) : null}
+        <span className="min-w-0 flex-1 truncate text-sm capitalize text-fg">{item.movement}</span>
+        {sub ? (
+          <span className="shrink-0 t-label text-faint">note</span>
+        ) : (
+          <span className="max-w-[45%] shrink-0 truncate text-right text-xs tabular-nums text-muted">
+            {open >= 0 ? `${formatSetActual({ ...item.sets[open].actual, rpe: undefined })} · ` : ''}
+            {done}/{item.sets.length}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  // A not-focused group as it reads under "Up next": the Done pile's row
+  // shape, a superset keeping its stripe and kind label with its members
+  // indented. Tapping a row focuses that movement; everything else (sets,
+  // options, metric) is on the card it opens into.
+  function renderUpNextGroup(si: number, gi: number) {
+    const group = doc.sections[si].groups[gi];
+    const superset = group.items.length > 1;
+    return (
+      <div key={group.id} className={superset ? 'relative border-l-2 border-l-transparent' : ''}>
+        {superset ? (
+          <>
+            <span aria-hidden className="pointer-events-none absolute inset-y-3 -left-0.5 w-0.5 bg-accent" />
+            <div className="px-3 pt-1.5 t-label text-faint">
+              {group.kind === 'circuit' ? 'circuit' : 'superset'}
+            </div>
+          </>
+        ) : null}
+        {group.items.map((item) => movementRow(group.id, item, superset ? 'pl-6 pr-3' : 'px-3'))}
+      </div>
+    );
+  }
+
   // Hand off from the options sheet to another sheet. Sheets now unmount the
   // moment they close, so closing this one and opening the next in the same
   // commit leaves no overlap — no two scrims stacked, and no delay to wait out.
@@ -1633,7 +1868,40 @@ export default function Logger() {
             audit:mobile stays green on it (docs/LESSONS.md § "A fix silently
             switched off an existing guard"). Caught by screenshot, not by a
             check. */}
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-y border-border">
+        {/* Session progress, merged into this row as its top edge rather than
+            a row of its own: the 4px strip replaces the 1px hairline that sat
+            here, so it costs 3px. One segment per movement, sized by its set
+            count; logged sets fill in ink, the rest is the neutral track, and
+            the focused movement's remaining sets take the in-progress accent.
+            It is data, not a control, and it reads without colour — the
+            "done/total sets" count on the row beneath says the same thing. */}
+        {progress.length > 0 ? (
+          <div
+            role="progressbar"
+            aria-label="Session progress"
+            aria-valuemin={0}
+            aria-valuemax={sessionSets.total}
+            aria-valuenow={sessionSets.done}
+            className="mt-2 flex h-1 gap-0.5"
+          >
+            {progress.map((p) => (
+              <span
+                key={p.id}
+                className={`flex h-full overflow-hidden rounded-[1px] ${
+                  p.id === focusItemId ? 'bg-teal' : 'bg-border'
+                }`}
+                style={{ flexGrow: p.total, flexBasis: 0 }}
+              >
+                <span className="h-full bg-fg" style={{ width: `${(p.done / p.total) * 100}%` }} />
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div
+          className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border ${
+            progress.length > 0 ? '' : 'mt-2 border-t'
+          }`}
+        >
           <button
             type="button"
             onClick={() => setShowDetails((v) => !v)}
@@ -1777,8 +2045,28 @@ export default function Logger() {
               {sectionLabel(section.key)}{' '}
               <span className="text-faint tabular-nums">{groups.length}</span>
             </SectionHeader>
+            {/* The focused movement as its card, then every other unparked
+                group in this section as one-line rows in a single card —
+                "Up next" in the focused section, unlabelled elsewhere since
+                the section header already says what they are. */}
             <div className="flex flex-col gap-2">
-              {groups.map((group, gi) => (parked.has(group.id) ? null : renderGroup(si, gi)))}
+              {focused && focused.si === si ? renderFocusGroup(si, focused.gi, focusIi) : null}
+              {(() => {
+                const rest = groups
+                  .map((g, gi) => ({ g, gi }))
+                  .filter(({ g, gi }) => !parked.has(g.id) && !(focused && focused.si === si && focused.gi === gi));
+                if (rest.length === 0) return null;
+                return (
+                  <div className="rounded-card border border-outline bg-surface">
+                    {focused && focused.si === si ? (
+                      <div className="px-3 pt-2 t-label text-muted">Up next</div>
+                    ) : null}
+                    <div className="flex flex-col [&>*+*]:border-t [&>*+*]:border-border-soft">
+                      {rest.map(({ gi }) => renderUpNextGroup(si, gi))}
+                    </div>
+                  </div>
+                );
+              })()}
               {groups.length === 0 ? (
                 <p className="text-sm text-muted">No movements yet.</p>
               ) : null}
