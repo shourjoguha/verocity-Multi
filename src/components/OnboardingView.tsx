@@ -312,7 +312,7 @@ export function OnboardingView() {
               <h1 className={`${heading} stagger-item mt-2`}>Let&apos;s tune this to you.</h1>
               <p className={`${sub} stagger-item`}>
                 Four short screens, then you pick where to start. Skip any of them and change
-                everything later in Settings.
+                everything later in You.
               </p>
             </div>
           )}

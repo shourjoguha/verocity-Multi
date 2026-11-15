@@ -118,7 +118,7 @@ Operational detail lives in `docs/HANDOVER.md`.
 Built after the roadmap above was written, so it has no phase entry of its own:
 Garmin integration (`garmin-connect` / `garmin-ingest`, `GarminPanel`), heart
 rate and fitness assessments, library subroutines, PR detection, the three-way
-theme toggle, `/app/settings`, and the mobile UX pass (bottom tab bar, set-entry
+theme toggle, `/app/settings` (folded into `/app/you` in Phase 17), and the mobile UX pass (bottom tab bar, set-entry
 sheet, 44px targets) with its two standing audits.
 
 The fitness radar was then reworked end to end: raw measurement split from
@@ -150,7 +150,7 @@ silently.
 A fourth pass gave the app its first user-level data. `user_stats` (owner-only,
 deliberately not columns on `profiles` — the showcase RLS policy grants `anon` a
 whole-row read) holds bodyweight, height, birth year, gender, body type and past
-injuries, edited from the **You** group on `/app/settings`. Two of those close
+injuries, edited from the **You** group on `/app/settings` (now `/app/you`). Two of those close
 gaps the config had been carrying comments about: unweighted work is priced
 against the owner's own mass instead of a flat 40kg, and the HR ceiling falls
 back to `220−age` instead of a flat 190. `/app/body` gained a **Volume**
@@ -239,7 +239,8 @@ layouts, #127 the Home layout, #128 You + tap targets) plus this one.
 
 **What changed.** Archivo Black + Space Grotesk; light and dark authored as
 equals with `system` still the default; all three shadow families retired to
-`none`; a 3px/4px/6px radius scale replacing "sharp corners by default"; a
+`none`; a 3px/4px/6px radius scale replacing "sharp corners by default" (6/8/12
+since Phase 17); a
 shared layout vocabulary in `ui/primitives.tsx` (`StatStrip`, `ListCard`,
 `Takeaway`, `TickProgress`, `DistributionBar`, `SegmentMeter`, `StackedBar`,
 `Delta`); `ui/SegmentedTabs` restyled and five hand-rolled copies folded into
@@ -494,7 +495,8 @@ Reads: `src/lib/holidays.ts` header, `supabase/migrations/0049_holidays.sql`.
   inclusive dates, owner-only RLS, exclusion constraint against overlaps.
   A date range, never a `workout_logs` row, so it can never be read as training
 - [x] Entry points: Log Activity's Session / Holiday switch (`?mode=holiday`,
-  `?holiday=<id>` edits), Settings → Holidays tab (`?tab=holidays`), and tapping
+  `?holiday=<id>` edits), the Holidays section of You (`/app/you#holidays`; the
+  old `?tab=holidays` link redirects there), and tapping
   a holiday day on the Home calendar. One form, `HolidayForm.tsx`
 - [x] Animated scenes (`lib/holidayScene.ts`, `HolidayScene.tsx`): calendar
   ribbons that wrap at the week boundary, hatched + glyph cells on the Stats
@@ -511,6 +513,28 @@ Reads: `src/lib/holidays.ts` header, `supabase/migrations/0049_holidays.sql`.
 - [ ] Radar `consistency` axis still divides by calendar weeks: excluding
   holidays there means a new `ASPECT_METRICS_VERSION` and a re-backfill
 - [ ] The deep coach edge function does not see holidays yet
+
+### Phase 17 — Warm palette and the three-fill rule  `[shipped]`
+Reads: the header of `src/styles/global.css`, `src/lib/themeTokens.test.ts`,
+`CLAUDE.md` hard rules (palette, three fills, card outline, buttons, segmented).
+Eight commits on `claude/ui-ux-improvements-m0578f`, `820d92d`..`f8086c3`, ~90 files.
+- [x] Warm paper / warm carbon neutral scale; data colours unchanged. Radius
+  6 / 8 / 12 (`--radius-chip` / `-control` / `-card`)
+- [x] Role tokens in both themes: `--color-tappable`, `--color-tappable-hover`,
+  `--color-outline` (transparent — cards are a tone step, not an outline)
+- [x] Three fills app-wide: surface = content, tappable = can be tapped,
+  accent = selected or the one primary. `.hill-btn[aria-pressed]` paints toggles;
+  `Button` ghost is tappable; `ui/SegmentedTabs` is a filled track with an
+  accent thumb; one `FIELD` class for inputs
+- [x] Plan header actions move into `ui/ActionMenu`
+- [x] `/app/settings` retired: a redirect to `/app/you`, Holidays at
+  `#holidays`, the Settings view component deleted; audits load the You hashes instead
+- [x] `themeTokens.test.ts` parses `global.css`: both themes define every
+  `--color-*`, contrast targets met
+- [ ] No check sees colour, radius or fill beyond that test — screenshots in
+  both themes are the evidence (LESSONS § "Audits were green on a palette
+  nobody had looked at")
+- [ ] `LogShareControl.tsx` still aliases `FIELD` as a local `inputClass`
 
 ## Backlog
 

@@ -68,7 +68,7 @@ These are Verocity's **dark theme values**. `CLAUDE.md`: *"Design tokens only (H
 colors in components — this one MUST hold… A hardcoded hex breaks dark mode silently."*
 The app ships a three-way light/dark/system toggle.
 
-**Resolution — use the tokens, which already resolve to exactly these values in dark:**
+**Resolution — use the tokens, which resolved to exactly these values in dark when this was written:**
 
 | Spec value | Token | Tailwind |
 |---|---|---|
@@ -82,10 +82,12 @@ The app ships a three-way light/dark/system toggle.
 | `rgba(255,255,255,.07)` inner | `--color-border-soft` | `border-border-soft` |
 | selected: white bg / near-black text | `--color-accent` / `--color-accent-fg` | `bg-accent text-accent-fg` |
 
-Every hex in the spec has an exact token. **Write zero raw colours.** Light mode then
+Every hex in the spec had an exact token when this was written; since the warm-palette
+pass the tokens no longer equal these hexes (dark is warm carbon, `--color-bg`
+`hsl(30 10% 4%)`), and the mapping by role is what still holds. **Write zero raw colours.** Light mode then
 works for free; hardcoding would break it silently and no audit here can see that.
 
-Radii (3px chip / 4px control / 6px card) and the fonts already match the repo's
+Radii (3px chip / 4px control / 6px card, now 6 / 8 / 12) and the fonts matched the repo's
 `--radius-*` tokens and Archivo Black + Space Grotesk exactly — no change needed.
 
 ### 0.3 A form in a drawer, with a software keyboard
@@ -705,8 +707,9 @@ surfaces one implementation.
   `role="tablist"` (the current behaviour) means "switches views" and `CLAUDE.md`
   restricts it to that.
 - `size?: 'sm' | 'md' | 'compact'` — `compact` = 36px visual, 44px hit box.
-- Selected: `bg-accent text-accent-fg`. Unselected: transparent, `border-border`,
-  `text-muted`. Keep `aria-pressed`/`aria-checked` — it is an accessibility contract here
+- Selected: `bg-accent text-accent-fg`. Unselected: no fill of its own on the
+  `bg-tappable` track, `text-muted` (it was transparent with `border-border` when
+  written). Keep `aria-pressed`/`aria-checked` — it is an accessibility contract here
   and the flat pressed state keys off it.
 - **Selected state must not rely on colour alone** — the fill/weight change carries it.
 

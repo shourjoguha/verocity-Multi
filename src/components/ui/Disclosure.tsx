@@ -16,10 +16,11 @@ export function Disclosure({
   variant = 'card',
   children,
 }: {
-  // Set this to make the section addressable from elsewhere — You's summary
-  // card opens the Profile section by id rather than lifting `open` into React
-  // state, which would trade the browser-driven, works-before-hydration
-  // behaviour for a controlled component and gain nothing else.
+  // Set this to make the section addressable from elsewhere — YouView's
+  // `openFromHash()` opens the section a URL hash names (`/app/you#holidays`)
+  // by setting the DOM `open` rather than lifting it into React state, which
+  // would trade the browser-driven, works-before-hydration behaviour for a
+  // controlled component and gain nothing else.
   id?: string;
   title: ReactNode;
   defaultOpen?: boolean;

@@ -322,8 +322,9 @@ const tabActive = (t: Tab) =>
       Instead the shell above does not scroll, so this is simply the last flex
       child of a box whose bottom edge is the screen's bottom edge — there is
       no viewport offset left to resolve, and nothing to lag. `relative z-50`
-      only so `.ledge`'s upward shadow paints over the scroller it sits under;
-      no `inset-x-0`, the flex column already stretches it full width. */}
+      keeps it stacked over the scroller it sits under (`.ledge` casts nothing
+      now; it only forbids a transform here); no `inset-x-0`, the flex column
+      already stretches it full width. */}
   <nav
     aria-label="Primary"
     class:list={[

@@ -997,11 +997,11 @@ export default function ProfileView({ mode }: { mode: Surface }) {
                     />
                   ) : null}
 
-                  {/* Flat, not pillowed. `.hill-btn-flush` carries a 4px radius
-                      and an inset dark edge, which inside a hairline-divider
-                      container reads as a rounded pill floating ON the card
-                      rather than a segment OF it — the same reason rows in a
-                      gap-px grid never take .lift. The unit owns the depth. */}
+                  {/* Flat segments, no `.hill-btn-flush`: its unlayered control
+                      radius, inside a hairline-divider container, reads as a
+                      rounded pill floating ON the card rather than a segment
+                      OF it — the same reason rows in a gap-px grid never take
+                      .lift. The unit owns the shape. */}
                   <div className="flex gap-px bg-border-soft">
                     <a
                       // '#' on the showcase, not just a prevented click: the
