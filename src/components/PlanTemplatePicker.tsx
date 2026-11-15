@@ -153,8 +153,8 @@ export default function PlanTemplatePicker({
           aria-expanded={open}
           aria-labelledby="plan-picker-label plan-picker-value"
           onClick={() => setOpen((o) => !o)}
-          className={`flex min-h-15 items-center gap-3 border border-fg bg-surface px-3.5 py-2.5 text-left text-fg ${
-            open ? 'rounded-t-control' : 'rounded-control'
+          className={`flex min-h-15 items-center gap-3 border bg-tappable px-3.5 py-2.5 text-left text-fg hover:bg-tappable-hover ${
+            open ? 'rounded-t-control border-fg' : 'rounded-control border-transparent'
           }`}
         >
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -181,9 +181,7 @@ export default function PlanTemplatePicker({
                   role="option"
                   aria-selected={on}
                   onClick={() => pick(x.id)}
-                  className={`flex w-full items-start gap-3 border-t border-border-soft p-3.5 text-left text-fg ${
-                    on ? 'bg-bg' : 'hover:bg-bg'
-                  }`}
+                  className="flex w-full items-start gap-3 border-t border-border-soft p-3.5 text-left text-fg hover:bg-tappable"
                 >
                   <span className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <span className="text-[0.9375rem] font-semibold">{x.name}</span>
@@ -206,7 +204,7 @@ export default function PlanTemplatePicker({
                 setOpen(false);
                 onBuild();
               }}
-              className="flex min-h-13 w-full items-center gap-3 border-t border-border px-3.5 text-left text-fg hover:bg-bg"
+              className="flex min-h-13 w-full items-center gap-3 border-t border-border-soft px-3.5 text-left text-fg hover:bg-tappable"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
                 <path d="M12 5v14M5 12h14" />
@@ -223,7 +221,7 @@ export default function PlanTemplatePicker({
         ) : null}
       </div>
 
-      <section aria-label={`${t.name} preview`} className="mt-4 overflow-hidden rounded-card border border-border bg-surface">
+      <section aria-label={`${t.name} preview`} className="mt-4 overflow-hidden rounded-card border border-outline bg-surface">
         <div className="grid grid-cols-3">
           <div className={stat}>
             <div className="font-display text-2xl tabular-nums text-fg">{weeks}</div>

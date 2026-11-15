@@ -191,7 +191,7 @@ function MealDrawerBody({
 
   return (
     <>
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
         <div>
           <div className="t-eyebrow text-teal">Quick capture</div>
           <div className="font-display text-sm uppercase tracking-[0.04em] text-fg">Log a meal</div>
@@ -274,7 +274,7 @@ function MealDrawerBody({
       </div>
 
       {asking && fromPreset ? (
-        <div className="flex shrink-0 flex-col gap-2 border-t border-border bg-elevated px-4 py-3 text-sm text-fg">
+        <div className="flex shrink-0 flex-col gap-2 border-t border-border-soft bg-bg px-4 py-3 text-sm text-fg">
           <span>You changed “{fromPreset.name}”.</span>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
@@ -292,7 +292,7 @@ function MealDrawerBody({
               type="button"
               disabled={saving}
               onClick={() => save('once')}
-              className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg disabled:opacity-40"
+              className="hill-btn flex min-h-11 items-center border border-transparent bg-tappable px-3 t-control text-fg transition-colors hover:bg-tappable-hover disabled:opacity-40"
             >
               Log once
             </button>
@@ -300,7 +300,7 @@ function MealDrawerBody({
               type="button"
               disabled={saving}
               onClick={() => save('update')}
-              className="hill-btn flex min-h-11 items-center bg-fg px-3 t-control text-bg transition-colors hover:bg-fg/85 disabled:opacity-40"
+              className="hill-btn flex min-h-11 items-center border border-accent bg-accent px-3 t-control text-accent-fg transition-colors hover:bg-accent/85 disabled:opacity-40"
             >
               Update and log
             </button>
@@ -308,14 +308,14 @@ function MealDrawerBody({
         </div>
       ) : null}
 
-      <div className="flex shrink-0 gap-2 border-t border-border p-4">
+      <div className="flex shrink-0 gap-2 border-t border-border-soft p-4">
         <button
           type="button"
           aria-label="Open the full logger"
           onClick={() => {
             window.location.href = '/app/meals/log';
           }}
-          className="hill-btn flex min-h-11 min-w-11 shrink-0 items-center justify-center border border-border bg-surface text-fg transition-colors hover:border-fg"
+          className="hill-btn flex min-h-11 min-w-11 shrink-0 items-center justify-center border border-transparent bg-tappable text-fg transition-colors hover:bg-tappable-hover"
         >
           <span aria-hidden>⤢</span>
         </button>
@@ -323,7 +323,7 @@ function MealDrawerBody({
           type="button"
           disabled={saving}
           onClick={() => save('check')}
-          className="hill-btn flex min-h-11 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85 disabled:opacity-40"
+          className="hill-btn flex min-h-11 flex-1 items-center justify-center border border-accent bg-accent px-4 text-sm uppercase tracking-wider text-accent-fg transition-colors hover:bg-accent/85 disabled:opacity-40"
         >
           {saving ? 'Saving…' : 'Save meal'}
         </button>

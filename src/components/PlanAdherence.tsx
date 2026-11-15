@@ -13,6 +13,7 @@ import { getActivePlan } from '@/lib/queries';
 import { loadAllLogs } from '@/lib/logStore';
 import { useAuthedQuery } from '@/lib/useAuthedQuery';
 import { Disclosure } from '@/components/ui/Disclosure';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 
 // The active plan's adherence for the pages that show it as one line (Stats,
 // Body). Every log, not the page's window: the plan's whole life is the
@@ -134,7 +135,16 @@ export function PlanAdherenceSection({ adherence }: { adherence: Adherence | nul
       <table className="mt-4 w-full table-fixed text-left text-sm">
         <thead>
           <tr className="text-[0.65rem] uppercase tracking-wide text-muted">
-            <th className="pb-1 pr-3 font-medium">Movement</th>
+            <th className="pb-1 pr-3 font-medium">
+              <span className="inline-flex items-center gap-2">
+                Movement
+                <InfoPopover label="How swaps are counted">
+                  <span className="normal-case tracking-normal">
+                    ↔ counted — trains the same thing. × not counted — a different prescription.
+                  </span>
+                </InfoPopover>
+              </span>
+            </th>
             <th className="w-16 pb-1 pr-3 text-right font-medium">Sets</th>
             <th className="w-12 pb-1 text-right font-medium">Hit</th>
           </tr>
@@ -145,9 +155,6 @@ export function PlanAdherenceSection({ adherence }: { adherence: Adherence | nul
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-[0.65rem] text-muted">
-        ↔ counted — trains the same thing. × not counted — a different prescription.
-      </p>
     </Disclosure>
   );
 }

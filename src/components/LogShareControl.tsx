@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createShare } from '@/lib/queries';
 import { randomToken, sha256Hex, shareUrl } from '@/lib/share';
 import { track } from '@/lib/analytics';
-import { Button } from '@/components/ui/primitives';
+import { Button, FIELD } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 
 // Inline, per-workout share control. Collapsed it is a single "Share" text
@@ -20,8 +20,7 @@ const VALIDITY: { key: string; label: string; days: number }[] = [
   { key: '0', label: '∞', days: 0 },
 ];
 
-const inputClass =
-  'min-h-11 w-full border border-border bg-surface px-3 text-sm text-fg outline-none placeholder:text-muted focus:border-subtle';
+const inputClass = FIELD;
 
 export function LogShareControl({
   logId,
@@ -90,7 +89,7 @@ export function LogShareControl({
       </button>
 
       {open ? (
-        <div className="flex flex-col gap-2 border border-border bg-bg p-3">
+        <div className="flex flex-col gap-2 rounded-control bg-bg p-3">
           {url ? (
             <>
               <span className="t-control text-muted">Copy this now — it won't be shown again</span>
@@ -99,7 +98,7 @@ export function LogShareControl({
                   readOnly
                   value={url}
                   onFocus={(e) => e.currentTarget.select()}
-                  className={`${inputClass} flex-1`}
+                  className={`${inputClass} min-w-0 flex-1`}
                   aria-label="Share link"
                 />
                 <Button variant="ghost" onClick={copy}>

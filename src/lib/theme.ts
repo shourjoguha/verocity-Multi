@@ -24,10 +24,11 @@ export const THEME_PREFS: ThemePref[] = ['light', 'dark', 'system'];
 // literal <meta> in Base.astro, the pre-paint script in Base.astro, and the
 // `bgColor` in BackgroundScene3DCanvas.tsx + LoginHeroScene.tsx (both are the
 // three.js clear colour behind a full-viewport scene — a mismatch shows as a
-// seam at the edges of the backdrop).
+// seam at the edges of the backdrop). The light value is also the
+// `background_color` / `theme_color` in public/manifest.webmanifest.
 export const THEME_COLOR: Record<ResolvedTheme, string> = {
-  light: '#f2f2f2',
-  dark: '#050505',
+  light: '#f3f1ec',
+  dark: '#0b0a09',
 };
 
 export function isThemePref(value: string | null | undefined): value is ThemePref {

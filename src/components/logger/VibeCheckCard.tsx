@@ -35,7 +35,7 @@ export function VibeCheckCard({
     // Banded like the movement cards: a surface-filled card whose heading sits
     // in its own row above an inner hairline, rather than a label floating in
     // shared padding. `mb-8` and the save/skip contract are unchanged.
-    <div className="lift mb-4 border border-border bg-surface">
+    <div className="lift mb-4 rounded-card border border-outline bg-surface">
       <div className="flex min-h-11 items-center justify-between gap-2 border-b border-border-soft px-4">
         <span className="t-label text-fg">Readiness</span>
         <span className="t-label text-faint">10 sec check-in</span>
@@ -65,8 +65,10 @@ export function VibeCheckCard({
                 >
                   <span
                     aria-hidden
-                    className={`flex h-9 w-9 items-center justify-center border text-sm tabular-nums ${
-                      vibe[key] === n ? 'border-fg bg-fg text-bg' : 'border-border text-muted hover:text-fg'
+                    className={`flex h-9 w-9 items-center justify-center rounded-chip border text-sm tabular-nums transition-colors ${
+                      vibe[key] === n
+                        ? 'border-accent bg-accent text-accent-fg'
+                        : 'border-transparent bg-tappable text-muted hover:text-fg'
                     }`}
                   >
                     {n}
@@ -90,14 +92,14 @@ export function VibeCheckCard({
             onSave(sore?.length && vibe.soreness >= SORENESS.askAreaFrom ? { ...rest, sore } : rest);
           }}
           disabled={saving}
-          className="inline-flex min-h-11 flex-1 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg hover:bg-subtle disabled:opacity-40"
+          className="hill-btn inline-flex min-h-11 flex-1 items-center justify-center border border-accent bg-accent px-4 text-sm uppercase tracking-wider text-accent-fg hover:bg-subtle disabled:opacity-40"
         >
           {saveLabel}
         </button>
         <button
           type="button"
           onClick={onSkip}
-          className="inline-flex min-h-11 items-center justify-center border border-border px-4 text-sm uppercase tracking-wider text-fg hover:border-subtle"
+          className="hill-btn inline-flex min-h-11 items-center justify-center border border-transparent bg-tappable px-4 text-sm uppercase tracking-wider text-fg hover:bg-tappable-hover"
         >
           {skipLabel}
         </button>

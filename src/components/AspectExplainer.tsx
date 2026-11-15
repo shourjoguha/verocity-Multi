@@ -160,11 +160,11 @@ export function AspectExplainer({
           that the measurement takes back over rather than letting an old rating look current.
         </p>
       </div>
-      <div className="flex items-center border-t border-border p-4">
+      <div className="flex items-center border-t border-border-soft p-4">
         <button
           type="button"
           onClick={onClose}
-          className="hill-btn ml-auto inline-flex min-h-11 items-center bg-fg px-5 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+          className="hill-btn ml-auto inline-flex min-h-11 items-center border border-accent bg-accent px-5 text-sm uppercase tracking-wider text-accent-fg"
         >
           Got it
         </button>

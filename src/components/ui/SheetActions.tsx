@@ -6,7 +6,7 @@ import { TrashGlyph } from '@/components/ui/icons';
 // the Library's movement sheet so the trash sits in the same corner in both.
 
 export const SHEET_ICON_BTN =
-  'hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-border bg-surface transition-colors';
+  'hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-transparent bg-tappable transition-colors';
 export const SHEET_GLYPH = 'h-[1.15rem] w-[1.15rem]';
 
 // How long the armed trash waits for its second tap before disarming.
@@ -60,7 +60,7 @@ export function ArmedDelete({
             setConfirming(false);
           }
         }}
-        className="hill-btn flex h-11 items-center border border-danger bg-surface px-3 t-control text-danger transition-colors disabled:opacity-40"
+        className="hill-btn flex h-11 items-center border border-danger bg-tappable px-3 t-control text-danger transition-colors disabled:opacity-40"
         aria-label={`Confirm delete ${name}`}
       >
         {deleting ? 'Deleting…' : 'Delete'}

@@ -108,7 +108,7 @@ export function DayList({
   onSelect?: (log: WorkoutLog) => void;
 }) {
   return (
-    <ul className="lift border border-border bg-surface">
+    <ul className="lift rounded-card border border-outline bg-surface">
       {days.map((day) => (
         <li key={day.date} className="border-b border-border-soft last:border-b-0">
           {day.logs.length === 1 ? (

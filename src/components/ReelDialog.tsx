@@ -49,7 +49,7 @@ export function ReelDialog({ className = '' }: { className?: string }) {
         {/* One line of copy under the video for the case where the browser or
             an extension refuses the embed (uBlock Origin, corporate proxies).
             A plain `<a>` opens the same video on YouTube in a new tab. */}
-        <p className="border-t border-border px-4 py-3 text-center text-xs text-muted">
+        <p className="border-t border-border-soft px-4 py-3 text-center text-xs text-muted">
           Trouble seeing the video?{' '}
           <a
             href={REEL.href}

@@ -38,6 +38,7 @@ import { TaxonomyEditor } from '@/components/TaxonomyEditor';
 import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Disclosure } from '@/components/ui/Disclosure';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { BodyMap } from '@/components/BodyMap';
 import { useBodyMapInk, useBodyMapStyle } from '@/lib/bodyMapPrefs';
@@ -448,7 +449,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               a second Strength/Cardio/Mobility tab row that grouped the same
               modalities; two widgets for one split, only one of them live. */}
           <Item>
-            <section className="lift mb-6 border border-border bg-surface">
+            <section className="mb-6 rounded-card border border-outline bg-surface">
               <div className="p-3">
                 <h2 className="t-label mb-2 text-muted">How you trained</h2>
                 <div
@@ -603,7 +604,7 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                           <button
                             type="button"
                             onClick={() => setMapping(u.name)}
-                            className="flex min-h-11 shrink-0 items-center px-2 t-control text-muted hover:text-fg"
+                            className="hill-btn flex min-h-11 shrink-0 items-center border border-transparent bg-tappable px-3 t-control text-fg hover:bg-tappable-hover"
                             aria-label={`Map ${u.name}`}
                           >
                             Map
@@ -629,8 +630,40 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           {worked.length > 0 && lensTotal > 0 ? (
             <Item>
               <section className="mb-6">
-                <SectionHeader>Most worked</SectionHeader>
-                <div className="lift overflow-hidden border border-border bg-surface">
+                <SectionHeader
+                  action={
+                    effective === 'volume' ? (
+                      <InfoPopover label="How volume is measured">
+                        <span className="block">
+                          <span className="font-semibold">Volume</span> — scaled load × reps ×
+                          range of motion.
+                        </span>
+                        <span className="mt-1 block">
+                          <span className="font-semibold">Unloaded work</span> — priced against
+                          your bodyweight.
+                        </span>
+                        <span className="mt-1 block">
+                          <span className="font-semibold">Shown as</span> — a share of the
+                          period's total.
+                        </span>
+                      </InfoPopover>
+                    ) : effective === 'work' ? (
+                      <InfoPopover label="How work is measured">
+                        <span className="block">
+                          <span className="font-semibold">Work</span> — each loaded set counts
+                          once, split across the muscles it trains.
+                        </span>
+                        <span className="mt-1 block">
+                          <span className="font-semibold">Shown as</span> — a share of the
+                          period's total.
+                        </span>
+                      </InfoPopover>
+                    ) : null
+                  }
+                >
+                  Most worked
+                </SectionHeader>
+                <div className="overflow-hidden rounded-card border border-outline bg-surface">
                   <ul className="flex flex-col gap-px bg-border-soft">
                     {worked.slice(0, 3).map((r) => (
                       <RegionRow
@@ -656,17 +689,6 @@ export default function BodyView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                     </Disclosure>
                   ) : null}
                 </div>
-                {effective === 'volume' ? (
-                  <p className="mt-2 text-[0.7rem] text-muted">
-                    Scaled volume — load × reps × range of motion, with unloaded work priced
-                    against your bodyweight. Shown as a share of the period's total.
-                  </p>
-                ) : effective === 'work' ? (
-                  <p className="mt-2 text-[0.7rem] text-muted">
-                    Work — each loaded set counts once, split across the muscles it trains.
-                    Shown as a share of the period's total.
-                  </p>
-                ) : null}
               </section>
             </Item>
           ) : null}

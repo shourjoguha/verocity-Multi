@@ -4,6 +4,7 @@ import type { WorkoutLog } from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { localTimeOf, retimeLog } from '@/lib/logWhen';
 import { toast } from '@/lib/toast';
+import { Button, FIELD } from '@/components/ui/primitives';
 
 // Tap-to-edit start date and time of a session — the backdating control.
 // Mirrors SessionTime. A session still in progress shows its start read-only:
@@ -76,8 +77,7 @@ export function SessionWhen({
     );
   }
 
-  const inputCls =
-    'min-h-11 min-w-0 flex-1 rounded-control border border-border bg-surface px-2 text-sm tabular-nums text-fg outline-none focus:border-subtle';
+  const inputCls = `${FIELD} min-w-0 flex-1 tabular-nums`;
   return (
     <span className="flex w-full flex-wrap items-center gap-2">
       {/* Native inputs, as in the meal "When" row — on iOS these are the OS
@@ -100,21 +100,12 @@ export function SessionWhen({
         />
       </span>
       <span className="flex gap-2">
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving || !date}
-          className="hill-btn inline-flex min-h-11 items-center bg-fg px-3 t-control text-bg transition-colors hover:bg-fg/85 disabled:opacity-40"
-        >
+        <Button onClick={save} disabled={saving || !date}>
           {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setEditing(false)}
-          className="hill-btn inline-flex min-h-11 items-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg"
-        >
+        </Button>
+        <Button variant="ghost" onClick={() => setEditing(false)}>
           Cancel
-        </button>
+        </Button>
       </span>
     </span>
   );

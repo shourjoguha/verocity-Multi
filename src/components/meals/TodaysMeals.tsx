@@ -40,7 +40,7 @@ export function TodaysMeals({ meals, presets = [] }: { meals: MealLog[]; presets
         action={
           <a
             href="/app/meals"
-            className="t-eyebrow -my-3.5 inline-flex min-h-11 items-center text-muted transition-colors hover:text-fg"
+            className="t-eyebrow -my-3.5 inline-flex min-h-11 items-center text-fg"
           >
             All →
           </a>

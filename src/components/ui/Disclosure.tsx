@@ -6,7 +6,8 @@ import type { ReactNode } from 'react';
 // hides the platform triangle in favour of the chevron rendered below.
 //
 // The row itself is the container, not a button, so it stays flat rather than
-// carrying `.hill-btn`. Rows in a hairline grid own the depth, not their parts.
+// carrying `.hill-btn`. The 'card' variant is a card (`border-outline`, a soft
+// divider under the summary); 'row' is a line inside someone else's card.
 export function Disclosure({
   id,
   title,
@@ -15,10 +16,11 @@ export function Disclosure({
   variant = 'card',
   children,
 }: {
-  // Set this to make the section addressable from elsewhere — You's summary
-  // card opens the Profile section by id rather than lifting `open` into React
-  // state, which would trade the browser-driven, works-before-hydration
-  // behaviour for a controlled component and gain nothing else.
+  // Set this to make the section addressable from elsewhere — YouView's
+  // `openFromHash()` opens the section a URL hash names (`/app/you#holidays`)
+  // by setting the DOM `open` rather than lifting it into React state, which
+  // would trade the browser-driven, works-before-hydration behaviour for a
+  // controlled component and gain nothing else.
   id?: string;
   title: ReactNode;
   defaultOpen?: boolean;
@@ -54,7 +56,7 @@ export function Disclosure({
   return (
     <details
       id={id}
-      className="disclosure group rounded-card border border-border bg-surface"
+      className="disclosure group rounded-card border border-outline bg-surface"
       open={defaultOpen}
     >
       <summary className="flex min-h-13 cursor-pointer list-none items-center gap-3 px-4 text-fg outline-none focus-visible:ring-1 focus-visible:ring-teal">
@@ -74,7 +76,7 @@ export function Disclosure({
           ›
         </span>
       </summary>
-      <div className="border-t border-border px-4 py-4">{children}</div>
+      <div className="border-t border-border-soft px-4 py-4">{children}</div>
     </details>
   );
 }

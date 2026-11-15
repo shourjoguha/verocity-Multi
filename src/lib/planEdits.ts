@@ -122,6 +122,56 @@ export function setPlanned(plan: ParsedPlan, di: number, ei: number, week: numbe
   });
 }
 
+// The nearest programmed week before `week`, or null. What an un-skipped week
+// is restored from: a gap in plannedByWeek is "not this cycle", so bringing a
+// week back means picking up the prescription that led into it.
+export function nearestEarlierPlanned(ex: PlanExercise, week: number): string | null {
+  for (let w = week - 1; w >= 1; w--) {
+    const v = ex.plannedByWeek[w];
+    if (v?.trim()) return v;
+  }
+  return null;
+}
+
+// Copy one week's prescription onto each of `weeks`. Weeks not listed are left
+// alone, so a caller can copy forward around deliberately skipped weeks.
+export function copyPlanned(plan: ParsedPlan, di: number, ei: number, from: number, weeks: number[]): ParsedPlan {
+  return mapExercise(plan, di, ei, (e) => {
+    const value = e.plannedByWeek[from];
+    if (!value?.trim()) return e;
+    const plannedByWeek = { ...e.plannedByWeek };
+    for (const w of weeks) if (w !== from) plannedByWeek[w] = value;
+    return { ...e, plannedByWeek };
+  });
+}
+
+// The rest stepper's increment, in seconds.
+export const REST_STEP_SECONDS = 15;
+
+// Set (or clear, when undefined) the rest after each set. One value per
+// exercise — the plan has no per-week rest. Whole seconds, never negative.
+export function setExerciseRest(plan: ParsedPlan, di: number, ei: number, seconds: number | undefined): ParsedPlan {
+  return mapExercise(plan, di, ei, (e) => {
+    const next = { ...e };
+    if (seconds === undefined || !Number.isFinite(seconds)) delete next.restSeconds;
+    else next.restSeconds = Math.max(0, Math.round(seconds));
+    return next;
+  });
+}
+
+// Set (or clear, when blank) one week's cue for an exercise (`notesByWeek`).
+// An emptied map is dropped rather than stored as `{}`.
+export function setExerciseWeekNote(plan: ParsedPlan, di: number, ei: number, week: number, note: string): ParsedPlan {
+  return mapExercise(plan, di, ei, (e) => {
+    const notesByWeek = { ...(e.notesByWeek ?? {}) };
+    if (note.trim()) notesByWeek[week] = note;
+    else delete notesByWeek[week];
+    const next: PlanExercise = { ...e, notesByWeek };
+    if (Object.keys(notesByWeek).length === 0) delete next.notesByWeek;
+    return next;
+  });
+}
+
 // ---- block (mesocycle phase) edits ----
 
 function withBlocks(plan: ParsedPlan, blocks: PlanBlock[]): ParsedPlan {

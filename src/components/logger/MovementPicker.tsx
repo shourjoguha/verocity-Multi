@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Movement } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
 import { useScrollLock } from '@/lib/scrollLock';
+import { FIELD } from '@/components/ui/primitives';
 
 export interface Suggestion {
   id: string;
@@ -68,9 +69,9 @@ export function MovementPicker({
       />
       <div
         data-sheet-panel
-        className="sheet-panel relative flex max-h-[80dvh] w-full max-w-lg flex-col border border-border bg-surface"
+        className="sheet-panel relative flex max-h-[80dvh] w-full max-w-lg flex-col border border-outline bg-surface"
       >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
           <span className="t-eyebrow text-muted">{title}</span>
           <button
             type="button"
@@ -82,7 +83,7 @@ export function MovementPicker({
         </div>
 
         {suggestions.length > 0 ? (
-          <div className="border-b border-border px-4 py-3">
+          <div className="border-b border-border-soft px-4 py-3">
             <div className="mb-2 t-control text-muted">
               You usually swap to
             </div>
@@ -90,7 +91,7 @@ export function MovementPicker({
               {suggestions.map((s) => (
                 <span
                   key={s.id}
-                  className="inline-flex items-center border border-accent text-accent"
+                  className="inline-flex items-center rounded-chip bg-tappable text-fg"
                 >
                   <button
                     type="button"
@@ -104,7 +105,7 @@ export function MovementPicker({
                     <button
                       type="button"
                       onClick={() => onDismiss(s.id)}
-                      className="border-l border-accent px-1.5 py-1 text-xs text-muted hover:text-fg"
+                      className="border-l border-border px-1.5 py-1 text-xs text-muted hover:text-fg"
                       aria-label={`Dismiss ${s.replacement} suggestion`}
                     >
                       ×
@@ -124,10 +125,12 @@ export function MovementPicker({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search movements"
-          className="m-4 min-h-11 border border-border bg-bg px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
+          // FIELD carries `w-full`; the max-width takes the m-4 margins back out
+          // of it, or the field would overflow the panel by 32px.
+          className={`${FIELD} m-4 max-w-[calc(100%-2rem)]`}
         />
 
-        <ul className="flex-1 divide-y divide-border overflow-y-auto border-t border-border">
+        <ul className="flex-1 divide-y divide-border-soft overflow-y-auto border-t border-border-soft">
           {needle && !filtered.some((m) => m.name.trim().toLowerCase() === needle) ? (
             <li>
               <button

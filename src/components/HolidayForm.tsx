@@ -5,19 +5,19 @@ import { createHoliday, deleteHoliday, updateHoliday } from '@/lib/queries';
 import { ymdLocal } from '@/lib/streak';
 import { toast } from '@/lib/toast';
 import type { Holiday } from '@/lib/types';
-import { Button } from '@/components/ui/primitives';
-import { HolidayGlyph, HolidayScene } from '@/components/HolidayScene';
+import { Button, FIELD } from '@/components/ui/primitives';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { HolidayScene } from '@/components/HolidayScene';
 
 // Add or edit one holiday. Shared by Log Activity (Session / Holiday) and
-// Settings → Holidays, so the two entry points cannot drift apart.
+// You → Holidays, so the two entry points cannot drift apart.
 //
 // A holiday is a date range, never a log: saving here writes `holidays`
 // (migration 0049), not workout_logs, so nothing on it reaches volume, the
 // body map or the session stats. The overlap check below names the clash; the
 // database's exclusion constraint is the real guard.
 
-const field =
-  'min-h-11 w-full min-w-0 border border-border bg-surface px-3 text-base text-fg outline-none focus:border-subtle';
+const field = `${FIELD} min-w-0`;
 const label = 'mb-2 block t-control text-muted';
 
 export function HolidayForm({
@@ -77,22 +77,20 @@ export function HolidayForm({
     <div className="flex flex-col gap-5">
       <div>
         <span className={label}>Kind</span>
-        <div className="flex flex-wrap gap-2">
-          {(Object.keys(HOLIDAY_KINDS) as HolidayKindKey[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={kind === k}
-              onClick={() => setKind(k)}
-              className={`flex min-h-11 items-center gap-2 border px-3 t-control transition-colors ${
-                kind === k ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-              }`}
-            >
-              <HolidayGlyph kind={k} />
-              {HOLIDAY_KINDS[k].label}
-            </button>
-          ))}
-        </div>
+        {/* One of four: a segmented radiogroup. The per-kind glyph the old
+            detached buttons carried is not repeated here — the scene directly
+            below draws the picked kind. */}
+        <SegmentedTabs
+          as="radiogroup"
+          size="sm"
+          ariaLabel="Holiday kind"
+          tabs={(Object.keys(HOLIDAY_KINDS) as HolidayKindKey[]).map((k) => ({
+            key: k,
+            label: HOLIDAY_KINDS[k].label,
+          }))}
+          active={kind}
+          onChange={(k) => setKind(k as HolidayKindKey)}
+        />
       </div>
 
       <div className="h-24 overflow-hidden rounded-card border border-border bg-surface">
@@ -110,7 +108,7 @@ export function HolidayForm({
           maxLength={40}
           placeholder={HOLIDAY_KINDS[kind].label}
           onChange={(e) => setName(e.target.value)}
-          className={`${field} placeholder:text-muted`}
+          className={field}
         />
       </div>
 

@@ -67,7 +67,7 @@ export function DemoIconButton({
 function DemoMedia({ asset, note }: { asset: string; note?: string }) {
   return (
     <figure className="mx-auto flex max-w-[220px] flex-col gap-2">
-      <div className="overflow-hidden rounded-card border border-border bg-surface">
+      <div className="overflow-hidden rounded-control bg-bg">
         <img
           src={demoGifUrl(asset)}
           alt=""
@@ -88,7 +88,7 @@ function DemoMedia({ asset, note }: { asset: string; note?: string }) {
 function DemoPlaceholder({ name, label }: { name: string; label?: string }) {
   return (
     <figure className="mx-auto flex max-w-[220px] flex-col gap-2">
-      <div className="grid aspect-square w-full place-items-center rounded-card border border-border bg-elevated">
+      <div className="grid aspect-square w-full place-items-center rounded-control bg-bg">
         <span className="font-display text-2xl text-muted">{initials(name)}</span>
       </div>
       {label ? <figcaption className="text-center t-label text-faint">{label}</figcaption> : null}
@@ -134,7 +134,7 @@ export function MovementTile({ name }: { name: string }) {
   return (
     <span
       aria-hidden="true"
-      className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-chip border border-border bg-elevated"
+      className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-chip bg-bg"
     >
       {demo ? (
         <img

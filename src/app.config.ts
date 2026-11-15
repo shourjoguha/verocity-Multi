@@ -87,7 +87,10 @@ export const PRIMARY_METRICS = ['reps', 'time', 'distance', 'cal'] as const;
 // name.
 export const WEIGHTED_PRIMARIES = ['reps', 'time', 'distance'] as const;
 
-export const RPE = { min: 5, max: 10, step: 0.5, default: 7 } as const;
+// `pickerMin` is where the Logger focus card's inline RPE row starts: the row
+// shows pickerMin–max so nine cells fit a phone at a readable size. The scale
+// itself still runs from `min`; lower values stay reachable in the set sheet.
+export const RPE = { min: 5, max: 10, step: 0.5, default: 7, pickerMin: 6 } as const;
 
 /**
  * What the points on the RPE dial mean to THIS athlete, and how much of the
@@ -181,7 +184,7 @@ export const HR_WHEEL = { minBpm: 30, maxBpm: 230, restAvg: 140, restMax: 175 } 
 export const SUBROUTINE = { maxDescriptionChars: 300 } as const;
 
 // ---------------------------------------------------------------------------
-// Owner stats (`user_stats`, edited on /app/settings).
+// Owner stats (`user_stats`, edited on /app/you).
 //
 // Only two of these fields reach a metric: `body_weight_kg` prices unweighted
 // work through VOLUME.bodyweightFraction, and `birth_year` supplies the HR
@@ -262,10 +265,10 @@ export const GOAL_DEFAULTS = [
 export const GOAL_WEIGHT = { min: 0, max: 100, step: 5, default: 40 } as const;
 
 // First-run onboarding asks for a primary and a secondary goal only; ranking
-// all of them is what GoalsEditor in Settings is for.
+// all of them is what GoalsEditor on the You page is for.
 export const ONBOARDING = { maxGoals: 2 } as const;
 
-// Training age. `blurb` is the helper text under the Settings select AND the
+// Training age. `blurb` is the helper text under the You page's select AND the
 // gloss sent to the AI, so the athlete and the model are told the same thing.
 export const EXPERIENCE_LEVELS = {
   beginner: { label: 'Beginner', blurb: 'Under a year of consistent lifting' },
@@ -295,7 +298,7 @@ export const EQUIPMENT = [
 // Training disciplines the athlete identifies with. Unlike EQUIPMENT this does
 // not drive substitution rules — it biases suggestions and is rendered into the
 // ATHLETE PROFILE block of buildPlanAiPrompt. Open-ended in spirit but a fixed
-// vocabulary here so the onboarding chips and Settings editor stay in step; add
+// vocabulary here so the onboarding chips and the You page editor stay in step; add
 // an option by editing this list, not a migration (there is no check
 // constraint, same call goals/experience/equipment made).
 export const DISCIPLINES = [
@@ -314,7 +317,7 @@ export const DISCIPLINES = [
 // tables stop. The prompt asks the athlete to confirm a length inside this.
 export const PLAN_LENGTH = { minWeeks: 6, maxWeeks: 12, defaultWeeks: 8 } as const;
 
-// Bounds for the Settings form. Wide enough to be a typo guard, not a judgement.
+// Bounds for the You page stats form. Wide enough to be a typo guard, not a judgement.
 export const STATS_LIMITS = {
   weightKg: { min: 25, max: 300 },
   heightCm: { min: 100, max: 250 },

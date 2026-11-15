@@ -35,10 +35,13 @@ export default function Toaster() {
         <div
           key={t.id}
           role="status"
-          className={`toast-in pointer-events-auto max-w-sm px-4 py-2 text-sm shadow-sm ${
+          // A floating layer: the hairline is all that separates it now there
+          // are no shadows, so both types keep one (the error toast's border
+          // is its own fill, which keeps the two the same size).
+          className={`toast-in pointer-events-auto max-w-sm rounded-control border px-4 py-2 text-sm ${
             t.type === 'error'
-              ? 'bg-fg text-bg'
-              : 'border border-border border-l-2 border-l-teal bg-surface text-fg'
+              ? 'border-accent bg-accent text-accent-fg'
+              : 'border-border border-l-2 border-l-teal bg-surface text-fg'
           }`}
         >
           {t.message}

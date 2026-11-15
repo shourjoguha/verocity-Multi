@@ -89,10 +89,13 @@ function FinishDetailsBody({
                   key={key}
                   type="button"
                   onClick={() => toggle(key)}
-                  className={`hill-btn flex min-h-11 items-center border bg-surface px-3 t-control transition-colors ${
-                    on ? '' : 'border-border text-muted hover:text-fg'
+                  // Fills come from `.hill-btn[aria-pressed]`: accent when on,
+                  // tappable when off. The activity colour stays as the on
+                  // chip's outline — data colour, and never the only cue.
+                  className={`hill-btn flex min-h-11 items-center border px-3 t-control transition-colors ${
+                    on ? '' : 'text-muted hover:text-fg'
                   }`}
-                  style={on ? { borderColor: v.color, color: v.color } : undefined}
+                  style={on ? { borderColor: v.color } : undefined}
                   aria-pressed={on}
                 >
                   {v.label}
@@ -174,7 +177,7 @@ function FinishDetailsBody({
           </p>
         )}
       </div>
-      <div className="border-t border-border p-4">
+      <div className="border-t border-border-soft p-4">
         <Button
           disabled={saving}
           onClick={async () => {

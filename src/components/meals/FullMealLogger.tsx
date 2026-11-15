@@ -120,7 +120,7 @@ export default function FullMealLogger() {
           type="button"
           disabled={saving}
           onClick={save}
-          className="hill-btn mb-3 flex min-h-12 w-full items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85 disabled:opacity-40"
+          className="hill-btn mb-3 flex min-h-12 w-full items-center justify-center border border-accent bg-accent px-4 text-sm uppercase tracking-wider text-accent-fg transition-colors hover:bg-accent/85 disabled:opacity-40"
         >
           {saving ? 'Saving…' : 'Save meal'}
         </button>

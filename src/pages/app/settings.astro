@@ -1,8 +1,33 @@
 ---
-import App from '@/layouts/App.astro';
-import SettingsView from '@/components/SettingsView';
+// /app/settings is retired: everything it held lives on /app/you, and its
+// Holidays tab is the Holidays section there. Kept as a redirect so old links,
+// bookmarks and installed shells still land somewhere. `?tab=holidays` becomes
+// `#holidays`, which YouView opens on load.
+//
+// Deliberately NOT inside the App layout: the script runs in <head>, before
+// anything paints, so no chrome flashes on the way through. The meta refresh
+// is the no-JS fallback, inside <noscript> so it can never race the script and
+// win with a hash-less URL.
 ---
 
-<App title="Settings · Verocity">
-  <SettingsView client:load />
-</App>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Redirecting · Verocity</title>
+    <script is:inline>
+      (function () {
+        var tab = new URLSearchParams(window.location.search).get('tab');
+        window.location.replace('/app/you' + (tab === 'holidays' ? '#holidays' : ''));
+      })();
+    </script>
+    <noscript><meta http-equiv="refresh" content="0; url=/app/you" /></noscript>
+    <link rel="canonical" href="/app/you" />
+  </head>
+  <body>
+    <p><a href="/app/you">Settings moved to You →</a></p>
+  </body>
+</html>

@@ -49,7 +49,10 @@ export function EditableNumber({
           if (e.key === 'Enter') commit(e.currentTarget.value);
           else if (e.key === 'Escape') setEditing(false);
         }}
-        className={`w-full border border-subtle bg-surface text-center outline-none ${className}`}
+        // Not FIELD: the caller's display type (text-4xl/5xl) IS this input's
+        // size, and FIELD's text-base / min-h-11 / px-3 would fight it. Same
+        // fill and focus ink as FIELD, which it always shows while editing.
+        className={`w-full rounded-control border border-fg bg-tappable text-center outline-none ${className}`}
       />
     );
   }

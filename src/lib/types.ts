@@ -586,8 +586,10 @@ export interface SetActual {
    * Whether the athlete set THIS set's RPE themselves. `prefilled` cannot answer
    * that: it is stamped when any value is seeded and never cleared, and the
    * seeded RPE is last session's, so a single rating used to echo forward for
-   * weeks. True only when the RPE stepper or a spoken RPE wrote the value;
-   * false when seeded, copied or defaulted. ABSENT means the set predates the
+   * weeks. True when the RPE stepper, the focus card's RPE row or a spoken RPE
+   * wrote the value, or when the athlete pressed the focus card's copy key on a
+   * set whose own RPE was rated (an explicit, visible choice they can change
+   * before logging). False when seeded, defaulted, or carried by Copy to next. ABSENT means the set predates the
    * field — readers fall back to the session-level `rpeWasRated` heuristic.
    */
   rpeRated?: boolean;

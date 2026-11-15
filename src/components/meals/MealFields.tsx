@@ -12,6 +12,7 @@ import {
   MEAL_TAGS,
 } from '@/app.config';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { FIELD } from '@/components/ui/primitives';
 import { MACRO_FILL } from '@/components/meals/MacroStack';
 import { macrosIn, moveDivider, placeholderMix, toggleTag, type MealDraft } from '@/lib/mealDraft';
 import type { MacroKey } from '@/lib/mealInsights';
@@ -117,7 +118,7 @@ export function PhotoRow({
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg"
+          className="hill-btn flex min-h-11 items-center border border-transparent bg-tappable px-3 t-control text-fg transition-colors hover:bg-tappable-hover"
         >
           Add picture
         </button>
@@ -188,20 +189,21 @@ export function WhenRow({
     <div className="flex gap-2">
       {/* Native inputs — on iOS Safari these ARE the scrollable wheels, drawn
           by the OS. Do not build a custom one (docs/MEAL_LOGGING.md rules it
-          out). Tight padding so both fit side by side at 375px. */}
+          out). Tight padding (px-2! over FIELD's px-3) so both fit side by
+          side at 375px. */}
       <input
         type="time"
         value={time}
         onChange={(e) => onTime(e.target.value)}
         aria-label="Time eaten"
-        className="min-h-11 min-w-0 flex-1 rounded-control border border-border bg-surface px-2 text-sm tabular-nums text-fg outline-none focus:border-subtle"
+        className={`${FIELD} min-w-0 flex-1 px-2! tabular-nums`}
       />
       <input
         type="date"
         value={date}
         onChange={(e) => onDate(e.target.value)}
         aria-label="Date eaten"
-        className="min-h-11 min-w-0 flex-1 rounded-control border border-border bg-surface px-2 text-sm tabular-nums text-fg outline-none focus:border-subtle"
+        className={`${FIELD} min-w-0 flex-1 px-2! tabular-nums`}
       />
     </div>
   );
@@ -225,26 +227,27 @@ export function SwitchTrack({ on }: { on: boolean }) {
     <span
       aria-hidden
       className={`relative h-[18px] w-8 shrink-0 rounded-full border transition-colors ${
-        on ? 'border-fg bg-fg' : 'border-border bg-elevated'
+        on ? 'border-accent bg-accent' : 'border-transparent bg-tappable'
       }`}
     >
       <span
-        className={`absolute top-[2px] h-3 w-3 rounded-full transition-[left] ${on ? 'left-[16px] bg-bg' : 'left-[2px] bg-muted'}`}
+        className={`absolute top-[2px] h-3 w-3 rounded-full transition-[left] ${on ? 'left-[16px] bg-accent-fg' : 'left-[2px] bg-muted'}`}
       />
     </span>
   );
 }
 
 // A toggle chip. Monochrome on purpose: a selected chip is chrome, not data.
+// The fills are `.hill-btn[aria-pressed]` in global.css (on = accent, off =
+// tappable), which also sets the radius — so no colour ternary here. The muted
+// text is the off state only; the pressed rule overrides it with accent-fg.
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button"
       aria-pressed={on}
       onClick={onClick}
-      className={`hill-btn flex min-h-11 shrink-0 items-center rounded-chip border px-3 t-control transition-colors ${
-        on ? 'border-fg bg-elevated text-fg' : 'border-border bg-surface text-muted hover:text-fg'
-      }`}
+      className="hill-btn flex min-h-11 shrink-0 items-center border px-3 t-control text-muted transition-colors hover:text-fg"
     >
       {children}
     </button>
@@ -502,7 +505,7 @@ export function PresetNameInput({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       aria-label="Saved meal name"
-      className="min-h-11 w-full rounded-control border border-border bg-surface px-3 text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
+      className={FIELD}
     />
   );
 }
@@ -548,7 +551,7 @@ export function NotesRow({ value, onChange }: { value: string; onChange: (v: str
       onChange={(e) => onChange(e.target.value)}
       rows={2}
       placeholder="Anything worth remembering?"
-      className="w-full resize-none rounded-control border border-border bg-surface p-3 text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
+      className={`${FIELD} resize-none py-3`}
     />
   );
 }

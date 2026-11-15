@@ -6,9 +6,24 @@ import { AnimatedNumber } from '@/components/anim';
 // inline style. Micro-interactions are CSS; orchestrated motion lives in the
 // screens via Motion (see components/anim.tsx).
 //
-// Flat hairline identity: separation is a 1px border and a surface-tone step,
-// never a cast shadow. `.lift` / `.hill-btn` still carry the radius and the
-// state transitions — see their definitions in global.css.
+// Flat fill identity: separation is a surface-tone step, never a cast shadow.
+// Containers keep a 1px `border-outline` (transparent today) so the outline can
+// be switched back on from one token without moving layout; dividers inside
+// them are `border-border-soft`. `.lift` / `.hill-btn` still carry the radius
+// and the state transitions — see their definitions in global.css.
+
+// The one class string for inputs, selects and textareas: a tappable fill with
+// no visible border at rest, an ink border on focus. `text-base` (16px) is
+// load-bearing — iOS Safari zooms the page on focus into any field under 16px.
+export const FIELD =
+  'min-h-11 w-full rounded-control border border-transparent bg-tappable px-3 text-base text-fg outline-none placeholder:text-muted focus:border-fg';
+
+// FIELD for the repeated rows of a tabular editor ONLY (the plan editor grid,
+// the session form's movement rows): 36px tall with tighter padding, so a
+// column of rows stays compact. Still `text-base` — the iOS zoom rule does not
+// relax for a dense row. Standalone fields stay on FIELD.
+export const FIELD_DENSE =
+  'min-h-9 w-full rounded-control border border-transparent bg-tappable px-2 text-base text-fg outline-none placeholder:text-muted focus:border-fg';
 
 export function Card({
   children,
@@ -23,7 +38,7 @@ export function Card({
 }) {
   const depth = flat ? '' : `lift${interactive ? ' lift-interactive' : ''}`;
   return (
-    <div className={`border border-border bg-surface p-4 ${depth} ${className}`}>{children}</div>
+    <div className={`rounded-card border border-outline bg-surface p-4 ${depth} ${className}`}>{children}</div>
   );
 }
 
@@ -49,10 +64,10 @@ export function SectionHeader({
   );
 }
 
-// A bordered N-up row of label/value cells divided by INNER hairlines. The
-// outer border is --color-border, the dividers --color-border-soft: that
-// distinction is what stops a strip of numbers reading as a grid of separate
-// cards. Cells stay flat by design — a shadow here would muddy the hairlines.
+// An N-up row of label/value cells divided by INNER hairlines. The outer
+// edge is the card outline (--color-outline), the dividers --color-border-soft:
+// that distinction is what stops a strip of numbers reading as a grid of
+// separate cards. Cells stay flat by design — a shadow here would muddy the hairlines.
 export function StatStrip({
   stats,
   className = '',
@@ -62,7 +77,7 @@ export function StatStrip({
 }) {
   return (
     <div
-      className={`grid overflow-hidden rounded-card border border-border bg-surface ${className}`}
+      className={`grid overflow-hidden rounded-card border border-outline bg-surface ${className}`}
       style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}
     >
       {stats.map((s, i) => (
@@ -88,7 +103,7 @@ export function StatStrip({
   );
 }
 
-// One bordered card whose children are hairline-divided rows. The single most
+// One card whose children are hairline-divided rows. The single most
 // repeated pattern in the reference design (recent sessions, settings rows,
 // region lists, quick links), and previously rebuilt per screen. Rows are
 // separated with a CSS sibling selector rather than a JS-inserted <Divider>, so
@@ -102,7 +117,7 @@ export function ListCard({
 }) {
   return (
     <div
-      className={`overflow-hidden rounded-card border border-border bg-surface [&>*+*]:border-t [&>*+*]:border-border-soft ${className}`}
+      className={`overflow-hidden rounded-card border border-outline bg-surface [&>*+*]:border-t [&>*+*]:border-border-soft ${className}`}
     >
       {children}
     </div>
@@ -223,7 +238,7 @@ export function StatCard({
   // duration ("13h 28m") stay on one line in a 375px 3-up column.
   // Restored to px-4 at sm:, where the column is ~171px+ and nothing competes.
   return (
-    <div className="rounded-card border border-border bg-surface px-2 py-3 sm:px-4">
+    <div className="rounded-card border border-outline bg-surface px-2 py-3 sm:px-4">
       <div className="t-label text-muted">{label}</div>
       {/* Sized to fit on ONE line, which is the whole point: in a 3-up grid at
           375px each value gets 87.7px, and a duration like "3h 52m" needed
@@ -249,9 +264,8 @@ export function StatCard({
   );
 }
 
-// `selected` fills the chip in ink — the reference design's on/off treatment
-// for equipment and discipline pickers, which were previously hand-rolled per
-// screen. A colored (domain-palette) tag ignores `selected`: the two are
+// A static, OUTLINED label — not a control, so it keeps a visible hairline
+// rather than the tappable fill. `selected` fills it in the accent. A colored (domain-palette) tag ignores `selected`: the two are
 // different jobs and stacking them would produce an unreadable fill.
 export function Tag({
   label,
@@ -264,7 +278,7 @@ export function Tag({
 }) {
   const style: CSSProperties | undefined = color ? { borderColor: color, color } : undefined;
   const neutral = selected
-    ? 'border-fg bg-fg text-bg'
+    ? 'border-accent bg-accent text-accent-fg'
     : 'border-border bg-surface text-muted';
   return (
     <span
@@ -278,18 +292,27 @@ export function Tag({
 
 // One toggle chip for a filter row — the Sessions tag row, the Filters sheet,
 // the Library category row. The BUTTON is the 44px target and is
-// transparent; the bordered chip is a 32px span inside it. Wrapped rows sit
+// transparent; the chip is a 32px span inside it — accent when on, tappable
+// when off, no border at rest (the 1px transparent border keeps both states
+// the same size). No `hill-btn` on the span: its unlayered border-radius would
+// override `rounded-chip`, and the toggle fills it keys off aria-pressed live
+// on the button, not here — so the ternary below paints the state. Wrapped rows sit
 // with no vertical gap, so each row's 44px box abuts the next instead of
 // overlapping it (LESSONS: the slim-thumb trick does not transfer to stacked
 // rows) — the chips read slim, the 12px between them is hit box, not margin.
+// `color` (an activity tag's token, from lib/tags) outlines the chip when on,
+// matching the Logger's tag toggles; the accent fill and the label still carry
+// the state without it. Absent, the chip stays monochrome.
 export function FilterChip({
   label,
   on,
   onClick,
+  color,
 }: {
   label: string;
   on: boolean;
   onClick: () => void;
+  color?: string;
 }) {
   return (
     <button
@@ -297,13 +320,16 @@ export function FilterChip({
       aria-pressed={on}
       onClick={onClick}
       className={`group flex min-h-11 items-center t-control transition-colors ${
-        on ? 'text-fg' : 'text-muted hover:text-fg'
+        on ? 'text-accent-fg' : 'text-muted hover:text-fg'
       }`}
     >
       <span
-        className={`hill-btn flex min-h-8 items-center border bg-surface px-2.5 ${
-          on ? 'border-fg' : 'border-border group-hover:border-subtle'
+        className={`flex min-h-8 items-center rounded-chip border px-2.5 transition-colors ${
+          on
+            ? 'border-accent bg-accent'
+            : 'border-transparent bg-tappable group-hover:bg-tappable-hover'
         }`}
+        style={on && color ? { borderColor: color } : undefined}
       >
         {label}
       </span>
@@ -336,8 +362,8 @@ export function Button({
     'hill-btn t-control inline-flex min-h-11 items-center justify-center border px-4 disabled:opacity-40';
   const styles =
     variant === 'primary'
-      ? 'border-fg bg-fg text-bg hover:bg-subtle'
-      : 'border-border bg-surface text-fg';
+      ? 'border-accent bg-accent text-accent-fg'
+      : 'border-transparent bg-tappable text-fg hover:bg-tappable-hover';
   return (
     <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${styles} ${className}`}>
       {children}
@@ -359,7 +385,7 @@ export function LoadingScreen({ label = 'Loading' }: { label?: string }) {
 
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-card border border-dashed border-border px-4 py-10 text-center text-sm text-muted">
+    <div className="rounded-card border border-outline bg-surface px-4 py-10 text-center text-sm text-muted">
       {children}
     </div>
   );

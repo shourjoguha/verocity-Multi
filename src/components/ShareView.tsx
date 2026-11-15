@@ -63,7 +63,7 @@ function PlanReadView({ parsed }: { parsed: ParsedPlan }) {
         <Item key={day.dayKey}>
           <section className="mt-8">
           <SectionHeader>{day.label}</SectionHeader>
-          <div className="overflow-x-auto border border-border">
+          <div className="overflow-x-auto rounded-card border border-outline bg-surface">
             <table className="w-full text-sm">
               <thead>
                 <tr className="t-control text-muted">
@@ -145,7 +145,7 @@ function LogReadView({ log }: { log: WorkoutLog }) {
           <Item key={section.key}>
             <section className="mt-6">
             <SectionHeader>{section.key}</SectionHeader>
-            <ul className="divide-y divide-border border border-border">
+            <ul className="divide-y divide-border-soft overflow-hidden rounded-card border border-outline bg-surface">
               {section.groups.flatMap((g) =>
                 g.items.map((item) => (
                   <li key={item.id} className="px-4 py-3">
@@ -197,7 +197,7 @@ function ProfileReadView({
       </Item>
 
       <Item>
-        <section className="mt-6 grid grid-cols-2 gap-px bg-border">
+        <section className="mt-6 grid grid-cols-2 gap-2">
           <StatCard label="Sessions" value={logs.length} />
           <StatCard label="Total time" value={formatDuration(totalSeconds)} />
         </section>
@@ -207,7 +207,7 @@ function ProfileReadView({
         <Item>
           <section className="mt-8">
             <SectionHeader>Active plan</SectionHeader>
-            <div className="border border-border bg-surface p-4 font-display text-xl text-fg">
+            <div className="rounded-card border border-outline bg-surface p-4 font-display text-xl text-fg">
               {activePlan.name}
             </div>
           </section>
@@ -220,7 +220,7 @@ function ProfileReadView({
           {logs.length === 0 ? (
             <EmptyState>No sessions logged yet.</EmptyState>
           ) : (
-            <ul className="divide-y divide-border border border-border">
+            <ul className="divide-y divide-border-soft overflow-hidden rounded-card border border-outline bg-surface">
               {logs.slice(0, 20).map((log) => (
                 <li key={log.id} className="flex items-center gap-4 px-4 py-3">
                   <div className="w-16 shrink-0 text-sm tabular-nums text-subtle">

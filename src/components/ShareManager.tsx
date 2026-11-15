@@ -6,7 +6,9 @@ import { randomToken, sha256Hex, shareUrl } from '@/lib/share';
 import type { Plan, Share, ShareScope, WorkoutLog } from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { track } from '@/lib/analytics';
-import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
+import { Button, EmptyState, FIELD, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
@@ -15,9 +17,6 @@ const SCOPES: { key: ShareScope; label: string }[] = [
   { key: 'plan', label: 'A plan' },
   { key: 'log', label: 'A workout' },
 ];
-
-const inputClass =
-  'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle';
 
 function shareStatus(s: Share): 'revoked' | 'expired' | 'active' {
   if (s.revoked) return 'revoked';
@@ -29,6 +28,12 @@ function shareStatus(s: Share): 'revoked' | 'expired' | 'active' {
 // can live inside a Disclosure on /app/you without doubling the chrome. The
 // standalone /app/shares route calls with defaults and still renders its own
 // header + shell.
+//
+// Embedded is the short version: a "New share link" primary that opens the
+// create form IN FLOW (not a sheet — it holds text fields, which raise the iOS
+// keyboard, and it shows a link that is displayed exactly once, which a stray
+// scrim tap must not be able to dismiss), then ACTIVE links only, then a row to
+// /app/shares, which shows everything: active first, then expired / revoked.
 export default function ShareManager({ embedded = false }: { embedded?: boolean } = {}) {
   const [ready, setReady] = useState(false);
   const [shares, setShares] = useState<Share[]>([]);
@@ -42,6 +47,8 @@ export default function ShareManager({ embedded = false }: { embedded?: boolean 
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Embedded only: the create form is folded behind "New share link".
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -122,169 +129,240 @@ export default function ShareManager({ embedded = false }: { embedded?: boolean 
           as="h1"
           className={ECHO_APP_TITLE}
         />
-        <p className="mt-4 text-sm text-muted">
-          Mint a read-only link to your profile, a plan, or a single workout. Holders can view but
-          never edit. The full link is shown once on creation; revoke any time.
-        </p>
       </header>
     </Item>
   );
 
   const wrap = (children: ReactNode) =>
     embedded ? (
-      <div className="flex flex-col gap-6">{children}</div>
+      <div className="flex flex-col gap-4">{children}</div>
     ) : (
       <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">{children}</PageStagger>
     );
 
-  return wrap(
-    <>
-      {header}
+  const active = shares.filter((s) => shareStatus(s) === 'active');
+  const inactive = shares.filter((s) => shareStatus(s) !== 'active');
 
-      <Item>
-        <section className={`${embedded ? '' : 'mb-8 '}flex flex-col gap-3 border border-border bg-surface p-4`}>
-        <SectionHeader>Create a link</SectionHeader>
-        <div className="flex flex-wrap gap-2">
-          {SCOPES.map((s) => (
-            <button
-              key={s.key}
-              onClick={() => changeScope(s.key)}
-              aria-pressed={scope === s.key}
-              className={`hill-btn flex min-h-11 items-center border bg-surface px-3 t-control transition-colors ${
-                scope === s.key ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-              }`}
-            >
-              {s.label}
-            </button>
+  // Embedded, the form sits inside the Sharing card, so it is an inset well;
+  // standalone it is a card of its own on the page.
+  const form = (
+    <section
+      className={`flex flex-col gap-3 ${
+        embedded ? 'rounded-control bg-bg p-3' : 'mb-8 rounded-card border border-outline bg-surface p-4'
+      }`}
+    >
+      {embedded ? null : (
+        <SectionHeader>
+          <span className="inline-flex items-center gap-2">
+            Create a link
+            <InfoPopover>
+              A read-only link to your profile, a plan, or one workout. Holders can view, never
+              edit. The full link is shown once; revoke any time.
+            </InfoPopover>
+          </span>
+        </SectionHeader>
+      )}
+      <SegmentedTabs
+        as="radiogroup"
+        size="sm"
+        ariaLabel="What to share"
+        tabs={SCOPES}
+        active={scope}
+        onChange={(k) => changeScope(k as ShareScope)}
+      />
+
+      {scope === 'plan' ? (
+        <select
+          value={resourceId}
+          onChange={(e) => setResourceId(e.target.value)}
+          className={FIELD}
+          aria-label="Plan to share"
+        >
+          <option value="">Select a plan…</option>
+          {plans.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+              {p.is_active ? ' (active)' : ''}
+            </option>
           ))}
-        </div>
+        </select>
+      ) : null}
 
-        {scope === 'plan' ? (
-          <select
-            value={resourceId}
-            onChange={(e) => setResourceId(e.target.value)}
-            className={inputClass}
-            aria-label="Plan to share"
-          >
-            <option value="">Select a plan…</option>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-                {p.is_active ? ' (active)' : ''}
-              </option>
-            ))}
-          </select>
-        ) : null}
+      {scope === 'log' ? (
+        <select
+          value={resourceId}
+          onChange={(e) => setResourceId(e.target.value)}
+          className={FIELD}
+          aria-label="Workout to share"
+        >
+          <option value="">Select a workout…</option>
+          {logs.map((l) => (
+            <option key={l.id} value={l.id}>
+              {formatDate(l.log_date)}
+              {l.day_key ? ` · Day ${l.day_key}` : ''} ·{' '}
+              {l.activity_type ?? (l.tags.length ? l.tags.join(', ') : 'Session')}
+            </option>
+          ))}
+        </select>
+      ) : null}
 
-        {scope === 'log' ? (
-          <select
-            value={resourceId}
-            onChange={(e) => setResourceId(e.target.value)}
-            className={inputClass}
-            aria-label="Workout to share"
-          >
-            <option value="">Select a workout…</option>
-            {logs.map((l) => (
-              <option key={l.id} value={l.id}>
-                {formatDate(l.log_date)}
-                {l.day_key ? ` · Day ${l.day_key}` : ''} ·{' '}
-                {l.activity_type ?? (l.tags.length ? l.tags.join(', ') : 'Session')}
-              </option>
-            ))}
-          </select>
-        ) : null}
-
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="Label (optional)"
-          className={inputClass}
-          aria-label="Label"
-        />
-        <label className="flex items-center gap-2 text-sm text-muted">
-          Expires in
+      <input
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        placeholder="Label (optional)"
+        className={FIELD}
+        aria-label="Label"
+      />
+      <label className="flex items-center gap-2 text-sm text-muted">
+        Expires in
+        <span className="w-24 shrink-0">
           <input
             type="number"
             min={0}
             value={expiryDays}
             onChange={(e) => setExpiryDays(Math.max(0, Number(e.target.value)))}
-            className={`${inputClass} w-24 tabular-nums`}
+            className={`${FIELD} tabular-nums`}
             aria-label="Expiry in days"
           />
-          days (0 = never)
-        </label>
+        </span>
+        days (0 = never)
+      </label>
 
-        <div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          onClick={handleCreate}
+          disabled={busy || (scope !== 'profile' && !resourceId)}
+        >
+          {busy ? 'Creating…' : 'Create link'}
+        </Button>
+        {embedded ? (
           <Button
-            onClick={handleCreate}
-            disabled={busy || (scope !== 'profile' && !resourceId)}
+            variant="ghost"
+            onClick={() => {
+              setCreating(false);
+              setCreated(null);
+            }}
           >
-            {busy ? 'Creating…' : 'Create link'}
+            {created ? 'Done' : 'Cancel'}
           </Button>
-        </div>
-
-        {created ? (
-          <div className="flex flex-col gap-2 border border-border bg-bg p-3">
-            <span className="t-control text-muted">
-              Copy this now — it won't be shown again
-            </span>
-            <div className="flex items-center gap-2">
-              <input
-                readOnly
-                value={created}
-                onFocus={(e) => e.currentTarget.select()}
-                className={`${inputClass} flex-1 text-sm`}
-                aria-label="Share link"
-              />
-              <Button variant="ghost" onClick={copy}>
-                {copied ? 'Copied' : 'Copy'}
-              </Button>
-            </div>
-          </div>
         ) : null}
+      </div>
+
+      {created ? (
+        <div
+          className={`flex flex-col gap-2 rounded-control p-3 ${embedded ? 'bg-surface' : 'bg-bg'}`}
+        >
+          <span className="t-control text-muted">
+            Copy this now — it won't be shown again
+          </span>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={created}
+              onFocus={(e) => e.currentTarget.select()}
+              className={`${FIELD} min-w-0 flex-1`}
+              aria-label="Share link"
+            />
+            <Button variant="ghost" onClick={copy}>
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+
+  const list = (items: Share[]) => (
+    <ul
+      className={
+        embedded
+          ? 'divide-y divide-border-soft'
+          : 'divide-y divide-border-soft overflow-hidden rounded-card border border-outline bg-surface'
+      }
+    >
+      {items.map((s) => {
+        const status = shareStatus(s);
+        return (
+          <li key={s.id} className={`flex items-center gap-3 py-2 ${embedded ? '' : 'px-4'}`}>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-fg">{s.label ?? s.scope}</div>
+              <div className="t-control text-muted">
+                {s.scope} · {formatDate(s.created_at)}
+                {s.expires_at ? ` · expires ${formatDate(s.expires_at)}` : ''}
+              </div>
+            </div>
+            <span className={`t-control ${status === 'active' ? 'text-subtle' : 'text-muted'}`}>
+              {status}
+            </span>
+            {status === 'active' ? (
+              <Button variant="ghost" onClick={() => handleRevoke(s.id)} className="px-3">
+                Revoke
+              </Button>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  if (embedded) {
+    return wrap(
+      <>
+        {creating ? (
+          form
+        ) : (
+          <div>
+            <Button onClick={() => setCreating(true)}>New share link</Button>
+          </div>
+        )}
+        <section>
+          <SectionHeader>Active links</SectionHeader>
+          {active.length === 0 ? (
+            <p className="text-sm text-muted">
+              {shares.length === 0 ? 'No share links yet.' : 'No active links.'}
+            </p>
+          ) : (
+            list(active)
+          )}
         </section>
-      </Item>
+        <a
+          href="/app/shares"
+          className="-mx-4 -mb-4 flex min-h-11 items-center justify-between gap-3 border-t border-border-soft px-4 t-control text-fg transition-colors hover:bg-tappable-hover"
+        >
+          <span>
+            Expired &amp; revoked · <span className="tabular-nums">{inactive.length}</span>
+          </span>
+          <span aria-hidden="true">→</span>
+        </a>
+      </>,
+    );
+  }
+
+  return wrap(
+    <>
+      {header}
+
+      <Item>{form}</Item>
 
       <Item>
-        <section>
-          <SectionHeader>Your links</SectionHeader>
-          {shares.length === 0 ? (
-            <EmptyState>No share links yet.</EmptyState>
+        <section className="mb-8">
+          <SectionHeader>Active links</SectionHeader>
+          {active.length === 0 ? (
+            <EmptyState>{shares.length === 0 ? 'No share links yet.' : 'No active links.'}</EmptyState>
           ) : (
-            <ul className="divide-y divide-border border border-border">
-              {shares.map((s) => {
-                const status = shareStatus(s);
-                return (
-                  <li key={s.id} className="flex items-center gap-3 px-4 py-3">
-                    <div className="flex-1">
-                      <div className="text-fg">{s.label ?? s.scope}</div>
-                      <div className="t-control text-muted">
-                        {s.scope} · {formatDate(s.created_at)}
-                        {s.expires_at ? ` · expires ${formatDate(s.expires_at)}` : ''}
-                      </div>
-                    </div>
-                    <span
-                      className={`t-control ${
-                        status === 'active' ? 'text-subtle' : 'text-muted'
-                      }`}
-                    >
-                      {status}
-                    </span>
-                    {status === 'active' ? (
-                      <button
-                        onClick={() => handleRevoke(s.id)}
-                        className="px-2 t-control text-muted transition-colors hover:text-accent"
-                      >
-                        Revoke
-                      </button>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+            list(active)
           )}
         </section>
       </Item>
+
+      {inactive.length > 0 ? (
+        <Item>
+          <section>
+            <SectionHeader>Expired &amp; revoked</SectionHeader>
+            {list(inactive)}
+          </section>
+        </Item>
+      ) : null}
     </>,
   );
 }

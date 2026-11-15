@@ -172,7 +172,7 @@ export function SetRow({
           <motion.span
             key={pop}
             aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-[4px] border-2 border-teal"
+            className="pointer-events-none absolute inset-0 rounded-control border-2 border-teal"
             initial={{ opacity: 0.85, scale: 1 }}
             animate={{ opacity: 0, scale: popPr ? 2.4 : 1.8 }}
             transition={{ duration: popPr ? 0.65 : 0.5, ease: EASE }}
@@ -199,10 +199,13 @@ export function SetRow({
             still reported 44 (docs/LESSONS.md § "The slim-thumb trick does not
             transfer to a stacked list"). So the chrome shrinks and the target
             does not.
-            `hill-btn` moved onto the span with it: on the button it also
-            matched `.hill-btn[aria-pressed='true']`, whose unlayered
-            `background-color` beat the `bg-accent` utility, so the completed
-            state was painting `--color-elevated` instead of the accent fill. */}
+            `hill-btn` stays on the span, never the button: the button carries
+            `aria-pressed`, so `.hill-btn[aria-pressed]`'s unlayered fills
+            (accent when done, tappable when not) would paint the whole 44px
+            hit box instead of the 24px tick. That used to show as
+            `--color-elevated` beating the `bg-accent` utility; the global rule
+            now paints accent, but on the wrong box. The span has no
+            aria-pressed, so the ternary below paints it. */}
         <button
           type="button"
           onClick={() => {
@@ -218,7 +221,7 @@ export function SetRow({
             className={`hill-btn flex h-6 w-6 items-center justify-center border text-xs transition-colors ${
               a.completed
                 ? 'border-accent bg-accent text-accent-fg'
-                : 'border-border bg-surface text-muted'
+                : 'border-transparent bg-tappable text-muted'
             }`}
           >
             ✓

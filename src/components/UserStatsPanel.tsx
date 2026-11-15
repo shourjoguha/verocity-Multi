@@ -1,4 +1,4 @@
-// The "You" group on /app/settings — the first place the app asks for anything
+// The profile form on /app/you (opened by the summary card's Edit) — the first place the app asks for anything
 // about the person rather than the training.
 //
 // Two fields reach a metric: bodyweight prices unweighted work (a push-up stops
@@ -38,12 +38,31 @@ import {
 import { getUserStats, upsertUserStats } from '@/lib/queries';
 import type { Injury, UserStats } from '@/lib/types';
 import { toast } from '@/lib/toast';
-import { Button } from '@/components/ui/primitives';
+import { Button, FIELD } from '@/components/ui/primitives';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 
-const field =
-  'min-h-11 w-full border border-border bg-surface px-3 text-sm text-fg outline-none focus:border-fg';
+const field = FIELD;
 const numField = `${field} tabular-nums`;
 const label = 'mb-1 block t-label text-muted';
+// A label with its "what is this" popover beside it. The popover sits OUTSIDE
+// the <label>, so tapping it never focuses the field.
+function InfoLabel({ htmlFor, text, info }: { htmlFor?: string; text: string; info: string }) {
+  return (
+    <div className="mb-1 flex items-center gap-2">
+      {htmlFor ? (
+        <label className="t-label text-muted" htmlFor={htmlFor}>
+          {text}
+        </label>
+      ) : (
+        <span className="t-label text-muted">{text}</span>
+      )}
+      <InfoPopover>{info}</InfoPopover>
+    </div>
+  );
+}
+// Toggle chips (pick many). `.hill-btn[aria-pressed]` in global.css paints
+// both states — accent when on, tappable when off — so no ternary here.
+const toggleClass = 'hill-btn min-h-11 border px-3 text-sm text-fg';
 
 // Inputs are strings so a half-typed "17" in a bounded field is not clamped or
 // blanked mid-keystroke. Parsing to number/null happens once, on save.
@@ -208,9 +227,11 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
-          <label className={label} htmlFor="stat-weight">
-            Bodyweight (kg)
-          </label>
+          <InfoLabel
+            htmlFor="stat-weight"
+            text="Bodyweight (kg)"
+            info="Prices push-ups, jumps and planks against your own mass instead of a flat estimate."
+          />
           <input
             id="stat-weight"
             type="number"
@@ -224,9 +245,7 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
           />
         </div>
         <div>
-          <label className={label} htmlFor="stat-height">
-            Height (cm)
-          </label>
+          <InfoLabel htmlFor="stat-height" text="Height (cm)" info="Stored for later." />
           <input
             id="stat-height"
             type="number"
@@ -240,9 +259,11 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
           />
         </div>
         <div>
-          <label className={label} htmlFor="stat-birth">
-            Birth year
-          </label>
+          <InfoLabel
+            htmlFor="stat-birth"
+            text="Birth year"
+            info="Sets your heart-rate ceiling until you log a higher one, and your age in the AI plan prompt."
+          />
           <input
             id="stat-birth"
             type="number"
@@ -256,12 +277,6 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
           />
         </div>
       </div>
-
-      <p className="text-[0.7rem] text-muted">
-        Bodyweight prices unweighted work — push-ups, jumps and planks — against your own
-        mass instead of a flat estimate. Birth year sets your heart-rate ceiling until you
-        log a higher one, and your age in the AI plan prompt. Height is stored for later.
-      </p>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
@@ -304,9 +319,17 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
-          <label className={label} htmlFor="stat-experience">
-            Experience
-          </label>
+          {form.experience && EXPERIENCE_LEVELS[form.experience] ? (
+            <InfoLabel
+              htmlFor="stat-experience"
+              text="Experience"
+              info={EXPERIENCE_LEVELS[form.experience].blurb}
+            />
+          ) : (
+            <label className={label} htmlFor="stat-experience">
+              Experience
+            </label>
+          )}
           <select
             id="stat-experience"
             value={form.experience}
@@ -320,9 +343,6 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
               </option>
             ))}
           </select>
-          {form.experience && EXPERIENCE_LEVELS[form.experience] ? (
-            <p className="mt-1 text-[0.7rem] text-muted">{EXPERIENCE_LEVELS[form.experience].blurb}</p>
-          ) : null}
         </div>
         <div>
           <label className={label} htmlFor="stat-days">
@@ -361,7 +381,10 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
       </div>
 
       <div>
-        <span className={label}>Equipment available</span>
+        <InfoLabel
+          text="Equipment available"
+          info="Experience, days, equipment, disciplines and plan length go into the AI plan prompt, with your goals, age, sex and injuries. Blanks become questions it asks you first."
+        />
         <div className="flex flex-wrap gap-2">
           {EQUIPMENT.map((e) => {
             const on = form.equipment.includes(e.key);
@@ -371,9 +394,7 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
                 type="button"
                 onClick={() => toggleEquipment(e.key)}
                 aria-pressed={on}
-                className={`hill-btn min-h-11 border bg-surface px-3 text-sm ${
-                  on ? 'border-fg text-fg' : 'border-border text-muted'
-                }`}
+                className={toggleClass}
               >
                 {e.label}
               </button>
@@ -393,9 +414,7 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
                 type="button"
                 onClick={() => toggleDiscipline(d.key)}
                 aria-pressed={on}
-                className={`hill-btn min-h-11 border bg-surface px-3 text-sm ${
-                  on ? 'border-fg text-fg' : 'border-border text-muted'
-                }`}
+                className={toggleClass}
               >
                 {d.label}
               </button>
@@ -404,15 +423,15 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
         </div>
       </div>
 
-      <p className="text-[0.7rem] text-muted">
-        Experience, days, equipment, disciplines and plan length are written into the AI prompt
-        on the new-plan page, along with your goals, age, sex and injuries. Anything you leave
-        blank becomes a question the AI asks you before it writes the plan.
-      </p>
-
       <div>
         <div className="mb-2 flex flex-wrap items-center gap-3">
-          <span className={`${label} mb-0`}>Past injuries</span>
+          <span className="inline-flex items-center gap-2">
+            <span className="t-label text-muted">Past injuries</span>
+            <InfoPopover>
+              Sent to the AI when you generate a plan, so it can work around them. Naming the region
+              is what lets it substitute the right movements.
+            </InfoPopover>
+          </span>
           <Button
             variant="ghost"
             onClick={addInjury}
@@ -477,10 +496,6 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
             ))}
           </ul>
         )}
-        <p className="mt-2 text-[0.7rem] text-muted">
-          Sent to the AI when you generate a plan, so it can work around them. Naming the
-          region is what lets it substitute the right movements.
-        </p>
       </div>
 
       <div>

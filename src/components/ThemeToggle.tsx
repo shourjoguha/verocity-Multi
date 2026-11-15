@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { applyTheme, getStoredPref, THEME_PREFS, type ThemePref } from '@/lib/theme';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
 
 const LABEL: Record<ThemePref, string> = {
   light: 'Light',
@@ -7,13 +8,10 @@ const LABEL: Record<ThemePref, string> = {
   system: 'System',
 };
 
-const HINT: Record<ThemePref, string> = {
-  light: 'Always light.',
-  dark: 'Always dark.',
-  system: 'Follows your device setting.',
-};
-
-export function ThemeToggle() {
+// One value out of three, so it is a segmented radiogroup rather than a row of
+// detached buttons. The caller places it (You → Appearance puts it at the right
+// of a label row).
+export function ThemeToggle({ className = '' }: { className?: string }) {
   const [pref, setPref] = useState<ThemePref>('system');
 
   useEffect(() => {
@@ -26,26 +24,14 @@ export function ThemeToggle() {
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap gap-2">
-        {THEME_PREFS.map((p) => {
-          const selected = pref === p;
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => pick(p)}
-              aria-pressed={selected}
-              className={`hill-btn min-h-11 border bg-surface px-3 t-control transition-colors ${
-                selected ? 'border-fg text-fg' : 'border-border text-muted hover:border-fg hover:text-fg'
-              }`}
-            >
-              {LABEL[p]}
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-2 text-[0.7rem] text-muted">{HINT[pref]}</p>
-    </div>
+    <SegmentedTabs
+      as="radiogroup"
+      size="sm"
+      ariaLabel="Theme"
+      tabs={THEME_PREFS.map((p) => ({ key: p, label: LABEL[p] }))}
+      active={pref}
+      onChange={(k) => pick(k as ThemePref)}
+      className={className}
+    />
   );
 }

@@ -3,7 +3,9 @@ import {
   addBlock,
   addDay,
   addSubroutine,
+  copyPlanned,
   moveDay,
+  nearestEarlierPlanned,
   removeBlock,
   reorder,
   setBlockEnd,
@@ -11,7 +13,9 @@ import {
   setBlockType,
   setDayLabel,
   setExerciseDescription,
+  setExerciseRest,
   setExerciseUrl,
+  setExerciseWeekNote,
   setPlanned,
 } from '@/lib/planEdits';
 import { isSubroutine } from '@/lib/subroutine';
@@ -94,6 +98,60 @@ describe('setPlanned', () => {
   it('clears a week when the value is blank', () => {
     const next = setPlanned(PLAN, 0, 0, 1, '   ');
     expect(next.days[0].exercises[0].plannedByWeek).toEqual({});
+  });
+});
+
+describe('setExerciseRest', () => {
+  it('sets whole, non-negative seconds and clears on undefined', () => {
+    const set = setExerciseRest(PLAN, 0, 0, 90.4);
+    expect(set.days[0].exercises[0].restSeconds).toBe(90);
+    expect(PLAN.days[0].exercises[0].restSeconds).toBeUndefined(); // original untouched
+    expect(setExerciseRest(PLAN, 0, 0, -15).days[0].exercises[0].restSeconds).toBe(0);
+    const cleared = setExerciseRest(set, 0, 0, undefined).days[0].exercises[0];
+    expect('restSeconds' in cleared).toBe(false);
+  });
+
+  it('leaves superset grouping and the weeks alone', () => {
+    const grouped: ParsedPlan = {
+      ...PLAN,
+      days: [{ ...PLAN.days[0], exercises: [{ ...PLAN.days[0].exercises[0], group: { id: 'g', kind: 'superset' } }] }],
+    };
+    const ex = setExerciseRest(grouped, 0, 0, 60).days[0].exercises[0];
+    expect(ex.group).toEqual({ id: 'g', kind: 'superset' });
+    expect(ex.plannedByWeek).toEqual({ 1: '3x5' });
+  });
+});
+
+describe('setExerciseWeekNote', () => {
+  it('sets one week and drops an emptied map', () => {
+    const noted = setExerciseWeekNote(PLAN, 0, 0, 2, 'hold');
+    expect(noted.days[0].exercises[0].notesByWeek).toEqual({ 2: 'hold' });
+    const cleared = setExerciseWeekNote(noted, 0, 0, 2, ' ').days[0].exercises[0];
+    expect('notesByWeek' in cleared).toBe(false);
+  });
+});
+
+describe('skip / restore a week', () => {
+  // Alternating: programmed in W1 and W3, skipped in W2 and W4.
+  const alt = setPlanned(setPlanned(PLAN, 0, 0, 3, '3x3 @85%'), 0, 0, 1, '3x5 @75%');
+
+  it('skipping is clearing the entry', () => {
+    const skipped = setPlanned(alt, 0, 0, 3, '');
+    expect(skipped.days[0].exercises[0].plannedByWeek).toEqual({ 1: '3x5 @75%' });
+  });
+
+  it('restores from the nearest earlier programmed week', () => {
+    const ex = alt.days[0].exercises[0];
+    expect(nearestEarlierPlanned(ex, 2)).toBe('3x5 @75%');
+    expect(nearestEarlierPlanned(ex, 4)).toBe('3x3 @85%');
+    expect(nearestEarlierPlanned(ex, 1)).toBeNull();
+  });
+
+  it('copyPlanned writes only the listed weeks', () => {
+    const next = copyPlanned(alt, 0, 0, 1, [3, 5]);
+    expect(next.days[0].exercises[0].plannedByWeek).toEqual({ 1: '3x5 @75%', 3: '3x5 @75%', 5: '3x5 @75%' });
+    // Nothing to copy from an empty week.
+    expect(copyPlanned(alt, 0, 0, 2, [4])).toEqual(alt);
   });
 });
 

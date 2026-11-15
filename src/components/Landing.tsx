@@ -45,7 +45,7 @@ const features = [
 // The start padding absorbs the trailing 0.45em that letter-spacing adds after
 // the final glyph, so the label reads optically centred inside the pill.
 const HERO_BTN =
-  'inline-flex h-12 items-center rounded-full border border-fg pl-[calc(1.75rem+0.45em)] pr-7 text-xs uppercase tracking-[0.45em] text-fg transition-colors duration-200 hover:bg-fg hover:text-bg';
+  'inline-flex h-12 items-center rounded-full border border-fg pl-[calc(1.75rem+0.45em)] pr-7 text-xs uppercase tracking-[0.45em] text-fg transition-colors duration-200 hover:bg-accent hover:text-accent-fg';
 
 // The wordmark's own type scale, shared by the DOM heading and the particle
 // field so the two are never described in two places.

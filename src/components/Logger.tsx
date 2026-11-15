@@ -92,11 +92,14 @@ import type {
   VibeCheck,
   WorkoutLog,
 } from '@/lib/types';
-import { Button, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
+import { Button, FIELD, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Modal } from '@/components/ui/Modal';
 import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
 import { SetEntrySheet } from '@/components/logger/SetEntrySheet';
+import { FocusItem } from '@/components/logger/FocusItem';
+import { firstOpenSet, nextOpenSet } from '@/components/logger/focusSet';
 import { MovementPicker } from '@/components/logger/MovementPicker';
 import { SubroutineEditor } from '@/components/logger/SubroutineEditor';
 import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
@@ -120,6 +123,13 @@ import { toast } from '@/lib/toast';
 // more: weight is an always-on field on reps/time/distance, and rpe was never a
 // primary that rendered anything. See PRIMARY_METRICS in app.config.ts.
 const METRIC_CYCLE: MetricKey[] = [...PRIMARY_METRICS];
+// The metric a tap on the metric button moves to. indexOf is -1 for a legacy
+// `weight`/`rpe` row, which would otherwise jump to index 1 and skip the first
+// option, so "not in the cycle" is treated as "before the start".
+const nextMetric = (current: MetricKey): MetricKey => {
+  const at = METRIC_CYCLE.indexOf(current);
+  return METRIC_CYCLE[at < 0 ? 0 : (at + 1) % METRIC_CYCLE.length];
+};
 
 // Shared by every icon-only control in a movement card's bands: a real 44px
 // target (TOUCH.minTargetPx) holding a ~18px glyph, with no gap between
@@ -181,6 +191,42 @@ type Picker =
 type SubEditor =
   | { mode: 'add'; sectionKey: SectionKey }
   | { mode: 'edit'; si: number; gi: number; ii: number };
+
+// Brings the focus card into view when the focus moves to a DIFFERENT movement
+// group — after logging a movement's last set, or tapping an Up-next row. Not
+// on first render (the page opens where it opens), and not when the live set
+// moves between members of one superset: that card is already on screen.
+// scrollIntoView scrolls the nearest scrollable ancestor, which under the app
+// shell is `[data-scroll-root]`, never the document (see CLAUDE.md). The
+// scroll margin clears the sticky app header. Reduced motion jumps instead of
+// gliding. No focus() call: moving keyboard focus into a field here would
+// raise the iOS keyboard mid-layout.
+// `last` lives in the Logger, not here: the anchor remounts when the focus
+// crosses into another section, and a ref of its own would forget where the
+// focus had been and skip exactly that scroll.
+function FocusAnchor({
+  groupId,
+  last,
+  children,
+}: {
+  groupId: string;
+  last: { current: string | null };
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const prev = last.current;
+    last.current = groupId;
+    if (prev === null || prev === groupId) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    ref.current?.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+  }, [groupId, last]);
+  return (
+    <div ref={ref} data-focus-anchor className="scroll-mt-20">
+      {children}
+    </div>
+  );
+}
 
 export default function Logger() {
   const [ready, setReady] = useState(false);
@@ -250,6 +296,14 @@ export default function Logger() {
     setParked(addAll);
     setCollapsed(addAll);
   };
+  // Which movement the focus card shows. Null = follow the work: the first
+  // group, in section order, with a set still to log (nextOpenSet). Tapping an
+  // Up-next row pins a group (and, in a superset, a member); logging a set
+  // drops the member pin so the card follows the round order across the group,
+  // and finishing the group drops the pin entirely so the card advances.
+  const [focus, setFocus] = useState<{ groupId: string; itemId?: string } | null>(null);
+  // The group the focus card last showed, for FocusAnchor's scroll-on-move.
+  const lastFocusGroup = useRef<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // Finish always asks for type / duration / HR in a sheet; `rowHr` is a
   // resumed row's heart rate, which the sheet starts on.
@@ -991,6 +1045,48 @@ export default function Logger() {
     (n, { g }) => n + g.items.filter((it) => !isSubroutine(it)).length,
     0,
   );
+  // The focused movement. Groups in render order (sections by SECTIONS, then
+  // their own order), parked ones excluded — the Done pile keeps its own
+  // expand-to-full-card path. A pin that no longer resolves (group removed,
+  // or parked) falls back to following the work.
+  const liveGroups = ordered.flatMap((section) => {
+    const si = doc.sections.findIndex((s) => s.key === section.key);
+    return doc.sections[si].groups
+      .map((g, gi) => ({ si, gi, g }))
+      .filter(({ g }) => !parked.has(g.id));
+  });
+  const pinned = focus ? liveGroups.find(({ g }) => g.id === focus.groupId) : undefined;
+  const focused = pinned ?? liveGroups.find(({ g }) => nextOpenSet(g) !== null) ?? null;
+  // Which member of the focused group gets the live editor: a pinned member,
+  // else the one holding the group's next set in round order, else the first
+  // movement. -1 means the group is subroutines only.
+  const focusIi = (() => {
+    if (!focused) return -1;
+    const items = focused.g.items;
+    const byPin =
+      pinned && focus?.itemId ? items.findIndex((it) => it.id === focus.itemId && !isSubroutine(it)) : -1;
+    if (byPin >= 0) return byPin;
+    const next = nextOpenSet(focused.g);
+    if (next) return next.ii;
+    return items.findIndex((it) => !isSubroutine(it));
+  })();
+  const focusItemId = focused && focusIi >= 0 ? focused.g.items[focusIi].id : null;
+
+  // The session progress strip: one segment per movement in render order,
+  // sized by its set count and filled by sets logged.
+  const progress = ordered.flatMap((section) => {
+    const si = doc.sections.findIndex((s) => s.key === section.key);
+    return doc.sections[si].groups.flatMap((g) =>
+      g.items
+        .filter((it) => !isSubroutine(it) && it.sets.length > 0)
+        .map((it) => ({
+          id: it.id,
+          total: it.sets.length,
+          done: it.sets.filter((st) => st.actual.completed).length,
+        })),
+    );
+  });
+
   // The set the entry sheet is bound to, resolved fresh each render so the sheet
   // always shows current values. Any index that no longer exists (set deleted,
   // movement removed) resolves to null and closes the sheet.
@@ -1042,7 +1138,7 @@ export default function Logger() {
     const item = group.items[ii];
     if (isSubroutine(item)) {
       return (
-        <div key={item.id} className={grouped ? 'border-t border-border first:border-0' : ''}>
+        <div key={item.id} className={grouped ? 'border-t border-border-soft first:border-0' : ''}>
           {/* Carries its own px-4/py-3 now that the card container is unpadded
               — same band treatment as a movement's identity row. */}
           <div className="flex items-start justify-between gap-2 px-4 py-3">
@@ -1052,7 +1148,7 @@ export default function Logger() {
             </div>
             <button
               onClick={() => setOptionsFor({ si, gi, ii })}
-              className="hill-btn shrink-0 border border-border bg-surface px-2 py-1 t-control text-muted hover:text-fg"
+              className="hill-btn shrink-0 border border-transparent bg-tappable px-2 py-1 t-control text-muted hover:text-fg"
               aria-label="Subroutine options"
             >
               ⋯
@@ -1072,7 +1168,7 @@ export default function Logger() {
     // `showPlanned` note in SetRow.
     const anyPlanned = item.sets.some((s) => !!s.planned);
     return (
-      <div key={item.id} className={grouped ? 'border-t border-border first:border-0' : ''}>
+      <div key={item.id} className={grouped ? 'border-t border-border-soft first:border-0' : ''}>
         {/* BAND 1 — identity. The ✓ is a full-height cell flush with the
             card's edge, divided from the name by a hairline: the whole cell is
             the 44px target, so the visible box and the hit box are the same
@@ -1086,12 +1182,17 @@ export default function Logger() {
               activate(groupId);
               toggleItemComplete(si, gi, ii);
             }}
-            // No `hill-btn`: its unlayered aria-pressed background beats the
-            // `bg-accent` utility (see the SetRow note). The rounded corners
-            // keep the filled cell inside a standalone card's radius.
+            // No `hill-btn`, and the reason is no longer the fill: the global
+            // `.hill-btn[aria-pressed]` rule now paints accent / tappable, which
+            // is what this cell wants. But `.hill-btn`'s border-radius is
+            // unlayered too, so it would round all four corners of a cell that
+            // sits flush against the card edge and beat the per-corner
+            // rounded-*-card below that keeps the fill inside a standalone
+            // card's radius — and its hover/press `border-color` would outline
+            // the cell. So this paints its own fill, on = accent, off = tappable.
             className={`flex w-11 shrink-0 items-center justify-center border-r text-sm transition-colors ${
               grouped ? '' : `rounded-tl-card ${isCollapsed ? 'rounded-bl-card' : ''}`
-            } ${allDone ? 'border-r-accent bg-accent text-accent-fg' : 'border-r-border text-muted'}`}
+            } ${allDone ? 'border-r-accent bg-accent text-accent-fg' : 'border-r-transparent bg-tappable text-muted'}`}
             aria-label="Complete movement"
             aria-pressed={allDone}
           >
@@ -1242,12 +1343,7 @@ export default function Logger() {
           <button
             onClick={() => {
               activate(groupId);
-              // indexOf is -1 for a legacy `weight`/`rpe` row, which would otherwise
-              // jump to index 1 and skip the first option. Treat "not in the
-              // cycle" as "before the start" so the first tap lands on reps.
-              const at = METRIC_CYCLE.indexOf(item.primaryMetric);
-              const nextMetric = METRIC_CYCLE[at < 0 ? 0 : (at + 1) % METRIC_CYCLE.length];
-              setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric));
+              setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric(item.primaryMetric)));
             }}
             className="hill-btn flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 px-2 t-control text-fg transition-colors"
             aria-label={`Metric: ${METRICS[item.primaryMetric].label}. Change metric`}
@@ -1281,16 +1377,24 @@ export default function Logger() {
       return (
         // Left accent rule, not an all-round accent border — the mockup's
         // "superset with previous" cue on an otherwise ordinary bordered
-        // card, matching the single-movement group's border-border below.
+        // card, matching the single-movement group's border-outline below.
         // Horizontal padding moved off the card and onto the bands inside it,
         // so a superset's member movements band exactly like a standalone one
         // instead of being inset a second time by this container.
+        //
+        // The stripe is its own straight element, not the card's border-l: on
+        // a 12px-radius card a left border bends round both corners. It sits
+        // over the card's (transparent) 2px left border so nothing inside
+        // moves, and stops 12px short of each end, where the corner curve
+        // starts. Not `overflow-hidden` on the card instead: SetRow's PR
+        // ring-pop scales to 2.4x a 44px box and is meant to escape it.
         <div
           key={group.id}
-          className={`lift border border-border border-l-2 border-l-accent bg-surface ${
+          className={`lift relative rounded-card border border-outline border-l-2 bg-surface ${
             isCollapsed ? 'py-1' : ''
           }`}
         >
+          <span aria-hidden className="pointer-events-none absolute inset-y-3 -left-0.5 w-0.5 bg-accent" />
           <div
             className={`flex items-center justify-between gap-2 px-4 t-control ${
               isCollapsed ? '' : 'border-b border-border-soft'
@@ -1314,23 +1418,21 @@ export default function Logger() {
               </span>
             </button>
             {isCollapsed ? null : (
-            <div className="flex shrink-0 gap-1">
-              {(['superset', 'circuit'] as GroupKind[]).map((k) => (
-                <button
-                  key={k}
-                  onClick={() => {
-                    activate(group.id);
-                    setDoc((d) => setGroupKind(d, si, gi, k));
-                  }}
-                  aria-pressed={group.kind === k}
-                  className={`flex min-h-11 items-center px-2 ${
-                    group.kind === k ? 'text-accent' : 'text-muted hover:text-fg'
-                  }`}
-                >
-                  {k}
-                </button>
-              ))}
-            </div>
+            // One of two → the shared segmented control. Its 36px shell fits
+            // inside this 44px band and its buttons stay min-h-11, so neither
+            // the band height nor the tap targets change. Default size, not
+            // `sm`: `sm` would drop the label from t-control's 11px to 10px.
+            <SegmentedTabs
+              as="radiogroup"
+              ariaLabel="Group kind"
+              className="shrink-0"
+              tabs={(['superset', 'circuit'] as GroupKind[]).map((k) => ({ key: k, label: k }))}
+              active={group.kind}
+              onChange={(k) => {
+                activate(group.id);
+                setDoc((d) => setGroupKind(d, si, gi, k as GroupKind));
+              }}
+            />
             )}
           </div>
           {isCollapsed
@@ -1375,7 +1477,7 @@ export default function Logger() {
       // their own padding so every row runs the full width of the card.
       <div
         key={group.id}
-        className="lift border border-border bg-surface"
+        className="lift rounded-card border border-outline bg-surface"
       >
         {renderItem(si, gi, 0, false, {
           link:
@@ -1429,7 +1531,13 @@ export default function Logger() {
     }
     const superset = group.items.length > 1;
     return (
-      <div key={group.id} className={superset ? 'border-l-2 border-l-accent' : ''}>
+      // Same straight stripe as the superset card (see renderGroup), kept off
+      // the rows' own border so it cannot poke past the pile's rounded corner
+      // when this group is the pile's first or last.
+      <div key={group.id} className={superset ? 'relative border-l-2 border-l-transparent' : ''}>
+        {superset ? (
+          <span aria-hidden className="pointer-events-none absolute inset-y-3 -left-0.5 w-0.5 bg-accent" />
+        ) : null}
         {superset ? (
           // 'single' is unreachable for a multi-item group, but printing it
           // raw would read as a bug rather than a label if it ever arrived.
@@ -1492,6 +1600,189 @@ export default function Logger() {
             </button>
           );
         })}
+      </div>
+    );
+  }
+
+  // Log the focus card's live set. The write is the one SetEntrySheet's Log
+  // makes — `{ completed: true }` on that set, nothing else. What follows is
+  // only where the card goes next: if that set finished the group, the group
+  // parks into Done at once (the card is leaving it anyway, so parking now is
+  // one change on screen rather than two) and focus follows the work again;
+  // otherwise the member pin is dropped so a superset moves to its next set
+  // in round order.
+  function logFocusSet(si: number, gi: number, ii: number, ki: number) {
+    const groupId = doc.sections[si].groups[gi].id;
+    activate(groupId);
+    const after = patchSetActual(doc, si, gi, ii, ki, { completed: true });
+    setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: true }));
+    const g = after.sections[si].groups[gi];
+    if (nextOpenSet(g)) {
+      setFocus({ groupId });
+      return;
+    }
+    if (g.completedAt) {
+      const park = (prev: Set<string>) => (prev.has(groupId) ? prev : new Set([...prev, groupId]));
+      setParked(park);
+      setCollapsed(park);
+    }
+    setFocus(null);
+  }
+
+  // The focused group as a card: a single movement is FocusItem on a card
+  // with the in-progress stripe; a superset/circuit keeps its own card, header
+  // and ink stripe, and only the member holding the live set opens up — the
+  // others are one tappable row each, so the group stays visibly together.
+  // A subroutine-only group has nothing to log and keeps its ordinary card.
+  function renderFocusGroup(si: number, gi: number, focusAt: number) {
+    const group = doc.sections[si].groups[gi];
+    if (focusAt < 0) return renderGroup(si, gi);
+    const focusItem = (ii: number, grouped: boolean) => {
+      const item = group.items[ii];
+      const open = firstOpenSet(item);
+      // The live set is the group's next set when it falls in this member;
+      // a member pinned out of round order logs its own first open set.
+      const next = nextOpenSet(group);
+      const liveKi = next && next.ii === ii ? next.ki : open >= 0 ? open : null;
+      return (
+        <FocusItem
+          key={item.id}
+          item={item}
+          liveKi={liveKi}
+          markKind={markKindOf(item)}
+          grouped={grouped}
+          onPatchSet={(ki, patch) => {
+            activate(group.id);
+            setDoc((d) => patchSetActual(d, si, gi, ii, ki, patch));
+          }}
+          onLogSet={(ki) => logFocusSet(si, gi, ii, ki)}
+          onOpenSet={(ki) => {
+            activate(group.id);
+            setEntryFor({ si, gi, ii, ki });
+          }}
+          onToggleSet={(ki) => {
+            activate(group.id);
+            const was = item.sets[ki].actual.completed;
+            setDoc((d) => patchSetActual(d, si, gi, ii, ki, { completed: !was }));
+          }}
+          onAddSet={() => {
+            activate(group.id);
+            setDoc((d) => addSet(d, si, gi, ii));
+          }}
+          onCycleMetric={() => {
+            activate(group.id);
+            setDoc((d) => setItemMetric(d, si, gi, ii, nextMetric(item.primaryMetric)));
+          }}
+          onToggleAll={() => {
+            activate(group.id);
+            toggleItemComplete(si, gi, ii);
+          }}
+          onOptions={() => setOptionsFor({ si, gi, ii })}
+          onDemo={() => setDemoFor(item.movement)}
+        />
+      );
+    };
+    if (group.items.length === 1) {
+      return (
+        <div key={group.id} className="lift relative rounded-card border border-outline border-l-2 bg-surface">
+          {/* The in-progress marker: the same straight stripe as a superset's
+              (see renderGroup for why it is not the card's border-l), in the
+              in-progress accent rather than ink. */}
+          <span aria-hidden className="pointer-events-none absolute inset-y-3 -left-0.5 w-0.5 bg-teal" />
+          {focusItem(0, false)}
+        </div>
+      );
+    }
+    return (
+      <div key={group.id} className="lift relative rounded-card border border-outline border-l-2 bg-surface">
+        <span aria-hidden className="pointer-events-none absolute inset-y-3 -left-0.5 w-0.5 bg-accent" />
+        <div className="flex items-center justify-between gap-2 border-b border-border-soft px-4 t-control">
+          <span className="flex min-h-11 items-center text-muted">{group.items.length} movements</span>
+          <SegmentedTabs
+            as="radiogroup"
+            ariaLabel="Group kind"
+            className="shrink-0"
+            tabs={(['superset', 'circuit'] as GroupKind[]).map((k) => ({ key: k, label: k }))}
+            active={group.kind}
+            onChange={(k) => {
+              activate(group.id);
+              setDoc((d) => setGroupKind(d, si, gi, k as GroupKind));
+            }}
+          />
+        </div>
+        {group.items.map((item, ii) => {
+          if (ii === focusAt) {
+            return (
+              <div key={item.id} className={ii > 0 ? 'border-t border-border-soft' : ''}>
+                {focusItem(ii, true)}
+              </div>
+            );
+          }
+          if (isSubroutine(item)) return renderItem(si, gi, ii, true);
+          return movementRow(group.id, item, `px-4 ${ii > 0 ? 'border-t border-border-soft' : ''}`);
+        })}
+      </div>
+    );
+  }
+
+  // One movement as a one-line, genuinely 44px row (stacked, so no negative
+  // margins — LESSONS § "The slim-thumb trick does not transfer to a stacked
+  // list"): ✓ when every set is logged, the name, then the next set's values
+  // and done/total. Tapping it focuses that movement.
+  function movementRow(groupId: string, item: LogItem, pad: string) {
+    const sub = isSubroutine(item);
+    const done = sub ? 0 : item.sets.filter((st) => st.actual.completed).length;
+    const open = sub ? -1 : firstOpenSet(item);
+    const allDone = !sub && item.sets.length > 0 && open < 0;
+    return (
+      <button
+        key={item.id}
+        type="button"
+        onClick={() => {
+          activate(groupId);
+          setFocus({ groupId, itemId: sub ? undefined : item.id });
+        }}
+        className={`flex min-h-11 w-full items-center gap-2 text-left ${pad}`}
+      >
+        {allDone ? (
+          <span
+            aria-hidden
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-chip border border-accent bg-accent text-[0.5rem] text-accent-fg"
+          >
+            ✓
+          </span>
+        ) : null}
+        <span className="min-w-0 flex-1 truncate text-sm capitalize text-fg">{item.movement}</span>
+        {sub ? (
+          <span className="shrink-0 t-label text-faint">note</span>
+        ) : (
+          <span className="max-w-[45%] shrink-0 truncate text-right text-xs tabular-nums text-muted">
+            {open >= 0 ? `${formatSetActual({ ...item.sets[open].actual, rpe: undefined })} · ` : ''}
+            {done}/{item.sets.length}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  // A not-focused group as it reads under "Up next": the Done pile's row
+  // shape, a superset keeping its stripe and kind label with its members
+  // indented. Tapping a row focuses that movement; everything else (sets,
+  // options, metric) is on the card it opens into.
+  function renderUpNextGroup(si: number, gi: number) {
+    const group = doc.sections[si].groups[gi];
+    const superset = group.items.length > 1;
+    return (
+      <div key={group.id} className={superset ? 'relative border-l-2 border-l-transparent' : ''}>
+        {superset ? (
+          <>
+            <span aria-hidden className="pointer-events-none absolute inset-y-3 -left-0.5 w-0.5 bg-accent" />
+            <div className="px-3 pt-1.5 t-label text-faint">
+              {group.kind === 'circuit' ? 'circuit' : 'superset'}
+            </div>
+          </>
+        ) : null}
+        {group.items.map((item) => movementRow(group.id, item, superset ? 'pl-6 pr-3' : 'px-3'))}
       </div>
     );
   }
@@ -1615,7 +1906,40 @@ export default function Logger() {
             audit:mobile stays green on it (docs/LESSONS.md § "A fix silently
             switched off an existing guard"). Caught by screenshot, not by a
             check. */}
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-y border-border">
+        {/* Session progress, merged into this row as its top edge rather than
+            a row of its own: the 4px strip replaces the 1px hairline that sat
+            here, so it costs 3px. One segment per movement, sized by its set
+            count; logged sets fill in ink, the rest is the neutral track, and
+            the focused movement's remaining sets take the in-progress accent.
+            It is data, not a control, and it reads without colour — the
+            "done/total sets" count on the row beneath says the same thing. */}
+        {progress.length > 0 ? (
+          <div
+            role="progressbar"
+            aria-label="Session progress"
+            aria-valuemin={0}
+            aria-valuemax={sessionSets.total}
+            aria-valuenow={sessionSets.done}
+            className="mt-2 flex h-1 gap-0.5"
+          >
+            {progress.map((p) => (
+              <span
+                key={p.id}
+                className={`flex h-full overflow-hidden rounded-[1px] ${
+                  p.id === focusItemId ? 'bg-teal' : 'bg-border'
+                }`}
+                style={{ flexGrow: p.total, flexBasis: 0 }}
+              >
+                <span className="h-full bg-fg" style={{ width: `${(p.done / p.total) * 100}%` }} />
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div
+          className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border ${
+            progress.length > 0 ? '' : 'mt-2 border-t'
+          }`}
+        >
           <button
             type="button"
             onClick={() => setShowDetails((v) => !v)}
@@ -1651,7 +1975,7 @@ export default function Logger() {
         </div>
 
         {showDetails && cycle?.note ? (
-          <p className="mt-1.5 border border-border px-3 py-2 text-sm text-fg">
+          <p className="mt-1.5 rounded-card border border-outline bg-surface px-3 py-2 text-sm text-fg">
             <span className="t-label text-muted">Cycle {cycle.week} · </span>
             {cycle.note}
           </p>
@@ -1663,7 +1987,9 @@ export default function Logger() {
               type="date"
               value={logDate}
               onChange={(e) => changeDate(e.target.value)}
-              className="min-h-11 border border-border bg-surface px-3 text-base tabular-nums text-fg outline-none focus:border-subtle"
+              // FIELD is `w-full`; max-w-max keeps this one at its own width so the
+              // tag toggles still wrap beside it.
+              className={`${FIELD} max-w-max tabular-nums`}
               aria-label="Session date"
             />
             {Object.entries(ACTIVITY_TAGS).map(([key, v]) => {
@@ -1673,10 +1999,12 @@ export default function Logger() {
                   key={key}
                   type="button"
                   onClick={() => toggleTag(key)}
-                  className={`hill-btn flex min-h-11 items-center border bg-surface px-3 t-control transition-colors ${
-                    on ? '' : 'border-border text-muted hover:text-fg'
+                  // Fills from `.hill-btn[aria-pressed]` (accent / tappable);
+                  // the activity colour stays as the on chip's outline.
+                  className={`hill-btn flex min-h-11 items-center border px-3 t-control transition-colors ${
+                    on ? '' : 'text-muted hover:text-fg'
                   }`}
-                  style={on ? { borderColor: v.color, color: v.color } : undefined}
+                  style={on ? { borderColor: v.color } : undefined}
                   aria-pressed={on}
                 >
                   {v.label}
@@ -1687,7 +2015,7 @@ export default function Logger() {
               <button
                 type="button"
                 onClick={() => setShowVibe(true)}
-                className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 t-control text-muted transition-colors hover:text-fg"
+                className="hill-btn flex min-h-11 items-center border border-transparent bg-tappable px-3 t-control text-fg transition-colors hover:bg-tappable-hover"
               >
                 Readiness
               </button>
@@ -1696,7 +2024,7 @@ export default function Logger() {
         ) : null}
 
         {showDetails && linkedSession?.source_text ? (
-          <details className="mt-1.5 border border-border">
+          <details className="mt-1.5 rounded-card border border-outline bg-surface">
             <summary className="cursor-pointer px-3 py-2 t-control text-muted hover:text-fg">
               Source{linkedSession.source ? ` · ${linkedSession.source}` : ''}
             </summary>
@@ -1755,8 +2083,30 @@ export default function Logger() {
               {sectionLabel(section.key)}{' '}
               <span className="text-faint tabular-nums">{groups.length}</span>
             </SectionHeader>
+            {/* The focused movement as its card, then every other unparked
+                group in this section as one-line rows in a single card —
+                "Up next" in the focused section, unlabelled elsewhere since
+                the section header already says what they are. */}
             <div className="flex flex-col gap-2">
-              {groups.map((group, gi) => (parked.has(group.id) ? null : renderGroup(si, gi)))}
+              {focused && focused.si === si ? (
+                <FocusAnchor groupId={focused.g.id} last={lastFocusGroup}>{renderFocusGroup(si, focused.gi, focusIi)}</FocusAnchor>
+              ) : null}
+              {(() => {
+                const rest = groups
+                  .map((g, gi) => ({ g, gi }))
+                  .filter(({ g, gi }) => !parked.has(g.id) && !(focused && focused.si === si && focused.gi === gi));
+                if (rest.length === 0) return null;
+                return (
+                  <div className="rounded-card border border-outline bg-surface">
+                    {focused && focused.si === si ? (
+                      <div className="px-3 pt-2 t-label text-muted">Up next</div>
+                    ) : null}
+                    <div className="flex flex-col [&>*+*]:border-t [&>*+*]:border-border-soft">
+                      {rest.map(({ gi }) => renderUpNextGroup(si, gi))}
+                    </div>
+                  </div>
+                );
+              })()}
               {groups.length === 0 ? (
                 <p className="text-sm text-muted">No movements yet.</p>
               ) : null}
@@ -1798,7 +2148,7 @@ export default function Logger() {
             // a stack of individually bordered cards separated by an 8px gap:
             // the card chrome was costing more height per finished movement
             // than the movement itself.
-            <div className="mt-1 flex flex-col border border-border [&>*+*]:border-t [&>*+*]:border-border-soft">
+            <div className="mt-1 flex flex-col rounded-card border border-outline bg-surface [&>*+*]:border-t [&>*+*]:border-border-soft">
               {doneGroups.map(({ si, gi }) => renderDoneGroup(si, gi))}
             </div>
           ) : null}
@@ -1883,7 +2233,7 @@ export default function Logger() {
               );
               const close = () => setOptionsFor(null);
               const rowClass =
-                'hill-btn inline-flex min-h-11 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg disabled:opacity-40';
+                'hill-btn inline-flex min-h-11 items-center justify-center border border-transparent bg-tappable px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:bg-tappable-hover disabled:opacity-40';
               return (
                 <div className="min-h-0 flex-1 overflow-y-auto p-4">
                   <div className="mb-4 text-sm capitalize text-fg">{item.movement}</div>
@@ -1912,7 +2262,7 @@ export default function Logger() {
                           setDoc((d) => removeItem(d, si, gi, ii));
                           close();
                         }}
-                        className="hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-border bg-surface text-danger transition-colors hover:border-danger"
+                        className="hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-transparent bg-tappable text-danger transition-colors hover:border-danger"
                         aria-label={sub ? 'Remove subroutine' : 'Remove movement'}
                         title={sub ? 'Remove subroutine' : 'Remove movement'}
                       >
@@ -2011,7 +2361,7 @@ export default function Logger() {
                           setDoc((d) => moveGroupToSection(d, si, gi, k));
                           close();
                         }}
-                        className="hill-btn min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-sm text-fg transition-colors hover:border-fg"
+                        className={`${FIELD} min-w-0 flex-1`}
                       >
                         <option value="">Choose…</option>
                         {SECTIONS.filter((k) => k !== currentKey).map((k) => (
@@ -2035,7 +2385,7 @@ export default function Logger() {
                             );
                             close();
                           }}
-                          className="hill-btn min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-sm capitalize text-fg transition-colors hover:border-fg"
+                          className={`${FIELD} min-w-0 flex-1 capitalize`}
                         >
                           <option value="">Choose…</option>
                           {supersetTargets.map(({ group: g, sectionKey }) => (
@@ -2061,7 +2411,7 @@ export default function Logger() {
                       onChange={(e) => setDoc((d) => setItemNotes(d, si, gi, ii, e.target.value))}
                       rows={2}
                       placeholder="Optional — cue, setup, how it felt"
-                      className="w-full resize-none border border-border bg-surface px-2 py-1.5 text-sm text-fg placeholder:text-muted focus:border-fg focus:outline-none"
+                      className={`${FIELD} resize-none py-1.5`}
                     />
                   </div>
 
@@ -2080,8 +2430,8 @@ export default function Logger() {
                             title={desc}
                             onClick={() => setDoc((d) => toggleItemNotation(d, si, gi, ii, sym))}
                             aria-pressed={on}
-                            className={`hill-btn border bg-surface px-2 py-1 text-xs transition-colors ${
-                              on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                            className={`hill-btn border px-2 py-1 text-xs transition-colors ${
+                              on ? '' : 'text-muted hover:text-fg'
                             }`}
                           >
                             {sym}
@@ -2109,8 +2459,8 @@ export default function Logger() {
                                 title={desc}
                                 onClick={() => setDoc((d) => toggleItemNotation(d, si, gi, ii, sym))}
                                 aria-pressed={on}
-                                className={`hill-btn border bg-surface px-2 py-1 text-xs transition-colors ${
-                                  on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                                className={`hill-btn border px-2 py-1 text-xs transition-colors ${
+                                  on ? '' : 'text-muted hover:text-fg'
                                 }`}
                               >
                                 {label}
@@ -2133,10 +2483,8 @@ export default function Logger() {
                           type="button"
                           onClick={() => setDoc((d) => setItemRest(d, si, gi, ii, sec))}
                           aria-pressed={item.restSeconds === sec}
-                          className={`hill-btn border bg-surface px-2 py-1 text-xs tabular-nums transition-colors ${
-                            item.restSeconds === sec
-                              ? 'border-fg text-fg'
-                              : 'border-border text-muted hover:text-fg'
+                          className={`hill-btn border px-2 py-1 text-xs tabular-nums transition-colors ${
+                            item.restSeconds === sec ? '' : 'text-muted hover:text-fg'
                           }`}
                         >
                           {sec}s
@@ -2181,7 +2529,10 @@ export default function Logger() {
                                           setDoc((d) => setSetRest(d, si, gi, ii, ki, v === '' ? null : Number(v)));
                                         }}
                                         aria-label={`Rest after set ${ki + 1}`}
-                                        className="min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-xs tabular-nums text-fg"
+                                        // Not FIELD: two of these share a 375px row with their labels, and
+                                        // FIELD's text-base / px-3 would clip "Same (120s)". FIELD's fill
+                                        // and focus ink at the old size.
+                                        className="min-h-11 min-w-0 flex-1 rounded-control border border-transparent bg-tappable px-2 text-xs tabular-nums text-fg outline-none focus:border-fg"
                                       >
                                         <option value="">{base != null ? `Same (${base}s)` : 'Same'}</option>
                                         {TIMERS.restPresets.map((sec) => (
@@ -2223,8 +2574,8 @@ export default function Logger() {
                             type="button"
                             onClick={() => setDoc((d) => setItemMarkKind(d, si, gi, ii, key))}
                             aria-pressed={on}
-                            className={`hill-btn border bg-surface px-2 py-1 text-xs transition-colors ${
-                              on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                            className={`hill-btn border px-2 py-1 text-xs transition-colors ${
+                              on ? '' : 'text-muted hover:text-fg'
                             }`}
                           >
                             {label}
@@ -2244,8 +2595,8 @@ export default function Logger() {
                               onClick={() => setDoc((d) => setItemMark(d, si, gi, ii, cm))}
                               aria-pressed={on}
                               aria-label={`Box ${inches} inches, ${cm} centimetres, all sets`}
-                              className={`hill-btn border bg-surface px-2 py-1 text-xs tabular-nums transition-colors ${
-                                on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                              className={`hill-btn border px-2 py-1 text-xs tabular-nums transition-colors ${
+                                on ? '' : 'text-muted hover:text-fg'
                               }`}
                             >
                               {inches}in
@@ -2308,7 +2659,7 @@ export default function Logger() {
               {/* Finish takes the width; discard is a 44px square beside it.
                   The size difference IS the safeguard — the two are one gap
                   apart, so what keeps a shaking hand off the wrong one is that
-                  Finish is ~6x the area and filled while discard is a hairline
+                  Finish is ~6x the area and accent-filled while discard is a grey
                   square. It also opens a confirm sheet rather than discarding,
                   which the per-movement trash does not. Both are `min-h-11`
                   with a border so their boxes align to the pixel (see the
@@ -2318,14 +2669,14 @@ export default function Logger() {
                 className="flex-1"
               >
                 Finish
-                <span className="ml-2 text-bg/45 tabular-nums">
+                <span className="ml-2 text-accent-fg/45 tabular-nums">
                   {sessionSets.done}/{sessionSets.total}
                 </span>
               </Button>
               <button
                 type="button"
                 onClick={() => setConfirmDiscard(true)}
-                className="hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-border bg-surface text-muted transition-colors hover:text-fg"
+                className="hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-transparent bg-tappable text-muted transition-colors hover:text-fg"
                 aria-label="Discard session"
                 title="Discard session"
               >

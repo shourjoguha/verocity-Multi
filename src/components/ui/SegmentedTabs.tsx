@@ -1,16 +1,24 @@
-export type SegTab = { key: string; label: string };
+// `strike` draws the label struck through, and `srNote` is appended to the
+// button's accessible name — the plan editor's week picker marks a skipped week this way,
+// so the state survives without colour (and the thumb's fill means "selected",
+// never "skipped").
+export type SegTab = { key: string; label: string; strike?: boolean; srNote?: string };
 
-// The app's segmented control: a bordered SHELL holding a filled THUMB, per the
-// reference design. Previously this rendered detached bordered buttons in a row,
+// The app's segmented control: a filled SHELL (the tappable track) holding an
+// accent THUMB. Previously this rendered detached bordered buttons in a row,
 // which read as three separate controls rather than one control with three
-// states — the shell is what makes "these are alternatives" legible.
+// states — the shell is what makes "these are alternatives" legible. The shell
+// keeps a 1px TRANSPARENT border so it still measures 36px (26 thumb + 2×4
+// padding + 2×1 border) and lines up with anything sized against it.
 //
 // SLIM BY DEFAULT, at EVERY size. The visible thumb is a ~26px inner row
 // (`min-h-[26px]`) so the whole control reads slim per the reference design —
 // this is the standard, not a per-caller override (a `[&_button]:min-h-[26px]`
 // override on one instance is what this replaces). `size` only changes TYPE AND
 // PADDING: `md` (default) is the top-level nav scale, `sm` the in-card scale,
-// `compact` (meal logging, docs/MEAL_LOGGING.md §0.1) tighter still. Font size
+// `compact` (meal logging, docs/MEAL_LOGGING.md §0.1) tighter still; `numeric`
+// is for a row of short numbers (the Logger's RPE row): no side padding and
+// 14px tabular type, so many cells stay readable. Font size
 // never shrinks to buy height — the slimness comes entirely from the thumb.
 //
 // The <button> itself STAYS min-h-11 (44px = TOUCH.minTargetPx) so audit:mobile
@@ -19,7 +27,9 @@ export type SegTab = { key: string; label: string };
 // hit box does not. This is exactly CLAUDE.md's "bigger hit box, not a bigger
 // glyph" applied in reverse: never shrink the button below 44px to get a slim
 // look. Keeping the thumb on an inner span (not the button) is what lets the
-// fill/border/focus ring hug the 26px visual instead of the 44px hit box.
+// fill/focus ring hug the 26px visual instead of the 44px hit box. The button
+// carries no `hill-btn`, so the global aria-pressed fills never reach it; the
+// thumb's own classes paint the state.
 //
 // aria-pressed is mandatory alongside role=tab/aria-selected (or role=radio/
 // aria-checked, see `as` below): ui components in this app key their pressed
@@ -43,7 +53,7 @@ export default function SegmentedTabs({
   active: string;
   onChange: (key: string) => void;
   ariaLabel?: string;
-  size?: 'sm' | 'md' | 'compact';
+  size?: 'sm' | 'md' | 'compact' | 'numeric';
   as?: 'tabs' | 'radiogroup';
   className?: string;
 }) {
@@ -52,7 +62,7 @@ export default function SegmentedTabs({
     <div
       role={as === 'radiogroup' ? 'radiogroup' : 'tablist'}
       aria-label={ariaLabel}
-      className={`t-control grid gap-1 rounded-control border border-border bg-surface p-1 ${className}`}
+      className={`t-control grid gap-1 rounded-control border border-transparent bg-tappable p-1 ${className}`}
       style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
     >
       {tabs.map((t) => {
@@ -65,6 +75,10 @@ export default function SegmentedTabs({
             aria-selected={as === 'radiogroup' ? undefined : on}
             aria-checked={as === 'radiogroup' ? on : undefined}
             aria-pressed={on}
+            // An aria-label, not an sr-only span: an absolutely positioned
+            // child inside a horizontally scrolling picker escapes its
+            // scroller and widens the page's scroll root.
+            aria-label={t.srNote ? `${t.label} ${t.srNote}` : undefined}
             onClick={() => onChange(t.key)}
             // Hit target stays 44px; -my collapses it to the 26px thumb in flow,
             // so the control reads slim without a sub-44px tap target. Focus ring
@@ -73,16 +87,14 @@ export default function SegmentedTabs({
           >
             <span
               className={`flex min-h-[26px] w-full items-center justify-center truncate rounded-chip transition-colors duration-150 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:[outline-color:var(--color-focus)] ${
-                compact ? 'px-1 text-[0.625rem]' : size === 'sm' ? 'px-1.5 text-[0.625rem]' : 'px-3'
+                size === 'numeric'
+                  ? 'px-0 text-sm tabular-nums'
+                  : compact ? 'px-1 text-[0.625rem]' : size === 'sm' ? 'px-1.5 text-[0.625rem]' : 'px-3'
               } ${
-                on
-                  ? as === 'radiogroup'
-                    ? 'bg-accent text-accent-fg'
-                    : 'bg-fg text-bg'
-                  : 'text-muted group-hover:text-fg'
+                on ? 'bg-accent text-accent-fg' : 'text-muted group-hover:text-fg'
               }`}
             >
-              {t.label}
+              <span className={`min-w-0 truncate ${t.strike ? 'line-through' : ''}`}>{t.label}</span>
             </span>
           </button>
         );

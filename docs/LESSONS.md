@@ -589,34 +589,6 @@ the glyphs rather than the layout. Grep is the real guard —
 empty.
 → `src/components/logger/SetRow.tsx`
 
-### Dark-theme cards dissolve into the page while the light theme looks fine
-`[confirmed in the wild]` — reported on the Logger, where movement cards stopped
-reading as objects sitting on the background.
-The two themes were authored to the same token ROLES and the same *lightness
-steps*, which is exactly the trap: **contrast is a ratio, not a difference in
-lightness, and the ratio collapses at the dark end.** Paper put 5 points of L
-between `--color-bg` (95%) and `--color-surface` (100%) and bought 1.117:1.
-Carbon put 3.5 points between #050505 and #0E0E0E and bought **1.055:1 — barely
-half the separation**, from numbers that look comparable in the file. The same
-halving hit `surface → elevated` (1.076:1 against paper's 1.225:1), so tracks,
-hover fills and pressed rows flattened too.
-**Derive a dark value from the light theme's RATIO, never from its step.**
-Matching paper took surface #141414 and elevated #242424 — both far lighter than
-the reference palette's hexes, which are correct as a starting point and wrong
-as a destination. There is a ceiling: `--color-border` at `0.14` white
-composites to ≈15.7% over the page, so an `elevated` above ~15% swallows the
-hairline on `.hill-btn[aria-pressed='true']`, which is filled *and* outlined.
-No check in this repo can see any of it — `audit:mobile` measures overflow and
-tap targets, `audit:flicker` exercises sheets, and neither reads a colour. The
-guard is to measure: render the real markup under `data-theme='dark'`, sample
-the painted `backgroundColor`s and compute the ratio against the light theme's.
-**Sample it after the transition has settled.** `.lift` carries
-`transition: background-color 0.18s`, so a computed colour read straight after
-flipping `data-theme` is a mid-fade value, not the token — it read #1F1F1F for a
-card whose token says #141414 and sent this investigation after a phantom
-override. Set the attribute before first paint, or wait past 180ms.
-→ `src/styles/global.css` (dark token block)
-
 ### Engraved shows no dashed "estimated" outline, though the data says estimated
 `[argued — not reproduced]` (found in code review; the fixture had no estimated muscle)
 Engraved strokes every muscle piece with a solid outline, and the dashed
@@ -644,6 +616,24 @@ are now `useMemo`'d on logs, window length and window end (0.5s). Scoring agains
 the baseline stays per render on purpose: it is cheap and the baseline grows
 mid-session. Any new heavy derivation in `StatsView` needs the same treatment.
 → `src/lib/useAspectProfile.ts`, `src/components/StatsView.tsx`
+
+### A utility class is ignored on a `.hill-btn`
+`[argued — not reproduced]` — the CSS cascade-layer rule, which the code is now
+written around rather than observed failing.
+`rounded-chip`, `bg-*`, `border-*` or `text-*` on an element that also carries
+`.hill-btn` silently loses. Tailwind v4 emits utilities inside
+`@layer utilities`; the `.hill-btn` rules in `global.css` are **unlayered**, and
+unlayered styles beat every layer whatever their specificity. So its
+`--radius-control` beats any `rounded-*`, and its `[aria-pressed]` fills beat any
+colour utility — which is the point: a toggle needs no colour ternary, the
+attribute paints it. The cost is that a control wanting its own radius or fill
+cannot have the class. That is why `FilterChip` puts `aria-pressed` on a bare
+44px button and paints a `rounded-chip` span itself, why `InfoPopover`'s trigger
+and bubble carry neither `.hill-btn` nor `.lift-fixed` (whose card radius is
+unlayered too), and why `SegmentedTabs`' button carries none. If a class "does
+nothing", check for `.hill-btn`, `.lift` or `.lift-fixed` on the same element
+before suspecting the build.
+→ `src/styles/global.css` (`.hill-btn`), `src/components/ui/primitives.tsx` (`FilterChip`)
 
 ## Build & deploy
 
@@ -701,6 +691,24 @@ schema fault indefinitely** — which is also why no check here caught it. `npm 
 the network, and all three browser audits stub Supabase REST, so none of them can see a
 column that does not exist.
 → `src/components/UserStatsPanel.tsx`, `src/components/OnboardingView.tsx`, `src/lib/queries.ts`
+
+### The build breaks on a page importing a component that "still exists locally"
+`[confirmed in the wild]` — Vercel's build of `a7f71ee`; the cause is read off
+the git history, not reproduced.
+Vercel failed with "Rollup failed to resolve import" for the Settings view component, which
+was on disk in the working tree that had just built clean. Several agents shared
+that tree. One had `git rm`'d the file, which **stages** the deletion; another
+agent then committed, and `git commit` takes the whole index — not just the
+paths that agent added — so the staged deletion went in with it, while
+`src/pages/app/settings.astro` — still importing it — was uncommitted
+elsewhere. Each agent's local build passed because each saw the full tree; the
+commit was the first state anyone built that had the deletion and not the
+redirect. `9e44e14` fixed it by committing the redirect.
+**With several agents in one working tree, stage by explicit path and read
+`git diff --cached --stat` before every commit. Never `git rm` in a shared
+tree** — delete the file and leave staging to the orchestrator, so a deletion
+only lands in the commit that also removes its importers.
+→ `src/pages/app/settings.astro`
 
 ## Caching
 
@@ -903,18 +911,6 @@ and keeping the row a genuine `min-h-11` — and it now shows the movement names
 inside a superset, which the taller version did not.
 → `src/components/Logger.tsx`, `src/components/ui/SegmentedTabs.tsx`
 
-### `audit:mobile` never visits `/app/plan/upload`
-`[measured in Chromium]`
-Its `ROUTES` list covers the nav destinations, so the entire plan/session
-authoring surface — every button on `PlanUpload`, including the ones added for
-the AI repair loop — is **unaudited**. A green `audit:mobile` says nothing about
-that page. The same goes for `/app/settings`' newer controls, which are reached
-through a `Disclosure` the audit does not open.
-Checked by hand at 375 and 390 instead: no horizontal overflow, `Copy fix
-request` at 179x44, equipment toggles at `min-h-11`. **If you change
-`PlanUpload` or `UserStatsPanel`, cite a measurement, not the audit.**
-→ `scripts/mobile-audit.mjs`, `src/components/PlanUpload.tsx`
-
 ### Ask the LLM for "no fences, no prose" and it will still send fences and prose
 `[measured — reviewed the shipped code and pasted three model outputs at the parser]`
 `parsePlanTabular` demanded the header on `rawLines[0]`, so a ` ```csv ` fence
@@ -1061,7 +1057,7 @@ line does.
 
 ### Two form controls whose accessible names substring-match each other
 `[measured in Chromium]`
-The Settings stats form has a "Birth year" field and, per injury row, a year
+The You page's stats form has a "Birth year" field and, per injury row, a year
 input labelled `aria-label="Year"`. A Playwright `getByLabel('Year')` matched
 **both**, resolved `.nth(0)` to the birth-year input, and wrote the injury year
 into it — where 2023 fell outside `STATS_LIMITS.birthYear` and parsed to `null`.
@@ -1351,12 +1347,36 @@ as evidence for it.
 `[argued — not reproduced]`
 `bodyMapShade.test.ts` checks that adjacent shade bands stay distinguishable by
 computing WCAG contrast from `--color-surface`, `--color-fg` and `--bm-mango`.
-Vitest cannot read `global.css`, so those HSL values are **copied into the test**.
+It does not read `global.css`, so those HSL values are **copied into the test**
+(`themeTokens.test.ts` does read it, but only for `--color-*` — nothing reads
+`--bm-mango` from the file).
 Change a token and the test keeps passing against the old number; it proves the
 ramp only for the colours it was given. Edit the test's `TOKENS` in the same
 change as the token, in both themes. Mono uses a 1.2 floor between bands and
 colour 1.15 because mango is lighter than the grey ink on white.
 → `src/lib/bodyMapShade.test.ts`, `src/styles/global.css` (`--bm-mango`)
+
+### Audits were green on a palette nobody had looked at
+`[argued — not reproduced]` — read from the three scripts, none of which reads a
+computed colour.
+The warm-palette pass changed every neutral token, three radii, the card
+outline and what "selected" looks like across ~90 files, and `audit:mobile`,
+`audit:shell` and `audit:flicker` would have been exactly as green on a palette
+that put muted text at 2:1 or made a selected tab grey. They measure overflow,
+tap targets, the shell's scroll geometry and sheet behaviour; **none sees
+colour, contrast, radius or fill.** What does: `themeTokens.test.ts`, which parses
+`global.css` (no hand-copied values) and fails on a `--color-*` defined in one
+theme and not the other, or on `muted`/`fg` under 4.5:1 on `bg`, `surface` or
+`tappable`, `accent-fg` on `accent`, or `tappable` under 1.15:1 on `surface` —
+plus rendered screenshots in **both** themes, looked at. Two traps from the
+dark-theme work still hold. Contrast is a ratio, not a lightness step, and it
+collapses at the dark end: derive carbon from paper's *ratios*, never copy its
+steps (the 3.5-point step that looked like paper's 5 bought half the
+separation). And sample a painted colour only after `.lift`'s 0.18s transition
+has settled, or set `data-theme` before first paint — a mid-fade read once sent
+an investigation after a phantom override. The test cannot see a utility that
+paints the wrong token, or a `--bm-*`/`--spr-*` data colour; for those, look.
+→ `src/lib/themeTokens.test.ts`, `src/styles/global.css`
 
 ## Data & privacy
 
@@ -2046,6 +2066,54 @@ The fitness radar:
   above as the assertion.
   → `ActivityStrip` in `src/components/ProfileView.tsx`
 
+The warm palette and the retired Settings page:
+
+- **Dark-theme cards dissolve into the page — derive carbon from paper's ratio,
+  and no check can see it.** Its lesson stands and now lives under "Audits were
+  green on a palette nobody had looked at": contrast is a ratio, not a lightness
+  step, and a colour sampled inside `.lift`'s 0.18s transition is a mid-fade
+  value. Everything else went with the warm palette. The hexes (#141414,
+  #242424) are not the tokens any more; the ceiling on `elevated` existed
+  because a pressed `.hill-btn` was filled *and* outlined in `--color-border`,
+  and a pressed toggle is now accent filled and accent bordered; and "no check
+  can see it" stopped being true when `themeTokens.test.ts` started computing
+  the ratios from `global.css`. What it said:
+
+  `[confirmed in the wild]` — reported on the Logger, where movement cards stopped
+  reading as objects sitting on the background.
+  The two themes were authored to the same token ROLES and the same *lightness
+  steps*, which is exactly the trap: **contrast is a ratio, not a difference in
+  lightness, and the ratio collapses at the dark end.** Paper put 5 points of L
+  between `--color-bg` (95%) and `--color-surface` (100%) and bought 1.117:1.
+  Carbon put 3.5 points between #050505 and #0E0E0E and bought **1.055:1 — barely
+  half the separation**, from numbers that look comparable in the file. The same
+  halving hit `surface → elevated` (1.076:1 against paper's 1.225:1), so tracks,
+  hover fills and pressed rows flattened too.
+  **Derive a dark value from the light theme's RATIO, never from its step.**
+  Matching paper took surface #141414 and elevated #242424 — both far lighter than
+  the reference palette's hexes, which are correct as a starting point and wrong
+  as a destination. There is a ceiling: `--color-border` at `0.14` white
+  composites to ≈15.7% over the page, so an `elevated` above ~15% swallows the
+  hairline on `.hill-btn[aria-pressed='true']`, which is filled *and* outlined.
+  No check in this repo can see any of it — `audit:mobile` measures overflow and
+  tap targets, `audit:flicker` exercises sheets, and neither reads a colour. The
+  guard is to measure: render the real markup under `data-theme='dark'`, sample
+  the painted `backgroundColor`s and compute the ratio against the light theme's.
+  **Sample it after the transition has settled.** `.lift` carries
+  `transition: background-color 0.18s`, so a computed colour read straight after
+  flipping `data-theme` is a mid-fade value, not the token — it read #1F1F1F for a
+  card whose token says #141414 and sent this investigation after a phantom
+  override. Set the attribute before first paint, or wait past 180ms.
+  → `src/styles/global.css` (dark token block)
+
+- **`audit:mobile` never visits `/app/plan/upload`, nor the Settings controls
+  behind a `Disclosure`.** Both halves are gone. `/app/plan/upload` is in its
+  `ROUTES`, with a `plan_templates` stub so the picker renders, and the Settings
+  page is a redirect: its controls live on `/app/you`, and the audit loads
+  `/app/you#holidays` and `/app/you#coach-icon`, which `openFromHash()` unfolds,
+  so the folded sections are measured open. The by-hand check it recorded
+  (`Copy fix request` at 179x44 at 375 and 390) was right at the time.
+
 ## Decisions
 
 - **Body-map shade is each muscle's share of the period's TOTAL, not of the
@@ -2070,8 +2138,8 @@ The fitness radar:
   *summary*, not a shrunken logging card (`renderDoneGroup` in `Logger.tsx`):
   one 44px row per movement reading `✓ name [tags] 60 × 8, 60 × 8`, the same
   shape `LogQuickView` and `SessionDetail` use for a finished workout, inside
-  one bordered pile with `--color-border-soft` dividers instead of a stack of
-  bordered cards with an 8px gap. A superset lists its movements indented under
+  one card with `--color-border-soft` dividers instead of a stack of
+  separate cards with an 8px gap. A superset lists its movements indented under
   its kind rather than hiding them behind "2 movements". Tapping any row expands
   the group back into the full editable card, which is the only reason the
   controls can leave the summary at all.

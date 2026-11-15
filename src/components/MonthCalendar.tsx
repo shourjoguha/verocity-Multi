@@ -128,7 +128,7 @@ export function MonthCalendar({
   };
 
   const navBtn =
-    'hill-btn min-h-11 min-w-11 border border-border bg-surface px-3 text-fg transition-colors hover:border-fg';
+    'hill-btn min-h-11 min-w-11 border border-transparent bg-tappable px-3 text-fg hover:bg-tappable-hover';
 
   const arrowBtn =
     '-my-3 inline-flex h-11 w-11 items-center justify-center text-fg transition-colors hover:text-muted';
@@ -184,14 +184,15 @@ export function MonthCalendar({
       </div>
 
       {/* One bordered card with hairline dividers, the same treatment as
-          `StatStrip` and the plan unit above it — outer `--color-border`
-          outlines, inner `--color-border-soft` divides. It was previously an
+          `StatStrip` and the plan unit above it — outer `--color-outline`
+          (transparent today, so the gutter fill shows through as a soft edge),
+          inner `--color-border-soft` divides. It was previously an
           unbounded grid whose full-weight gutters made every day read as its
           own tile, which is what the stat tiles used to do too.
           `overflow-hidden` is what makes the radius real: the day cells are
           opaque and square, so without a clip they paint over all four
           corners. */}
-      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-card border border-border bg-border-soft">
+      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-card border border-outline bg-border-soft">
         {cells.map((day, i) => {
           // Every cell is placed explicitly so the holiday ribbons below can
           // share its grid area without disturbing auto-placement.

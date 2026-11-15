@@ -70,7 +70,7 @@ function SheetBody({
                 color={tagColor(t)}
               />
             ))}
-            {isShared ? <Tag label="Shared" color="hsl(210 9% 55%)" /> : null}
+            {isShared ? <Tag label="Shared" /> : null}
           </div>
         )}
 
@@ -103,7 +103,7 @@ function SheetBody({
         )}
 
         {session.source_text ? (
-          <details className="mt-5 border border-border">
+          <details className="mt-5 rounded-control bg-bg">
             <summary className="cursor-pointer px-3 py-2 t-control text-muted hover:text-fg">
               Source{session.source ? ` · ${session.source}` : ''}
             </summary>
@@ -136,7 +136,7 @@ function SheetBody({
             href={`/app/log?session=${encodeURIComponent(session.id)}${
               levels.length > 0 ? `&level=${level}` : ''
             }`}
-            className="hill-btn flex h-11 items-center gap-2 border border-fg bg-surface px-4 t-control text-fg"
+            className="hill-btn flex h-11 items-center gap-2 border border-accent bg-accent px-4 t-control text-accent-fg"
           >
             <PlayGlyph className={SHEET_GLYPH} />
             Start
@@ -189,8 +189,8 @@ function BlockCard({ block }: { block: Block }) {
   if (block.restSeconds) meta.push(`${block.restSeconds}s rest`);
 
   return (
-    <div className="border border-border">
-      <div className="flex items-baseline justify-between gap-3 border-b border-border px-3 py-2">
+    <div className="rounded-control bg-bg">
+      <div className="flex items-baseline justify-between gap-3 border-b border-border-soft px-3 py-2">
         <div className="min-w-0 flex-1">
           <div className="t-eyebrow text-muted">
             {block.label ?? sectionLabel(block.section)}
@@ -204,7 +204,7 @@ function BlockCard({ block }: { block: Block }) {
         {block.items.map((it, i) => (
           <li
             key={i}
-            className="flex items-baseline gap-3 border-b border-border px-3 py-2 last:border-b-0"
+            className="flex items-baseline gap-3 border-b border-border-soft px-3 py-2 last:border-b-0"
           >
             <div className="min-w-0 flex-1">
               <div className="truncate text-fg">{it.movement}</div>

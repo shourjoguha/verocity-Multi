@@ -241,7 +241,7 @@ check by eye on phone width.
 Copy the `coachSpritePrefs.ts` pattern exactly: `src/lib/bodyMapPrefs.ts`
 (localStorage key, change event, guarded reads), `BodyMapStylePicker.tsx`
 using `ui/SegmentedTabs`, rendered in `SettingsView.tsx` next to the coach icon
-picker. Values: `plates` (default), `engraved`, `thermal`. Per device (D7).
+picker (both now in You → Appearance, `YouView.tsx`; SettingsView is deleted). Values: `plates` (default), `engraved`, `thermal`. Per device (D7).
 
 ### Phase F4a: Engraved (Sonnet), F4b: Thermal (Opus)
 

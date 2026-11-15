@@ -19,7 +19,10 @@ export function LogList({
 }) {
   const shapeOf = useMemo(() => sessionShaper(history ?? logs), [history, logs]);
   return (
-    <ul className="lift border border-border bg-surface">
+    // overflow-hidden so the first and last rows' stripes and hover fill are
+    // clipped to the card's 12px corner instead of squaring it off. The stripe
+    // itself stays on the row (no radius), so it never curls.
+    <ul className="overflow-hidden rounded-card border border-outline bg-surface">
       {logs.map((log) => {
         // The stripe is the only place the tag shows: the pill beside it said
         // the same thing and was the widest thing in the row.
@@ -43,7 +46,7 @@ export function LogList({
               <button
                 type="button"
                 onClick={() => onSelect(log)}
-                className="flex min-h-11 w-full items-center gap-3 px-3 py-1 text-left transition-colors hover:bg-elevated"
+                className="flex min-h-11 w-full items-center gap-3 px-3 py-1 text-left transition-colors hover:bg-tappable"
                 style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
               >
                 {inner}

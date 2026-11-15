@@ -252,8 +252,8 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   birth_year, gender, body_type, injuries jsonb` (migration 0020) plus
   `goals jsonb, experience, days_per_week, equipment jsonb,
   preferred_plan_weeks` (migration 0030).
-  Edited from the **You** group on `/app/settings` and `/app/you`
-  (`UserStatsPanel.tsx`; `goals` is owned by `GoalsEditor.tsx`).
+  Edited on `/app/you` (`UserStatsPanel.tsx`; `goals` is owned by
+  `GoalsEditor.tsx`). `/app/settings` is only a redirect there now.
   **A separate table, not columns on `profiles`, for one reason:**
   `profiles_select_showcase` grants `anon` a **whole-row** read of the showcase
   profile and `getCurrentProfile` is `select('*')`, so a column added to
@@ -523,7 +523,7 @@ Function, which validates the token and performs scoped read-only queries.
 > (`/app/coach`, `src/lib/coach/`), Garmin integration
 > (`garmin-connect` / `garmin-ingest` + `GarminPanel`), heart-rate and fitness
 > assessments, library subroutines, PR detection, the three-way theme toggle,
-> and `/app/settings`.
+> and the You page's settings (`/app/settings`, now a redirect to `/app/you`).
 
 ### Pages
 - **Home** — dashboard, ordered so the next workout leads: header meta (date ·
@@ -619,19 +619,23 @@ Single source of truth for blocks/sections, metrics, RPE, timers, activity tags
 ## 11. Visual / Design Direction
 
 A **flat, typographic identity**: Archivo Black + Space Grotesk, HSL tokens,
-hairline borders, a small radius scale (3px chips / 4px controls / 6px cards),
+no card outlines, a three-step radius (6px chips / 8px controls / 12px cards),
 tabular numbers, uppercase tracking, the typographic **Echo Stack**, and bold
 CSS-first motion. Monochrome in the chrome; colour only where it carries
 information.
 
 **Light and dark are equals** — both authored against the same token roles
 rather than one derived from the other, and `system` is the default. Light is
-paper (`#f2f2f2` / `#111111`), dark is carbon (`#050505` / white).
+warm paper (`hsl(40 22% 94%)` / ink `hsl(30 10% 9%)`), dark is warm carbon
+(`hsl(30 10% 4%)` / `hsl(40 30% 96%)`): a low-saturation hue on the neutral
+scale, with the data colours unchanged. Chrome reads in three fills — surface
+for content, tappable for what responds to a tap, accent for selected or the
+one primary.
 
 This supersedes the earlier "Swiss-minimalist, light editorial, sharp corners,
 3D pillow buttons" direction. Simulated depth is gone: every shadow token
-resolves to `none`, and surfaces separate with a hairline and a surface-tone
-step. `CLAUDE.md`'s hard rules are canonical on all of this.
+resolves to `none`, and cards separate from the page by a surface-tone step
+alone; a hairline is kept for dividers, edge bars and floating layers. `CLAUDE.md`'s hard rules are canonical on all of this.
 
 Elevate via:
 - **Astro View Transitions** for cheap, native page-to-page motion.

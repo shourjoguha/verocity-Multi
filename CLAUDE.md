@@ -23,6 +23,7 @@ intent, LESSONS describes what actually happened.
 | Edit plan/log JSONB or domain types                                      | `docs/SPEC.md` §8, `lib/types.ts`                 |
 | Touch saved sessions (templates / frames)                                | `docs/SPEC.md` §8, `SessionsView.tsx`             |
 | Change visuals, tokens, or layout                                        | **Hard rules below** (canonical), then `app.config.ts` |
+| **Change the palette, radius, card outline or what "selected" looks like** | `src/styles/global.css` token blocks + `.hill-btn` rules, then `themeTokens.test.ts` |
 | Touch the AI coach                                                       | `supabase/functions/coach/index.ts`, `lib/deepGovernors.ts` |
 | **Change when a finding is allowed to speak again**                      | `src/lib/coach/recurrence.ts` — read its header first |
 | **Change how a coach rule measures** (sections, sessions, a threshold)   | add a dated entry to `DEFINITION_CHANGES` in `src/lib/coach/outcome.ts` |
@@ -124,14 +125,20 @@ UI audit have both run.
   A hardcoded hex breaks dark mode silently, and light and dark are now
   authored as **equals** rather than dark being derived — a token defined in
   only one theme block is the most expensive mistake available in `global.css`.
-  Identity: **Archivo Black + Space Grotesk**, flat hairlines, 4px/6px radius,
-  tabular numbers, the typographic Echo Stack, **CSS-first motion** (see the
-  sheet entry in LESSONS for why JS-driven animation was removed from overlays).
+  Identity: **Archivo Black + Space Grotesk**, warm paper (light) / warm carbon
+  (dark) — a low-saturation hue 30–40 on the neutral scale, data colours
+  untouched — and a three-step radius: `--radius-chip` 6px, `--radius-control`
+  8px, `--radius-card` 12px. Use the tokens, never `rounded-[4px]`, bare
+  `rounded` or `rounded-sm` on chrome; `rounded-[1px]`/`[2px]` stay on data
+  marks (chart cells, swatches, bars). Tabular numbers, the typographic Echo
+  Stack, **CSS-first motion** (see the sheet entry in LESSONS for why JS-driven
+  animation was removed from overlays).
   Archivo Black ships **one weight** — never pair `font-display` with a weight
   utility; the `.font-display` rule in `global.css` pins it and kills synthesis,
   because a synthesised bold is *wider* and blows the StatCard width budget.
 - **Monochrome chrome; colour only on data.** Buttons, tabs, headers, cards,
-  rows and every other piece of chrome stay in the `--color-*` greyscale. Colour
+  rows and every other piece of chrome stay on the neutral `--color-*` scale —
+  warm-tinted now, not pure grey, but still one hue and no information. Colour
   is legal only where it *carries information*: activity/tone stripes, modality
   segments, the consistency grid, `--color-up` / `--color-down` on a delta, and
   the body map's Colour ink (`--bm-mango`, opt-in per device, Mono is the
@@ -139,9 +146,34 @@ UI audit have both run.
   Anything colour-coded must also survive without colour — `Delta` renders an
   arrow and a signed number, not just a hue.
   **One exception, by the owner's decision:** the Home coach icon may render in
-  colour (Settings → Coach icon → Ink: Colour, the default). Its colours are the
-  `--spr-*` tokens in `global.css`, defined in both themes — never raw values in
-  `CoachSprite.tsx`. Mono stays available. Do not "fix" this back to greyscale.
+  colour (You → Appearance → Coach icon → Ink: Colour, the default). Its colours
+  are the `--spr-*` tokens in `global.css`, defined in both themes — never raw
+  values in `CoachSprite.tsx`. Mono stays available. Do not "fix" this back to
+  greyscale.
+- **Three fills carry the chrome, and grey never means selected.**
+  `bg-surface` = content (cards, rows, read-only values). `bg-tappable`
+  (`--color-tappable`, hover `--color-tappable-hover`) = you can tap this —
+  secondary buttons, fields, segmented tracks, unselected toggles — with **no
+  visible border at rest**. `bg-accent text-accent-fg` = selected, or THE one
+  primary action, at most one per card. Use those, not `bg-fg text-bg`.
+  Pick-one is `ui/SegmentedTabs`, never a row of detached toggles; pick-many is
+  toggles with `aria-pressed` (on = accent, off = tappable). A nested
+  non-interactive box inside a card is a `bg-bg` well, never `bg-tappable` —
+  the fill is a promise that it responds. The central lever is
+  `.hill-btn[aria-pressed]` in `global.css`: it is **unlayered**, so it beats
+  every `bg-`/`border-`/`text-` utility on the same element and a toggle needs
+  no colour ternary of its own — and a control that needs its own radius or
+  fill must not carry `.hill-btn` (`FilterChip`, `InfoPopover`).
+  **One deliberate exception:** the active nav tab keeps the grey `.tab-bubble`,
+  because the centre Log slot is already the accent cell and a second accent
+  cell in the bar would make two things look primary.
+- **Inputs use `FIELD`.** One shared class string exported from
+  `ui/primitives.tsx` for every input, select and textarea: tappable fill,
+  transparent border at rest, ink border on focus, `text-base` (16px — iOS zooms
+  into anything smaller on focus). No local `inputClass` copies.
+  `FIELD_DENSE` (same file: 36px, tighter padding, still `text-base`) is
+  allowed only for the repeated rows of a tabular editor — the plan editor grid
+  and the session form's movement rows — never for a standalone field.
 - **Default to 3–4 things; collapse the rest.** A data-heavy screen leads with
   one headline and one primary visual. Everything else goes behind
   `ui/Disclosure` (native `<details>`, no JS state, no animation to get wrong)
@@ -156,10 +188,13 @@ UI audit have both run.
   `aurora` preset (labelled "Depth" in the UI) mounts `BackgroundScene3DCanvas`,
   lazy-loaded via `client:idle` + dynamic import. New backdrops stay monochrome
   and derived from the existing `--color-*` tokens. The user toggle is
-  `BackgroundPicker.tsx`, rendered in `SettingsView.tsx`.
+  `BackgroundPicker.tsx`, rendered in You → Appearance (`YouView.tsx`).
   The body map has its own per-device style (`plates` default, `engraved`,
-  `thermal`; `src/lib/bodyMapPrefs.ts`), also picked in Settings. Plates also
+  `thermal`; `src/lib/bodyMapPrefs.ts`), also picked in Appearance. Plates also
   take an ink pref (`mono` default, `colour`).
+  There is no Settings page: `/app/settings` is a redirect to `/app/you`
+  (`?tab=holidays` → `#holidays`), and `YouView`'s `openFromHash()` opens
+  whichever `Disclosure` the hash names, nested ones included.
 - **Body-map shade is a share of the TOTAL, in seven fixed bands.**
   `src/lib/bodyMapShade.ts`: untrained plus six worked bands with edges at
   1 / 2.5 / 5 / 8 / 12 % of the active measure's total, never relative to the
@@ -170,19 +205,30 @@ UI audit have both run.
   `bodyMapShade.test.ts` whose token values (`--color-surface`, `--color-fg`,
   `--bm-mango`, both themes) are **copied from `global.css` by hand** — change
   a token and you must change the test, or it passes against stale colours.
+  The palette as a whole is not hand-copied: `themeTokens.test.ts` parses
+  `global.css` directly and fails if a `--color-*` token exists in one theme
+  block and not the other, or if `muted`/`fg` on `bg`/`surface`/`tappable`,
+  `accent-fg` on `accent`, or `tappable` against `surface` miss their ratios.
 - **Default backdrop is device-gated.** Base.astro's pre-paint script picks
   `aurora` only when `(min-width: 768px) and (pointer: fine)` AND no
   `prefers-reduced-motion`. Touch / narrow / reduced-motion devices default
   to the `topography` CSS preset (still a depth cue, no WebGL). Never
   unconditionally default to the 3D scene — the three.js chunk is
   ~170KB gzip and would tank LCP on mobile.
-- **Depth is retired; separation is a hairline.** `--shadow-lift-rest`,
-  `--shadow-lift-hover`, `--shadow-ledge` and all six `--hill-btn-*` resolve to
-  `none` in **both** themes. Surfaces separate with a 1px `--color-border` and a
-  surface-tone step — never a cast shadow, and never an inlined `box-shadow` in
-  a component. Two hairline weights, and the distinction carries the look:
-  `--color-border` outlines a card, `--color-border-soft` divides rows *inside*
-  one (see `ListCard`).
+- **Depth is retired; a card is a tone step, not an outline.**
+  `--shadow-lift-rest`, `--shadow-lift-hover`, `--shadow-ledge` and all six
+  `--hill-btn-*` resolve to `none` in **both** themes — never a cast shadow, and
+  never an inlined `box-shadow` in a component. A card is
+  `rounded-card border border-outline bg-surface` and separates from the page
+  by the surface-tone step alone: `--color-outline` is `transparent` in both
+  themes. The 1px border stays in layout so that token is **the single lever
+  that puts card outlines back** without moving anything. `--color-border` now
+  means dividers at screen edges (header, tab bar, Finish bar) and the edge of
+  **floating** layers — popover, menu, toast — which keep a visible border
+  because with no shadows nothing else separates them from the card beneath.
+  `--color-border-soft` divides rows *inside* a card (see `ListCard`). A nested
+  non-interactive box inside a card is a `rounded-control bg-bg` well, with no
+  border.
   `.lift` is now the flat card treatment (radius + a fill/border transition);
   `.lift-interactive` changes fill and border on hover instead of tilting.
   **The two sibling classes survive on purpose, and their reasons outlive the
@@ -218,12 +264,18 @@ UI audit have both run.
   here as the hook the pressed-in pillow needed, which undersold it: it is an
   accessibility contract, `ui/SegmentedTabs` depends on it, and the flat pressed
   state is keyed off it too. It did not go away with the shadows.
-  Ghost variants keep their `bg-surface` body — now for the hover fill rather
-  than a highlight inset. `.hill-btn-flush` is kept for callers that name it.
-- **Segmented controls are `ui/SegmentedTabs`.** A bordered shell holding a
-  filled thumb; five hand-rolled copies were consolidated into it. Do not roll a
-  sixth. **Slim by default at every size** — the visible thumb is a ~26px inner
-  row (`min-h-[26px]` on a `<span>`), so the whole control reads slim per the
+  `Button` primary is `bg-accent text-accent-fg`; ghost (secondary) is a
+  `bg-tappable` fill with a transparent border, `hover:bg-tappable-hover`. Both
+  carry a 1px border so the two variants measure the same side by side.
+  `:active` is a border cue only and sets **no background** — it used to, and
+  put a grey fill under the light text of every primary button for the length
+  of the press. `.hill-btn-flush` is kept for callers that name it.
+- **Segmented controls are `ui/SegmentedTabs`.** A filled tappable track (1px
+  transparent border, so it still measures 36px) holding an accent thumb, in
+  both `as="tabs"` and `as="radiogroup"`; five hand-rolled copies were
+  consolidated into it. Do not roll a sixth. The `<button>` carries no
+  `.hill-btn` — the thumb span paints the state. **Slim by default at every
+  size** — the visible thumb is a ~26px inner row (`min-h-[26px]` on a `<span>`), so the whole control reads slim per the
   reference design. `size` (`md`/`sm`/`compact`) changes **type and padding
   only**, never height, and font size never shrinks to buy slimness. Do not add
   a per-caller height override (a `[&_button]:min-h-[26px]` on one instance is

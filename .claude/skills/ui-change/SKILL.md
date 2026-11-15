@@ -45,7 +45,14 @@ change one. If the task needs a schema change, stop and hand off — see
 ## Reuse before you write
 
 - `src/components/ui/primitives.tsx` — `Button`, `Card`, `SectionHeader`,
-  `StatCard`, `Tag`, `LoadingScreen`, `EmptyState`. Imported by ~24 components.
+  `StatCard`, `Tag`, `FilterChip`, `LoadingScreen`, `EmptyState`, and `FIELD`,
+  the one class string for every input, select and textarea (no local
+  `inputClass`). Imported by ~24 components.
+- `src/components/ui/SegmentedTabs.tsx` — every pick-one control.
+- `src/components/ui/ActionMenu.tsx` — a "⋯" menu of navigation links, for when
+  a row of header buttons would crowd the title.
+- `src/components/ui/InfoPopover.tsx` — the "!" caption bubble; clamps itself
+  inside a 375px viewport.
 - `src/components/ui/Modal.tsx` — the one sheet/modal. Read its comments; they
   explain the flicker fixes rather than just describing behaviour.
 - `src/components/EchoText.tsx` — the typographic Echo Stack, used in 17 files.
@@ -91,24 +98,44 @@ of token overrides under `html[data-theme='dark']` in `src/styles/global.css`;
 a hardcoded hex breaks it silently and no check will catch it. Colors are HSL,
 declared in the `@theme` block.
 
-- **Depth is retired — separation is a hairline.** `--shadow-lift-*`,
+- **The palette is warm paper / warm carbon**, and the radius is three tokens:
+  `rounded-chip` 6px, `rounded-control` 8px, `rounded-card` 12px. No
+  `rounded-[4px]`, bare `rounded` or `rounded-sm` on chrome; `rounded-[1px]` /
+  `[2px]` stay on data marks. `src/lib/themeTokens.test.ts` parses `global.css`
+  and fails on a token missing from one theme or a contrast ratio under target.
+- **Three fills, and grey never means selected.** `bg-surface` = content;
+  `bg-tappable` = can be tapped, no visible border at rest; `bg-accent
+  text-accent-fg` = selected or the one primary (at most one per card). Pick-one
+  is `ui/SegmentedTabs`; pick-many is `aria-pressed` toggles. The lever is
+  `.hill-btn[aria-pressed]` in `global.css` — **unlayered**, so it beats any
+  `bg-`/`border-`/`text-`/`rounded-` utility on the same element. A control that
+  needs its own radius or fill must not carry `.hill-btn` (that is why
+  `FilterChip` and `InfoPopover` do not). The one exception: the active nav tab
+  keeps the grey `.tab-bubble`, because the centre Log slot is already the
+  accent cell.
+- **Depth is retired, and a card has no visible outline.** `--shadow-lift-*`,
   `--shadow-ledge` and all six `--hill-btn-*` resolve to `none` in **both**
-  themes. Surfaces separate with a 1px `--color-border` and a surface-tone step,
-  never a cast shadow and never an inline `box-shadow`. `.lift` is now the flat
-  card treatment (radius + a fill/border transition); `.lift-interactive`
-  changes fill and border on hover instead of tilting. Two hairline weights and
-  the distinction carries the look: `--color-border` outlines a card,
-  `--color-border-soft` divides rows *inside* one (see `ListCard`). Rows inside
-  a hairline-divider container stay flat — that is the default now, not the
-  exception. **Any surface whose transform is animated takes `.lift-fixed`.**
+  themes — never a cast shadow, never an inline `box-shadow`. A card is
+  `rounded-card border border-outline bg-surface`; `--color-outline` is
+  `transparent` in both themes and is the single lever that puts outlines back
+  (the 1px stays in layout). `--color-border` is for edge bars and **floating**
+  layers (popover, menu, toast), which keep it because nothing else separates
+  them now; `--color-border-soft` divides rows *inside* a card (see
+  `ListCard`). A nested non-interactive box in a card is a `rounded-control
+  bg-bg` well. `.lift` is the flat card treatment; `.lift-interactive` changes
+  fill and border on hover. **Any surface whose transform is animated takes
+  `.lift-fixed`** — and note it carries an unlayered card radius.
 - **Buttons are flat** — `.hill-btn` is `--radius-control` plus a fill/border
   state change. No insets, no outer cast, and **no transform in any state**:
   several of these sit inside surfaces carrying `pointer-fine:backdrop-blur-*`,
-  and a transform there promotes a composited layer. Toggle buttons MUST still
-  set `aria-pressed` — that is an accessibility contract, `ui/SegmentedTabs`
-  depends on it, and the flat pressed state is keyed off it. `.hill-btn-flush`
-  is kept for callers that name it. Ghost variants keep their `bg-surface` body,
-  now for the hover fill. Icon-only buttons h-5..h-8 stay flat by design.
+  and a transform there promotes a composited layer. `Button` primary is accent;
+  ghost is a `bg-tappable` fill. `:active` is a border cue and sets no
+  background. Toggle buttons MUST still set `aria-pressed` — that is an
+  accessibility contract, `ui/SegmentedTabs` depends on it, and the pressed
+  fill is keyed off it. `.hill-btn-flush` is kept for callers that name it.
+  Icon-only buttons h-5..h-8 stay flat by design.
+- **Segmented controls** are a filled tappable track with an accent thumb (both
+  `as` modes); the thumb is a 26px span, the button stays `min-h-11`.
 - **EchoText layers** must set both `--echo-dx` and `--echo-tz`.
 - **Backdrop presets are enumerated only in `src/lib/background.ts`**
   (`BACKGROUNDS`, `BACKGROUND_KEYS`). New presets stay monochrome and derived

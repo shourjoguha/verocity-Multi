@@ -32,7 +32,7 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content={description} />
     <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#f2f2f2" />
+    <meta name="theme-color" content="#f3f1ec" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
@@ -84,7 +84,7 @@ const {
             document.documentElement.setAttribute('data-theme', r);
             document.documentElement.style.colorScheme = r;
             var m = document.querySelector('meta[name="theme-color"]');
-            if (m) m.setAttribute('content', r === 'dark' ? '#050505' : '#f2f2f2');
+            if (m) m.setAttribute('content', r === 'dark' ? '#0b0a09' : '#f3f1ec');
             return r;
           } catch (e) {
             document.documentElement.setAttribute('data-theme', 'light');

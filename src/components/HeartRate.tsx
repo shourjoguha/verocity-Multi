@@ -95,8 +95,12 @@ export function HeartRate({
     );
   }
 
+  // FIELD's treatment (ui/primitives) at an inline width. Not FIELD itself: its
+  // `w-full`/`px-3`/`min-h-11` would collide with the overrides here, and with
+  // no class merging the winner is stylesheet order, not class order.
+  // `text-base` for the same reason FIELD has it — iOS zooms into anything smaller.
   const inputCls =
-    'w-14 border border-border bg-surface px-2 py-1 text-center text-sm tabular-nums text-fg focus:border-fg focus:outline-none';
+    'w-14 rounded-control border border-transparent bg-tappable px-2 py-1 text-center text-base tabular-nums text-fg outline-none placeholder:text-muted focus:border-fg';
   return (
     <span className="inline-flex items-center gap-1.5 text-sm text-muted">
       <span aria-hidden="true">♥</span>
@@ -122,14 +126,14 @@ export function HeartRate({
         type="button"
         onClick={save}
         disabled={saving}
-        className="hill-btn ml-1 inline-flex min-h-8 items-center bg-fg px-2 t-control text-bg transition-colors hover:bg-fg/85 disabled:opacity-40"
+        className="hill-btn ml-1 inline-flex min-h-8 items-center border border-accent bg-accent px-2 t-control text-accent-fg disabled:opacity-40"
       >
         {saving ? 'Saving…' : 'Save'}
       </button>
       <button
         type="button"
         onClick={() => setEditing(false)}
-        className="hill-btn inline-flex min-h-8 items-center border border-border bg-surface px-2 t-control text-fg transition-colors hover:border-fg"
+        className="hill-btn inline-flex min-h-8 items-center border border-transparent bg-tappable px-2 t-control text-fg hover:bg-tappable-hover"
       >
         Cancel
       </button>

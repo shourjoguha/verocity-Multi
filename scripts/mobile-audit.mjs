@@ -344,11 +344,19 @@ const ROUTES = [
   '/app/plan',
   '/app/plan/view',
   '/app/plan/upload',
+  // The plan editor: day picker, section tabs, one stepper card per exercise.
+  // Not measured until it stopped being a sideways-scrolling table.
+  '/app/plan/edit',
   '/app/review',
   '/app/sessions',
   '/app/library',
-  '/app/settings',
-  '/app/settings?tab=holidays',
+  // /app/settings is now a redirect to /app/you. Its two entries became the
+  // states of /app/you that a plain load leaves folded: the Holidays section,
+  // and Appearance with its Coach icon row (#coach-icon opens both). Plus
+  // /app/shares, the full share list the You page now links to.
+  '/app/you#holidays',
+  '/app/you#coach-icon',
+  '/app/shares',
   '/app/activity',
   '/app/activity?mode=holiday',
   '/app/onboarding',

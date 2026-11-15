@@ -3,7 +3,7 @@ import { GOAL_DEFAULTS, GOALS, GOAL_WEIGHT, STATS_LIMITS, type GoalKey } from '@
 import { getUserStats, upsertUserStats } from '@/lib/queries';
 import type { Goal } from '@/lib/types';
 import { toast } from '@/lib/toast';
-import { Button } from '@/components/ui/primitives';
+import { Button, FIELD } from '@/components/ui/primitives';
 
 // Rank + weight the user's training goals, stored on `user_stats.goals`
 // (migration 0030). LIST ORDER IS THE RANK — the array is saved in the order
@@ -24,16 +24,26 @@ const DEFAULTS: Goal[] = GOAL_DEFAULTS.map((g) => ({
   weight: g.weight,
 }));
 
-// 44px, not 32. Three of these per goal row (up / down / remove) is what made
-// /app/you the worst offender in audit:mobile rule 2 — five goals put fifteen
-// sub-44px targets on the page by itself. The glyphs inside are unchanged; only
-// the hit box grew, and -mx-1.5 keeps the wider row from pushing the goal label
-// around. See TOUCH.minTargetPx in app.config.ts.
-const rowBtn =
-  '-mx-1.5 inline-flex h-11 w-11 items-center justify-center text-muted transition-colors hover:text-fg disabled:opacity-30 disabled:hover:text-muted';
+// Each goal is ONE compact row — rank, label, a thin weight bar, the weight —
+// and the row itself is the button that opens it. Only one row is open at a
+// time; the open row adds the weight slider and Up / Down / Remove. The row is a
+// genuine min-h-11 with no negative margin: a faked row height overlaps its
+// neighbours in a vertical list (docs/LESSONS.md, "The slim-thumb trick does not
+// transfer to a stacked list"). Rows are divided by soft hairlines, no gaps.
+//
+// Save stays explicit (owner decision: changes must be discardable — leave the
+// page and nothing was written), and is the section's one primary. It enables
+// only when the list differs from what is stored, or when nothing is stored yet
+// and the defaults on screen have never been saved.
+
+const span = GOAL_WEIGHT.max - GOAL_WEIGHT.min;
+const sameGoals = (a: Goal[], b: Goal[]) => JSON.stringify(a) === JSON.stringify(b);
 
 export function GoalsEditor() {
   const [goals, setGoals] = useState<Goal[]>(DEFAULTS);
+  // What is stored, or null when nothing has ever been saved.
+  const [saved, setSaved] = useState<Goal[] | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -47,7 +57,10 @@ export function GoalsEditor() {
       // wants none can remove them all and save, which stores [] and reads back
       // as the defaults again. Living with that: an empty goal list carries no
       // information for the prompt anyway.
-      if (stats?.goals?.length) setGoals(stats.goals);
+      if (stats?.goals?.length) {
+        setGoals(stats.goals);
+        setSaved(stats.goals);
+      }
       setLoading(false);
     })();
     return () => {
@@ -55,13 +68,18 @@ export function GoalsEditor() {
     };
   }, []);
 
+  const dirty = saved === null || !sameGoals(goals, saved);
+
   async function onSave() {
-    if (saving) return;
+    if (saving || !dirty) return;
     setSaving(true);
-    const ok = await upsertUserStats({
-      goals: goals.filter((g) => g.label.trim() !== ''),
-    });
+    const next = goals.filter((g) => g.label.trim() !== '');
+    const ok = await upsertUserStats({ goals: next });
     setSaving(false);
+    if (ok) {
+      setGoals(next);
+      setSaved(next);
+    }
     toast(ok ? 'Goals saved' : 'Could not save — try again', ok ? 'success' : 'error');
   }
 
@@ -82,6 +100,7 @@ export function GoalsEditor() {
 
   function remove(id: string) {
     setGoals((gs) => gs.filter((g) => g.id !== id));
+    setOpenId(null);
   }
 
   function add() {
@@ -98,82 +117,90 @@ export function GoalsEditor() {
       {goals.length === 0 ? (
         <p className="text-[0.7rem] text-muted">No goals — add one below.</p>
       ) : (
-        <ol className="flex flex-col gap-px bg-border">
-          {goals.map((g, i) => (
-            <li
-              key={g.id}
-              className="grid grid-cols-[auto_auto_1fr_auto] items-center gap-3 bg-surface px-3 py-2"
-            >
-              <div className="flex flex-col">
+        // -mx-4 -mt-4: flush with the Disclosure body edges, so the rows read
+        // as the card's own rows under its summary divider.
+        <ol className="-mx-4 -mt-4 border-b border-border-soft [&>*+*]:border-t [&>*+*]:border-border-soft">
+          {goals.map((g, i) => {
+            const open = openId === g.id;
+            const pct = Math.max(0, Math.min(100, ((g.weight - GOAL_WEIGHT.min) / span) * 100));
+            const panelId = `goal-panel-${g.id}`;
+            return (
+              <li key={g.id}>
                 <button
                   type="button"
-                  onClick={() => move(g.id, -1)}
-                  disabled={i === 0}
-                  className={rowBtn}
-                  aria-label={`Move ${g.label} up`}
+                  onClick={() => setOpenId(open ? null : g.id)}
+                  aria-expanded={open}
+                  aria-controls={panelId}
+                  className="flex min-h-11 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-tappable-hover"
                 >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  onClick={() => move(g.id, 1)}
-                  disabled={i === goals.length - 1}
-                  className={rowBtn}
-                  aria-label={`Move ${g.label} down`}
-                >
-                  ↓
-                </button>
-              </div>
-              <span className="t-eyebrow w-6 tabular-nums text-muted">
-                {String(i + 1).padStart(2, '0')}
-              </span>
-              <div className="min-w-0">
-                <div className="truncate text-sm text-fg">{g.label}</div>
-                <div className="mt-1 flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={GOAL_WEIGHT.min}
-                    max={GOAL_WEIGHT.max}
-                    step={GOAL_WEIGHT.step}
-                    value={g.weight}
-                    onChange={(e) => setWeight(g.id, Number(e.target.value))}
-                    aria-label={`${g.label} weight`}
-                    className="h-1 flex-1 accent-fg"
-                  />
-                  <span className="t-label w-8 shrink-0 text-right tabular-nums text-muted">
-                    {g.weight}
+                  <span className="t-eyebrow w-6 shrink-0 tabular-nums text-muted">
+                    {String(i + 1).padStart(2, '0')}
                   </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => remove(g.id)}
-                className={rowBtn}
-                aria-label={`Remove ${g.label}`}
-              >
-                ×
-              </button>
-            </li>
-          ))}
+                  <span className="min-w-0 flex-1 truncate text-sm text-fg">{g.label}</span>
+                  <span aria-hidden="true" className="h-1 w-14 shrink-0 overflow-hidden rounded-[1px] bg-elevated">
+                    <span className="block h-full bg-fg" style={{ width: `${pct}%` }} />
+                  </span>
+                  <span className="t-label w-8 shrink-0 text-right tabular-nums text-fg">{g.weight}</span>
+                </button>
+                {open ? (
+                  <div id={panelId} className="flex flex-col gap-3 px-4 pb-3">
+                    <input
+                      type="range"
+                      min={GOAL_WEIGHT.min}
+                      max={GOAL_WEIGHT.max}
+                      step={GOAL_WEIGHT.step}
+                      value={g.weight}
+                      onChange={(e) => setWeight(g.id, Number(e.target.value))}
+                      aria-label={`${g.label} weight`}
+                      // h-7: the track draws thin, but the input box is the
+                      // hit area, and a 4px-tall box was a 4px-tall target.
+                      className="h-7 w-full cursor-pointer accent-fg"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="ghost"
+                        onClick={() => move(g.id, -1)}
+                        disabled={i === 0}
+                      >
+                        ↑ Up
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => move(g.id, 1)}
+                        disabled={i === goals.length - 1}
+                      >
+                        ↓ Down
+                      </Button>
+                      <Button variant="ghost" onClick={() => remove(g.id)} className="ml-auto">
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ol>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder="Add a goal…"
-          aria-label="New goal"
-          maxLength={STATS_LIMITS.goalLabelChars}
-          className="min-h-11 flex-1 border border-border bg-surface px-3 text-sm text-fg outline-none focus:border-fg"
-        />
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                add();
+              }
+            }}
+            placeholder="Add a goal…"
+            aria-label="New goal"
+            maxLength={STATS_LIMITS.goalLabelChars}
+            className={FIELD}
+          />
+        </div>
         <Button
           variant="ghost"
           onClick={add}
@@ -184,7 +211,7 @@ export function GoalsEditor() {
       </div>
 
       <div>
-        <Button onClick={onSave} disabled={saving}>
+        <Button onClick={onSave} disabled={saving || !dirty}>
           {saving ? 'Saving…' : 'Save goals'}
         </Button>
       </div>

@@ -3,6 +3,7 @@ import type { Plan, Session } from '@/lib/types';
 import { getAllPlans, getSessions } from '@/lib/queries';
 import type { MiniPreset } from '@/lib/logBuilder';
 import { Modal } from '@/components/ui/Modal';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
 
 // "New session" chooser: a full or shortened active-plan day, a plan "mini", a
 // saved session, a past-plan day, a blank workout, or a non-lifting activity. An
@@ -64,7 +65,10 @@ export function AddSessionMenu({
     `/app/log?session=${encodeURIComponent(id)}${dateQ ? `&${dateQ}` : ''}`;
 
   const rowClass =
-    'flex items-center justify-between border-b border-border px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-elevated';
+    'flex items-center justify-between border-b border-border-soft px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-tappable';
+  // A list nested inside the sheet: an inset well, no outline of its own. The
+  // rows inside are the tappable things, not the well.
+  const listClass = 'overflow-hidden rounded-control bg-bg';
   const groupLabelClass = 'mb-2 t-label text-muted';
   // Shown while the two lists are still loading, not just once they turn out
   // non-empty: the button appearing after the fetch grew the sheet mid-rise
@@ -84,29 +88,25 @@ export function AddSessionMenu({
               <span className="t-label text-muted">
                 From {plan.parsed.title}
               </span>
-              {/* Short on time? Trim the picked day to a mini, primaries intact. */}
-              <div className="flex gap-1" title="Shorten the workout">
-                {SHORTEN.map((s) => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    onClick={() => setShorten(s.key)}
-                    aria-pressed={shorten === s.key}
-                    className={`hill-btn border bg-surface px-2 py-1 text-[0.6rem] uppercase tracking-wider transition-colors ${
-                      shorten === s.key ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
+              {/* Short on time? Trim the picked day to a mini, primaries intact.
+                  One value of three, so the shared segmented control rather
+                  than a row of detached toggles. */}
+              <SegmentedTabs
+                as="radiogroup"
+                size="compact"
+                ariaLabel="Shorten the workout"
+                tabs={SHORTEN}
+                active={shorten}
+                onChange={(k) => setShorten(k as Shorten)}
+                className="shrink-0"
+              />
             </div>
-            <ul className="mb-5 border border-border">
+            <ul className={`mb-5 ${listClass}`}>
               {plan.parsed.days.map((d) => (
                 <li key={d.dayKey}>
                   <a href={dayHref(d.dayKey)} className={rowClass}>
                     <span className="text-fg">{d.label}</span>
-                    <span className="text-muted">{shorten === 'full' ? '→' : `${shorten} →`}</span>
+                    <span className="text-fg">{shorten === 'full' ? '→' : `${shorten} →`}</span>
                   </a>
                 </li>
               ))}
@@ -117,12 +117,12 @@ export function AddSessionMenu({
         {planMinis.length > 0 ? (
           <div className="mb-5">
             <div className={groupLabelClass}>{plan?.parsed.title} · minis</div>
-            <ul className="border border-border">
+            <ul className={listClass}>
               {planMinis.map((s) => (
                 <li key={s.id}>
                   <a href={sessionHref(s.id)} className={rowClass}>
                     <span className="truncate text-fg">{s.name}</span>
-                    <span className="text-muted">→</span>
+                    <span className="text-fg">→</span>
                   </a>
                 </li>
               ))}
@@ -136,7 +136,7 @@ export function AddSessionMenu({
               type="button"
               onClick={() => setShowMore((v) => !v)}
               aria-expanded={showMore}
-              className="hill-btn flex min-h-12 w-full items-center justify-between border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg"
+              className="hill-btn flex min-h-12 w-full items-center justify-between border border-transparent bg-tappable px-4 t-control text-fg transition-colors hover:bg-tappable-hover"
             >
               <span>Past plans &amp; saved sessions</span>
               <span className="text-muted">{showMore ? '−' : '+'}</span>
@@ -147,12 +147,12 @@ export function AddSessionMenu({
                 {hyroxShared.length > 0 ? (
                   <div>
                     <div className={groupLabelClass}>Community · Hyrox</div>
-                    <ul className="border border-border">
+                    <ul className={listClass}>
                       {hyroxShared.map((s) => (
                         <li key={s.id}>
                           <a href={sessionHref(s.id)} className={rowClass}>
                             <span className="truncate text-fg">{s.name}</span>
-                            <span className="text-muted">→</span>
+                            <span className="text-fg">→</span>
                           </a>
                         </li>
                       ))}
@@ -163,12 +163,12 @@ export function AddSessionMenu({
                 {crossfitShared.length > 0 ? (
                   <div>
                     <div className={groupLabelClass}>Community · CrossFit</div>
-                    <ul className="border border-border">
+                    <ul className={listClass}>
                       {crossfitShared.map((s) => (
                         <li key={s.id}>
                           <a href={sessionHref(s.id)} className={rowClass}>
                             <span className="truncate text-fg">{s.name}</span>
-                            <span className="text-muted">→</span>
+                            <span className="text-fg">→</span>
                           </a>
                         </li>
                       ))}
@@ -182,17 +182,17 @@ export function AddSessionMenu({
                       <span className={groupLabelClass}>Saved sessions</span>
                       <a
                         href="/app/sessions"
-                        className="t-control text-muted hover:text-fg"
+                        className="t-control text-fg"
                       >
                         Manage →
                       </a>
                     </div>
-                    <ul className="border border-border">
+                    <ul className={listClass}>
                       {savedSessions.map((s) => (
                         <li key={s.id}>
                           <a href={sessionHref(s.id)} className={rowClass}>
                             <span className="truncate text-fg">{s.name}</span>
-                            <span className="text-muted">→</span>
+                            <span className="text-fg">→</span>
                           </a>
                         </li>
                       ))}
@@ -203,12 +203,12 @@ export function AddSessionMenu({
                 {pastPlans.map((p) => (
                   <div key={p.id}>
                     <div className={groupLabelClass}>{p.parsed.title || p.name}</div>
-                    <ul className="border border-border">
+                    <ul className={listClass}>
                       {p.parsed.days.map((d) => (
                         <li key={d.dayKey}>
                           <a href={planDayHref(p.id, d.dayKey)} className={rowClass}>
                             <span className="text-fg">{d.label}</span>
-                            <span className="text-muted">{shorten === 'full' ? '→' : `${shorten} →`}</span>
+                            <span className="text-fg">{shorten === 'full' ? '→' : `${shorten} →`}</span>
                           </a>
                         </li>
                       ))}
@@ -223,13 +223,13 @@ export function AddSessionMenu({
         <div className="flex flex-col gap-2">
           <a
             href={blankHref}
-            className="hill-btn inline-flex min-h-12 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+            className="hill-btn inline-flex min-h-12 items-center justify-center border border-transparent bg-tappable px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:bg-tappable-hover"
           >
             Blank workout
           </a>
           <a
             href={activityHref}
-            className="hill-btn inline-flex min-h-12 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg"
+            className="hill-btn inline-flex min-h-12 items-center justify-center border border-transparent bg-tappable px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:bg-tappable-hover"
           >
             Log activity
           </a>

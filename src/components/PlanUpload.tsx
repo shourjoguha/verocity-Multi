@@ -23,7 +23,7 @@ import {
 } from '@/lib/sessionTemplate';
 import type { Movement, ParsedPlan, PlanTemplate, UserStats } from '@/lib/types';
 import { track } from '@/lib/analytics';
-import { Button, EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
+import { Button, EmptyState, FIELD, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
@@ -53,14 +53,14 @@ function MethodRow({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-card border border-border bg-surface">
+    <section className="overflow-hidden rounded-card border border-outline bg-surface">
       <button
         type="button"
         aria-expanded={open}
         onClick={onToggle}
         className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left text-fg"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control border border-border">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-bg">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
             {icon}
           </svg>
@@ -321,7 +321,7 @@ export default function PlanUpload() {
           spellCheck={false}
           rows={12}
           aria-label="Plan in Markdown"
-          className="w-full rounded-control border border-border bg-bg p-3 font-mono text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
+          className={`${FIELD} py-3 font-mono`}
         />
       ) : (
         <textarea
@@ -331,7 +331,7 @@ export default function PlanUpload() {
           spellCheck={false}
           rows={10}
           aria-label="Paste CSV or TSV"
-          className="w-full rounded-control border border-border bg-bg p-3 font-mono text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
+          className={`${FIELD} py-3 font-mono`}
         />
       )}
       <div className="mt-3 flex flex-wrap gap-2">
@@ -402,7 +402,7 @@ export default function PlanUpload() {
             >
               Import sessions
             </SectionHeader>
-            <div className="rounded-card border border-border bg-surface p-4">
+            <div className="rounded-card border border-outline bg-surface p-4">
               <p className="text-sm text-muted">
                 Copy the prompt into an outside AI chat (Claude, ChatGPT, Gemini), attach the CSV wireframe if it takes
                 files, then paste its CSV back here or upload the file. Every session is saved standalone.
@@ -543,7 +543,7 @@ export default function PlanUpload() {
 
       {mode === 'build' && issues.length > 0 ? (
         <Item>
-          <div className="mt-6 border border-accent/60 bg-surface p-4">
+          <div className="mt-6 rounded-card border border-accent/60 bg-surface p-4">
             <SectionHeader>Compatibility · {issues.length} issue{issues.length === 1 ? '' : 's'}</SectionHeader>
             <ul className="mt-2 list-disc pl-5 text-sm text-accent">
               {issues.map((i, k) => (
@@ -577,7 +577,7 @@ export default function PlanUpload() {
               <EmptyState>No days parsed — check the format.</EmptyState>
             ) : (
               parsedPlan.days.map((day) => (
-                <div key={day.dayKey} className="mb-4 border border-border p-4">
+                <div key={day.dayKey} className="mb-4 rounded-card border border-outline bg-surface p-4">
                   <div className="mb-2 font-display text-lg text-fg">{day.label}</div>
                   <ul className="flex flex-col gap-1 text-sm">
                     {day.exercises.map((ex, i) => (
@@ -610,11 +610,11 @@ export default function PlanUpload() {
                 const groupCount = s.frame.groups?.length ?? 0;
                 const variantCount = s.frame.variants?.length ?? 0;
                 return (
-                  <div key={i} className="mb-4 border border-border p-4">
+                  <div key={i} className="mb-4 rounded-card border border-outline bg-surface p-4">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <span className="font-display text-lg text-fg">{s.name || 'Untitled session'}</span>
                       {s.session_type ? (
-                        <span className="border border-border px-2 py-0.5 text-xs uppercase tracking-wider text-muted">
+                        <span className="rounded-chip border border-border px-2 py-0.5 text-xs uppercase tracking-wider text-muted">
                           {s.session_type}
                         </span>
                       ) : null}
