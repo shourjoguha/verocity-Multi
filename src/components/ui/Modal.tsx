@@ -198,10 +198,10 @@ export function Modal({
         ref={panelRef}
         data-sheet-panel
         tabIndex={-1}
-        className="sheet-panel lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col border border-border bg-surface outline-none"
+        className="sheet-panel lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col border border-outline bg-surface outline-none"
       >
         {title ? (
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
             <span className="t-eyebrow text-muted">{title}</span>
             <button
               type="button"

@@ -15,7 +15,7 @@ function stubStorage(value: string | null, throws = false) {
 describe('getCoachSpritePrefs', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('defaults to a colour hedgehog on a 48 grid in a 32px slot, always moving at half speed', () => {
+  it('defaults to a colour hedgehog on a 48 grid in a 32px slot, always moving at normal speed', () => {
     stubStorage(null);
     expect(getCoachSpritePrefs()).toEqual({
       sprite: 'hedgehog',
@@ -23,7 +23,7 @@ describe('getCoachSpritePrefs', () => {
       motion: 'always',
       grid: 48,
       size: 32,
-      speed: 0.5,
+      speed: 1,
     });
   });
 

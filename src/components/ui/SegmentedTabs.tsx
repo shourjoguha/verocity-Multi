@@ -1,9 +1,11 @@
 export type SegTab = { key: string; label: string };
 
-// The app's segmented control: a bordered SHELL holding a filled THUMB, per the
-// reference design. Previously this rendered detached bordered buttons in a row,
+// The app's segmented control: a filled SHELL (the tappable track) holding an
+// accent THUMB. Previously this rendered detached bordered buttons in a row,
 // which read as three separate controls rather than one control with three
-// states — the shell is what makes "these are alternatives" legible.
+// states — the shell is what makes "these are alternatives" legible. The shell
+// keeps a 1px TRANSPARENT border so it still measures 36px (26 thumb + 2×4
+// padding + 2×1 border) and lines up with anything sized against it.
 //
 // SLIM BY DEFAULT, at EVERY size. The visible thumb is a ~26px inner row
 // (`min-h-[26px]`) so the whole control reads slim per the reference design —
@@ -19,7 +21,9 @@ export type SegTab = { key: string; label: string };
 // hit box does not. This is exactly CLAUDE.md's "bigger hit box, not a bigger
 // glyph" applied in reverse: never shrink the button below 44px to get a slim
 // look. Keeping the thumb on an inner span (not the button) is what lets the
-// fill/border/focus ring hug the 26px visual instead of the 44px hit box.
+// fill/focus ring hug the 26px visual instead of the 44px hit box. The button
+// carries no `hill-btn`, so the global aria-pressed fills never reach it; the
+// thumb's own classes paint the state.
 //
 // aria-pressed is mandatory alongside role=tab/aria-selected (or role=radio/
 // aria-checked, see `as` below): ui components in this app key their pressed
@@ -52,7 +56,7 @@ export default function SegmentedTabs({
     <div
       role={as === 'radiogroup' ? 'radiogroup' : 'tablist'}
       aria-label={ariaLabel}
-      className={`t-control grid gap-1 rounded-control border border-border bg-surface p-1 ${className}`}
+      className={`t-control grid gap-1 rounded-control border border-transparent bg-tappable p-1 ${className}`}
       style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
     >
       {tabs.map((t) => {
@@ -75,11 +79,7 @@ export default function SegmentedTabs({
               className={`flex min-h-[26px] w-full items-center justify-center truncate rounded-chip transition-colors duration-150 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:[outline-color:var(--color-focus)] ${
                 compact ? 'px-1 text-[0.625rem]' : size === 'sm' ? 'px-1.5 text-[0.625rem]' : 'px-3'
               } ${
-                on
-                  ? as === 'radiogroup'
-                    ? 'bg-accent text-accent-fg'
-                    : 'bg-fg text-bg'
-                  : 'text-muted group-hover:text-fg'
+                on ? 'bg-accent text-accent-fg' : 'text-muted group-hover:text-fg'
               }`}
             >
               {t.label}

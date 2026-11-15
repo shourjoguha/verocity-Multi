@@ -6,7 +6,8 @@ import type { ReactNode } from 'react';
 // hides the platform triangle in favour of the chevron rendered below.
 //
 // The row itself is the container, not a button, so it stays flat rather than
-// carrying `.hill-btn`. Rows in a hairline grid own the depth, not their parts.
+// carrying `.hill-btn`. The 'card' variant is a card (`border-outline`, a soft
+// divider under the summary); 'row' is a line inside someone else's card.
 export function Disclosure({
   id,
   title,
@@ -54,7 +55,7 @@ export function Disclosure({
   return (
     <details
       id={id}
-      className="disclosure group rounded-card border border-border bg-surface"
+      className="disclosure group rounded-card border border-outline bg-surface"
       open={defaultOpen}
     >
       <summary className="flex min-h-13 cursor-pointer list-none items-center gap-3 px-4 text-fg outline-none focus-visible:ring-1 focus-visible:ring-teal">
@@ -74,7 +75,7 @@ export function Disclosure({
           ›
         </span>
       </summary>
-      <div className="border-t border-border px-4 py-4">{children}</div>
+      <div className="border-t border-border-soft px-4 py-4">{children}</div>
     </details>
   );
 }

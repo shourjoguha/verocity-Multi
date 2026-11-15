@@ -34,7 +34,7 @@ const COMPACT_QUERY = '(max-width: 768px), (display-mode: standalone) and (point
 // materials can't read CSS custom properties (and THREE's color parser wants the
 // comma hsl() form), so the base is mirrored here — keep `wire` in sync with
 // --color-teal in global.css. Shades run deep→bright; the cast shadow is tinted
-// dark teal instead of black. Paper veil + #f2f2f2 canvas stay neutral.
+// dark teal instead of black. Paper veil + the bg-matched canvas stay neutral.
 const DEPTH = {
   slab: 'hsl(174, 84%, 24%)', // deep teal — anchor slab
   slabAlt: 'hsl(174, 74%, 36%)', // deep-mid teal — accent slab
@@ -266,7 +266,7 @@ export default function BackgroundScene3DCanvas() {
   const [tabHidden, setTabHidden] = useState(false);
   const [compact, setCompact] = useState(false);
   const dark = useResolvedTheme() === 'dark';
-  const bgColor = dark ? '#050505' : '#f2f2f2';
+  const bgColor = dark ? '#0b0a09' : '#f3f1ec';
 
   useEffect(() => {
     const motionMql = window.matchMedia(REDUCED_MOTION_QUERY);

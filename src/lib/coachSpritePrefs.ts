@@ -31,7 +31,7 @@ export const COACH_SPRITE_DEFAULTS: CoachSpritePrefs = {
   motion: 'always',
   grid: 48,
   size: 32,
-  speed: 0.5,
+  speed: 1,
 };
 
 const pick = <T>(allowed: readonly T[], v: unknown, fallback: T): T =>

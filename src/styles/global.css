@@ -1,9 +1,15 @@
 @import "tailwindcss";
 
-/* Design tokens — flat hairline system, authored from the reference design.
-   Archivo Black + Space Grotesk, monochrome CHROME with a semantic tone triad
-   reserved for data, 1px hairlines, 4px controls / 6px cards, tabular numbers,
+/* Design tokens — flat fill system. Archivo Black + Space Grotesk, a warm
+   near-monochrome CHROME (paper / carbon, low-saturation hue 30–40) with colour
+   reserved for data, 6px chips / 8px controls / 12px cards, tabular numbers,
    the typographic Echo Stack (auth + marketing only).
+
+   THREE FILLS carry the chrome: `surface` = content, `tappable` = you can tap
+   this (no visible border at rest), `accent` = selected or THE primary action.
+   Grey never means "selected". Card outlines are `--color-outline`
+   (transparent in both themes — the one lever that turns them back on);
+   `--color-border` is kept for floating layers, edge bars and dividers.
 
    LIGHT AND DARK ARE EQUALS. Neither is derived from the other: both are
    authored to the same token ROLES, and every token defined here has a
@@ -14,27 +20,32 @@
    Data-viz accents (activity tags / training blocks) still come from
    app.config.ts, which is domain truth and shared with the backend. */
 @theme {
-  /* Monochrome light scale — "paper" */
-  --color-bg: hsl(0 0% 95%);            /* #f2f2f2 — also lib/theme.ts THEME_COLOR.light */
-  --color-surface: hsl(0 0% 100%);      /* #ffffff — cards */
-  --color-elevated: hsl(0 0% 91%);      /* tracks / hover fills / pressed rows */
-  --color-border: hsl(0 0% 12% / 0.14); /* OUTER hairline — card + control outlines */
-  --color-border-soft: hsl(0 0% 12% / 0.07); /* INNER hairline — dividers BETWEEN rows
-                                                inside one card. The reference design
-                                                separates `line` from `lineSoft`, and
-                                                that distinction carries most of its
-                                                list-row look. */
-  --color-muted: hsl(0 0% 42%);         /* standard secondary text (AA ≥4.5:1 on bg) */
-  --color-subtle: hsl(0 0% 28%);        /* stronger secondary text */
-  --color-faint: hsl(0 0% 58%);         /* THIRD text tier — inactive tabs, units,
-                                           captions. Deliberately below AA for body
-                                           copy: never use it for anything a user has
-                                           to read to operate the app. */
-  --color-fg: hsl(0 0% 7%);             /* #111111 — ink */
+  /* Warm light scale — "paper". Ratios are WCAG, re-derived for these values
+     and asserted by lib/themeTokens.test.ts, which parses this file. */
+  --color-bg: hsl(40 22% 94%);          /* #f3f1ec — also lib/theme.ts THEME_COLOR.light,
+                                           Base.astro theme-color, the manifest and the
+                                           two 3D scenes' bgColor */
+  --color-surface: hsl(40 40% 99%);     /* #fdfdfb — cards. 1.109:1 on bg */
+  --color-elevated: hsl(40 18% 90%);    /* #eae7e1 — tracks / pressed rows */
+  --color-tappable: hsl(40 18% 90%);    /* = elevated. Resting fill of anything tappable
+                                           that is not primary. 1.211:1 on surface */
+  --color-tappable-hover: hsl(40 16% 86%); /* #e1ddd6 — one step stronger */
+  --color-outline: transparent;         /* CARD outline. The 1px border stays in layout */
+  --color-border: hsl(35 20% 15% / 0.14); /* hairline — floating layers, edge bars */
+  --color-border-soft: hsl(35 20% 15% / 0.07); /* INNER hairline — dividers BETWEEN
+                                                  rows inside one card */
+  --color-muted: hsl(35 8% 38%);        /* #696259 — standard secondary text: 5.32:1 on
+                                           bg, 5.90 on surface, 4.87 on tappable */
+  --color-subtle: hsl(35 8% 26%);       /* #48433d — stronger secondary text */
+  --color-faint: hsl(35 6% 56%);        /* #969088 — THIRD text tier — inactive tabs,
+                                           units, captions. Deliberately below AA
+                                           (2.80:1 on bg): never use it for anything a
+                                           user has to read to operate the app. */
+  --color-fg: hsl(30 10% 9%);           /* #191715 — ink. 15.8:1 on bg */
 
-  /* Monochrome signal: selected/active = ink */
-  --color-accent: hsl(0 0% 7%);
-  --color-accent-fg: hsl(0 0% 100%);
+  /* Selected / primary = ink */
+  --color-accent: hsl(30 10% 9%);
+  --color-accent-fg: hsl(40 40% 99%);   /* 17.6:1 on accent */
 
   /* Direction-of-change, and the ONLY place colour is allowed to carry meaning
      in the chrome. Used by the Delta primitive and by trend sparklines — never
@@ -61,20 +72,23 @@
      colour, not chrome. The fibrous share of carbs is a hatch of the carbs
      step (.macro-hatch), so it survives without colour too. Dark inverts the
      ramp: protein is always the step furthest from the surface. */
-  --color-macro-p: hsl(0 0% 10%);
-  --color-macro-c: hsl(0 0% 46%);
-  --color-macro-f: hsl(0 0% 74%);
+  --color-macro-p: hsl(30 10% 10%);
+  --color-macro-c: hsl(35 8% 46%);
+  --color-macro-f: hsl(35 8% 74%);
 
   /* Bright accent — kept as a single semantic role ("the highlight") but now
      THEME-AWARE. Dark mode keeps the teal `#49F2E1` that seeded the "Depth"
      backdrop; light mode flips to a mango / burnt-orange `#C2570A`
      (≈ hsl(25 90% 40%)) because the teal reads washed out on paper and clears
-     only ~1.8:1 against white. The orange holds ~4.9:1 on the surface token —
-     comfortable AA for the eyebrow / accent text this is used for.
+     only ~1.8:1 against white. The orange measures 4.44:1 on the warm surface
+     (4.00:1 on bg) — UNDER the 4.5:1 body-text floor, fine for large text
+     and non-text marks (focus ring, the Resume sheen), marginal for the small
+     eyebrow text it is sometimes used for. Not retuned here: it is a data /
+     highlight colour, outside the chrome palette.
      Exposed as `bg-teal / text-teal / border-teal / var(--color-teal)`; the
      name is legacy and kept to avoid churning ~14 call sites. The monochrome
      identity is still the default — use this sparingly and intentionally. */
-  --color-teal: hsl(25 90% 40%);
+  --color-teal: hsl(25 90% 38%);
 
   /* The same accent taken down to a surface shade — the one filled treatment
      it earns. It marks a workout left running: Home's primary CTA turns from
@@ -86,13 +100,14 @@
   /* Functional accent — promoted to a sparing UI role (keyboard focus now;
      active/selected cues in later phases). Follows --color-teal so focus
      rings flip with the accent. */
-  --color-focus: hsl(25 90% 40%);
+  --color-focus: hsl(25 90% 38%);
 
-  /* Echo-stack background layers (#bfbfbf → #d9d9d9) */
-  --color-echo-1: hsl(0 0% 75%);
-  --color-echo-2: hsl(0 0% 79%);
-  --color-echo-3: hsl(0 0% 82%);
-  --color-echo-4: hsl(0 0% 85%);
+  /* Echo-stack background layers (#c4c0ba → #dcd9d6) — the old grey lightness
+     steps, on the warm hue */
+  --color-echo-1: hsl(35 8% 75%);
+  --color-echo-2: hsl(35 8% 79%);
+  --color-echo-3: hsl(35 8% 82%);
+  --color-echo-4: hsl(35 8% 85%);
 
   /* Type — Archivo Black (headlines) + Space Grotesk (body) + serif for flair.
      Archivo Black ships ONE weight. See the `.font-display` rule further down:
@@ -109,16 +124,16 @@
   /* Motion */
   --ease-editorial: cubic-bezier(0.77, 0, 0.175, 1);
 
-  /* Radius. This REVERSES the previous "sharp corners by default" rule — the
-     reference design is softly rounded at a small, consistent scale. */
+  /* Radius — three steps, one per role. Chrome uses these tokens, never a
+     literal; data marks (chart cells, swatches, bars) keep their 1–2px. */
   --radius-none: 0px;
-  --radius-chip: 3px;    /* tags, seg-tab thumbs, tiny toggles */
-  --radius-control: 4px; /* buttons, inputs, seg-tab shells */
-  --radius-card: 6px;    /* cards, panels, sheets */
+  --radius-chip: 6px;     /* tags, seg-tab thumbs, chips */
+  --radius-control: 8px;  /* buttons, inputs, seg-tab shells, floating layers */
+  --radius-card: 12px;    /* cards, panels, sheets */
 
   /* ---- Depth — RETIRED. ----
-     The identity is now flat: separation comes from a 1px hairline and a
-     surface-tone step, never from a cast shadow. These three tokens are kept
+     The identity is flat: separation comes from a fill step (bg → surface →
+     tappable) and, where needed, a 1px hairline — never a cast shadow. These three tokens are kept
      (rather than deleted) because ~40 components consume `.lift`, `.lift-fixed`
      and `.ledge` by name, and each of those classes still carries a rule worth
      preserving — see their definitions below. Setting the tokens to `none`
@@ -135,8 +150,8 @@
 }
 
 /* Pillow (.hill*) shadow tokens — RETIRED along with the rest of the depth
-   system. Buttons are flat now: a hairline, a fill, and a fill/border flip on
-   press. Kept as `none` for the same reason as the lift tokens — `.hill-btn` is
+   system. Buttons are flat now: a fill, and a fill/border change when
+   pressed. Kept as `none` for the same reason as the lift tokens — `.hill-btn` is
    on nearly every button in the app and still owns the radius and the pressed
    state, so the class stays and only its shadows go.
 
@@ -152,48 +167,36 @@
   --hill-btn-flush-rest: none;
 }
 
-/* ---- Dark theme — "Carbon". The reference design's native palette, and an
-   EQUAL of the light block above rather than a derivation of it: same token
-   roles, independently chosen values. Overrides only token VALUES, so every
-   component consuming var(--color-*) flips with zero per-component change.
-   Applied via the pre-paint script in Base.astro (System / Light / Dark, see
-   lib/theme.ts).
+/* ---- Dark theme — "Carbon". An EQUAL of the light block above rather than a
+   derivation of it: same token roles, independently chosen values, the same
+   warm hue family (30–40, low saturation). Overrides only token VALUES, so
+   every component consuming var(--color-*) flips with zero per-component
+   change. Applied via the pre-paint script in Base.astro (System / Light /
+   Dark, see lib/theme.ts). The hairlines are light alphas rather than flat
+   tones so they stay correct over the six backdrop presets.
 
-   Values track the reference palette: bg #050505, line #262626, lineSoft
-   #1C1C1C, dim #8C8C8C, faint #5A5A5A, and pure-white ink. The hairlines are
-   white alphas rather than flat greys so they stay correct over the six
-   backdrop presets, which paint behind the surfaces.
-
-   SURFACE AND ELEVATED ARE DELIBERATELY LIGHTER THAN THE REFERENCE'S #0E0E0E /
-   #171717, because the reference's own numbers do not survive the transfer to
-   the dark end of the scale. Contrast is a RATIO, not a difference in
-   lightness: paper puts 5 points of L between bg and a card and buys 1.117:1,
-   while carbon put 3.5 points between #050505 and #0E0E0E and bought only
-   1.055:1 — barely half the separation, on the same token roles that
-   CLAUDE.md says are authored as EQUALS. Cards stopped reading as objects
-   sitting on the page and the Logger's movement cards dissolved into the
-   backdrop. Matching paper's ratio takes surface #141414 (1.110:1) and, so
-   `elevated` keeps its own step above the card it fills, #242424 (1.178:1 over
-   surface, against paper's 1.225:1).
-
-   Do not "restore" these to the reference hexes without re-deriving the ratio —
-   and do not push `elevated` past ~15%: `--color-border` at 0.14 white
-   composites to ≈15.7% over the page, so an elevated fill up there swallows the
-   hairline on `.hill-btn[aria-pressed='true']`, which is filled AND outlined.
+   Contrast is a RATIO, not a difference in lightness, so the dark steps are
+   wider in L than paper's to buy the same separation: surface sits 1.104:1 on
+   bg (paper 1.109:1), and tappable 1.233:1 on surface (paper 1.211:1).
+   lib/themeTokens.test.ts parses both blocks and asserts the floors — change a
+   value here and that test re-derives every ratio quoted in this file.
 
    IF YOU ADD A TOKEN ABOVE, ADD IT HERE. ---- */
 html[data-theme='dark'] {
-  --color-bg: hsl(0 0% 2%); /* #050505 */
-  --color-surface: hsl(0 0% 8%); /* #141414 — cards. 1.110:1 on bg, ≈ paper's 1.117:1 */
-  --color-elevated: hsl(0 0% 14%); /* #242424 — tracks / hover fills. 1.178:1 on surface */
-  --color-border: hsl(0 0% 100% / 0.14); /* ≈ #262626 over the page — OUTER hairline */
-  --color-border-soft: hsl(0 0% 100% / 0.07); /* ≈ #1c1c1c — INNER row divider */
-  --color-muted: hsl(0 0% 55%); /* #8c8c8c — AA secondary on carbon */
-  --color-subtle: hsl(0 0% 76%); /* stronger secondary */
-  --color-faint: hsl(0 0% 35%); /* #5a5a5a — third tier, never body copy */
-  --color-fg: hsl(0 0% 100%); /* paper as ink */
-  --color-accent: hsl(0 0% 100%); /* active = paper */
-  --color-accent-fg: hsl(0 0% 2%);
+  --color-bg: hsl(30 10% 4%); /* #0b0a09 */
+  --color-surface: hsl(30 7% 9%); /* #191715 — cards */
+  --color-elevated: hsl(30 6% 16%); /* #2b2926 — tracks / pressed rows */
+  --color-tappable: hsl(30 6% 16%); /* = elevated */
+  --color-tappable-hover: hsl(30 6% 20%); /* #363330 */
+  --color-outline: transparent;
+  --color-border: hsl(40 30% 90% / 0.14); /* hairline — floating layers, edge bars */
+  --color-border-soft: hsl(40 30% 90% / 0.08); /* INNER row divider */
+  --color-muted: hsl(35 8% 58%); /* #9c958b — 6.70:1 on bg, 6.07 surface, 4.92 tappable */
+  --color-subtle: hsl(35 8% 78%); /* #cbc8c2 — stronger secondary */
+  --color-faint: hsl(35 5% 37%); /* #635f5a — third tier (3.12:1 on bg), never body copy */
+  --color-fg: hsl(40 30% 96%); /* #f8f6f2 — paper as ink. 18.3:1 on bg */
+  --color-accent: hsl(40 30% 96%); /* selected / primary = paper */
+  --color-accent-fg: hsl(30 10% 4%); /* 18.3:1 on accent */
   /* Lightened off the light-theme values so they clear AA on carbon — the
      reference design's #3fa45b / #c4554d. */
   --color-up: hsl(137 44% 45%);
@@ -203,13 +206,13 @@ html[data-theme='dark'] {
      most expensive mistake available in this file. */
   --color-danger: hsl(4 43% 54%);
   /* Macro ramp, inverted for carbon — see the light block. */
-  --color-macro-p: hsl(0 0% 94%);
-  --color-macro-c: hsl(0 0% 58%);
-  --color-macro-f: hsl(0 0% 32%);
-  --color-echo-1: hsl(0 0% 20%);
-  --color-echo-2: hsl(0 0% 17%);
-  --color-echo-3: hsl(0 0% 14%);
-  --color-echo-4: hsl(0 0% 11%);
+  --color-macro-p: hsl(40 20% 94%);
+  --color-macro-c: hsl(35 8% 58%);
+  --color-macro-f: hsl(35 6% 32%);
+  --color-echo-1: hsl(30 6% 20%);
+  --color-echo-2: hsl(30 6% 17%);
+  --color-echo-3: hsl(30 6% 14%);
+  --color-echo-4: hsl(30 6% 11%);
 
   /* Highlight tokens — dark mode keeps the original #49F2E1 teal that seeded
      the "Depth" backdrop and reads bright on carbon. Restated explicitly here
@@ -552,10 +555,10 @@ p {
 }
 
 /* Lift utility — the CARD TREATMENT. Historically a resting drop shadow plus a
-   hover perspective tilt; now flat, because the identity is a hairline and a
-   surface-tone step. Cards and stat tiles still opt in via the Card primitive,
-   which supplies `border border-border bg-surface` — this adds the radius and
-   the state transition on top.
+   hover perspective tilt; now flat, because the identity is a surface-tone
+   step. Cards and stat tiles still opt in via the Card primitive, which
+   supplies `border border-outline bg-surface` — this adds the radius and the
+   state transition on top.
 
    The class is kept rather than deleted for two reasons: ~40 components name
    it, and the rules attached to it below (`.lift-fixed`, `.ledge`) each encode
@@ -715,18 +718,16 @@ p {
   box-shadow: var(--shadow-ledge); /* `none` */
 }
 
-/* Active tab — the current destination's whole cell, icon AND label, rides a
-   raised pillow floor-to-ceiling of the ribbon, so it reads as a pressed tab
-   rather than a tile floating above a word. Applied to the <a>/<button>
-   itself, which `items-stretch` + `min-h-13` already size to the bar's full
-   inner height; the cells are equal-width `flex-1` siblings, so only the
-   shadow changes between pages and no tab moves.
-   Reuses --hill-btn-rest (already re-lit for dark below) rather than .hill-btn:
-   that class's :hover / :active / [aria-pressed] rules are toggle semantics,
-   and this is a static current-page marker that must not react to touch.
-   Its downward cast is fine here — this sits INSIDE the bar, not on the bottom
-   viewport edge, so the --shadow-ledge problem above does not apply.
-   Shadow and token fill only, no transform: this lives inside the nav's
+/* Active tab — the current destination's whole cell, icon AND label, takes a
+   fill floor-to-ceiling of the ribbon, so it reads as a pressed tab rather
+   than a tile floating above a word. Applied to the <a>/<button> itself, which
+   `items-stretch` + `min-h-13` already size to the bar's full inner height;
+   the cells are equal-width `flex-1` siblings, so only the fill changes
+   between pages and no tab moves.
+   Not .hill-btn: that class's :hover / :active / [aria-pressed] rules are
+   toggle semantics, and this is a static current-page marker that must not
+   react to touch.
+   Token fill only, no transform: this lives inside the nav's
    pointer-fine:backdrop-blur-md, which is the pairing LESSONS § "Flicker on
    touch devices" warns about. Nothing animates either, so ClientRouter's DOM
    swap between pages needs no re-trigger. */
@@ -737,13 +738,13 @@ p {
 }
 
 /* Primary tab — the centre slot (Log in app mode, Plan in the showcase) fills
-   the same full cell in ink, glyph and label both in paper. Fill and text are
-   tokens so the dark theme inverts with everything else. Beats .tab-bubble
-   when a primary slot is also the active route. */
+   the same full cell in the accent, glyph and label both in accent-fg. Tokens,
+   so the dark theme inverts with everything else. Beats .tab-bubble when a
+   primary slot is also the active route. */
 .tab-bubble-primary {
   border-radius: var(--radius-control);
-  background: var(--color-fg);
-  color: var(--color-bg);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
   box-shadow: var(--hill-btn-rest); /* `none` */
 }
 /* Unlike .tab-bubble this one IS a button — it opens AddSessionMenu — so it
@@ -756,8 +757,8 @@ p {
 /* Interactive card. The hover cue is now a fill + border change rather than a
    shadow bump and a perspective tilt, so there is no motion left to guard —
    the prefers-reduced-motion branches that used to wrap this are gone rather
-   than emptied. Matches the reference design, where a hoverable row goes to
-   the `elevated` surface tone. */
+   than emptied. A hoverable card goes to the `elevated` tone and shows the
+   ink outline it does not carry at rest. */
 .lift-interactive {
   cursor: pointer;
 }
@@ -775,14 +776,21 @@ p {
 }
 
 /* Hill button — THE button treatment, on nearly every button in the app.
-   Was a 3D pillow (outer drop shadow + inset highlight top-left + inset shadow
-   bottom-right, inverting on :active so it read as pressed in). Now flat: a
-   4px radius and a fill/border state change.
+   Was a 3D pillow; now flat: the control radius and a fill/border state
+   change.
 
-   `aria-pressed` on toggle buttons IS STILL MANDATORY. It used to be described
-   here as the hook the pressed-in pillow needed, which undersold it — it is an
-   accessibility contract, ui/SegmentedTabs depends on it, and the flat pressed
-   state below is keyed off it too.
+   `aria-pressed` on toggle buttons IS STILL MANDATORY — it is an
+   accessibility contract, ui/SegmentedTabs depends on it, and the toggle
+   fills below are keyed off it: pressed = accent, not pressed = tappable with
+   no visible border. These rules are UNLAYERED, so they beat any bg-/border-/
+   text- utility on the same element — a toggle needs no colour ternary of its
+   own. That is also why two controls deliberately keep `hill-btn` off the
+   element carrying `aria-pressed` (Logger's complete-movement cell, SetRow's
+   tick): they paint their own fill.
+
+   `:active` is a border cue only and sets NO background: a background here
+   used to put a grey fill under the light text of every primary button for
+   the length of the press.
 
    No transform in any state: several of these sit inside surfaces carrying
    `pointer-fine:backdrop-blur-*`, and the press used to `translateY(1px)`. A
@@ -795,13 +803,18 @@ p {
     border-color 0.15s var(--ease-editorial),
     color 0.15s var(--ease-editorial);
 }
-.hill-btn:hover:not(:disabled),
-.hill-btn:focus-visible {
-  border-color: var(--color-fg);
-}
-.hill-btn:active:not(:disabled),
 .hill-btn[aria-pressed='true'] {
-  background-color: var(--color-elevated);
+  background-color: var(--color-accent);
+  color: var(--color-accent-fg);
+  border-color: var(--color-accent);
+}
+.hill-btn[aria-pressed='false'] {
+  background-color: var(--color-tappable);
+  border-color: transparent;
+}
+.hill-btn:hover:not(:disabled),
+.hill-btn:focus-visible,
+.hill-btn:active:not(:disabled) {
   border-color: var(--color-fg);
 }
 .hill-btn:disabled {
@@ -823,8 +836,8 @@ p {
 
 /* Flush variant — for buttons inside an already-elevated container (popover,
    modal). With no outer shadow left to double up there is nothing to suppress,
-   so it is now the same as .hill-btn; kept because callers name it and because
-   the distinction returns the moment anything gains elevation again. */
+   so it now carries the same toggle fills as .hill-btn; kept because callers
+   name it. Same rule on :active: border only, never a background. */
 .hill-btn-flush {
   border-radius: var(--radius-control);
   box-shadow: var(--hill-btn-flush-rest); /* `none` */
@@ -832,9 +845,17 @@ p {
     background-color 0.15s var(--ease-editorial),
     border-color 0.15s var(--ease-editorial);
 }
-.hill-btn-flush:active:not(:disabled),
 .hill-btn-flush[aria-pressed='true'] {
-  background-color: var(--color-elevated);
+  background-color: var(--color-accent);
+  color: var(--color-accent-fg);
+  border-color: var(--color-accent);
+}
+.hill-btn-flush[aria-pressed='false'] {
+  background-color: var(--color-tappable);
+  border-color: transparent;
+}
+.hill-btn-flush:active:not(:disabled) {
+  border-color: var(--color-fg);
 }
 
 /* ---- Toggleable background backdrop (BackgroundLayer + ProfileView toggle).
@@ -863,52 +884,53 @@ html[data-bg='grain'] .bg-backdrop::before {
     to bottom,
     transparent 0,
     transparent 31px,
-    hsl(0 0% 7% / 0.08) 31px,
-    hsl(0 0% 7% / 0.08) 32px
+    hsl(30 10% 9% / 0.08) 31px,
+    hsl(30 10% 9% / 0.08) 32px
   );
 }
 /* "Dotted" — a dot grid, like dotted notebook / bullet-journal paper. A 1.5px
    ink dot every 24px. Monochrome, derived from the ink token. */
 html[data-bg='dots'] .bg-backdrop::before {
   opacity: 1;
-  background-image: radial-gradient(hsl(0 0% 7% / 0.12) 1.5px, transparent 1.5px);
+  background-image: radial-gradient(hsl(30 10% 9% / 0.12) 1.5px, transparent 1.5px);
   background-size: 24px 24px;
   background-position: 12px 12px;
 }
 html[data-bg='hairlines'] .bg-backdrop::before {
   opacity: 1;
   background-image:
-    linear-gradient(hsl(0 0% 7% / 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(0 0% 7% / 0.05) 1px, transparent 1px);
+    linear-gradient(hsl(30 10% 9% / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(30 10% 9% / 0.05) 1px, transparent 1px);
   background-size: 48px 48px;
 }
 html[data-bg='topography'] .bg-backdrop::before {
   opacity: 1;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280' viewBox='0 0 280 280'><g fill='none' stroke='hsl(0 0%25 7%25 / 0.06)' stroke-width='1'><circle cx='140' cy='140' r='20'/><circle cx='140' cy='140' r='44'/><circle cx='140' cy='140' r='72'/><circle cx='140' cy='140' r='104'/><circle cx='140' cy='140' r='140'/></g></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280' viewBox='0 0 280 280'><g fill='none' stroke='hsl(30 10%25 9%25 / 0.06)' stroke-width='1'><circle cx='140' cy='140' r='20'/><circle cx='140' cy='140' r='44'/><circle cx='140' cy='140' r='72'/><circle cx='140' cy='140' r='104'/><circle cx='140' cy='140' r='140'/></g></svg>");
   background-size: 280px 280px;
 }
 /* Dark theme: the CSS backdrop presets flip from ink-on-paper to faint
-   light-on-carbon. Two attrs → higher specificity than the base preset rules,
-   so order-independent. */
+   paper-on-carbon. The literals are the --color-fg value of each theme at a
+   low alpha (an SVG data URI cannot read a custom property). Two attrs →
+   higher specificity than the base preset rules, so order-independent. */
 html[data-theme='dark'][data-bg='grain'] .bg-backdrop::before {
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0,
     transparent 31px,
-    hsl(0 0% 100% / 0.06) 31px,
-    hsl(0 0% 100% / 0.06) 32px
+    hsl(40 30% 96% / 0.06) 31px,
+    hsl(40 30% 96% / 0.06) 32px
   );
 }
 html[data-theme='dark'][data-bg='dots'] .bg-backdrop::before {
-  background-image: radial-gradient(hsl(0 0% 100% / 0.1) 1.5px, transparent 1.5px);
+  background-image: radial-gradient(hsl(40 30% 96% / 0.1) 1.5px, transparent 1.5px);
 }
 html[data-theme='dark'][data-bg='hairlines'] .bg-backdrop::before {
   background-image:
-    linear-gradient(hsl(0 0% 100% / 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(0 0% 100% / 0.045) 1px, transparent 1px);
+    linear-gradient(hsl(40 30% 96% / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(40 30% 96% / 0.045) 1px, transparent 1px);
 }
 html[data-theme='dark'][data-bg='topography'] .bg-backdrop::before {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280' viewBox='0 0 280 280'><g fill='none' stroke='hsl(0 0%25 100%25 / 0.07)' stroke-width='1'><circle cx='140' cy='140' r='20'/><circle cx='140' cy='140' r='44'/><circle cx='140' cy='140' r='72'/><circle cx='140' cy='140' r='104'/><circle cx='140' cy='140' r='140'/></g></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280' viewBox='0 0 280 280'><g fill='none' stroke='hsl(40 30%25 96%25 / 0.07)' stroke-width='1'><circle cx='140' cy='140' r='20'/><circle cx='140' cy='140' r='44'/><circle cx='140' cy='140' r='72'/><circle cx='140' cy='140' r='104'/><circle cx='140' cy='140' r='140'/></g></svg>");
 }
 .bg-canvas {
   position: absolute;

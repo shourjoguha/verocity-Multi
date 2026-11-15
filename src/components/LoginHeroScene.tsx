@@ -131,7 +131,7 @@ function Dust({ dark }: { dark: boolean }) {
 export default function LoginHeroScene() {
   const [paused, setPaused] = useState(false);
   const dark = useResolvedTheme() === 'dark';
-  const bgColor = dark ? '#050505' : '#f2f2f2';
+  const bgColor = dark ? '#0b0a09' : '#f3f1ec';
   useEffect(() => {
     const onVis = () => setPaused(document.hidden);
     document.addEventListener('visibilitychange', onVis);

@@ -9,6 +9,11 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } f
 // the trigger sits near an edge — a movement name at the left edge of a card at
 // 375px is exactly that case. So after it opens we measure it and shift it back
 // inside the viewport, keeping the trigger's own position untouched.
+//
+// A floating layer, so it keeps a visible `border-border` — with no shadows,
+// nothing else separates it from the card beneath. No `lift-fixed`: its
+// unlayered card radius would override `rounded-control`, and the bubble's
+// transform is a static inline offset, not an animation.
 export function InfoPopover({
   label = 'More info',
   children,
@@ -87,7 +92,7 @@ export function InfoPopover({
           ref={bubbleRef}
           id={bubbleId}
           role="tooltip"
-          className="lift-fixed absolute left-1/2 top-full z-40 mt-1 w-max max-w-[min(16rem,calc(100vw-2rem))] border border-border bg-surface px-3 py-2 text-[0.7rem] leading-snug text-muted"
+          className="absolute left-1/2 top-full z-40 mt-1 w-max max-w-[min(18rem,calc(100vw-2rem))] rounded-control border border-border bg-surface px-3 py-2 text-xs leading-snug text-fg"
           style={{ transform: `translateX(calc(-50% + ${shift}px))` }}
         >
           {children}

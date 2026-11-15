@@ -59,8 +59,8 @@ describe('plateOpacity', () => {
 // in :root and html[data-theme='dark']. [h, s%, l%].
 type Hsl = [number, number, number];
 const TOKENS: Record<'light' | 'dark', { surface: Hsl; fg: Hsl; mango: Hsl }> = {
-  light: { surface: [0, 0, 100], fg: [0, 0, 7], mango: [28, 90, 32] },
-  dark: { surface: [0, 0, 8], fg: [0, 0, 100], mango: [36, 92, 58] },
+  light: { surface: [40, 40, 99], fg: [30, 10, 9], mango: [28, 90, 32] },
+  dark: { surface: [30, 7, 9], fg: [40, 30, 96], mango: [36, 92, 58] },
 };
 type Rgb = [number, number, number];
 
