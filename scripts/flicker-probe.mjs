@@ -167,7 +167,7 @@ const SCENARIOS = [
     // has its own route.
     name: 'Ribbon · Log tab (AddSessionMenu)',
     route: '/app/you',
-    open: 'nav[aria-label="Primary"] button:has-text("Log")',
+    open: 'nav[aria-label="Primary"] button[aria-label="Log"]',
     close: '[role="dialog"] button:has-text("Close")',
   },
   {

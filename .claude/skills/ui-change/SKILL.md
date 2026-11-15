@@ -110,9 +110,9 @@ declared in the `@theme` block.
   `.hill-btn[aria-pressed]` in `global.css` — **unlayered**, so it beats any
   `bg-`/`border-`/`text-`/`rounded-` utility on the same element. A control that
   needs its own radius or fill must not carry `.hill-btn` (that is why
-  `FilterChip` and `InfoPopover` do not). The one exception: the active nav tab
-  keeps the grey `.tab-bubble`, because the centre Log slot is already the
-  accent cell.
+  `FilterChip` and `InfoPopover` do not). The bottom dock marks the current
+  tab with the coloured `.dock-rail` (owner's decision, `--color-rail`) and a
+  filled icon, not a grey cell; Log is the one accent square beside the pill.
 - **Depth is retired, and a card has no visible outline.** `--shadow-lift-*`,
   `--shadow-ledge` and all six `--hill-btn-*` resolve to `none` in **both**
   themes — never a cast shadow, never an inline `box-shadow`. A card is

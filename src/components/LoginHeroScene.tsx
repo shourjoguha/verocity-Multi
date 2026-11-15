@@ -1,176 +1,157 @@
-import { Canvas, useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  BufferAttribute,
-  BufferGeometry,
-  Color,
-  type Mesh,
-  type Points,
-} from 'three';
+import { useEffect, useRef } from 'react';
 import { useResolvedTheme } from '@/lib/theme';
 
-// Login-only hero. A faceted ink crystal at center spins explosively for the
-// first ~2s then settles into a slow drift; a faint particle dust bursts
-// outward at the same time and decays into near-stillness. A real shadow on a
-// ghost plane below the crystal twists with rotation. Monochrome,
-// token-derived. Honors prefers-reduced-motion (LoginHero won't even mount the
-// canvas in that case) and pauses on tab blur.
+// Login-only backdrop: a chronophotograph. A stick-figure squat is drawn as a
+// stroboscopic row of exposures across the band above the wordmark — each
+// figure a later instant of the same rep, the way 1880s motion studies laid
+// time out in space — and the row drifts left so the sequence keeps running.
+// Older exposures fade toward the left edge.
+//
+// Canvas 2D, not three.js: the crystal this replaced shipped ~170KB gzip of
+// WebGL to every phone that opened /login. This is a few hundred lines of
+// arithmetic per frame. Ink comes from --color-fg / --color-muted, re-read on
+// every theme change, so it is monochrome and token-derived in both themes.
+// Pauses while the tab is hidden; `still` draws one frame and never animates
+// (LoginHero passes it under prefers-reduced-motion).
 
-const BURST_DURATION = 2.0; // seconds of spin / outward burst
-const BURST_ROTATION = Math.PI * 4; // ~2 turns over BURST_DURATION (≈half the earlier angular speed)
-const PARTICLE_COUNT = 240;
-const PARTICLE_BURST_RADIUS = 7;
-const SLOW_ROTATION_RATE = 0.06; // rad/s after burst
+const SPEED = 22; // px/s the row drifts left
+const PHASE_STEP = 0.11; // fraction of a rep between neighbouring exposures
+const DPR_CAP = 2;
 
-// 1 - (1 - t)^4 — sharp acceleration, eased landing.
-function easeOutQuart(t: number): number {
-  const u = 1 - Math.min(1, Math.max(0, t));
-  return 1 - u * u * u * u;
+type Ink = { fg: string; muted: string };
+
+function readInk(): Ink {
+  const s = getComputedStyle(document.documentElement);
+  return {
+    fg: s.getPropertyValue('--color-fg').trim(),
+    muted: s.getPropertyValue('--color-muted').trim(),
+  };
 }
 
-function Crystal() {
-  const ref = useRef<Mesh>(null);
-  useFrame(({ clock }) => {
-    if (!ref.current) return;
-    const t = clock.getElapsedTime();
-    // Burst contributes ~2 turns over BURST_DURATION; the slow phase keeps
-    // a quiet rotation forever.
-    const burst = easeOutQuart(t / BURST_DURATION) * BURST_ROTATION;
-    const slow = SLOW_ROTATION_RATE * Math.max(0, t - BURST_DURATION);
-    ref.current.rotation.y = burst + slow;
-    ref.current.rotation.x = burst * 0.35 + slow * 0.5;
-    ref.current.rotation.z = burst * 0.1;
-  });
-  return (
-    <mesh ref={ref} scale={1.6} castShadow>
-      <icosahedronGeometry args={[1, 0]} />
-      <meshStandardMaterial
-        color="#f7f7f5"
-        roughness={0.32}
-        metalness={0.1}
-        flatShading
-      />
-    </mesh>
-  );
+const MIN_BAND = 100; // px — below this there is no room above the copy
+
+function draw(ctx: CanvasRenderingContext2D, w: number, ground: number, t: number, ink: Ink) {
+  ctx.clearRect(0, 0, w, ctx.canvas.height);
+  // The band fills the empty top of the page and stands on a line just above
+  // the "Verocity" eyebrow, so it never runs under the copy. Too short (a
+  // landscape phone) → draw nothing rather than squeeze the figures.
+  if (ground < MIN_BAND) return;
+  const unit = Math.min(ground * 0.2, 52); // thigh/shin length
+  const L1 = unit;
+  const L2 = unit * 0.96;
+  const L3 = unit * 1.08;
+  const sp = unit * 0.78; // spacing between exposures
+  const head = unit * 0.13;
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.globalAlpha = 0.3;
+  ctx.strokeStyle = ink.muted;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, ground + 2);
+  ctx.lineTo(w, ground + 2);
+  ctx.stroke();
+
+  const travel = t * SPEED;
+  const off = travel % sp;
+  const base = Math.floor(travel / sp);
+  const count = Math.ceil(w / sp) + 2;
+  ctx.strokeStyle = ink.fg;
+  ctx.fillStyle = ink.fg;
+  ctx.lineWidth = Math.max(1.2, unit * 0.035);
+
+  for (let i = -1; i < count; i++) {
+    const ax = i * sp - off + sp * 0.3;
+    const phase = ((i + base) * PHASE_STEP) % 1;
+    const d = (1 - Math.cos(phase * Math.PI * 2)) / 2; // 0 standing → 1 in the hole
+    const shin = 0.55 * d;
+    const thigh = 1.35 * d;
+    const torso = 0.55 * d;
+    const kx = ax + Math.sin(shin) * L2;
+    const ky = ground - Math.cos(shin) * L2;
+    const hx = kx - Math.sin(thigh) * L1;
+    const hy = ky - Math.cos(thigh) * L1;
+    const sx = hx + Math.sin(torso) * L3;
+    const sy = hy - Math.cos(torso) * L3;
+
+    const fade = Math.min(1, Math.max(0, ax / w));
+    ctx.globalAlpha = 0.04 + 0.24 * fade;
+    ctx.beginPath();
+    ctx.moveTo(ax, ground);
+    ctx.lineTo(kx, ky);
+    ctx.lineTo(hx, hy);
+    ctx.lineTo(sx, sy);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(sx + head * 0.5, sy - head * 2, head, 0, Math.PI * 2);
+    ctx.stroke();
+    // The bar, end-on, across the shoulders.
+    ctx.beginPath();
+    ctx.arc(sx, sy + head * 0.6, head * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 }
 
-function Dust({ dark }: { dark: boolean }) {
-  const ref = useRef<Points>(null);
+export default function LoginHeroScene({ still = false }: { still?: boolean }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const theme = useResolvedTheme();
 
-  const { geometry, directions, basePositions } = useMemo(() => {
-    const dirs = new Float32Array(PARTICLE_COUNT * 3);
-    const base = new Float32Array(PARTICLE_COUNT * 3);
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      // Even spherical distribution via the Marsaglia trick.
-      let x: number, y: number, z: number, s: number;
-      do {
-        x = Math.random() * 2 - 1;
-        y = Math.random() * 2 - 1;
-        z = Math.random() * 2 - 1;
-        s = x * x + y * y + z * z;
-      } while (s > 1 || s === 0);
-      const inv = 1 / Math.sqrt(s);
-      dirs[i * 3 + 0] = x * inv;
-      dirs[i * 3 + 1] = y * inv;
-      dirs[i * 3 + 2] = z * inv;
-      // Start very close to the crystal so the burst reads as an explosion.
-      const r = 0.6 + Math.random() * 0.4;
-      base[i * 3 + 0] = dirs[i * 3 + 0] * r;
-      base[i * 3 + 1] = dirs[i * 3 + 1] * r;
-      base[i * 3 + 2] = dirs[i * 3 + 2] * r;
-    }
-    const geom = new BufferGeometry();
-    geom.setAttribute('position', new BufferAttribute(base.slice(), 3));
-    return { geometry: geom, directions: dirs, basePositions: base };
-  }, []);
-
-  useEffect(() => () => geometry.dispose(), [geometry]);
-
-  useFrame(({ clock }) => {
-    if (!ref.current) return;
-    const t = clock.getElapsedTime();
-    const burst = easeOutQuart(t / BURST_DURATION);
-    const drift = Math.max(0, t - BURST_DURATION) * 0.04;
-    const attr = ref.current.geometry.getAttribute('position') as BufferAttribute;
-    const arr = attr.array as Float32Array;
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const dx = directions[i * 3 + 0];
-      const dy = directions[i * 3 + 1];
-      const dz = directions[i * 3 + 2];
-      // Each particle picks up an individual phase from its base position so
-      // the bob doesn't pulse in unison.
-      const phase = basePositions[i * 3 + 0] * 4 + basePositions[i * 3 + 1] * 2;
-      const wobble = Math.sin(t * 0.4 + phase) * 0.08;
-      const radius =
-        basePositions[i * 3 + 0] * dx +
-        basePositions[i * 3 + 1] * dy +
-        basePositions[i * 3 + 2] * dz +
-        burst * PARTICLE_BURST_RADIUS +
-        drift +
-        wobble;
-      arr[i * 3 + 0] = dx * radius;
-      arr[i * 3 + 1] = dy * radius;
-      arr[i * 3 + 2] = dz * radius;
-    }
-    attr.needsUpdate = true;
-  });
-
-  return (
-    <points ref={ref} geometry={geometry}>
-      <pointsMaterial
-        color={new Color(dark ? '#cfcfcf' : '#1a1a1a')}
-        size={0.025}
-        sizeAttenuation
-        transparent
-        opacity={0.55}
-      />
-    </points>
-  );
-}
-
-export default function LoginHeroScene() {
-  const [paused, setPaused] = useState(false);
-  const dark = useResolvedTheme() === 'dark';
-  const bgColor = dark ? '#0b0a09' : '#f3f1ec';
   useEffect(() => {
-    const onVis = () => setPaused(document.hidden);
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, []);
+    const canvas = ref.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
 
-  return (
-    <Canvas
-      className="bg-canvas"
-      shadows
-      dpr={[1, 1.5]}
-      camera={{ position: [0, 0.4, 5.5], fov: 38 }}
-      frameloop={paused ? 'never' : 'always'}
-      gl={{ antialias: true, alpha: true }}
-    >
-      <color attach="background" args={[bgColor]} />
-      <fog attach="fog" args={[bgColor, 5, 11]} />
-      <ambientLight intensity={0.55} />
-      <directionalLight
-        position={[4, 5, 6]}
-        intensity={0.9}
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-camera-near={1}
-        shadow-camera-far={20}
-        shadow-camera-left={-4}
-        shadow-camera-right={4}
-        shadow-camera-top={4}
-        shadow-camera-bottom={-4}
-      />
-      <directionalLight position={[-5, -2, 3]} intensity={0.25} />
-      <Crystal />
-      <Dust dark={dark} />
-      {/* Ghost plane that only renders the crystal's shadow — twists with rotation. */}
-      <mesh position={[0, -1.9, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[12, 12]} />
-        <shadowMaterial transparent opacity={0.22} />
-      </mesh>
-    </Canvas>
-  );
+    const ink = readInk();
+    let w = 0;
+    let ground = 0;
+    const size = () => {
+      const r = canvas.getBoundingClientRect();
+      const dpr = Math.min(DPR_CAP, window.devicePixelRatio || 1);
+      const anchor = document.querySelector('[data-login-anchor]');
+      w = r.width;
+      ground = anchor ? Math.round(anchor.getBoundingClientRect().top - r.top - 28) : 0;
+      const h = r.height;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    size();
+
+    const t0 = performance.now();
+    let raf = 0;
+    const frame = (now: number) => {
+      draw(ctx, w, ground, (now - t0) / 1000, ink);
+      raf = requestAnimationFrame(frame);
+    };
+    const start = () => {
+      if (!raf) raf = requestAnimationFrame(frame);
+    };
+    const stop = () => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const onResize = () => {
+      size();
+      if (still) draw(ctx, w, ground, 0, ink);
+    };
+    const onVisibility = () => (document.hidden ? stop() : start());
+
+    window.addEventListener('resize', onResize);
+    if (still) {
+      draw(ctx, w, ground, 0, ink);
+    } else {
+      document.addEventListener('visibilitychange', onVisibility);
+      if (!document.hidden) start();
+    }
+    return () => {
+      stop();
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [theme, still]);
+
+  return <canvas ref={ref} aria-hidden="true" className="block h-full w-full" />;
 }

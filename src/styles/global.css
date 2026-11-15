@@ -97,6 +97,15 @@
   --color-teal-deep: hsl(25 90% 28%);
   --color-teal-fg: hsl(0 0% 100%);
 
+  /* The tab bar's sliding rail — the ONE coloured mark in the chrome, by the
+     owner's decision (same standing as the Home coach icon). Each theme's
+     highlight hue, tuned for contrast against the dock it sits on: on paper
+     the mango is darkened (--color-teal is only 4.44:1 on surface); on carbon
+     the bright teal already clears it. Never the only cue: the active tab's
+     icon fills and its label goes ink. themeTokens.test.ts holds it to 3:1
+     (WCAG non-text) on surface and bg in both themes. */
+  --color-rail: hsl(25 90% 30%);
+
   /* Functional accent — promoted to a sparing UI role (keyboard focus now;
      active/selected cues in later phases). Follows --color-teal so focus
      rings flip with the accent. */
@@ -222,6 +231,7 @@ html[data-theme='dark'] {
   --color-teal: hsl(174 87% 62%);
   --color-teal-deep: hsl(174 84% 24%);
   --color-teal-fg: hsl(0 0% 100%);
+  --color-rail: hsl(174 80% 55%);
   --color-focus: hsl(174 87% 62%);
 
   /* Depth is retired in both themes — see the light block. Restated here rather
@@ -524,19 +534,18 @@ p {
   letter-spacing: 0.05em;
 }
 .t-nano {
-  font-size: 0.5625rem; /* 9px — the BOTTOM RIBBON LABELS AND NOTHING ELSE.
-                           The reference design sets these at 8.5px; 9px is the
-                           floor at which the caps stay legible here. Adding a
-                           tier this small was a considered exception, not a new
-                           general size — if you are reaching for it anywhere
-                           other than the tab bar, use .t-label instead.
-                           NOTE: the ribbon slot must still measure ≥44px tall
+  font-size: 0.625rem; /* 10px — the BOTTOM DOCK LABELS AND NOTHING ELSE.
+                           Sentence case, not tracked caps: "PROGRESS" in 0.12em
+                           caps nearly filled its slot at 375px. If you are
+                           reaching for this anywhere other than the tab bar,
+                           use .t-label instead.
+                           NOTE: the dock slot must still measure ≥44px tall
                            (TOUCH.minTargetPx, enforced by audit:mobile rule 2),
                            which is a property of the slot's padding, not of
                            this font size. */
+  font-weight: 500;
   line-height: 1.1;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.01em;
 }
 
 /* Archivo Black ships a SINGLE weight (400). 34 places in the app write
@@ -718,38 +727,68 @@ p {
   box-shadow: var(--shadow-ledge); /* `none` */
 }
 
-/* Active tab — the current destination's whole cell, icon AND label, takes a
-   fill floor-to-ceiling of the ribbon, so it reads as a pressed tab rather
-   than a tile floating above a word. Applied to the <a>/<button> itself, which
-   `items-stretch` + `min-h-13` already size to the bar's full inner height;
-   the cells are equal-width `flex-1` siblings, so only the fill changes
-   between pages and no tab moves.
-   Not .hill-btn: that class's :hover / :active / [aria-pressed] rules are
-   toggle semantics, and this is a static current-page marker that must not
-   react to touch.
-   Token fill only, no transform: this lives inside the nav's
-   pointer-fine:backdrop-blur-md, which is the pairing LESSONS § "Flicker on
-   touch devices" warns about. Nothing animates either, so ClientRouter's DOM
-   swap between pages needs no re-trigger. */
-.tab-bubble {
-  border-radius: var(--radius-control);
-  background: var(--color-elevated);
-  box-shadow: var(--hill-btn-rest); /* `none` — the fill alone marks the tab now */
+/* Bottom dock — four destination tabs in a surface pill, and the Log action as
+   its own square accent button beside it (under the right thumb). Separated
+   from the page by the surface tone step alone, like a card: no shadow, no
+   outline.
+
+   Current page is marked by the RAIL, a short bar on the dock's top inner edge
+   in --color-rail, plus the tab's icon filling and its label going ink. There
+   is no grey cell any more, so the old "active tab keeps .tab-bubble"
+   exception is gone with it.
+
+   The rail moves by `left`, NOT transform: the nav carries
+   pointer-fine:backdrop-blur-md, and a transform inside it promotes a
+   composited layer (LESSONS § "Flicker on touch devices"). It is one 3px
+   element, so animating its left edge is cheap. ClientRouter re-renders the
+   nav on every page, so the slide is replayed from the previous index by the
+   script in App.astro; server markup already sits at the right index, so with
+   no JS (or reduced motion) it simply appears in place. */
+.dock-rail {
+  position: absolute;
+  top: 0;
+  left: calc(var(--rail-i, 0) * 25%);
+  width: 25%;
+  height: 3px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  transition: left 320ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+.dock-rail > span {
+  width: 1.75rem;
+  height: 100%;
+  border-radius: 0 0 var(--radius-chip) var(--radius-chip);
+  background: var(--color-rail);
+}
+.dock-rail[data-instant] {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-rail {
+    transition: none;
+  }
+}
+/* The selected icon fills its closed shapes at a low ink tint — a second cue
+   that does not depend on seeing the rail's colour. */
+.dock-ic-fill {
+  fill: none;
+}
+[aria-current='page'] .dock-ic-fill {
+  fill: currentColor;
+  fill-opacity: 0.16;
 }
 
-/* Primary tab — the centre slot (Log in app mode, Plan in the showcase) fills
-   the same full cell in the accent, glyph and label both in accent-fg. Tokens,
-   so the dark theme inverts with everything else. Beats .tab-bubble when a
-   primary slot is also the active route. */
+/* The Log action. Fills with the accent, glyph in accent-fg. Tokens, so the
+   dark theme inverts with everything else. */
 .tab-bubble-primary {
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-card);
   background: var(--color-accent);
   color: var(--color-accent-fg);
   box-shadow: var(--hill-btn-rest); /* `none` */
 }
-/* Unlike .tab-bubble this one IS a button — it opens AddSessionMenu — so it
-   needs a press cue. A fill step, never a transform, for the backdrop-blur
-   reason above. */
+/* It IS a button — it opens AddSessionMenu — so it needs a press cue. A fill
+   step, never a transform, for the backdrop-blur reason above. */
 .tab-bubble-primary:active {
   background: var(--color-subtle);
 }

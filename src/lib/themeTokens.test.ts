@@ -81,6 +81,13 @@ describe('theme tokens (parsed from global.css)', () => {
       it('tappable reads against surface (>= 1.15:1)', () => {
         expect(ratio(theme, 'tappable', 'surface')).toBeGreaterThanOrEqual(1.15);
       });
+      // The tab dock's rail is a non-text mark: WCAG 1.4.11 asks 3:1 against
+      // what it sits on (the surface dock) and what surrounds it (bg).
+      for (const ground of ['surface', 'bg']) {
+        it(`rail on ${ground} >= 3:1`, () => {
+          expect(ratio(theme, 'rail', ground)).toBeGreaterThanOrEqual(3);
+        });
+      }
     });
   }
 });

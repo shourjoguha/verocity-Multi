@@ -150,6 +150,11 @@ UI audit have both run.
   are the `--spr-*` tokens in `global.css`, defined in both themes — never raw
   values in `CoachSprite.tsx`. Mono stays available. Do not "fix" this back to
   greyscale.
+  **A second, also by the owner's decision:** the bottom dock's sliding rail
+  (`--color-rail`: deep mango on paper, teal on carbon, held to 3:1 on surface
+  and bg by `themeTokens.test.ts`). It is the only coloured mark in the bar;
+  the current tab also fills its icon and inks its label, so it survives
+  without colour.
 - **Three fills carry the chrome, and grey never means selected.**
   `bg-surface` = content (cards, rows, read-only values). `bg-tappable`
   (`--color-tappable`, hover `--color-tappable-hover`) = you can tap this —
@@ -164,9 +169,11 @@ UI audit have both run.
   every `bg-`/`border-`/`text-` utility on the same element and a toggle needs
   no colour ternary of its own — and a control that needs its own radius or
   fill must not carry `.hill-btn` (`FilterChip`, `InfoPopover`).
-  **One deliberate exception:** the active nav tab keeps the grey `.tab-bubble`,
-  because the centre Log slot is already the accent cell and a second accent
-  cell in the bar would make two things look primary.
+  **The bottom dock follows this too:** the four destinations sit in a
+  `bg-surface` pill with no selected fill (the rail and a filled icon mark the
+  current page), and Log is the one accent cell, a square beside the pill
+  (`LogTabButton`). The grey `.tab-bubble` exception is gone. The rail moves by
+  `left`, never transform, because the nav carries `pointer-fine:backdrop-blur`.
 - **Inputs use `FIELD`.** One shared class string exported from
   `ui/primitives.tsx` for every input, select and textarea: tappable fill,
   transparent border at rest, ink border on focus, `text-base` (16px — iOS zooms
