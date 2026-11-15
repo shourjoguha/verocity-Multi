@@ -45,12 +45,15 @@ export function previousLoggedSet(item: LogItem, ki: number): number {
 const MEASURED = ['weight', 'reps', 'time', 'distance', 'calories', 'mark'] as const;
 
 /**
- * What "copy previous set" writes into the live set. Same provenance stamps as
- * Copy to next (`copyForward` in lib/logEdits.ts): `prefilled: true`, and a
- * copied RPE is never this set's rating — `SetActual.rpeRated` is "false when
- * seeded, copied or defaulted". RPE is copied ONLY when the source set's RPE
- * was actually rated; otherwise the live set's RPE and its rated flag are left
- * exactly as they were. Never touches `completed`: copying does not log.
+ * What "copy previous set" writes into the live set: the measured fields,
+ * `prefilled: true`, and — by the owner's decision (2026-11-15) — the previous
+ * set's RPE AS A RATING when that RPE was itself rated. This is the one place a
+ * copied RPE counts: the athlete pressed the copy key, sees the value selected
+ * in the picker, and can change or clear it before logging, so it is a rating
+ * they chose, not one that echoed forward unseen (which is what `rpeRated`
+ * exists to stop — see SetActual in lib/types.ts). A source RPE that was only
+ * seeded is NOT copied; the live set's RPE and rated flag stay as they were.
+ * Never touches `completed`: copying does not log.
  */
 export function copyPreviousPatch(source: SetActual): Partial<SetActual> {
   const patch: Partial<SetActual> = { prefilled: true };
@@ -60,15 +63,20 @@ export function copyPreviousPatch(source: SetActual): Partial<SetActual> {
   }
   if (source.rpeRated === true && source.rpe != null) {
     patch.rpe = source.rpe;
-    patch.rpeRated = false;
+    patch.rpeRated = true;
   }
   return patch;
 }
 
-/** Every value on the RPE dial, from app.config's RPE scale. */
-export function rpeScale(): number[] {
+/**
+ * The values the inline RPE row offers: `RPE.pickerMin`–`RPE.max`. If the set
+ * already carries a rated value below that (set in the sheet, or copied), the
+ * row starts there instead, so a selected value is never off the row.
+ */
+export function rpeScale(selected: number | null = null): number[] {
+  const from = selected != null && selected < RPE.pickerMin ? Math.max(RPE.min, selected) : RPE.pickerMin;
   const out: number[] = [];
-  for (let v = RPE.min; v <= RPE.max + 1e-9; v += RPE.step) out.push(Math.round(v * 10) / 10);
+  for (let v = from; v <= RPE.max + 1e-9; v += RPE.step) out.push(Math.round(v * 10) / 10);
   return out;
 }
 

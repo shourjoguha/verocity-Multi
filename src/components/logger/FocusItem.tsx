@@ -220,8 +220,8 @@ export function FocusItem({
           <SegmentedTabs
             as="radiogroup"
             ariaLabel="RPE"
-            size="compact"
-            tabs={rpeScale().map((v) => ({ key: String(v), label: String(v) }))}
+            size="numeric"
+            tabs={rpeScale(selectedRpe(live.actual)).map((v) => ({ key: String(v), label: String(v) }))}
             active={selectedRpe(live.actual) != null ? String(selectedRpe(live.actual)) : ''}
             onChange={(k) => onPatchSet(liveKi!, rpeTapPatch(live.actual, Number(k)))}
           />

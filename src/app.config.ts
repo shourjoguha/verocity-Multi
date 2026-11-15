@@ -87,7 +87,10 @@ export const PRIMARY_METRICS = ['reps', 'time', 'distance', 'cal'] as const;
 // name.
 export const WEIGHTED_PRIMARIES = ['reps', 'time', 'distance'] as const;
 
-export const RPE = { min: 5, max: 10, step: 0.5, default: 7 } as const;
+// `pickerMin` is where the Logger focus card's inline RPE row starts: the row
+// shows pickerMin–max so nine cells fit a phone at a readable size. The scale
+// itself still runs from `min`; lower values stay reachable in the set sheet.
+export const RPE = { min: 5, max: 10, step: 0.5, default: 7, pickerMin: 6 } as const;
 
 /**
  * What the points on the RPE dial mean to THIS athlete, and how much of the

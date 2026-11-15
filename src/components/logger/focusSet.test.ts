@@ -63,10 +63,10 @@ describe('copyPreviousPatch — RPE provenance', () => {
     expect('rpeRated' in p).toBe(false);
   });
 
-  it('copies a RATED RPE as a copy — rpeRated false, per SetActual.rpeRated', () => {
+  it('copies a RATED RPE as a rating — the copy key is an explicit choice', () => {
     const p = copyPreviousPatch({ completed: true, prefilled: false, weight: 100, rpe: 8.5, rpeRated: true });
     expect(p.rpe).toBe(8.5);
-    expect(p.rpeRated).toBe(false);
+    expect(p.rpeRated).toBe(true);
   });
 });
 
@@ -86,7 +86,10 @@ describe('inline RPE picker', () => {
 
   it('spans the configured scale', () => {
     const s = rpeScale();
-    expect(s[0]).toBe(RPE.min);
+    expect(s[0]).toBe(RPE.pickerMin);
     expect(s[s.length - 1]).toBe(RPE.max);
+    // A rated value below the row's start pulls the start down to include it.
+    expect(rpeScale(5.5)[0]).toBe(5.5);
+    expect(rpeScale(8)[0]).toBe(RPE.pickerMin);
   });
 });

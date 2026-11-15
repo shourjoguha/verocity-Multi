@@ -16,7 +16,9 @@ export type SegTab = { key: string; label: string; strike?: boolean; srNote?: st
 // this is the standard, not a per-caller override (a `[&_button]:min-h-[26px]`
 // override on one instance is what this replaces). `size` only changes TYPE AND
 // PADDING: `md` (default) is the top-level nav scale, `sm` the in-card scale,
-// `compact` (meal logging, docs/MEAL_LOGGING.md §0.1) tighter still. Font size
+// `compact` (meal logging, docs/MEAL_LOGGING.md §0.1) tighter still; `numeric`
+// is for a row of short numbers (the Logger's RPE row): no side padding and
+// 14px tabular type, so many cells stay readable. Font size
 // never shrinks to buy height — the slimness comes entirely from the thumb.
 //
 // The <button> itself STAYS min-h-11 (44px = TOUCH.minTargetPx) so audit:mobile
@@ -51,7 +53,7 @@ export default function SegmentedTabs({
   active: string;
   onChange: (key: string) => void;
   ariaLabel?: string;
-  size?: 'sm' | 'md' | 'compact';
+  size?: 'sm' | 'md' | 'compact' | 'numeric';
   as?: 'tabs' | 'radiogroup';
   className?: string;
 }) {
@@ -85,7 +87,9 @@ export default function SegmentedTabs({
           >
             <span
               className={`flex min-h-[26px] w-full items-center justify-center truncate rounded-chip transition-colors duration-150 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:[outline-color:var(--color-focus)] ${
-                compact ? 'px-1 text-[0.625rem]' : size === 'sm' ? 'px-1.5 text-[0.625rem]' : 'px-3'
+                size === 'numeric'
+                  ? 'px-0 text-sm tabular-nums'
+                  : compact ? 'px-1 text-[0.625rem]' : size === 'sm' ? 'px-1.5 text-[0.625rem]' : 'px-3'
               } ${
                 on ? 'bg-accent text-accent-fg' : 'text-muted group-hover:text-fg'
               }`}
