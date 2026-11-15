@@ -92,7 +92,7 @@ export function GarminHealthSection() {
 
   return (
     <Disclosure variant="row" title="Recovery" headerRight={headline || undefined}>
-      <div className="-mx-3 grid grid-cols-3 gap-px bg-border">
+      <div className="-mx-3 grid grid-cols-3 gap-px bg-border-soft">
         <StatCard label="Resting HR" value={restingHr ? restingHr.value : '—'} unit={restingHr ? 'bpm' : undefined} />
         <StatCard label="HRV" value={hrv ? hrv.value : '—'} unit={hrv ? 'ms' : undefined} />
         <StatCard label="Sleep" value={sleep ? formatDuration(sleep.value) : '—'} />
@@ -118,7 +118,7 @@ export function GarminHealthSection() {
       ) : null}
 
       {restingHrSeries.length > 1 || hrvSeries.length > 1 ? (
-        <div className="-mx-3 -mb-3 mt-px grid grid-cols-2 gap-px bg-border">
+        <div className="-mx-3 -mb-3 mt-px grid grid-cols-2 gap-px bg-border-soft">
           {restingHrSeries.length > 1 ? (
             <div className="bg-surface px-4 py-4">
               <div className="mb-2 t-label text-muted">

@@ -39,13 +39,33 @@ import { InfoPopover } from '@/components/ui/InfoPopover';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { BackgroundPicker } from '@/components/BackgroundPicker';
 import { CoachSpritePicker } from '@/components/CoachSpritePicker';
+import { BodyMapStylePicker } from '@/components/BodyMapStylePicker';
+import { HolidaysSettings } from '@/components/HolidaysSettings';
 import { GarminPanel } from '@/components/GarminPanel';
 import { UserStatsPanel } from '@/components/UserStatsPanel';
 import { GoalsEditor } from '@/components/GoalsEditor';
 import ShareManager from '@/components/ShareManager';
 
 const exportBtn =
-  'hill-btn min-h-11 border border-border bg-surface px-4 t-control text-fg transition-colors hover:border-fg disabled:opacity-40';
+  'hill-btn min-h-11 border border-transparent bg-tappable px-4 t-control text-fg transition-colors hover:bg-tappable-hover disabled:opacity-40';
+
+// Open the section the URL's hash names — `/app/you#holidays` is where Log
+// Activity's Holiday mode and the retired /app/settings?tab=holidays land. Any
+// <details> ancestor opens too, so a row nested in a section (#coach-icon) is
+// reachable. Sets the DOM `open` directly rather than lifting it into React
+// state: Disclosure stays browser-driven and works before hydration.
+function openFromHash() {
+  const id = decodeURIComponent(window.location.hash.slice(1));
+  if (!id) return;
+  const target = document.getElementById(id);
+  if (!target) return;
+  let node: Element | null = target;
+  while (node) {
+    if (node instanceof HTMLDetailsElement) node.open = true;
+    node = node.parentElement?.closest('details') ?? null;
+  }
+  target.scrollIntoView({ block: 'start' });
+}
 
 // The eight fields that feed buildPlanAiPrompt. Readiness is the share of them
 // that are filled: blanks become questions the AI asks you later, so this is a
@@ -72,8 +92,9 @@ const labelOf = <T extends string>(list: readonly { key: T; label: string }[], k
 
 // Wrapped, and this page in particular needs it. `<details>` renders its
 // children whether or not it is open, so /app/you MOUNTS all seven of its
-// sections on arrival — GoalsEditor, ThemeToggle, BackgroundPicker,
-// CoachSpritePicker, GarminPanel, ShareManager and the export block — each with
+// sections on arrival — GoalsEditor, HolidaysSettings, ThemeToggle,
+// BackgroundPicker, CoachSpritePicker, BodyMapStylePicker, GarminPanel,
+// ShareManager and the export block — each with
 // its own fetch and its own render. It is the widest crash surface in the app,
 // and it was the one heavy island with no boundary above it, so a single throw
 // anywhere in that set left a blank page with nothing on screen to act on.
@@ -121,6 +142,12 @@ function YouSurface() {
   }, [statsVersion]);
 
   const readiness = readinessOf(stats);
+
+  useEffect(() => {
+    openFromHash();
+    window.addEventListener('hashchange', openFromHash);
+    return () => window.removeEventListener('hashchange', openFromHash);
+  }, []);
 
   // "Dark · Dotted" on the collapsed Appearance row. It has to be LIVE: the two
   // controls that change it live inside this very section, so a value read once
@@ -199,7 +226,7 @@ function YouSurface() {
       {/* Read before you write. The page opens on what the form CONTAINS, with
           one Edit button that opens the form in this card. */}
       <Item>
-        <section className="lift mb-3 rounded-card border border-border bg-surface p-4">
+        <section className="lift mb-3 rounded-card border border-outline bg-surface p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="t-label text-muted">Profile · private</div>
@@ -212,7 +239,7 @@ function YouSurface() {
               onClick={() => setEditing((v) => !v)}
               aria-expanded={editing}
               aria-controls="you-profile-form"
-              className="hill-btn flex min-h-11 shrink-0 items-center rounded-control border border-border bg-surface px-3 t-control text-fg"
+              className="hill-btn flex min-h-11 shrink-0 items-center border border-transparent bg-tappable px-3 t-control text-fg hover:bg-tappable-hover"
             >
               {editing ? 'Done' : 'Edit'}
             </button>
@@ -339,33 +366,43 @@ function YouSurface() {
 
       <Item>
         <div className="mb-3">
-          <Disclosure title={sectionTitle('Appearance')} headerRight={appearanceSummary}>
-            <div className="flex flex-col gap-6">
-              <div>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="t-label text-muted">Theme</span>
-                </div>
-                <ThemeToggle />
+          <Disclosure
+            id="holidays"
+            title={sectionTitle('Holidays')}
+          >
+            <HolidaysSettings />
+          </Disclosure>
+        </div>
+      </Item>
+
+      {/* One card of rows. -mx-4 -my-4 cancels the Disclosure body's padding so
+          the rows run edge to edge under its summary divider, divided by the
+          same soft hairline the row-disclosures carry. */}
+      <Item>
+        <div className="mb-3">
+          <Disclosure id="appearance" title={sectionTitle('Appearance')} headerRight={appearanceSummary}>
+            <div className="-mx-4 -my-4 [&>*+*]:border-t [&>*+*]:border-border-soft">
+              <div className="flex min-h-11 items-center justify-between gap-3 px-3 py-2">
+                <span className="t-label shrink-0 text-muted">Theme</span>
+                <ThemeToggle className="min-w-0 max-w-60 flex-1" />
               </div>
-              <div>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="t-label text-muted">Backdrop</span>
-                  <InfoPopover>
-                    The full-viewport texture behind the app. Depth is device-gated — touch and
-                    reduced-motion devices default to a flatter preset.
-                  </InfoPopover>
-                </div>
+              <div className="px-3 pb-3 pt-1">
                 <BackgroundPicker />
               </div>
-              <div>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="t-label text-muted">Coach icon</span>
-                  <InfoPopover>
-                    The character on Home's Active plan card. Tap it to open Coach.
-                  </InfoPopover>
-                </div>
-                <CoachSpritePicker />
-              </div>
+              <CoachSpritePicker
+                id="coach-icon"
+                title={sectionTitle(
+                  'Coach icon',
+                  "The character on Home's Active plan card. Tap it to open Coach.",
+                )}
+              />
+              <BodyMapStylePicker
+                id="body-map"
+                title={sectionTitle(
+                  'Body map',
+                  'How the Body page draws muscles: seven shades, untrained to busiest. Plates ink in grey or colour. Saved on this device.',
+                )}
+              />
             </div>
           </Disclosure>
         </div>

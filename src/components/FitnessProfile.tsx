@@ -78,7 +78,7 @@ export function FitnessProfile({
       </div>
 
       {series.length > 0 ? (
-        <div className="lift border border-border bg-surface">
+        <div className="lift rounded-card border border-outline bg-surface">
           {/* The takeaway. Renders nothing
               until there is a prior period to compare against — an invented
               takeaway is worse than none. Compared with the PREVIOUS block
@@ -136,7 +136,7 @@ export function FitnessProfile({
                   }`}
                   className="-my-3 inline-flex min-h-11 shrink-0 items-center rounded-control text-muted transition-colors hover:text-fg"
                 >
-                  <span className="inline-flex items-center gap-1.5 rounded-control border border-border px-1.5 py-1 normal-case tracking-normal tabular-nums">
+                  <span className="inline-flex items-center gap-1.5 rounded-chip border border-transparent bg-tappable px-1.5 py-1 normal-case tracking-normal tabular-nums">
                     <GhostSwatch />
                     vs {baseline.label}
                     <span aria-hidden="true">⇄</span>
@@ -152,7 +152,7 @@ export function FitnessProfile({
           </div>
         </div>
       ) : (
-        <p className="border border-border bg-surface p-6 text-center text-sm text-muted">
+        <p className="rounded-card border border-outline bg-surface p-6 text-center text-sm text-muted">
           {profile.building
             ? 'Building your baseline from your training history…'
             : 'No training logged yet.'}

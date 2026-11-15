@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import { Button } from '@/components/ui/primitives';
+import { Button, FIELD } from '@/components/ui/primitives';
 import {
   MODALITY_KEYS,
   MOVEMENT_MODALITIES,
@@ -45,8 +45,7 @@ import type { MovementTaxonomyOverride } from '@/lib/types';
 // Saves `muscles` only: applyOverride derives the regions and marks the
 // profile `authored`.
 
-const selectClass =
-  'min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none focus:border-subtle';
+const selectClass = FIELD;
 
 // Plates ink per role. Monochrome by house rule: role is carried by ink depth
 // here and by the list's pressed/inverted state below, never by hue.
@@ -238,14 +237,14 @@ export function TaxonomyEditor({
                         type="button"
                         aria-pressed={role !== null}
                         onClick={() => toggle(m)}
-                        className="hill-btn t-control inline-flex min-h-11 items-center gap-2 border border-border bg-surface px-3 text-fg"
+                        className="hill-btn t-control inline-flex min-h-11 items-center gap-2 border px-3 text-fg"
                       >
                         {MUSCLES[m].label}
                         {/* Pressed fill marks any selection; the primary also
                             says so in words, since .hill-btn's pressed rule is
                             unlayered and owns the fill. */}
                         {role === 'primary' ? (
-                          <span className="t-label text-muted">primary</span>
+                          <span className="t-label opacity-70">primary</span>
                         ) : role === 'helper' ? (
                           <span className="sr-only">, helper</span>
                         ) : null}
@@ -315,7 +314,7 @@ export function TaxonomyEditor({
         </label>
       </div>
 
-      <div className="flex gap-3 border-t border-border p-4">
+      <div className="flex gap-3 border-t border-border-soft p-4">
         <Button
           type="button"
           disabled={busy || !profile}

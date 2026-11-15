@@ -17,11 +17,14 @@ import {
 import type { Holiday } from '@/lib/types';
 import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { HolidayForm } from '@/components/HolidayForm';
 import { HolidayGlyph, HolidayScene } from '@/components/HolidayScene';
 
-// Settings → Holidays: every planned break, plus how their scenes are drawn.
-// Editing happens inline with the same form Log Activity uses.
+// You → Holidays (a Disclosure with id="holidays", so /app/you#holidays opens
+// it): every planned break, plus how their scenes are drawn. Editing happens
+// inline with the same form Log Activity uses. It sits inside a card, so its
+// list is an inset well rather than a card of its own.
 
 const INK_LABEL: Record<HolidayInk, string> = { mono: 'Mono', colour: 'Colour' };
 const MOTION_LABEL: Record<HolidayMotion, string> = { auto: 'Auto', on: 'On', still: 'Still' };
@@ -32,7 +35,7 @@ function Row({ h, onEdit }: { h: Holiday; onEdit: () => void }) {
       <button
         type="button"
         onClick={onEdit}
-        className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-elevated"
+        className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-tappable-hover"
       >
         <span className="text-subtle">
           <HolidayGlyph kind={h.kind} />
@@ -44,7 +47,7 @@ function Row({ h, onEdit }: { h: Holiday; onEdit: () => void }) {
             {formatDate(h.ends_on)} · {holidayDays(h)} days
           </span>
         </span>
-        <span className="t-control text-muted">Edit</span>
+        <span className="t-control text-fg">Edit</span>
       </button>
     </li>
   );
@@ -71,7 +74,7 @@ export function HolidaysSettings() {
     const current = editing === 'new' ? null : (holidays.find((h) => h.id === editing) ?? null);
     const sorted = (list: Holiday[]) => [...list].sort((a, b) => a.starts_on.localeCompare(b.starts_on));
     return (
-      <section className="mb-6">
+      <section>
         <SectionHeader>{current ? `Edit ${holidayLabel(current)}` : 'New holiday'}</SectionHeader>
         <HolidayForm
           key={editing}
@@ -118,10 +121,10 @@ export function HolidaysSettings() {
             without counting as training.
           </EmptyState>
         ) : (
-          <div className="overflow-hidden rounded-card border border-border bg-surface">
+          <div className="overflow-hidden rounded-control bg-bg">
             {upcoming.length > 0 ? (
               <>
-                <div className="border-b border-border-soft bg-bg px-3 py-1.5 t-label text-faint">Upcoming</div>
+                <div className="border-b border-border-soft px-3 py-1.5 t-label text-faint">Upcoming</div>
                 <ul className="divide-y divide-border-soft">
                   {upcoming.map((h) => (
                     <Row key={h.id} h={h} onEdit={() => setEditing(h.id)} />
@@ -131,7 +134,7 @@ export function HolidaysSettings() {
             ) : null}
             {past.length > 0 ? (
               <>
-                <div className="border-y border-border-soft bg-bg px-3 py-1.5 t-label text-faint">Past</div>
+                <div className="border-y border-border-soft px-3 py-1.5 t-label text-faint">Past</div>
                 <ul className="divide-y divide-border-soft">
                   {past.map((h) => (
                     <Row key={h.id} h={h} onEdit={() => setEditing(h.id)} />
@@ -143,40 +146,53 @@ export function HolidaysSettings() {
         )}
       </section>
 
-      <section className="mb-6">
-        <SectionHeader>Scenes</SectionHeader>
-        <div className="grid gap-2">
-          <div className="mb-1 t-label text-muted">Ink</div>
-          <SegmentedTabs
-            as="radiogroup"
-            size="sm"
-            ariaLabel="Holiday scene ink"
-            tabs={HOLIDAY_INKS.map((k) => ({ key: k, label: INK_LABEL[k] }))}
-            active={ink}
-            onChange={(k) => setHolidayInk(k as HolidayInk)}
-          />
-          <div className="mt-3 mb-1 t-label text-muted">Motion</div>
-          <SegmentedTabs
-            as="radiogroup"
-            size="sm"
-            ariaLabel="Holiday scene motion"
-            tabs={HOLIDAY_MOTIONS.map((k) => ({ key: k, label: MOTION_LABEL[k] }))}
-            active={motion}
-            onChange={(k) => setHolidayMotion(k as HolidayMotion)}
-          />
-          <div className="mt-3 h-20 overflow-hidden rounded-card border border-border bg-surface">
+      <section>
+        <SectionHeader>
+          <span className="inline-flex items-center gap-2">
+            Scenes
+            <InfoPopover>
+              This device only. Scenes appear on the calendar and the Stats consistency grid. Auto
+              follows your device’s reduced-motion setting.
+            </InfoPopover>
+          </span>
+        </SectionHeader>
+        <div className="flex flex-col gap-1">
+          <div className="flex min-h-11 items-center justify-between gap-3">
+            <span className="t-label shrink-0 text-muted">Ink</span>
+            <SegmentedTabs
+              as="radiogroup"
+              size="sm"
+              ariaLabel="Holiday scene ink"
+              tabs={HOLIDAY_INKS.map((k) => ({ key: k, label: INK_LABEL[k] }))}
+              active={ink}
+              onChange={(k) => setHolidayInk(k as HolidayInk)}
+              className="min-w-0 max-w-60 flex-1"
+            />
+          </div>
+          <div className="flex min-h-11 items-center justify-between gap-3">
+            <span className="t-label shrink-0 text-muted">Motion</span>
+            <SegmentedTabs
+              as="radiogroup"
+              size="sm"
+              ariaLabel="Holiday scene motion"
+              tabs={HOLIDAY_MOTIONS.map((k) => ({ key: k, label: MOTION_LABEL[k] }))}
+              active={motion}
+              onChange={(k) => setHolidayMotion(k as HolidayMotion)}
+              className="min-w-0 max-w-60 flex-1"
+            />
+          </div>
+          <div className="mt-2 h-20 overflow-hidden rounded-card border border-border bg-surface">
             <HolidayScene kind={preview?.kind ?? 'dive'} seed={4} />
           </div>
-          <p className="text-xs text-muted">
-            This device only. Scenes appear on the calendar and the Stats consistency grid.{' '}
-            {reducedMotion
-              ? motion === 'auto'
+          {/* Only the current-state line stays visible; what the setting is
+              lives in the popover above. */}
+          {reducedMotion && motion !== 'still' ? (
+            <p className="mt-1 text-xs text-muted">
+              {motion === 'auto'
                 ? 'Your device asks for reduced motion, so Auto keeps them still. Pick On to animate anyway.'
-                : motion === 'on'
-                  ? 'Animating even though your device asks for reduced motion.'
-                  : ''
-              : 'Auto follows your device’s reduced-motion setting.'}
-          </p>
+                : 'Animating even though your device asks for reduced motion.'}
+            </p>
+          ) : null}
         </div>
       </section>
     </>

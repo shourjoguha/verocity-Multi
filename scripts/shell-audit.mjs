@@ -29,7 +29,9 @@ const BASE = process.env.BASE || 'http://localhost:4321';
 // Enough of the app to catch a layout regressing on one surface only. The
 // Logger is deliberately included: it is immersive (no tab bar) but owns the
 // other bottom bar, the Finish bar, which had the identical bug.
-const ROUTES = ['/app', '/app/stats', '/app/you', '/app/settings', '/showcase'];
+// '/app/you#holidays' replaced '/app/settings' (now a redirect): a long,
+// opened You page is the tallest scroller left among the settings surfaces.
+const ROUTES = ['/app', '/app/stats', '/app/you', '/app/you#holidays', '/showcase'];
 
 // Three viewport heights, because the failure was a MISMATCH between two
 // viewport sizes. A shell that only holds at the height it was authored

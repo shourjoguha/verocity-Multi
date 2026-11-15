@@ -30,7 +30,7 @@ function str(v: unknown): string | null {
 }
 
 const chip =
-  'inline-flex items-center gap-1 border border-border px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider text-muted';
+  'inline-flex items-center gap-1 rounded-chip border border-border px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider text-muted';
 
 function DeepRetrieval({ payload }: { payload: Dict }) {
   const curated = asArr(payload.curated);
@@ -48,7 +48,7 @@ function DeepRetrieval({ payload }: { payload: Dict }) {
       {notes ? <p className="mb-2 whitespace-pre-line text-xs text-muted">{notes}</p> : null}
       <ul className="flex flex-col gap-1">
         {curated.slice(0, 12).map((c, i) => (
-          <li key={i} className="flex items-start justify-between gap-2 border border-border bg-bg px-2 py-1.5">
+          <li key={i} className="flex items-start justify-between gap-2 rounded-control bg-bg px-2 py-1.5">
             <span className="text-xs text-fg">{str(c.path) ?? str(c.title) ?? 'source'}</span>
             <span className="flex shrink-0 gap-1">
               {typeof c.hop === 'number' ? <span className={chip}>hop {c.hop}</span> : null}
@@ -155,7 +155,7 @@ export default function DeepEnrichment({ recId }: { recId: string }) {
   const disc = latest('disconfirmation');
 
   return (
-    <div className="mt-5 flex flex-col gap-4 border-t border-border pt-4">
+    <div className="mt-5 flex flex-col gap-4 border-t border-border-soft pt-4">
       <div className="text-[0.6rem] uppercase tracking-[0.35em] text-muted">Deep enrichment</div>
       {contra ? <Contradiction payload={asDict(contra.payload)} /> : null}
       {disc ? <Disconfirmation payload={asDict(disc.payload)} /> : null}
