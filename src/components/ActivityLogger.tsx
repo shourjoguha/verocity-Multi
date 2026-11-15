@@ -6,7 +6,7 @@ import { ACTIVITY_TAGS, ACTIVITY_TYPE_TAGS, ACTIVITY_TYPES, METRICS, SORENESS } 
 import { retagForType } from '@/lib/tags';
 import { retimeLog } from '@/lib/logWhen';
 import type { Holiday, LogDocument, VibeCheck } from '@/lib/types';
-import { Button, LoadingScreen } from '@/components/ui/primitives';
+import { Button, FIELD, LoadingScreen } from '@/components/ui/primitives';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { SoreAreaPicker } from '@/components/logger/SoreAreaPicker';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
@@ -233,8 +233,12 @@ export default function ActivityLogger() {
             key={t}
             type="button"
             onClick={() => pickType(t)}
-            className={`flex min-h-11 items-center border px-3 t-control transition-colors ${
-              type === t ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+            // Single-select, but there are more types than fit one segmented
+            // row at 375px, so these stay wrapping toggles. aria-pressed hands
+            // the fills to `.hill-btn[aria-pressed]`: accent on, tappable off.
+            aria-pressed={type === t}
+            className={`hill-btn flex min-h-11 items-center border px-3 t-control transition-colors ${
+              type === t ? '' : 'text-muted hover:text-fg'
             }`}
           >
             {t}
@@ -249,7 +253,7 @@ export default function ActivityLogger() {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none focus:border-subtle"
+            className={FIELD}
           />
         </div>
         <div>
@@ -259,7 +263,7 @@ export default function ActivityLogger() {
             value={time}
             onChange={(e) => setTime(e.target.value)}
             aria-label="Start time (optional)"
-            className="min-h-11 w-full min-w-0 border border-border bg-surface px-3 text-base tabular-nums text-fg outline-none focus:border-subtle"
+            className={`${FIELD} min-w-0 tabular-nums`}
           />
         </div>
       </div>
@@ -271,7 +275,7 @@ export default function ActivityLogger() {
         value={minutes}
         onChange={(e) => setMinutes(e.target.value)}
         placeholder="30"
-        className="mb-5 min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
+        className={`${FIELD} mb-5`}
       />
 
       <label className="mb-2 block t-control text-muted">
@@ -283,7 +287,7 @@ export default function ActivityLogger() {
         value={distance}
         onChange={(e) => setDistance(e.target.value)}
         placeholder="5000"
-        className="mb-5 min-h-11 w-full border border-border bg-surface px-3 text-base text-fg outline-none placeholder:text-muted focus:border-subtle"
+        className={`${FIELD} mb-5`}
       />
 
       <label className="mb-2 block t-control text-muted">Tags</label>
@@ -293,12 +297,13 @@ export default function ActivityLogger() {
             key={key}
             type="button"
             onClick={() => toggleTag(key)}
-            className="flex min-h-11 items-center border px-3 t-control transition-colors"
-            style={
-              tags.includes(key)
-                ? { borderColor: color, color }
-                : { borderColor: 'var(--color-border)', color: 'var(--color-muted)' }
-            }
+            // Multi-select toggles: fills from `.hill-btn[aria-pressed]`, and
+            // the activity colour stays as the on chip's outline.
+            aria-pressed={tags.includes(key)}
+            className={`hill-btn flex min-h-11 items-center border px-3 t-control transition-colors ${
+              tags.includes(key) ? '' : 'text-muted hover:text-fg'
+            }`}
+            style={tags.includes(key) ? { borderColor: color } : undefined}
           >
             {label}
           </button>
@@ -310,7 +315,7 @@ export default function ActivityLogger() {
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         rows={3}
-        className="mb-5 w-full border border-border bg-surface p-3 text-sm text-fg outline-none placeholder:text-muted focus:border-subtle"
+        className={`${FIELD} mb-5 py-3`}
       />
 
       <div className="mb-5">
@@ -339,10 +344,10 @@ export default function ActivityLogger() {
                     >
                       <span
                         aria-hidden
-                        className={`flex h-9 w-9 items-center justify-center border text-sm tabular-nums ${
+                        className={`flex h-9 w-9 items-center justify-center rounded-chip border text-sm tabular-nums transition-colors ${
                           vibe[key] === n
-                            ? 'border-fg bg-fg text-bg'
-                            : 'border-border text-muted hover:text-fg'
+                            ? 'border-accent bg-accent text-accent-fg'
+                            : 'border-transparent bg-tappable text-muted hover:text-fg'
                         }`}
                       >
                         {n}
@@ -369,7 +374,7 @@ export default function ActivityLogger() {
                 onChange={(e) => setHrAvg(e.target.value)}
                 placeholder="140"
                 aria-label="Average heart rate (BPM)"
-                className="min-h-11 w-full border border-border bg-surface px-3 text-base tabular-nums text-fg outline-none placeholder:text-muted focus:border-subtle"
+                className={`${FIELD} tabular-nums`}
               />
             </div>
             <div>
@@ -381,7 +386,7 @@ export default function ActivityLogger() {
                 onChange={(e) => setHrMax(e.target.value)}
                 placeholder="175"
                 aria-label="Max heart rate (BPM)"
-                className="min-h-11 w-full border border-border bg-surface px-3 text-base tabular-nums text-fg outline-none placeholder:text-muted focus:border-subtle"
+                className={`${FIELD} tabular-nums`}
               />
             </div>
           </div>
@@ -418,8 +423,8 @@ function HolidayPanel({ holidays }: { holidays: Holiday[] }) {
         onCancel={() => (window.location.href = '/app')}
       />
       <a
-        href="/app/settings?tab=holidays"
-        className="mt-4 flex min-h-11 items-center t-control text-muted transition-colors hover:text-fg"
+        href="/app/you#holidays"
+        className="mt-4 flex min-h-11 items-center t-control text-fg"
       >
         All holidays in Settings →
       </a>

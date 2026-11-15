@@ -27,8 +27,10 @@ export function SoreAreaPicker({ value, onChange }: { value: Sore; onChange: (ne
       className="-my-1.5 flex h-11 items-center"
     >
       <span
-        className={`flex h-8 w-full items-center justify-center border text-xs uppercase tracking-wider ${
-          value.includes(k) ? 'border-fg bg-fg text-bg' : 'border-border text-muted hover:text-fg'
+        className={`flex h-8 w-full items-center justify-center rounded-chip border text-xs uppercase tracking-wider transition-colors ${
+          value.includes(k)
+            ? 'border-accent bg-accent text-accent-fg'
+            : 'border-transparent bg-tappable text-muted hover:text-fg'
         }`}
       >
         {label}

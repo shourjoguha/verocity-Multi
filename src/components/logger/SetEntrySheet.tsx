@@ -90,7 +90,7 @@ function EntryOverlay({
       />
       <div
         data-sheet-panel
-        className="sheet-panel-full lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col overflow-y-auto border border-border bg-surface"
+        className="sheet-panel-full lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col overflow-y-auto border border-outline bg-surface"
       >
         {children}
       </div>
@@ -196,13 +196,13 @@ export function SetEntrySheet({
   };
 
   const secondary =
-    'hill-btn flex min-h-11 flex-1 items-center justify-center border border-border bg-surface px-3 t-control text-fg transition-colors hover:border-fg';
+    'hill-btn flex min-h-11 flex-1 items-center justify-center border border-transparent bg-tappable px-3 t-control text-fg transition-colors hover:bg-tappable-hover';
 
   if (!open || !a) return null;
 
   return (
     <EntryOverlay label={`Set ${setIndex + 1} — ${movement}`} onClose={onClose}>
-              <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+              <div className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm text-fg">{movement}</div>
                   <div className="t-control text-muted">
@@ -271,7 +271,7 @@ export function SetEntrySheet({
                     haptic();
                     onLog();
                   }}
-                  className="hill-btn mt-2 flex min-h-14 items-center justify-center bg-fg px-4 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85"
+                  className="hill-btn mt-2 flex min-h-14 items-center justify-center bg-accent px-4 text-sm uppercase tracking-wider text-accent-fg transition-colors hover:bg-accent/85"
                 >
                   {a.completed ? 'Update set' : 'Log set'}
                 </button>

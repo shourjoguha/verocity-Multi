@@ -92,7 +92,8 @@ import type {
   VibeCheck,
   WorkoutLog,
 } from '@/lib/types';
-import { Button, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
+import { Button, FIELD, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
+import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Modal } from '@/components/ui/Modal';
 import { EASE } from '@/components/anim';
 import { SetRow } from '@/components/logger/SetRow';
@@ -1042,7 +1043,7 @@ export default function Logger() {
     const item = group.items[ii];
     if (isSubroutine(item)) {
       return (
-        <div key={item.id} className={grouped ? 'border-t border-border first:border-0' : ''}>
+        <div key={item.id} className={grouped ? 'border-t border-border-soft first:border-0' : ''}>
           {/* Carries its own px-4/py-3 now that the card container is unpadded
               — same band treatment as a movement's identity row. */}
           <div className="flex items-start justify-between gap-2 px-4 py-3">
@@ -1052,7 +1053,7 @@ export default function Logger() {
             </div>
             <button
               onClick={() => setOptionsFor({ si, gi, ii })}
-              className="hill-btn shrink-0 border border-border bg-surface px-2 py-1 t-control text-muted hover:text-fg"
+              className="hill-btn shrink-0 border border-transparent bg-tappable px-2 py-1 t-control text-muted hover:text-fg"
               aria-label="Subroutine options"
             >
               ⋯
@@ -1072,7 +1073,7 @@ export default function Logger() {
     // `showPlanned` note in SetRow.
     const anyPlanned = item.sets.some((s) => !!s.planned);
     return (
-      <div key={item.id} className={grouped ? 'border-t border-border first:border-0' : ''}>
+      <div key={item.id} className={grouped ? 'border-t border-border-soft first:border-0' : ''}>
         {/* BAND 1 — identity. The ✓ is a full-height cell flush with the
             card's edge, divided from the name by a hairline: the whole cell is
             the 44px target, so the visible box and the hit box are the same
@@ -1086,12 +1087,17 @@ export default function Logger() {
               activate(groupId);
               toggleItemComplete(si, gi, ii);
             }}
-            // No `hill-btn`: its unlayered aria-pressed background beats the
-            // `bg-accent` utility (see the SetRow note). The rounded corners
-            // keep the filled cell inside a standalone card's radius.
+            // No `hill-btn`, and the reason is no longer the fill: the global
+            // `.hill-btn[aria-pressed]` rule now paints accent / tappable, which
+            // is what this cell wants. But `.hill-btn`'s border-radius is
+            // unlayered too, so it would round all four corners of a cell that
+            // sits flush against the card edge and beat the per-corner
+            // rounded-*-card below that keeps the fill inside a standalone
+            // card's radius — and its hover/press `border-color` would outline
+            // the cell. So this paints its own fill, on = accent, off = tappable.
             className={`flex w-11 shrink-0 items-center justify-center border-r text-sm transition-colors ${
               grouped ? '' : `rounded-tl-card ${isCollapsed ? 'rounded-bl-card' : ''}`
-            } ${allDone ? 'border-r-accent bg-accent text-accent-fg' : 'border-r-border text-muted'}`}
+            } ${allDone ? 'border-r-accent bg-accent text-accent-fg' : 'border-r-transparent bg-tappable text-muted'}`}
             aria-label="Complete movement"
             aria-pressed={allDone}
           >
@@ -1281,16 +1287,24 @@ export default function Logger() {
       return (
         // Left accent rule, not an all-round accent border — the mockup's
         // "superset with previous" cue on an otherwise ordinary bordered
-        // card, matching the single-movement group's border-border below.
+        // card, matching the single-movement group's border-outline below.
         // Horizontal padding moved off the card and onto the bands inside it,
         // so a superset's member movements band exactly like a standalone one
         // instead of being inset a second time by this container.
+        //
+        // The stripe is its own straight element, not the card's border-l: on
+        // a 12px-radius card a left border bends round both corners. It sits
+        // over the card's (transparent) 2px left border so nothing inside
+        // moves, and stops 12px short of each end, where the corner curve
+        // starts. Not `overflow-hidden` on the card instead: SetRow's PR
+        // ring-pop scales to 2.4x a 44px box and is meant to escape it.
         <div
           key={group.id}
-          className={`lift border border-border border-l-2 border-l-accent bg-surface ${
+          className={`lift relative rounded-card border border-outline border-l-2 bg-surface ${
             isCollapsed ? 'py-1' : ''
           }`}
         >
+          <span aria-hidden className="pointer-events-none absolute inset-y-3 -left-0.5 w-0.5 bg-accent" />
           <div
             className={`flex items-center justify-between gap-2 px-4 t-control ${
               isCollapsed ? '' : 'border-b border-border-soft'
@@ -1314,23 +1328,21 @@ export default function Logger() {
               </span>
             </button>
             {isCollapsed ? null : (
-            <div className="flex shrink-0 gap-1">
-              {(['superset', 'circuit'] as GroupKind[]).map((k) => (
-                <button
-                  key={k}
-                  onClick={() => {
-                    activate(group.id);
-                    setDoc((d) => setGroupKind(d, si, gi, k));
-                  }}
-                  aria-pressed={group.kind === k}
-                  className={`flex min-h-11 items-center px-2 ${
-                    group.kind === k ? 'text-accent' : 'text-muted hover:text-fg'
-                  }`}
-                >
-                  {k}
-                </button>
-              ))}
-            </div>
+            // One of two → the shared segmented control. Its 36px shell fits
+            // inside this 44px band and its buttons stay min-h-11, so neither
+            // the band height nor the tap targets change. Default size, not
+            // `sm`: `sm` would drop the label from t-control's 11px to 10px.
+            <SegmentedTabs
+              as="radiogroup"
+              ariaLabel="Group kind"
+              className="shrink-0"
+              tabs={(['superset', 'circuit'] as GroupKind[]).map((k) => ({ key: k, label: k }))}
+              active={group.kind}
+              onChange={(k) => {
+                activate(group.id);
+                setDoc((d) => setGroupKind(d, si, gi, k as GroupKind));
+              }}
+            />
             )}
           </div>
           {isCollapsed
@@ -1375,7 +1387,7 @@ export default function Logger() {
       // their own padding so every row runs the full width of the card.
       <div
         key={group.id}
-        className="lift border border-border bg-surface"
+        className="lift rounded-card border border-outline bg-surface"
       >
         {renderItem(si, gi, 0, false, {
           link:
@@ -1429,7 +1441,13 @@ export default function Logger() {
     }
     const superset = group.items.length > 1;
     return (
-      <div key={group.id} className={superset ? 'border-l-2 border-l-accent' : ''}>
+      // Same straight stripe as the superset card (see renderGroup), kept off
+      // the rows' own border so it cannot poke past the pile's rounded corner
+      // when this group is the pile's first or last.
+      <div key={group.id} className={superset ? 'relative border-l-2 border-l-transparent' : ''}>
+        {superset ? (
+          <span aria-hidden className="pointer-events-none absolute inset-y-3 -left-0.5 w-0.5 bg-accent" />
+        ) : null}
         {superset ? (
           // 'single' is unreachable for a multi-item group, but printing it
           // raw would read as a bug rather than a label if it ever arrived.
@@ -1651,7 +1669,7 @@ export default function Logger() {
         </div>
 
         {showDetails && cycle?.note ? (
-          <p className="mt-1.5 border border-border px-3 py-2 text-sm text-fg">
+          <p className="mt-1.5 rounded-card border border-outline bg-surface px-3 py-2 text-sm text-fg">
             <span className="t-label text-muted">Cycle {cycle.week} · </span>
             {cycle.note}
           </p>
@@ -1663,7 +1681,9 @@ export default function Logger() {
               type="date"
               value={logDate}
               onChange={(e) => changeDate(e.target.value)}
-              className="min-h-11 border border-border bg-surface px-3 text-base tabular-nums text-fg outline-none focus:border-subtle"
+              // FIELD is `w-full`; max-w-max keeps this one at its own width so the
+              // tag toggles still wrap beside it.
+              className={`${FIELD} max-w-max tabular-nums`}
               aria-label="Session date"
             />
             {Object.entries(ACTIVITY_TAGS).map(([key, v]) => {
@@ -1673,10 +1693,12 @@ export default function Logger() {
                   key={key}
                   type="button"
                   onClick={() => toggleTag(key)}
-                  className={`hill-btn flex min-h-11 items-center border bg-surface px-3 t-control transition-colors ${
-                    on ? '' : 'border-border text-muted hover:text-fg'
+                  // Fills from `.hill-btn[aria-pressed]` (accent / tappable);
+                  // the activity colour stays as the on chip's outline.
+                  className={`hill-btn flex min-h-11 items-center border px-3 t-control transition-colors ${
+                    on ? '' : 'text-muted hover:text-fg'
                   }`}
-                  style={on ? { borderColor: v.color, color: v.color } : undefined}
+                  style={on ? { borderColor: v.color } : undefined}
                   aria-pressed={on}
                 >
                   {v.label}
@@ -1687,7 +1709,7 @@ export default function Logger() {
               <button
                 type="button"
                 onClick={() => setShowVibe(true)}
-                className="hill-btn flex min-h-11 items-center border border-border bg-surface px-3 t-control text-muted transition-colors hover:text-fg"
+                className="hill-btn flex min-h-11 items-center border border-transparent bg-tappable px-3 t-control text-fg transition-colors hover:bg-tappable-hover"
               >
                 Readiness
               </button>
@@ -1696,7 +1718,7 @@ export default function Logger() {
         ) : null}
 
         {showDetails && linkedSession?.source_text ? (
-          <details className="mt-1.5 border border-border">
+          <details className="mt-1.5 rounded-card border border-outline bg-surface">
             <summary className="cursor-pointer px-3 py-2 t-control text-muted hover:text-fg">
               Source{linkedSession.source ? ` · ${linkedSession.source}` : ''}
             </summary>
@@ -1798,7 +1820,7 @@ export default function Logger() {
             // a stack of individually bordered cards separated by an 8px gap:
             // the card chrome was costing more height per finished movement
             // than the movement itself.
-            <div className="mt-1 flex flex-col border border-border [&>*+*]:border-t [&>*+*]:border-border-soft">
+            <div className="mt-1 flex flex-col rounded-card border border-outline bg-surface [&>*+*]:border-t [&>*+*]:border-border-soft">
               {doneGroups.map(({ si, gi }) => renderDoneGroup(si, gi))}
             </div>
           ) : null}
@@ -1883,7 +1905,7 @@ export default function Logger() {
               );
               const close = () => setOptionsFor(null);
               const rowClass =
-                'hill-btn inline-flex min-h-11 items-center justify-center border border-border bg-surface px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg disabled:opacity-40';
+                'hill-btn inline-flex min-h-11 items-center justify-center border border-transparent bg-tappable px-4 text-sm uppercase tracking-wider text-fg transition-colors hover:bg-tappable-hover disabled:opacity-40';
               return (
                 <div className="min-h-0 flex-1 overflow-y-auto p-4">
                   <div className="mb-4 text-sm capitalize text-fg">{item.movement}</div>
@@ -1912,7 +1934,7 @@ export default function Logger() {
                           setDoc((d) => removeItem(d, si, gi, ii));
                           close();
                         }}
-                        className="hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-border bg-surface text-danger transition-colors hover:border-danger"
+                        className="hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-transparent bg-tappable text-danger transition-colors hover:border-danger"
                         aria-label={sub ? 'Remove subroutine' : 'Remove movement'}
                         title={sub ? 'Remove subroutine' : 'Remove movement'}
                       >
@@ -2011,7 +2033,7 @@ export default function Logger() {
                           setDoc((d) => moveGroupToSection(d, si, gi, k));
                           close();
                         }}
-                        className="hill-btn min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-sm text-fg transition-colors hover:border-fg"
+                        className={`${FIELD} min-w-0 flex-1`}
                       >
                         <option value="">Choose…</option>
                         {SECTIONS.filter((k) => k !== currentKey).map((k) => (
@@ -2035,7 +2057,7 @@ export default function Logger() {
                             );
                             close();
                           }}
-                          className="hill-btn min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-sm capitalize text-fg transition-colors hover:border-fg"
+                          className={`${FIELD} min-w-0 flex-1 capitalize`}
                         >
                           <option value="">Choose…</option>
                           {supersetTargets.map(({ group: g, sectionKey }) => (
@@ -2061,7 +2083,7 @@ export default function Logger() {
                       onChange={(e) => setDoc((d) => setItemNotes(d, si, gi, ii, e.target.value))}
                       rows={2}
                       placeholder="Optional — cue, setup, how it felt"
-                      className="w-full resize-none border border-border bg-surface px-2 py-1.5 text-sm text-fg placeholder:text-muted focus:border-fg focus:outline-none"
+                      className={`${FIELD} resize-none py-1.5`}
                     />
                   </div>
 
@@ -2080,8 +2102,8 @@ export default function Logger() {
                             title={desc}
                             onClick={() => setDoc((d) => toggleItemNotation(d, si, gi, ii, sym))}
                             aria-pressed={on}
-                            className={`hill-btn border bg-surface px-2 py-1 text-xs transition-colors ${
-                              on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                            className={`hill-btn border px-2 py-1 text-xs transition-colors ${
+                              on ? '' : 'text-muted hover:text-fg'
                             }`}
                           >
                             {sym}
@@ -2109,8 +2131,8 @@ export default function Logger() {
                                 title={desc}
                                 onClick={() => setDoc((d) => toggleItemNotation(d, si, gi, ii, sym))}
                                 aria-pressed={on}
-                                className={`hill-btn border bg-surface px-2 py-1 text-xs transition-colors ${
-                                  on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                                className={`hill-btn border px-2 py-1 text-xs transition-colors ${
+                                  on ? '' : 'text-muted hover:text-fg'
                                 }`}
                               >
                                 {label}
@@ -2133,10 +2155,8 @@ export default function Logger() {
                           type="button"
                           onClick={() => setDoc((d) => setItemRest(d, si, gi, ii, sec))}
                           aria-pressed={item.restSeconds === sec}
-                          className={`hill-btn border bg-surface px-2 py-1 text-xs tabular-nums transition-colors ${
-                            item.restSeconds === sec
-                              ? 'border-fg text-fg'
-                              : 'border-border text-muted hover:text-fg'
+                          className={`hill-btn border px-2 py-1 text-xs tabular-nums transition-colors ${
+                            item.restSeconds === sec ? '' : 'text-muted hover:text-fg'
                           }`}
                         >
                           {sec}s
@@ -2181,7 +2201,10 @@ export default function Logger() {
                                           setDoc((d) => setSetRest(d, si, gi, ii, ki, v === '' ? null : Number(v)));
                                         }}
                                         aria-label={`Rest after set ${ki + 1}`}
-                                        className="min-h-11 min-w-0 flex-1 border border-border bg-surface px-2 text-xs tabular-nums text-fg"
+                                        // Not FIELD: two of these share a 375px row with their labels, and
+                                        // FIELD's text-base / px-3 would clip "Same (120s)". FIELD's fill
+                                        // and focus ink at the old size.
+                                        className="min-h-11 min-w-0 flex-1 rounded-control border border-transparent bg-tappable px-2 text-xs tabular-nums text-fg outline-none focus:border-fg"
                                       >
                                         <option value="">{base != null ? `Same (${base}s)` : 'Same'}</option>
                                         {TIMERS.restPresets.map((sec) => (
@@ -2223,8 +2246,8 @@ export default function Logger() {
                             type="button"
                             onClick={() => setDoc((d) => setItemMarkKind(d, si, gi, ii, key))}
                             aria-pressed={on}
-                            className={`hill-btn border bg-surface px-2 py-1 text-xs transition-colors ${
-                              on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                            className={`hill-btn border px-2 py-1 text-xs transition-colors ${
+                              on ? '' : 'text-muted hover:text-fg'
                             }`}
                           >
                             {label}
@@ -2244,8 +2267,8 @@ export default function Logger() {
                               onClick={() => setDoc((d) => setItemMark(d, si, gi, ii, cm))}
                               aria-pressed={on}
                               aria-label={`Box ${inches} inches, ${cm} centimetres, all sets`}
-                              className={`hill-btn border bg-surface px-2 py-1 text-xs tabular-nums transition-colors ${
-                                on ? 'border-fg text-fg' : 'border-border text-muted hover:text-fg'
+                              className={`hill-btn border px-2 py-1 text-xs tabular-nums transition-colors ${
+                                on ? '' : 'text-muted hover:text-fg'
                               }`}
                             >
                               {inches}in
@@ -2308,7 +2331,7 @@ export default function Logger() {
               {/* Finish takes the width; discard is a 44px square beside it.
                   The size difference IS the safeguard — the two are one gap
                   apart, so what keeps a shaking hand off the wrong one is that
-                  Finish is ~6x the area and filled while discard is a hairline
+                  Finish is ~6x the area and accent-filled while discard is a grey
                   square. It also opens a confirm sheet rather than discarding,
                   which the per-movement trash does not. Both are `min-h-11`
                   with a border so their boxes align to the pixel (see the
@@ -2318,14 +2341,14 @@ export default function Logger() {
                 className="flex-1"
               >
                 Finish
-                <span className="ml-2 text-bg/45 tabular-nums">
+                <span className="ml-2 text-accent-fg/45 tabular-nums">
                   {sessionSets.done}/{sessionSets.total}
                 </span>
               </Button>
               <button
                 type="button"
                 onClick={() => setConfirmDiscard(true)}
-                className="hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-border bg-surface text-muted transition-colors hover:text-fg"
+                className="hill-btn flex h-11 w-11 shrink-0 items-center justify-center border border-transparent bg-tappable text-muted transition-colors hover:text-fg"
                 aria-label="Discard session"
                 title="Discard session"
               >
