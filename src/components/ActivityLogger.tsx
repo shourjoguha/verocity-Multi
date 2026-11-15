@@ -426,7 +426,7 @@ function HolidayPanel({ holidays }: { holidays: Holiday[] }) {
         href="/app/you#holidays"
         className="mt-4 flex min-h-11 items-center t-control text-fg"
       >
-        All holidays in Settings →
+        All holidays in You →
       </a>
     </>
   );
