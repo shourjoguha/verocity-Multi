@@ -19,7 +19,7 @@ import { DEFAULT_PRIMARY_METRIC } from '@/lib/metrics';
 import { tagColor } from '@/lib/tags';
 import { distinctSessionMovements, formatSessionMeta, sessionMovementKeys, TYPE_SHORT } from '@/lib/sessionMeta';
 import { SessionSheet } from '@/components/SessionSheet';
-import { Button, EmptyState, FIELD, FilterChip, ListCard, LoadingScreen } from '@/components/ui/primitives';
+import { Button, EmptyState, FIELD, FIELD_DENSE, FilterChip, ListCard, LoadingScreen } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
 import { Disclosure } from '@/components/ui/Disclosure';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
@@ -174,6 +174,7 @@ function TagPicker({ value, onChange }: { value: string[]; onChange: (tags: stri
           label={ACTIVITY_TAGS[key].label}
           on={value.includes(key)}
           onClick={() => toggle(key)}
+          color={tagColor(key)}
         />
       ))}
     </div>
@@ -271,54 +272,64 @@ function SessionForm({
         {draft.exercises.length === 0 ? (
           <p className="mb-3 text-sm text-muted">No movements yet.</p>
         ) : (
-          <ul className="mb-3 flex flex-col gap-2">
+          // Same rhythm as the plan editor grid: FIELD_DENSE cells (36px) on a
+          // 44px line set by the 44x44 row buttons, rows split by a divider
+          // with no gap. The buttons sit side by side, never stacked (LESSONS:
+          // the slim-thumb trick does not transfer to a stacked list). Under
+          // `sm` the fields wrap to a second line below name + buttons.
+          <ul className="mb-3 flex flex-col">
             {draft.exercises.map((ex, i) => (
-              <li key={i} className="flex flex-wrap items-center gap-2 rounded-control bg-bg p-2">
+              <li
+                key={i}
+                className="flex flex-wrap items-center gap-x-2 border-b border-border-soft last:border-b-0"
+              >
                 <span className="min-w-28 flex-1 capitalize text-fg">{ex.movement}</span>
-                {/* FIELD is w-full; the wrappers give each field its width. */}
-                <span className="w-32">
-                  <select
-                    value={ex.section}
-                    onChange={(e) => setEx(i, { section: e.target.value as SectionKey })}
-                    className={FIELD}
-                    aria-label={`${ex.movement} section`}
-                  >
-                    {SECTIONS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </span>
-                <span className="w-32">
-                  <select
-                    value={ex.primaryMetric}
-                    onChange={(e) => setEx(i, { primaryMetric: e.target.value as MetricKey })}
-                    className={FIELD}
-                    aria-label={`${ex.movement} metric`}
-                  >
-                    {METRIC_KEYS.map((m) => (
-                      <option key={m} value={m}>
-                        {METRICS[m].label}
-                      </option>
-                    ))}
-                  </select>
-                </span>
-                <span className="w-20">
-                  <input
-                    value={ex.planned}
-                    onChange={(e) => setEx(i, { planned: e.target.value })}
-                    placeholder="3x5"
-                    className={`${FIELD} tabular-nums`}
-                    aria-label={`${ex.movement} planned sets`}
-                  />
-                </span>
-                <div className="flex shrink-0 items-center">
+                {/* FIELD_DENSE is w-full; the wrappers give each field its width. */}
+                <div className="order-last flex w-full gap-2 pb-1 sm:order-1 sm:w-auto sm:pb-0">
+                  <span className="min-w-0 flex-1 sm:w-32 sm:flex-none">
+                    <select
+                      value={ex.section}
+                      onChange={(e) => setEx(i, { section: e.target.value as SectionKey })}
+                      className={FIELD_DENSE}
+                      aria-label={`${ex.movement} section`}
+                    >
+                      {SECTIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                  <span className="min-w-0 flex-1 sm:w-32 sm:flex-none">
+                    <select
+                      value={ex.primaryMetric}
+                      onChange={(e) => setEx(i, { primaryMetric: e.target.value as MetricKey })}
+                      className={FIELD_DENSE}
+                      aria-label={`${ex.movement} metric`}
+                    >
+                      {METRIC_KEYS.map((m) => (
+                        <option key={m} value={m}>
+                          {METRICS[m].label}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                  <span className="w-20 shrink-0">
+                    <input
+                      value={ex.planned}
+                      onChange={(e) => setEx(i, { planned: e.target.value })}
+                      placeholder="3x5"
+                      className={`${FIELD_DENSE} tabular-nums`}
+                      aria-label={`${ex.movement} planned sets`}
+                    />
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center sm:order-2">
                   <button
                     type="button"
                     onClick={() => moveEx(i, -1)}
                     disabled={i === 0}
-                    className="px-1.5 text-muted hover:text-fg disabled:opacity-30"
+                    className="flex min-h-11 min-w-11 items-center justify-center text-muted transition-colors hover:text-fg disabled:opacity-30"
                     aria-label="Move up"
                   >
                     ↑
@@ -327,7 +338,7 @@ function SessionForm({
                     type="button"
                     onClick={() => moveEx(i, 1)}
                     disabled={i === draft.exercises.length - 1}
-                    className="px-1.5 text-muted hover:text-fg disabled:opacity-30"
+                    className="flex min-h-11 min-w-11 items-center justify-center text-muted transition-colors hover:text-fg disabled:opacity-30"
                     aria-label="Move down"
                   >
                     ↓
@@ -335,7 +346,7 @@ function SessionForm({
                   <button
                     type="button"
                     onClick={() => removeEx(i)}
-                    className="px-1.5 text-muted hover:text-accent"
+                    className="flex min-h-11 min-w-11 items-center justify-center text-muted transition-colors hover:text-accent"
                     aria-label={`Remove ${ex.movement}`}
                   >
                     ×
@@ -685,6 +696,7 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
               label={ACTIVITY_TAGS[key].label}
               on={tagFilter === key}
               onClick={() => setTagFilter(tagFilter === key ? null : key)}
+              color={tagColor(key)}
             />
           ))}
         </div>

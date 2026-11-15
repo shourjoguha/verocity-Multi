@@ -18,6 +18,13 @@ import { AnimatedNumber } from '@/components/anim';
 export const FIELD =
   'min-h-11 w-full rounded-control border border-transparent bg-tappable px-3 text-base text-fg outline-none placeholder:text-muted focus:border-fg';
 
+// FIELD for the repeated rows of a tabular editor ONLY (the plan editor grid,
+// the session form's movement rows): 36px tall with tighter padding, so a
+// column of rows stays compact. Still `text-base` — the iOS zoom rule does not
+// relax for a dense row. Standalone fields stay on FIELD.
+export const FIELD_DENSE =
+  'min-h-9 w-full rounded-control border border-transparent bg-tappable px-2 text-base text-fg outline-none placeholder:text-muted focus:border-fg';
+
 export function Card({
   children,
   className = '',
@@ -293,14 +300,19 @@ export function Tag({
 // with no vertical gap, so each row's 44px box abuts the next instead of
 // overlapping it (LESSONS: the slim-thumb trick does not transfer to stacked
 // rows) — the chips read slim, the 12px between them is hit box, not margin.
+// `color` (an activity tag's token, from lib/tags) outlines the chip when on,
+// matching the Logger's tag toggles; the accent fill and the label still carry
+// the state without it. Absent, the chip stays monochrome.
 export function FilterChip({
   label,
   on,
   onClick,
+  color,
 }: {
   label: string;
   on: boolean;
   onClick: () => void;
+  color?: string;
 }) {
   return (
     <button
@@ -317,6 +329,7 @@ export function FilterChip({
             ? 'border-accent bg-accent'
             : 'border-transparent bg-tappable group-hover:bg-tappable-hover'
         }`}
+        style={on && color ? { borderColor: color } : undefined}
       >
         {label}
       </span>

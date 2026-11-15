@@ -171,6 +171,9 @@ UI audit have both run.
   `ui/primitives.tsx` for every input, select and textarea: tappable fill,
   transparent border at rest, ink border on focus, `text-base` (16px — iOS zooms
   into anything smaller on focus). No local `inputClass` copies.
+  `FIELD_DENSE` (same file: 36px, tighter padding, still `text-base`) is
+  allowed only for the repeated rows of a tabular editor — the plan editor grid
+  and the session form's movement rows — never for a standalone field.
 - **Default to 3–4 things; collapse the rest.** A data-heavy screen leads with
   one headline and one primary visual. Everything else goes behind
   `ui/Disclosure` (native `<details>`, no JS state, no animation to get wrong)

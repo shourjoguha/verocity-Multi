@@ -26,15 +26,22 @@ import {
 import { BLOCKS, SECTIONS, SUBROUTINE, type BlockKey, type SectionKey } from '@/app.config';
 import type { ParsedPlan } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
-import { Button, EmptyState, FIELD, LoadingScreen } from '@/components/ui/primitives';
+import { Button, EmptyState, FIELD_DENSE, LoadingScreen } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 
 const SAVE_DEBOUNCE_MS = 1200;
-// FIELD is w-full; fixed-width fields get it from a wrapper rather than a
-// second, conflicting width utility on the same element.
-const cellClass = FIELD;
-const weekCell = `${FIELD} text-center tabular-nums`;
+// Repeated-row fields use FIELD_DENSE (36px), the same as the session form's
+// movement rows; a cell's py-1 plus the 44px row buttons make a 44px row.
+// FIELD_DENSE is w-full; fixed-width fields get it from a wrapper rather than
+// a second, conflicting width utility on the same element. Grid cells carry a
+// min-w so a narrow screen scrolls the table in its card rather than crushing
+// a week cell to one glyph.
+const cellClass = FIELD_DENSE;
+const weekCell = `${FIELD_DENSE} text-center tabular-nums`;
+// 44x44 glyph buttons, side by side — never stacked (LESSONS: the slim-thumb
+// trick does not transfer to a stacked list).
+const rowBtn = 'flex min-h-11 min-w-11 items-center justify-center text-muted transition-colors';
 const BLOCK_KEYS = Object.keys(BLOCKS) as BlockKey[];
 
 export default function PlanEditor() {
@@ -192,7 +199,7 @@ export default function PlanEditor() {
                 </span>
                 <button
                   onClick={() => edit((p) => removeBlock(p, bi))}
-                  className="px-2 text-muted transition-colors hover:text-accent"
+                  className={`${rowBtn} hover:text-accent`}
                   aria-label={`Delete phase ${bi + 1}`}
                 >
                   ×
@@ -271,12 +278,12 @@ export default function PlanEditor() {
               <tbody>
                 {day.exercises.map((ex, ei) => {
                   const moveDeleteCell = (
-                    <td className="border-l border-border px-1 py-1 text-center align-top">
+                    <td className="border-l border-border p-0 text-center align-top">
                       <div className="flex items-center justify-center">
                         <button
                           onClick={() => edit((p) => moveExercise(p, di, ei, ei - 1))}
                           disabled={ei === 0}
-                          className="px-1 text-muted hover:text-fg disabled:opacity-30"
+                          className={`${rowBtn} hover:text-fg disabled:opacity-30`}
                           aria-label="Move exercise up"
                         >
                           ↑
@@ -284,14 +291,14 @@ export default function PlanEditor() {
                         <button
                           onClick={() => edit((p) => moveExercise(p, di, ei, ei + 1))}
                           disabled={ei === day.exercises.length - 1}
-                          className="px-1 text-muted hover:text-fg disabled:opacity-30"
+                          className={`${rowBtn} hover:text-fg disabled:opacity-30`}
                           aria-label="Move exercise down"
                         >
                           ↓
                         </button>
                         <button
                           onClick={() => edit((p) => removeExercise(p, di, ei))}
-                          className="px-1 text-muted hover:text-accent"
+                          className={`${rowBtn} hover:text-accent`}
                           aria-label="Delete exercise"
                         >
                           ×
@@ -328,7 +335,7 @@ export default function PlanEditor() {
                               value={ex.movement}
                               onChange={(e) => edit((p) => setExerciseMovement(p, di, ei, e.target.value))}
                               placeholder="Subroutine title"
-                              className={cellClass}
+                              className={`${cellClass} min-w-28`}
                               aria-label="Subroutine title"
                             />
                           </div>
@@ -337,7 +344,7 @@ export default function PlanEditor() {
                           <select
                             value={ex.section}
                             onChange={(e) => edit((p) => setExerciseSection(p, di, ei, e.target.value as SectionKey))}
-                            className={cellClass}
+                            className={`${cellClass} min-w-24`}
                             aria-label="Section"
                           >
                             {SECTIONS.map((s) => (
@@ -381,7 +388,7 @@ export default function PlanEditor() {
                             value={ex.movement}
                             onChange={(e) => edit((p) => setExerciseMovement(p, di, ei, e.target.value))}
                             placeholder="Movement"
-                            className={cellClass}
+                            className={`${cellClass} min-w-28`}
                             aria-label="Movement name"
                           />
                         </div>
@@ -390,7 +397,7 @@ export default function PlanEditor() {
                         <select
                           value={ex.section}
                           onChange={(e) => edit((p) => setExerciseSection(p, di, ei, e.target.value as SectionKey))}
-                          className={cellClass}
+                          className={`${cellClass} min-w-24`}
                           aria-label="Section"
                         >
                           {SECTIONS.map((s) => (
@@ -406,7 +413,7 @@ export default function PlanEditor() {
                             value={ex.plannedByWeek[w] ?? ''}
                             onChange={(e) => edit((p) => setPlanned(p, di, ei, w, e.target.value))}
                             placeholder="·"
-                            className={`${cellClass} text-center tabular-nums`}
+                            className={`${cellClass} min-w-14 text-center tabular-nums`}
                             aria-label={`Week ${w} planned`}
                           />
                         </td>
