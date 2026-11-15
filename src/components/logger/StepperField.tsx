@@ -19,6 +19,7 @@ export function StepperField({
   label,
   ariaLabel,
   inline = false,
+  stepLabel = false,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -33,6 +34,10 @@ export function StepperField({
   label: string;
   ariaLabel: string;
   inline?: boolean;
+  // Inline only: the keys read "−2.5" / "+2.5" (the real step, from the
+  // caller) instead of a bare −/+. The focus card uses it so a tap says what
+  // it will do; the sheet keeps the glyphs.
+  stepLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<'top' | 'bottom'>('top');
@@ -77,18 +82,24 @@ export function StepperField({
         <button
           type="button"
           onClick={() => bump(-1)}
-          className="hill-btn-flush flex h-16 w-16 shrink-0 items-center justify-center bg-tappable text-3xl text-fg active:bg-tappable-hover"
+          className={`hill-btn-flush flex h-16 w-16 shrink-0 items-center justify-center bg-tappable text-fg active:bg-tappable-hover ${
+            stepLabel ? 'text-base tabular-nums' : 'text-3xl'
+          }`}
           aria-label={`Decrease ${ariaLabel}`}
         >
-          −
+          {stepLabel ? `−${step}` : '−'}
         </button>
         <div className="flex min-w-0 flex-1 flex-col items-center justify-center border-x border-border-soft px-2">
+          {/* min-h-11: the tap-to-type value is a control too. At text-4xl
+              leading-none it measured 36px; 44 + the label still fits the
+              64px keys beside it, so nothing moves. Only measured once the
+              Logger's focus card put these on the page, not in a sheet. */}
           <EditableNumber
             value={value}
             onCommit={(v) => onChange(typed(v))}
             clampParse={typed}
             ariaLabel={ariaLabel}
-            className="font-display text-4xl leading-none tabular-nums text-fg"
+            className="min-h-11 font-display text-4xl leading-none tabular-nums text-fg"
           >
             {display}
           </EditableNumber>
@@ -97,10 +108,12 @@ export function StepperField({
         <button
           type="button"
           onClick={() => bump(1)}
-          className="hill-btn-flush flex h-16 w-16 shrink-0 items-center justify-center bg-tappable text-3xl text-fg active:bg-tappable-hover"
+          className={`hill-btn-flush flex h-16 w-16 shrink-0 items-center justify-center bg-tappable text-fg active:bg-tappable-hover ${
+            stepLabel ? 'text-base tabular-nums' : 'text-3xl'
+          }`}
           aria-label={`Increase ${ariaLabel}`}
         >
-          +
+          {stepLabel ? `+${step}` : '+'}
         </button>
       </div>
     );
