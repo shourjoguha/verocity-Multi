@@ -57,7 +57,7 @@ import type {
 import { formatDate } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { isLiveRec, setCoachSeenAt } from '@/lib/coachSignal';
-import { EmptyState, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
+import { EmptyState, FIELD, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { Modal } from '@/components/ui/Modal';
@@ -177,9 +177,9 @@ function ClosedStrip({ rows, onOpen }: { rows: Recommendation[]; onOpen: (r: Rec
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const inkBtn =
-  'hill-btn inline-flex min-h-11 items-center justify-center bg-fg px-3 text-sm uppercase tracking-wider text-bg transition-colors hover:bg-fg/85 disabled:opacity-40';
+  'hill-btn inline-flex min-h-11 items-center justify-center border border-accent bg-accent px-3 text-sm uppercase tracking-wider text-accent-fg disabled:opacity-40';
 const ghostBtn =
-  'hill-btn inline-flex min-h-11 items-center justify-center border border-border bg-surface px-3 text-sm uppercase tracking-wider text-fg transition-colors hover:border-fg';
+  'hill-btn inline-flex min-h-11 items-center justify-center border border-transparent bg-tappable px-3 text-sm uppercase tracking-wider text-fg hover:bg-tappable-hover disabled:opacity-40';
 
 /**
  * One bar per check-in, oldest on the left, height = drift. A day the rule did
@@ -243,7 +243,7 @@ function CheckinStrip({ delta }: { delta: CheckinDelta }) {
   ];
   return (
     <div>
-      <div className="grid grid-cols-3 border border-border bg-surface">
+      <div className="grid grid-cols-3 rounded-card border border-outline bg-surface">
         {cells.map(([n, label], i) => (
           <div key={label} className={`px-3 py-2 ${i > 0 ? 'border-l border-border-soft' : ''}`}>
             <div className="font-display text-xl tabular-nums text-fg">{n}</div>
@@ -289,7 +289,7 @@ function EvidenceBlock({ evidence, sessions }: { evidence: EvidencePayload; sess
     <section className="mt-5">
       <div className="text-[0.6rem] uppercase tracking-[0.3em] text-subtle">What was measured</div>
       {observed.length > 0 ? (
-        <dl className="mt-2 border border-border">
+        <dl className="mt-2 rounded-control bg-bg">
           {observed.map(([k, v]) => (
             <div
               key={k}
@@ -310,7 +310,7 @@ function EvidenceBlock({ evidence, sessions }: { evidence: EvidencePayload; sess
         <div key={c.id} className="mt-2">
           <Disclosure title={`Rests on · ${c.speaker}`}>
             <p className="text-sm text-fg">{c.statement}</p>
-            <blockquote className="mt-2 bg-bg px-3 py-2 text-sm text-subtle">“{c.quote}”</blockquote>
+            <blockquote className="mt-2 rounded-control bg-bg px-3 py-2 text-sm text-subtle">“{c.quote}”</blockquote>
             {c.caveat ? <p className="mt-2 text-xs text-muted">Caveat: {c.caveat}</p> : null}
             {c.url ? (
               <a
@@ -338,6 +338,7 @@ function RecRow({
   muted,
   noted,
   series,
+  nested = false,
 }: {
   rec: Recommendation;
   onClick: () => void;
@@ -347,6 +348,9 @@ function RecRow({
   noted?: boolean;
   /** The rule's readings, when the row should show its trajectory. */
   series?: readonly Reading[];
+  /** Inside another card (a Disclosure): an inset well instead of a card of its
+   *  own — a surface card on a surface card with no outline would not separate. */
+  nested?: boolean;
 }) {
   const aging = rec.status === 'open' && Date.now() - Date.parse(rec.created_at) > 14 * 86_400_000;
   return (
@@ -354,9 +358,9 @@ function RecRow({
       <button
         type="button"
         onClick={onClick}
-        className={`hill-btn flex w-full flex-wrap items-start justify-between gap-3 border border-border bg-surface p-4 text-left transition-colors hover:border-fg ${
-          muted ? 'opacity-60' : ''
-        }`}
+        className={`lift-interactive flex w-full flex-wrap items-start justify-between gap-3 border p-4 text-left transition-colors ${
+          nested ? 'rounded-control border-transparent bg-bg' : 'rounded-card border-outline bg-surface'
+        } ${muted ? 'opacity-60' : ''}`}
       >
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium text-fg">{rec.tldr}</div>
@@ -397,7 +401,7 @@ function BriefCard({ brief, onClick }: { brief: CoachBrief; onClick: () => void 
     <button
       type="button"
       onClick={onClick}
-      className="lift block w-full border border-border bg-surface p-4 text-left transition-colors hover:border-fg"
+      className="lift lift-interactive block w-full rounded-card border border-outline bg-surface p-4 text-left"
     >
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <span className="text-[0.6rem] uppercase tracking-[0.3em] text-subtle">Observation</span>
@@ -426,7 +430,7 @@ function BriefRow({ brief, onClick }: { brief: CoachBrief; onClick: () => void }
       <button
         type="button"
         onClick={onClick}
-        className="hill-btn flex w-full items-start justify-between gap-3 border border-border bg-surface p-4 text-left opacity-60 transition-colors hover:border-fg"
+        className="lift-interactive flex w-full items-start justify-between gap-3 rounded-control border border-transparent bg-bg p-4 text-left opacity-60 transition-colors"
       >
         <div>
           <div className="text-[0.6rem] uppercase tracking-[0.3em] text-subtle">
@@ -485,7 +489,7 @@ function WeeksFilter({
  *
  * A hairline container with the theme's headline and a one-line blurb, then the
  * member rows divided by `--color-border-soft` — the ListCard distinction:
- * `--color-border` outlines the card, the soft weight divides rows inside it.
+ * `--color-outline` outlines the card, the soft weight divides rows inside it.
  * No shadow and no transform; the rows inside stay flat, which is the default
  * rather than the exception (CLAUDE.md, "Depth is retired").
  */
@@ -504,7 +508,7 @@ function ThemeCard({
   series: readonly Reading[];
 }) {
   return (
-    <li className="lift overflow-hidden border border-border bg-surface">
+    <li className="overflow-hidden rounded-card border border-outline bg-surface">
       <div className="border-b border-border-soft px-4 py-3">
         <div className="flex items-baseline justify-between gap-3">
           <span className="font-display text-sm uppercase tracking-[0.04em] text-fg">
@@ -959,6 +963,7 @@ export default function CoachView() {
                             onClick={() => setActive(r)}
                             noted={noted.has(r.id)}
                             series={seriesOf(r)}
+                            nested
                           />
                         ))}
                       </ul>
@@ -994,6 +999,7 @@ export default function CoachView() {
                             onClick={() => setActive(r)}
                             snoozed
                             noted={noted.has(r.id)}
+                            nested
                           />
                         ))}
                       </ul>
@@ -1007,7 +1013,7 @@ export default function CoachView() {
                           <BriefRow key={b.id} brief={b} onClick={() => setActiveBrief(b)} />
                         ))}
                         {decided.map((r) => (
-                          <RecRow key={r.id} rec={r} onClick={() => setActive(r)} muted />
+                          <RecRow key={r.id} rec={r} onClick={() => setActive(r)} muted nested />
                         ))}
                       </ul>
                     </div>
@@ -1079,7 +1085,7 @@ export default function CoachView() {
                     placeholder="Note — context for the coach, you don't have to decide yet"
                     aria-label="Note"
                     rows={2}
-                    className="mt-4 w-full border border-border bg-bg px-3 py-2 text-sm text-fg outline-none focus:border-subtle"
+                    className={`mt-4 py-2 ${FIELD}`}
                   />
                   <div className="mt-2 flex justify-end">
                     <button
@@ -1097,7 +1103,7 @@ export default function CoachView() {
                   <div className="text-[0.6rem] uppercase tracking-[0.3em] text-subtle">
                     Notes for weekly review
                   </div>
-                  <ul className="mt-2 border border-border">
+                  <ul className="mt-2 rounded-control bg-bg">
                     {activeNotes.map((n) => (
                       <li
                         key={n.id}
@@ -1118,7 +1124,7 @@ export default function CoachView() {
                         <button
                           type="button"
                           onClick={() => removeNote(n)}
-                          className="-my-1 inline-flex min-h-11 shrink-0 items-center px-3 text-[0.65rem] uppercase tracking-wider text-muted hover:text-fg"
+                          className="hill-btn -my-1 mr-1 inline-flex min-h-11 shrink-0 items-center border border-transparent bg-tappable px-3 text-[0.65rem] uppercase tracking-wider text-fg hover:bg-tappable-hover"
                         >
                           Delete
                         </button>
@@ -1130,7 +1136,7 @@ export default function CoachView() {
               <DeepEnrichment recId={active.id} />
             </div>
             {active.status === 'acted' || active.status === 'dismissed' ? null : (
-              <div className="flex flex-col gap-2 border-t border-border p-4">
+              <div className="flex flex-col gap-2 border-t border-border-soft p-4">
                 <div className="flex gap-2">
                   <button onClick={() => decide(active, 'acted_as_prescribed')} className={`flex-1 ${inkBtn}`}>
                     Did it
@@ -1184,11 +1190,11 @@ export default function CoachView() {
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Note (optional)"
                   rows={2}
-                  className="mt-4 w-full border border-border bg-bg px-3 py-2 text-sm text-fg outline-none focus:border-subtle"
+                  className={`mt-4 py-2 ${FIELD}`}
                 />
               )}
             </div>
-            <div className="flex flex-col gap-2 border-t border-border p-4">
+            <div className="flex flex-col gap-2 border-t border-border-soft p-4">
               <div className="flex gap-2">
                 {activeBrief.status === 'acted' ? null : (
                   <>

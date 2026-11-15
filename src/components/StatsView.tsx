@@ -52,6 +52,7 @@ import {
 } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Disclosure } from '@/components/ui/Disclosure';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { adherenceText, useActivePlanAdherence } from '@/components/PlanAdherence';
 import { formatDateRange, HistoryScroller } from '@/components/ui/HistoryScroller';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
@@ -896,7 +897,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               // is only for the per-movement table on /app/plan.
               <a
                 href="/app/plan"
-                className="-my-3 mt-0 inline-flex min-h-11 items-center text-[0.7rem] tabular-nums text-muted underline"
+                className="-my-3 mt-0 inline-flex min-h-11 items-center text-[0.7rem] tabular-nums text-fg underline"
               >
                 {adherence ? `${adherenceText(adherence)} →` : 'Plan adherence →'}
               </a>
@@ -906,7 +907,26 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
 
         <Item>
           <section className="mb-6">
-            <SectionHeader>
+            <SectionHeader
+              action={
+                <InfoPopover label="How to read the consistency grid">
+                  <span className="block">
+                    <span className="font-semibold">Cell</span> — coloured by activity; striped
+                    means several.
+                  </span>
+                  <span className="mt-1 block">
+                    <span className="font-semibold">Bars</span> — lifting on top, conditioning
+                    below, against your usual best for that kind of session (your{' '}
+                    {Math.round(CONSISTENCY.referencePercentile * 100)}th percentile, all time;
+                    dotted until there are {CONSISTENCY.minSessions} to compare).
+                  </span>
+                  <span className="mt-1 block">
+                    <span className="font-semibold">Under a week</span> — time, then the highest
+                    max HR logged (bpm).
+                  </span>
+                </InfoPopover>
+              }
+            >
               Consistency{gridCapped ? ` · Last ${GRID_WEEKS} weeks` : ''}
             </SectionHeader>
             <ConsistencyGrid
@@ -918,13 +938,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               todayKey={ymd(today)}
               onTip={showTip}
             />
-            <p className="mt-2 text-[0.65rem] text-muted">
-              Under each week: time, then the highest max HR logged (bpm).
-              Colored by activity · striped = several activities. Bars: lifting blocks on top,
-              conditioning blocks below, vs your usual best for that kind of session, your{' '}
-              {Math.round(CONSISTENCY.referencePercentile * 100)}th percentile all time; dotted
-              until there are {CONSISTENCY.minSessions} to compare. Tap a day for detail.
-            </p>
+            <p className="mt-2 text-[0.65rem] text-muted">Tap a day for detail.</p>
           </section>
         </Item>
 
@@ -936,7 +950,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
         <Item>
             {/* `empty:hidden`: with no lifts, no RPE and no Garmin rows every
                 child renders null, and the card would be a bare 2px outline. */}
-            <div className="lift overflow-hidden border border-border bg-surface empty:hidden [&>details:first-child]:border-t-0">
+            <div className="overflow-hidden rounded-card border border-outline bg-surface empty:hidden [&>details:first-child]:border-t-0">
               {topLift ? (
                 <Disclosure
                   variant="row"
@@ -1046,7 +1060,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
               // screen. A nowrap line centred on the finger ran off the right
               // edge on the grid's last column. `pre-line` honours the label's
               // line break.
-              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-pre-line bg-fg px-2 py-1 text-[0.7rem] leading-snug tabular-nums text-bg"
+              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-pre-line rounded-control bg-fg px-2 py-1 text-[0.7rem] leading-snug tabular-nums text-bg"
               style={{
                 left: tip
                   ? Math.min(

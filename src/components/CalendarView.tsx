@@ -133,14 +133,14 @@ export default function CalendarView({ mode = 'app' }: { mode?: 'app' | 'showcas
             <div className="flex shrink-0 gap-2 pb-1">
               <button
                 onClick={() => shift(-1)}
-                className="hill-btn min-h-11 border border-border bg-surface px-3 text-fg transition-colors hover:border-fg"
+                className="hill-btn min-h-11 border border-transparent bg-tappable px-3 text-fg hover:bg-tappable-hover"
                 aria-label="Previous month"
               >
                 ←
               </button>
               <button
                 onClick={() => shift(1)}
-                className="hill-btn min-h-11 border border-border bg-surface px-3 text-fg transition-colors hover:border-fg"
+                className="hill-btn min-h-11 border border-transparent bg-tappable px-3 text-fg hover:bg-tappable-hover"
                 aria-label="Next month"
               >
                 →
