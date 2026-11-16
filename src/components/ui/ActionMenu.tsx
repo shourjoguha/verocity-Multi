@@ -75,7 +75,13 @@ export function ActionMenu({
       ref={rootRef}
       className="relative shrink-0"
       onBlur={(e) => {
-        if (open && !rootRef.current?.contains(e.relatedTarget as Node | null)) setOpen(false);
+        // Close when keyboard focus moves to something OUTSIDE the menu. A blur
+        // with no relatedTarget is not that: iOS Safari does not focus a
+        // tapped link or button, so tapping an item blurs the focused first
+        // item to nothing — closing here unmounted the menu before the tap's
+        // click could land. Outside taps are already handled by pointerdown.
+        const next = e.relatedTarget as Node | null;
+        if (open && next && !rootRef.current?.contains(next)) setOpen(false);
       }}
     >
       <button

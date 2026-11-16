@@ -776,7 +776,10 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // Wait on stats too, or every work figure paints at the fallback bodyweight
   // and then jumps once the real one lands (docs/LESSONS.md, and the same trap
   // BodyView's Volume currency hit).
-  if (loading || statsLoading || historyLoading) return <LoadingScreen />;
+  // `profile.loading` is part of the gate: FitnessProfile renders nothing until
+  // its own reads land, so without it the page painted the consistency grid
+  // first and the radar then dropped in above it, pushing everything down.
+  if (loading || statsLoading || historyLoading || profile.loading) return <LoadingScreen />;
 
   const {
     all,
