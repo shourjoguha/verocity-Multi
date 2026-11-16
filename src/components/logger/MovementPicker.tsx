@@ -3,6 +3,7 @@ import type { Movement } from '@/lib/types';
 import { isSubroutine } from '@/lib/subroutine';
 import { useScrollLock } from '@/lib/scrollLock';
 import { FIELD } from '@/components/ui/primitives';
+import { useKeyboardInset } from '@/components/ui/Modal';
 
 export interface Suggestion {
   id: string;
@@ -29,6 +30,11 @@ export function MovementPicker({
 }) {
   // This component IS the overlay, so being mounted means being on screen.
   useScrollLock();
+  // Typing shortens the list, the panel shrinks to it, and without this the
+  // shrunken panel sat at the layout viewport's bottom — behind the iOS
+  // keyboard. Same mechanism as Modal/SetEntrySheet: padding on the flex root
+  // that bottom-aligns the panel, never a margin/transform on the panel.
+  const keyboardInset = useKeyboardInset();
 
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -57,6 +63,7 @@ export function MovementPicker({
     // page still on touch — see lib/scrollLock.ts.
     <div
       className="fixed inset-0 z-[80] flex items-end justify-center overflow-hidden overscroll-contain p-0 sm:items-center sm:p-6"
+      style={keyboardInset ? { paddingBottom: keyboardInset } : undefined}
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -69,7 +76,9 @@ export function MovementPicker({
       />
       <div
         data-sheet-panel
-        className="sheet-panel relative flex max-h-[80dvh] w-full max-w-lg flex-col border border-outline bg-surface"
+        // min(…, 100%): 80dvh is of the layout viewport and ignores the
+        // keyboard; 100% is the root's padded box, i.e. what is still visible.
+        className="sheet-panel relative flex max-h-[min(80dvh,100%)] w-full max-w-lg flex-col border border-outline bg-surface"
       >
         <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
           <span className="t-eyebrow text-muted">{title}</span>

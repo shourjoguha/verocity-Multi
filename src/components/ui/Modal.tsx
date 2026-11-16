@@ -8,7 +8,9 @@ import { useScrollLock } from '@/lib/scrollLock';
 // animation on, and disturbing its own box while that runs is the same class
 // of bug as the `.lift` transform fight in docs/LESSONS.md. Opt-in only
 // (`keyboardInset`), so the five existing sheets see no behavior change.
-function useKeyboardInset() {
+// Also used by `logger/MovementPicker.tsx`, whose search field shortens the
+// list under the keyboard.
+export function useKeyboardInset() {
   const [inset, setInset] = useState(0);
   useEffect(() => {
     const vv = window.visualViewport;
