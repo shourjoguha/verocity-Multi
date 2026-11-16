@@ -1,6 +1,7 @@
 # Friends, send-to and adopt — plan and handover
 
-Status: **planned, nothing built.** Written 2026-11-16 from a design session
+Status: **planned, revised 2026-11-16 (second session) — see §12, which
+overrides earlier sections where they conflict.** Written 2026-11-16 from a design session
 with the owner. This file is the whole brief; the conversation that produced it
 is not available to you.
 
@@ -26,7 +27,8 @@ inside the app, and the receiver should be able to take it as a starting point.
 
 Explicitly **not** wanted: messaging, comments, reactions, a feed, leaderboards,
 live co-logging, groups, a user directory, standing auto-share, push
-notifications, realtime delivery, read receipts, linked plans that sync.
+notifications, realtime delivery, linked plans that sync. (Read receipts were
+on this list; the owner has since asked for an acceptance notice — §12.4.)
 
 ## 2. Decisions already made by the owner
 
@@ -36,7 +38,7 @@ Do not reopen these.
 |---|---|
 | Friendship | Permits **sending only**. It grants no read of anything. |
 | Delivery | **Snapshot at send.** Later edits or deletes by the sender do not change what was sent. |
-| Accepted logs | Sit in a **needs-review** state and must not count in stats or coach until confirmed. The button must say **"Accept & review"**, never bare "Accept". |
+| Accepted logs | Two paths (§12.1). **Accept & review** → `needs_review`, counts nowhere until confirmed; the button says "Accept & review", never bare "Accept". **Accept all / Accept selected** → `done` immediately, editable afterwards like any log. |
 | Review | Must be low friction. Editing happens in review (see §5.4). |
 | Duplicates | Warn with **"x% of movements overlap"**. Offer three choices: union (unique movements only), keep mine, use the shared version. |
 | Plan link | The sender's `plan_id`, `day_key`, `week_number` are nulled. Adherence should count the accepted log against **whatever plan the receiver is on**, which may be a different plan. |
@@ -389,6 +391,13 @@ Small, none blocks PR 1.
 4. Unfriending leaves already-delivered pending items in place; blocking
    removes them. Confirm.
 
+**Answered 2026-11-16 (second session):** 1 — confirmed: row-level notes
+stripped, item-level notes kept. 2 — overruled: the sender gets a notice
+(§12.4). 3 — confirmed: 31 per batch, 20 per page. 4 — unfriend and block both
+leave **accepted** logs as they are; the receiver can bulk-reject them later
+(§12.5). Block still deletes that sender's **pending** items; unfriend leaves
+pending items in place.
+
 ## 11. Environment notes
 
 - The Supabase MCP server failed to connect during planning, so nothing here
@@ -396,3 +405,103 @@ Small, none blocks PR 1.
   Confirm the live schema matches `0051` before writing `0052`.
 - The three UI audits need a build and a running preview, restarted after every
   rebuild (`docs/HANDOVER.md`).
+
+## 12. Revisions from the second session (owner decisions — do not reopen)
+
+### 12.1 Two accept paths
+
+- **Accept & review** (per item, or for a selection): as §5.4 —
+  `needs_review`, Logger review mode, counts nowhere until Confirm.
+- **Accept all** (batch header) / **Accept selected**: inserts each log as
+  `done` in one action. Validated and sanitised exactly as §6. Custom movements
+  copied as §5.7. They count in stats, body map and coach at once, and are
+  edited afterwards through the normal `/app/log?logId=…&edit=1` path; edits
+  feed every reader like any other log (nothing special to build — readers are
+  pure functions of `workout_logs`).
+- **Same-day conflict overrides the bulk path.** Any item in a bulk accept
+  whose `log_date` already has a non-cancelled, non-`needs_review` log of the
+  receiver's goes in as `needs_review` instead, and is resolved by the §5.5
+  duplicates sheet. The result toast says "5 added · 2 need review (same day as
+  your log)". Conflicts are also checked within the batch itself only against
+  existing logs, not against siblings (two shared logs on one day are the
+  sender's own business).
+
+### 12.2 Selection ("multiplexer")
+
+In a batch with more than one pending item, each row carries a checkbox-style
+toggle (`aria-pressed`, pick-many per CLAUDE.md). With anything selected the
+batch header actions become **Accept selected** and **Review selected**
+(and **Dismiss selected**); with nothing selected they read **Accept all** and
+**Review all**. Review stepping (§5.4.3) walks only the reviewed subset.
+Selection is local component state; it does not persist.
+
+### 12.3 Plan link on the bulk path
+
+Attach automatically when **both** hold: the best-matching day of the active
+plan clears `FRIENDS.planMatchThreshold` (`compareMovements`, never
+`familyOf`), and `log_date` is on or after the receiver's first log on that
+plan (so a backdated row cannot renumber weeks — the §7 trap). Otherwise
+leave `plan_id`/`day_key`/`week_number` null. The "Counts toward" control of
+§5.6 is available in **edit mode for any log that came from a share**
+(`shared_item_id` not null), not only in review, so a bulk-accepted log can be
+attached or detached later. The pure chooser lives in `src/lib/sharedLog.ts`
+and is shared by both paths.
+
+### 12.4 Sender notice
+
+The sender learns that an item was accepted. Not realtime; counted on page
+load like the bell.
+
+- `shared_items` gains `sender_seen_at timestamptz` (null until the sender
+  views the notice).
+- RPC `list_acceptances()` — caller is sender; returns accepted rows grouped
+  by `batch_id`: recipient display name (via the friendship), count accepted,
+  latest `acted_at`, whether seen. **Never returns `payload`** (null by then
+  anyway) or any receiver data beyond the name and the count.
+- RPC `mark_acceptances_seen(batch_ids uuid[])`.
+- The bell count adds unseen acceptance batches. The inbox gets a fourth
+  block, **Accepted by friends**: "Sam accepted 5 of your logs", one line per
+  batch, marked seen when the inbox renders it.
+- Suppressed when the friendship is `blocked`. Dismissals are **not** reported
+  (no rejection signal to the sender).
+
+### 12.5 Rejecting previously accepted logs
+
+Unfriend and block leave accepted logs alone. The inbox's accepted history
+(behind its `Disclosure`) is grouped by batch with the same selection
+toggles and a **Remove from my logs** action (selected, or the whole batch).
+
+- On accept, the status RPC stores `accepted_log_id` and `accepted_digest`
+  (`md5(data::text)` of the inserted row) on the `shared_items` row.
+- RPC `remove_accepted_items(ids uuid[], dry_run bool)` — recipient only.
+  Dry run returns `{ total, edited }` where *edited* = linked log's
+  `md5(data::text)` ≠ `accepted_digest`. Real run deletes the caller's
+  `workout_logs` rows whose `shared_item_id` is in `ids`, sets item status
+  `removed`. A confirm sheet shows "Delete 7 logs? 2 of them you edited."
+- Logs folded into the receiver's own log by **Combine** have no row left to
+  delete and are untouched; the item shows "Combined into your log".
+- `shared_items.status` becomes `pending | accepted | dismissed | removed`.
+
+### 12.6 Room for friend read access later (not built)
+
+A future feature may let friends read each other's data. Shape today's work so
+that is additive, without building it:
+
+- Keep CLAUDE.md's rule: **no RLS policy references `friendships`.** Future
+  reads go through grant-scoped `security definer` RPCs (like `list_friends`),
+  so the security boundary stays in one reviewable place.
+- `list_friends()` returns a `FriendSummary` object, not a tuple, so a later
+  `grants` field is additive.
+- `friendships.status` is a check constraint that can gain values; do not
+  encode direction or permissions in it.
+- Do **not** add a grants table, a "visibility" setting, or any read path now.
+
+### 12.7 Execution layout
+
+All phases land on one branch / one PR, one commit per phase, in §8 order.
+Phase 2 includes §12.1–12.2 for the inbox UI; Phase 3 includes §12.3 and the
+"Counts toward" edit-mode control; §12.4–12.5 RPCs land in Phase 1 and their
+UI in Phase 2. The Supabase MCP was unreachable again this session: verify the
+migration against a **local Postgres 16** (`/usr/bin/psql`, cluster
+`16/main`) with a stub `auth` schema, and say plainly that the advisors were
+not run.
