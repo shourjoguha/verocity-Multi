@@ -4,6 +4,7 @@ import { formatDate, formatDuration } from '@/lib/format';
 import { tagColor } from '@/lib/tags';
 import { sessionShaper } from '@/lib/sessionShape';
 import { SessionShapeBar } from '@/components/SessionShape';
+import { REVIEW_MARK } from '@/components/friends/friendCopy';
 
 // `history` is what each bar's height is compared against. Defaults to the
 // rows themselves; pass the full log set where one is loaded so a five-row
@@ -38,6 +39,11 @@ export function LogList({
               ) : null}
             </div>
             <SessionShapeBar shape={shapeOf(log)} />
+            {log.status === 'needs_review' ? (
+              <span className="t-label shrink-0 rounded-chip border border-border px-1.5 py-0.5 text-[0.55rem] text-fg">
+                {REVIEW_MARK}
+              </span>
+            ) : null}
           </>
         );
         return (

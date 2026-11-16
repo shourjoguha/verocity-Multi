@@ -52,6 +52,7 @@ import { READ_ONLY_NOTICE, readOnlyProps } from '@/components/ui/ReadOnly';
 import { toast } from '@/lib/toast';
 import { CoachRunner } from '@/components/CoachRunner';
 import { coachSignal, getCoachSeenAt } from '@/lib/coachSignal';
+import { SendToSheet } from '@/components/friends/SendToSheet';
 
 function topE1rm(logs: WorkoutLog[]): number | null {
   let best: number | null = null;
@@ -734,6 +735,9 @@ export default function ProfileView({ mode }: { mode: Surface }) {
   // `if (loading)` is what crashed this component with React #310 once
   // already, and the audits were green on the blank page it produced.
   const [showAllRecent, setShowAllRecent] = useState(false);
+  // Date-range send (§5.2.2): the history list's multi-select is a from/to
+  // range in the sheet, capped at FRIENDS.batchMaxItems there.
+  const [sendOpen, setSendOpen] = useState(false);
   const [showAllMonth, setShowAllMonth] = useState(false);
   // "This month" and "Recent sessions" used to be two stacked lists; they're
   // now one tabbed list, so only one is ever on screen. Defaults to 'month'
@@ -1208,6 +1212,15 @@ export default function ProfileView({ mode }: { mode: Surface }) {
               ) : null}
             </>
           )}
+          {!readOnly && allLogs.some((l) => l.status === 'done') ? (
+            <button
+              type="button"
+              onClick={() => setSendOpen(true)}
+              className="t-control flex min-h-11 w-full items-center justify-center text-muted transition-colors hover:text-fg"
+            >
+              Send workouts to a friend
+            </button>
+          ) : null}
         </section>
       </Item>
 
@@ -1223,6 +1236,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
         open={previewDay !== null}
         onClose={() => setPreviewDay(null)}
       />
+      {!readOnly ? <SendToSheet open={sendOpen} onClose={() => setSendOpen(false)} rangeLogs={allLogs} /> : null}
       <LogQuickView
         log={quickLog}
         open={quickLog !== null}

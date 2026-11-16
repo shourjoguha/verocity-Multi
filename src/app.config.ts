@@ -183,6 +183,52 @@ export const HR_WHEEL = { minBpm: 30, maxBpm: 230, restAvg: 140, restMax: 175 } 
 // UI (maxLength) and the plan validator.
 export const SUBROUTINE = { maxDescriptionChars: 300 } as const;
 
+// Friends and send-to (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C)). The numeric caps
+// below are MIRRORED in the latest SQL definition of their function
+// (migrations 0052, 0053) as `c_* constant` lines tagged `-- FRIENDS.<key>`,
+// and codeLength by the friend_codes check constraint; friendsConfig.test.ts
+// fails when the two disagree — the RPC is the cap, this is what the UI says
+// about it.
+export const FRIENDS = {
+  // Logs or plans in one send (a date-range send is one batch). Sized so a
+  // 6-day x 12-week plan's logs go in one send.
+  batchMaxItems: 120,
+  // Items one sender may send in a rolling 24h, across all friends.
+  dailySendCap: 200,
+  // Outgoing friend requests a user may have waiting at once.
+  pendingRequestCap: 20,
+  // FAILED request_friend calls per user per rolling 24h. Past it every
+  // attempt, even a valid code, is refused with too_many_attempts.
+  failedCodeAttemptsPerDay: 20,
+  // Largest log `data` a send will snapshot, in bytes of JSON.
+  maxLogPayloadBytes: 262_144,
+  // Largest plan a send will snapshot: parsed JSON + source_markdown, in bytes.
+  maxPlanPayloadBytes: 1_048_576,
+  codeLength: 8,
+  // Dice overlap (2·matched / (logged + prescribed)) a plan day must reach
+  // before a shared log is attached to it automatically. Matching is
+  // compareMovements (same or minor), never familyOf. An app choice.
+  planMatchThreshold: 0.6,
+  // What validateLogDocument accepts from another user. Reject past these,
+  // never truncate.
+  limits: {
+    groupsPerSection: 60,
+    itemsPerGroup: 30,
+    setsPerItem: 60,
+    nameChars: 120,
+    notesChars: 2000,
+    plannedChars: 120,
+    urlChars: 2048,
+    notations: 12,
+    notationChars: 24,
+    tags: 20,
+    tagChars: 40,
+    movements: 200,
+    totalSeconds: 24 * 60 * 60,
+  },
+} as const;
+
+
 // ---------------------------------------------------------------------------
 // Owner stats (`user_stats`, edited on /app/you).
 //

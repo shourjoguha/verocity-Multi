@@ -125,8 +125,97 @@ const savedSessions = Array.from({ length: 30 }, (_, i) => ({
   instructions: null, source: null, source_text: null, source_ref: null,
 }));
 
-function fixtureFor(url) {
+// A FINISHED log, reachable only by id, so the session page offers "Send to a
+// friend" (SendToSheet takes `done` logs only) without changing what the list
+// queries return to the other scenarios.
+const DONE_ID = '55555555-5555-5555-5555-555555555555';
+const doneLog = { ...workoutLog, id: DONE_ID, status: 'done', ended_at: new Date().toISOString() };
+// Friends and accepted inbox history, for SendToSheet's toggles and the
+// inbox's "Remove from my logs" confirm sheet.
+const friends = [
+  { friendship_id: 'fr1', user_id: 'u1', display_name: 'Alex', status: 'accepted', direction: 'incoming', created_at: '2026-01-01T00:00:00Z', responded_at: null },
+];
+const accepted = (id) => ({
+  id, sender_id: 'u1', recipient_id: session.user.id, sender_name: 'Alex', kind: 'log', batch_id: 'b0',
+  title: 'Lower body', item_date: '2026-01-05', payload: null, status: 'accepted',
+  created_at: '2026-01-05T00:00:00Z', acted_at: '2026-01-06T00:00:00Z', sender_seen_at: null,
+  accepted_log_id: `log-${id}`, accepted_digest: 'x',
+});
+
+// A plan, for the plan page's "Send to a friend" and a plan a friend sent
+// (the inbox's Accept & review sheet). Minimal but valid: the sheet validates.
+// Only the plan page's scenario gets an active plan: with one, Home swaps its
+// "Start workout" button for the plan unit, and the Home scenario would skip.
+let withPlan = false;
+const PLAN_ID = '33333333-3333-3333-3333-333333333333';
+const planDoc = {
+  title: 'Strength block',
+  startDate: '2026-01-06',
+  endDate: '2026-03-01',
+  blocks: [{ type: 'accumulation', startWeek: 1, endWeek: 8 }],
+  weeklyTemplate: ['mon', 'wed'],
+  days: ['mon', 'wed'].map((k) => ({
+    dayKey: k,
+    label: k === 'mon' ? 'Monday — Lower' : 'Wednesday — Upper',
+    exercises: [{ movement: 'back squat', section: 'primary', primaryMetric: 'weight', plannedByWeek: { 1: '5x5' } }],
+  })),
+};
+const activePlan = {
+  id: PLAN_ID, owner_user_id: session.user.id, name: 'Strength block', start_date: '2026-01-06', end_date: '2026-03-01',
+  source_markdown: null, parsed: planDoc, is_active: true, is_public: false, created_at: '2026-01-06T00:00:00Z',
+};
+const pendingPlanItem = {
+  id: 'sp1', sender_id: 'u1', recipient_id: session.user.id, sender_name: 'Alex', kind: 'plan', batch_id: 'bp',
+  title: 'Strength block', item_date: null, status: 'pending', created_at: '2026-01-05T00:00:00Z', acted_at: null,
+  sender_seen_at: null, accepted_log_id: null, accepted_digest: null,
+  payload: { name: 'Strength block', start_date: '2026-01-06', end_date: '2026-03-01', parsed: planDoc, source_markdown: null },
+};
+
+// Two pending LOGS in their own batch, newer than the plan's: only the leave-
+// with-selection scenario sees them (`inboxLogs`), so the plan scenario still
+// lands on the plan batch. Selecting one and pressing Older batch is what
+// opens the prompt.
+let inboxLogs = false;
+const pendingLog = (id, date) => ({
+  id, sender_id: 'u1', recipient_id: session.user.id, sender_name: 'Alex', kind: 'log', batch_id: 'bl',
+  title: 'Lower body', item_date: date, status: 'pending', created_at: '2026-01-07T00:00:00Z', acted_at: null,
+  sender_seen_at: null, accepted_log_id: null, accepted_digest: null,
+  payload: { log_date: date, started_at: null, ended_at: null, total_seconds: 3600, activity_type: null, tags: [], data: { sections: [] }, movements: [] },
+});
+const pendingLogs = [pendingLog('pl1', '2026-01-05'), pendingLog('pl2', '2026-01-06')];
+const pendingRows = () => (inboxLogs ? [...pendingLogs, pendingPlanItem] : [pendingPlanItem]);
+const historyRows = () => [accepted('si1'), accepted('si2')];
+function inboxBatches(rows) {
+  const out = new Map();
+  for (const r of rows) {
+    const b = out.get(r.batch_id) ?? { batch_id: r.batch_id, sender_name: r.sender_name, kind: r.kind, item_count: 0, created_at: r.created_at };
+    b.item_count += 1;
+    out.set(r.batch_id, b);
+  }
+  return [...out.values()];
+}
+
+// A friend's log awaiting review, dated the same day as workoutLog — so the
+// Logger's review mode opens the same-day duplicates sheet (§5.5) on load.
+const REVIEW_ID = '77777777-7777-7777-7777-777777777777';
+const reviewLog = { ...workoutLog, id: REVIEW_ID, status: 'needs_review', started_at: null, shared_item_id: 'si1' };
+
+function fixtureFor(url, body) {
   const path = new URL(url).pathname;
+  if (path.endsWith('/rpc/list_inbox_batches'))
+    return inboxBatches(String(body ?? '').includes('pending') ? pendingRows() : historyRows());
+  if (path.includes('/workout_logs') && url.includes(REVIEW_ID)) return reviewLog;
+  if (path.endsWith('/rpc/list_friends')) return friends;
+  if (path.endsWith('/rpc/remove_accepted_items')) return { total: 2, edited: 1 };
+  if (path.includes('/rpc/')) return [];
+  if (path.includes('/shared_items')) {
+    if (url.includes('id=eq.si1')) return accepted('si1');
+    const rows = url.includes('pending') ? pendingRows() : historyRows();
+    const batch = /[?&]batch_id=eq\.([^&]+)/.exec(url)?.[1];
+    return batch ? rows.filter((r) => r.batch_id === batch) : rows;
+  }
+  if (path.includes('/workout_logs') && url.includes(DONE_ID)) return doneLog;
+  if (path.includes('/plans')) return !withPlan ? [] : url.includes('is_active=eq.true') ? activePlan : [activePlan];
   if (path.endsWith('/sessions')) return savedSessions;
   if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog];
   if (path.includes('/movements')) return movements;
@@ -215,6 +304,72 @@ const SCENARIOS = [
     // The handoff is the interesting part: this closes the options sheet and
     // opens the picker. Both scrims used to be on screen together.
     then: '[role="dialog"] button:has-text("Swap movement")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Session · send to a friend (SendToSheet)',
+    route: `/app/session?id=${DONE_ID}`,
+    open: 'button:has-text("Send to a friend")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    // The plan page's actions menu opens a floating layer first; picking its
+    // entry hands off to the sheet, like the movement options above.
+    name: 'Plan · send to a friend (SendToSheet, plan mode)',
+    route: '/app/plan/view',
+    withPlan: true,
+    open: '[aria-label="Plan actions"]',
+    then: '[role="menuitem"]:has-text("Send to a friend")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: "Plan · send this plan's logs (SendToSheet, plan-logs mode)",
+    route: '/app/plan/view',
+    withPlan: true,
+    open: '[aria-label="Plan actions"]',
+    then: '[role="menuitem"]:has-text("Send this plan\'s logs")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Inbox · accept a friend\'s plan (AcceptPlanSheet)',
+    route: '/app/inbox',
+    open: 'button:has-text("Accept & review")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    // One batch per page: changing page with logs selected asks first
+    // (Accept selected / Discard selection / Stay). The select toggle is
+    // in-flow; the sheet is what Older batch opens.
+    name: 'Inbox · leave with a selection (Accept / Discard / Stay)',
+    route: '/app/inbox',
+    inboxLogs: true,
+    open: 'button[aria-pressed][aria-label^="Select"]',
+    then: 'button:has-text("Older batch")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    // The Disclosure is in-flow (no sheet); the sheet is the confirm that
+    // follows the dry run.
+    name: 'Inbox · remove from my logs (confirm sheet)',
+    route: '/app/inbox',
+    open: '#inbox-history summary',
+    then: 'button:has-text("from my logs")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    // The sheet opens itself on load; `dismiss` closes that one first, then
+    // the banner's Resolve reopens it under the recorder.
+    name: 'Logger review · same-day duplicates sheet',
+    route: `/app/log?logId=${REVIEW_ID}&edit=1`,
+    dismiss: '[role="dialog"] button:has-text("Close")',
+    open: 'button:has-text("Resolve")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Logger review · discard confirm',
+    route: `/app/log?logId=${REVIEW_ID}&edit=1`,
+    dismiss: '[role="dialog"] button:has-text("Close")',
+    open: 'button:has-text("Discard")',
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
@@ -313,7 +468,7 @@ await context.route('**/rest/v1/**', (route) =>
     status: 200,
     contentType: 'application/json',
     headers: { 'content-range': '0-0/1' },
-    body: JSON.stringify(fixtureFor(route.request().url())),
+    body: JSON.stringify(fixtureFor(route.request().url(), route.request().postData())),
   }),
 );
 await context.addInitScript(
@@ -326,9 +481,23 @@ const results = [];
 
 for (const s of SCENARIOS) {
   const result = { name: s.name, skipped: null, failures: [] };
+  withPlan = !!s.withPlan;
+  inboxLogs = !!s.inboxLogs;
 
   await page.goto(BASE + s.route, { waitUntil: 'networkidle' });
   await page.waitForTimeout(900); // let the CSS entrance stagger finish
+  if (s.dismiss) {
+    // A sheet that opens itself on load: close it before measuring, so the
+    // cycle below starts from a resting page. Missing = the scenario is stale.
+    const pre = page.locator(s.dismiss).first();
+    if ((await pre.count()) === 0) {
+      result.skipped = `no element matching ${s.dismiss} (expected a sheet open on load)`;
+      results.push(result);
+      continue;
+    }
+    await pre.click();
+    await page.waitForTimeout(400);
+  }
 
   const trigger = page.locator(s.open).first();
   if ((await trigger.count()) === 0 || !(await trigger.isVisible().catch(() => false))) {

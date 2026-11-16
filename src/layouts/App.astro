@@ -36,7 +36,8 @@ const home = showcase ? '/showcase' : '/app';
 const surface: Surface = showcase ? 'showcase' : 'app';
 const keep = (href: string) => !showcase || existsOnShowcase(href);
 
-type NavItem = { href: string; label: string; svgGlyph?: boolean };
+// `count`: the row carries the inbox badge, filled by the script below.
+type NavItem = { href: string; label: string; svgGlyph?: boolean; count?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
 const allGroups: NavGroup[] = [
@@ -51,7 +52,16 @@ const allGroups: NavGroup[] = [
   { label: GROUPS.progress.label, items: GROUPS.progress.tabs.map(({ href, label }) => ({ href, label })) },
   // One row, no sub-items: You is a single collapsible page
   // (Settings + Share links + Goals), not a neighbourhood of its own.
-  { label: 'You', items: [{ href: '/app/you', label: 'You', svgGlyph: true }] },
+  // Inbox sits here as well as behind the header bell, because the header
+  // hides on scroll-down and the drawer does not. Not on the showcase
+  // (absent from SHOWCASE_ROUTES, so `keep` drops it).
+  {
+    label: 'You',
+    items: [
+      { href: '/app/you', label: 'You', svgGlyph: true },
+      { href: '/app/inbox', label: 'Inbox', count: true },
+    ],
+  },
 ];
 
 // The drawer lists places you can actually go, so a destination with no
@@ -197,6 +207,41 @@ const railIndex = dockTabs.findIndex((t) => tabActive(t));
           Verocity
         </a>
       </div>
+      {/* The inbox bell (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C) §5.3). Static markup —
+          no island: the count is filled by the script below from
+          getInboxCounts() on each page load, never polled. The badge is chrome,
+          so it is the accent fill, not a red dot. Not on the showcase, which
+          has no inbox. */}
+      {
+        !showcase && (
+          <a
+            href="/app/inbox"
+            data-inbox-bell
+            aria-label="Inbox"
+            aria-current={path === '/app/inbox' ? 'page' : undefined}
+            class="relative -mr-2 flex min-h-11 min-w-11 items-center justify-center text-fg"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="h-5 w-5"
+            >
+              <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z" />
+              <path d="M10 20.5a2 2 0 0 0 4 0" />
+            </svg>
+            <span
+              data-inbox-count
+              hidden
+              class="absolute right-0.5 top-1 min-w-[1.125rem] rounded-chip bg-accent px-1 text-center text-[0.625rem] font-semibold leading-[1.125rem] tabular-nums text-accent-fg"
+            />
+          </a>
+        )
+      }
       {
         showcase && (
           <div class="flex items-center gap-3">
@@ -271,6 +316,13 @@ const railIndex = dockTabs.findIndex((t) => tabActive(t));
                   </svg>
                 )}
                 {l.label}
+                {l.count && (
+                  <span
+                    data-inbox-count
+                    hidden
+                    class="ml-auto min-w-[1.25rem] rounded-chip bg-accent px-1.5 text-center text-[0.7rem] leading-5 tabular-nums tracking-normal text-accent-fg"
+                  />
+                )}
               </a>
             ))}
           </div>
@@ -633,4 +685,33 @@ const railIndex = dockTabs.findIndex((t) => tabActive(t));
   }
 
   document.addEventListener('astro:page-load', setupNav);
+
+  // The inbox count: the header bell and the drawer's Inbox row. Read once per
+  // page load (no realtime, no polling — §5.3). ClientRouter re-renders the
+  // header on every navigation, so the last value is painted at once and then
+  // replaced by a fresh read, rather than the badge blinking out and back.
+  let lastInboxCount: number | null = null;
+  function paintInbox(n: number) {
+    const text = n > 99 ? '99+' : String(n);
+    document.querySelectorAll<HTMLElement>('[data-inbox-count]').forEach((el) => {
+      el.textContent = text;
+      el.hidden = n === 0;
+    });
+    document
+      .querySelector('[data-inbox-bell]')
+      ?.setAttribute('aria-label', n > 0 ? `Inbox, ${text} waiting` : 'Inbox');
+  }
+  async function refreshInbox() {
+    if (!document.querySelector('[data-inbox-count]')) return;
+    if (lastInboxCount !== null) paintInbox(lastInboxCount);
+    try {
+      const { getInboxCounts } = await import('@/lib/queries');
+      const { total } = await getInboxCounts();
+      lastInboxCount = total;
+      paintInbox(total);
+    } catch {
+      /* offline or signed out — the bell stays as it was */
+    }
+  }
+  document.addEventListener('astro:page-load', refreshInbox);
 </script>

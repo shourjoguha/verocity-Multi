@@ -1368,6 +1368,28 @@ no active plan that row is the only route to the chooser, so a live session woul
 have left resuming as the single thing you could do.
 → `scripts/flicker-probe.mjs`, `ProfileView.tsx`
 
+### A count reads 0 under the audit fixture, though the fixture sends one
+`[measured in Chromium]`
+The inbox bell showed **1** under `audit:mobile`'s fixtures where they describe
+**4** (one each of pending item, friend request and review row from head-count
+queries, plus one unseen acceptance from an RPC). Not a bug in
+`getInboxCounts`: the stub answers every REST call with `content-range: 0-0/1`,
+but Supabase is cross-origin to the preview (`:54321` vs `:4321`), and a browser
+hides any response header that is not CORS-safelisted unless the response
+exposes it. So supabase-js saw no `content-range`, every `count: 'exact'` head
+query resolved to `null`, and only the RPC's row counted. The real API exposes
+it (PostgREST's CORS headers list `Content-Range`) — argued from that, not
+observed against a live database. The audit fixture now sends
+`access-control-expose-headers: content-range`, and the bell reads 4.
+**Before calling a count wrong, check the response header is readable from the
+page** — log `res.headers.get('content-range')` in the page, not in the route
+handler, which sees it either way.
+Same session, same family: a stub that answers an `insert().select().single()`
+with the library ARRAY breaks every caller that then reads `.name` — the
+Logger's movement sweep threw on it and never navigated. Only a scratch
+harness clicked through to that point; no standing audit submits a write.
+→ `scripts/mobile-audit.mjs`, `src/lib/queries.ts` (`getInboxCounts`)
+
 ### The whole page is blank, and two of the three audits are green on it
 
 `[measured in Chromium]`

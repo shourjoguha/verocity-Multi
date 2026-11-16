@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { adoptPlan, createPlan, createSession, getMovements, getPlanTemplates, getUserStats } from '@/lib/queries';
+import { createPlan, createSession, getMovements, getPlanTemplates, getUserStats } from '@/lib/queries';
 import type { SessionInput } from '@/lib/queries';
 import { parsePlanMarkdown, PLAN_FORMAT_HELP } from '@/lib/planParser';
 import {
@@ -119,12 +119,6 @@ export default function PlanUpload() {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
         window.location.href = '/login';
-        return;
-      }
-      const adopt = new URLSearchParams(window.location.search).get('adopt');
-      if (adopt) {
-        const result = await adoptPlan(adopt);
-        window.location.href = result ? '/app/plan' : '/app/plan/upload';
         return;
       }
       // Ready does NOT wait on the profile. It is optional decoration on the

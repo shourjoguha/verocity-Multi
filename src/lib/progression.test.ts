@@ -183,3 +183,31 @@ describe('blockForWeek', () => {
     expect(blockForWeek([], 1)).toBeNull();
   });
 });
+
+describe('needs_review and plan cycles (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C) §7)', () => {
+  it('a needs_review row never advances or renumbers a cycle', () => {
+    const a = log('lower-jump', '2026-05-01');
+    const review = log('lower-jump', '2026-05-03', 'needs_review');
+    const b = log('lower-jump', '2026-05-05');
+    const byLog = planWeekByLog(PLAN_ID, [a, review, b], 4);
+    expect(byLog.has(review.id)).toBe(false);
+    expect(byLog.get(b.id)).toBe(2);
+    expect(currentProgramWeek(PLAN_ID, [a, review], 4)).toBe(1);
+    expect(nextWeekForDay([a, review], PLAN_ID, 'upper', 4)).toBe(1);
+  });
+
+  // THE TRAP, pinned: attaching a backdated row to a plan day inserts it
+  // mid-history and renumbers every later log. This is why choosePlanDay
+  // (lib/sharedLog.ts) refuses a date before the first plan log, and why an
+  // unconfirmed row is excluded above.
+  it('a backdated done row attached to a plan day renumbers the weeks after it', () => {
+    const w1 = log('lower-jump', '2026-05-10');
+    const w2 = log('lower-jump', '2026-05-17');
+    expect(planWeekByLog(PLAN_ID, [w1, w2], 4).get(w2.id)).toBe(2);
+    const backdated = log('lower-jump', '2026-05-03');
+    const after = planWeekByLog(PLAN_ID, [w1, w2, backdated], 4);
+    expect(after.get(backdated.id)).toBe(1);
+    expect(after.get(w1.id)).toBe(2);
+    expect(after.get(w2.id)).toBe(3);
+  });
+});

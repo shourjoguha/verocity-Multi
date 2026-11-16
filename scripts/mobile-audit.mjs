@@ -175,6 +175,91 @@ const doneLog = {
   },
 };
 
+// Friends / inbox (migration 0052). A needs_review log — a friend's workout
+// accepted but not confirmed — so the history lists render their "Review"
+// marker and /app/inbox its To review block. Without these the inbox would
+// render its empty state and be measured as one.
+const reviewLog = {
+  ...doneLog,
+  id: '44444444-4444-4444-4444-444444444444',
+  status: 'needs_review',
+  plan_id: null,
+  day_key: null,
+  week_number: null,
+  activity_type: 'Upper body — long friend-sent session title',
+  shared_item_id: 'si-h1',
+};
+// A second review row on a day with no log of mine: the Logger's review mode
+// without the duplicates sheet over it (Counts toward, Confirm / Discard), and
+// the inbox's Confirm as is, which is withheld over a same-day log.
+const REVIEW2_ID = '66666666-6666-6666-6666-666666666666';
+const reviewLog2 = {
+  ...reviewLog,
+  id: REVIEW2_ID,
+  log_date: new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10),
+  shared_item_id: 'si-h2',
+  // One movement doneLog lacks, so Combine (doneLog + this) marks an Added row.
+  data: {
+    sections: [
+      ...reviewLog.data.sections,
+      {
+        key: 'accessory',
+        groups: [{ id: 'ga', kind: 'single', items: [{ id: 'ia', movement: 'cable face pull with a long name', primaryMetric: 'reps', sets: [set('15', 20, 15, 7, true)] }] }],
+      },
+    ],
+  },
+};
+const logById = new Map([workoutLog, doneLog, reviewLog, reviewLog2].map((l) => [l.id, l]));
+const sharedPayload = (logDate) => ({
+  log_date: logDate,
+  started_at: null,
+  ended_at: null,
+  total_seconds: 3600,
+  activity_type: null,
+  tags: ['strength'],
+  data: doneLog.data,
+  movements: [],
+});
+const today = new Date().toISOString().slice(0, 10);
+const ymdAgo = (n) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+const sharedItem = (id, batch, sender, date, status, extra = {}) => ({
+  id, sender_id: 'f1', recipient_id: session.user.id, sender_name: sender, kind: 'log',
+  batch_id: batch, title: 'Day 3 — Lower body strength with a long label', item_date: date,
+  payload: status === 'pending' ? sharedPayload(date) : null, status,
+  created_at: new Date().toISOString(), acted_at: null, sender_seen_at: null,
+  accepted_log_id: null, accepted_digest: null, ...extra,
+});
+// The inbox pages ONE BATCH per page (0053). Batch b1 is 72 logs — a 6-day x
+// 12-week plan's worth, the size the owner sized batchMaxItems for — one dated
+// today (same day as doneLog, so its overlap chip renders); it is page 1, so
+// the long page and its sticky action bar are what /app/inbox measures. b2 is
+// a single item; b3 (below) a plan. `/app/inbox#older=N` steps to them.
+const pendingItems = [
+  sharedItem('si-1', 'b1', 'Samantha Rivera-Longname', today, 'pending'),
+  ...Array.from({ length: 71 }, (_, i) =>
+    sharedItem(`si-1-${i}`, 'b1', 'Samantha Rivera-Longname', ymdAgo(i + 2), 'pending'),
+  ),
+  sharedItem('si-4', 'b2', 'Alex', ymdAgo(1), 'pending'),
+];
+const historyItems = [
+  sharedItem('si-h1', 'b0', 'Alex', ymdAgo(9), 'accepted', { accepted_log_id: reviewLog.id }),
+  sharedItem('si-h2', 'b0', 'Alex', ymdAgo(10), 'accepted', { accepted_log_id: 'gone' }),
+  sharedItem('si-h3', 'b0', 'Alex', ymdAgo(11), 'dismissed'),
+];
+const friendRow = (id, name, status, direction) => ({
+  friendship_id: id, user_id: `u-${id}`, display_name: name, status, direction,
+  created_at: new Date().toISOString(), responded_at: null,
+});
+const friends = [
+  friendRow('fr1', 'Jordan Incoming-Request', 'pending', 'incoming'),
+  friendRow('fr2', 'Samantha Rivera-Longname', 'accepted', 'outgoing'),
+  friendRow('fr3', 'Alex', 'accepted', 'incoming'),
+  friendRow('fr4', 'Morgan Waiting', 'pending', 'outgoing'),
+];
+const acceptances = [
+  { batch_id: 'b9', recipient_id: 'u-fr2', recipient_name: 'Samantha Rivera-Longname', kind: 'log', accepted_count: 5, last_acted_at: new Date().toISOString(), seen: false },
+];
+
 // An ACTIVE PLAN is load-bearing for the same reason m3 below is owned: the
 // fixture used to return [] for plans, so every plan-dependent surface rendered
 // its empty state and was never measured — Home's plan unit and day accordion,
@@ -229,6 +314,16 @@ const activePlan = {
   is_public: false,
   created_at: '2026-01-06T00:00:00Z',
 };
+
+// A PLAN a friend sent (phase 4), in its own batch, so the inbox renders a plan
+// row — long title, its day count, Dismiss + Accept & review — rather than
+// only log rows. Pushed here because activePlan must exist first.
+pendingItems.push({
+  ...sharedItem('si-5', 'b3', 'Samantha Rivera-Longname', ymdAgo(0), 'pending'),
+  kind: 'plan',
+  title: 'Endurance & Cut Block with a deliberately long plan name',
+  payload: { name: activePlan.name, start_date: '2026-01-06', end_date: null, parsed: activePlan.parsed, source_markdown: null },
+});
 
 // m3 is OWNED (owner_user_id set), and that is load-bearing: Library renders
 // its per-row controls (Map / Edit / ×) only for rows the user owns, so a
@@ -315,12 +410,38 @@ const holidays = [
   holiday('h2', 'hike', -20, -27, null),
 ];
 
-function fixtureFor(url) {
+// list_inbox_batches, newest first: the order rows were pushed in.
+function inboxBatches(rows) {
+  const out = new Map();
+  for (const r of rows) {
+    const b = out.get(r.batch_id) ?? { batch_id: r.batch_id, sender_name: r.sender_name, kind: r.kind, item_count: 0, created_at: r.created_at };
+    b.item_count += 1;
+    out.set(r.batch_id, b);
+  }
+  return [...out.values()];
+}
+
+function fixtureFor(url, body) {
   const path = new URL(url).pathname;
+  if (path.endsWith('/rpc/list_inbox_batches'))
+    return inboxBatches(String(body ?? '').includes('pending') ? pendingItems : historyItems);
   if (path.includes('/holidays')) return holidays;
   if (path.includes('/recommendations')) return recommendations;
   if (path.includes('/coach_briefs')) return coachBriefs;
-  if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog, doneLog];
+  if (path.endsWith('/rpc/list_friends')) return friends;
+  if (path.endsWith('/rpc/my_friend_code')) return 'K7MX2QPA';
+  if (path.endsWith('/rpc/list_acceptances')) return acceptances;
+  if (path.includes('/rpc/')) return null;
+  // getSharedItem (the review banner's sender) is a by-id maybeSingle.
+  const byId = /[?&]id=eq\.([^&]+)/.exec(url)?.[1];
+  if (path.includes('/shared_items')) {
+    if (byId) return historyItems.find((i) => i.id === byId) ?? null;
+    const rows = url.includes('pending') ? pendingItems : historyItems;
+    const batch = /[?&]batch_id=eq\.([^&]+)/.exec(url)?.[1];
+    return batch ? rows.filter((i) => i.batch_id === batch) : rows;
+  }
+  if (path.includes('/workout_logs'))
+    return byId ? (logById.get(byId) ?? workoutLog) : [workoutLog, doneLog, reviewLog, reviewLog2];
   if (path.includes('/movements')) return movements;
   if (path.endsWith('/sessions')) return url.includes('id=eq.') ? savedSessions[0] : savedSessions;
   if (path.includes('/profiles')) return url.includes('id=eq.') ? null : [];
@@ -364,6 +485,17 @@ const ROUTES = [
   '/app/activity?mode=holiday',
   '/app/onboarding',
   `/app/log?logId=${LOG_ID}`,
+  // Friends (You → Friends, opened by the hash) and the inbox, both with rows.
+  '/app/you#friends',
+  '/app/inbox',
+  // The other two batches: Alex's single log, then the plan.
+  '/app/inbox#older=1',
+  '/app/inbox#older=2',
+  // Review mode (§5.4): with the same-day duplicates sheet open over it, then
+  // plain (Counts toward, Confirm / Discard), then Combine on my own log.
+  `/app/log?logId=${reviewLog.id}&edit=1`,
+  `/app/log?logId=${REVIEW2_ID}&edit=1&queue=${REVIEW2_ID},${reviewLog.id}`,
+  `/app/log?logId=${doneLog.id}&edit=1&combine=${REVIEW2_ID}`,
 ];
 
 const VIEWPORTS = [
@@ -408,11 +540,15 @@ for (const vp of VIEWPORTS) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(session) }),
   );
   await context.route('**/rest/v1/**', (route) => {
-    const body = fixtureFor(route.request().url());
+    const body = fixtureFor(route.request().url(), route.request().postData());
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      headers: { 'content-range': '0-0/1' },
+      // Supabase is cross-origin (:54321 vs the preview's :4321), so the
+      // browser hides content-range unless it is exposed — as the real API
+      // does. Without this every head count (the inbox bell's three) read 0
+      // and the bell showed 1 where the fixture means 4.
+      headers: { 'content-range': '0-0/1', 'access-control-expose-headers': 'content-range' },
       body: JSON.stringify(body),
     });
   });
@@ -427,6 +563,20 @@ for (const vp of VIEWPORTS) {
   for (const route of ROUTES) {
     await page.goto(BASE + route, { waitUntil: 'networkidle' });
     await page.waitForTimeout(600);
+    // `#older=N`: step N batches back through the inbox's batch pager (the
+    // inbox ignores the hash; this is the audit's own instruction).
+    const older = Number(/#older=(\d+)/.exec(route)?.[1] ?? 0);
+    // A hash-only goto is a same-document navigation: reload, or the pager
+    // starts wherever the previous route left it.
+    if (older) {
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForTimeout(600);
+    }
+    for (let i = 0; i < older; i++) {
+      await page.locator('button:has-text("Older batch")').first().click();
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(300);
+    }
 
     const report = await page.evaluate(({ allowSrc, deviceWidth }) => {
       const allow = allowSrc.map((s) => new RegExp(s.slice(1, s.lastIndexOf('/')), 'i'));

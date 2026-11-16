@@ -57,6 +57,9 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('id', share.resource_id)
       .eq('owner_user_id', share.owner_user_id)
+      // A friend's log accepted but not yet confirmed (migration 0052) is
+      // their numbers, not the owner's; it is never published.
+      .neq('status', 'needs_review')
       .maybeSingle();
     if (error) return json({ error: 'read_failed' }, 500);
     return json({ scope: 'log', log: data });
@@ -81,6 +84,8 @@ Deno.serve(async (req) => {
       .from('workout_logs')
       .select('*')
       .eq('owner_user_id', share.owner_user_id)
+      // Unreviewed copies of a friend's logs (0052) stay off a public profile.
+      .neq('status', 'needs_review')
       .order('log_date', { ascending: false })
       .limit(50),
   ]);

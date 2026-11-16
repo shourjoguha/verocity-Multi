@@ -73,6 +73,14 @@ export function completedLogs(logs: WorkoutLog[]): WorkoutLog[] {
   return logs.filter((l) => l.status === 'done');
 }
 
+// Every log except `needs_review` rows — a friend's numbers the athlete has not
+// confirmed. For readers that deliberately take more than `done` (the Logger's
+// prefill and PR reference, the Stats consistency grid) and must still never
+// count an unreviewed copy. Prefer completedLogs for anything new.
+export function withoutUnreviewed<T extends Pick<WorkoutLog, 'status'>>(logs: T[]): T[] {
+  return logs.filter((l) => l.status !== 'needs_review');
+}
+
 // Map a movement name to its family key (substring match), or null.
 export function familyOf(name: string): string | null {
   const n = name.toLowerCase();

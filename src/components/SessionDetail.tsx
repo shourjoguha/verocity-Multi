@@ -22,6 +22,7 @@ import { SessionWhen } from '@/components/SessionWhen';
 import { HeartRate } from '@/components/HeartRate';
 import { DeleteLogButton } from '@/components/DeleteLogButton';
 import { LogShareControl } from '@/components/LogShareControl';
+import { SendToSheet } from '@/components/friends/SendToSheet';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Item, PageStagger } from '@/components/anim';
 import { clientFor, hrefFor, isReadOnly, type Surface } from '@/lib/surface';
@@ -40,6 +41,7 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
   const [soreFrom, setSoreFrom] = useState<SorenessCandidate[]>([]);
   const [editingVibe, setEditingVibe] = useState(false);
   const [savingVibe, setSavingVibe] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
 
   async function saveVibe(next: VibeCheck) {
     if (!log) return;
@@ -132,7 +134,8 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
           <div className="flex items-center justify-between gap-4">
             <p className="t-eyebrow text-muted">
               {formatDate(log.log_date)}
-              {log.day_key ? ` · Day ${log.day_key}` : ''} · {log.status}
+              {log.day_key ? ` · Day ${log.day_key}` : ''} ·{' '}
+              {log.status === 'needs_review' ? 'Needs review' : log.status}
             </p>
             {/* Every control in this row writes, so the whole row goes on the
                 showcase rather than rendering three inert stubs. */}
@@ -235,8 +238,11 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
               ) : null}
             </p>
           ) : null}
-          {!readOnly ? (
-            <div className="mt-5 border-t border-border pt-4">
+          {/* A needs_review row is a friend's numbers, not yours: it is never
+              published by link nor passed on. Sending takes `done` only (the
+              RPC refuses anything else). */}
+          {!readOnly && log.status !== 'needs_review' ? (
+            <div className="mt-5 flex flex-col border-t border-border pt-4">
               <LogShareControl
                 logId={log.id}
                 defaultLabel={[
@@ -246,6 +252,25 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
                   .filter(Boolean)
                   .join(' · ')}
               />
+              {log.status === 'done' ? (
+                <button
+                  type="button"
+                  onClick={() => setSendOpen(true)}
+                  className="flex min-h-11 items-center self-start t-control text-muted transition-colors hover:text-fg"
+                >
+                  Send to a friend
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {!readOnly && log.status === 'needs_review' ? (
+            <div className="mt-5 border-t border-border pt-4">
+              <a
+                href={`/app/log?logId=${log.id}&edit=1`}
+                className="flex min-h-11 items-center t-control text-fg underline underline-offset-2"
+              >
+                Review this workout
+              </a>
             </div>
           ) : null}
         </header>
@@ -310,6 +335,7 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
           </Item>
         ))
       )}
+      {!readOnly ? <SendToSheet open={sendOpen} onClose={() => setSendOpen(false)} logIds={[log.id]} /> : null}
     </PageStagger>
   );
 }
