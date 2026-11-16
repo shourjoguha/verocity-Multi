@@ -34,6 +34,43 @@ two live answers — see that section for why.
 
 ## Rendering & animation
 
+### Switching tabs flashes white for a moment, on some switches and not others
+`[cause measured frame by frame in an iPhone screen recording; fix verified by attribute in Chromium, NOT yet observed to stop on the device]`
+On an installed iOS app in the dark theme, Home → Training and You → Progress
+showed the incoming page in the **light** theme for five to seven frames
+(~100ms) and then turned dark; Training → Progress, Progress → You and
+anything → Home did not. One frame even mixed the two — light page, dark cards.
+
+**What it is.** Astro's ClientRouter swap replaces `<html>`'s attributes with
+the incoming document's. `data-theme`, `style="color-scheme"` and `data-bg` are
+set by script, never by the server, so the incoming document has none of them.
+`Base.astro` re-applied them in `astro:after-swap`, which leaves a gap between
+"the new page is in the DOM" and "the theme is back". Chromium never paints
+inside that gap — every Chromium measurement (per-frame brightness, both
+themes, CPU throttled 6x, three builds) showed nothing, which is why an earlier
+pass at this bug reported it as not reproducible. WebKit does paint there.
+
+**The fix:** stamp theme and backdrop onto `event.newDocument` in
+`astro:before-swap`, so the swap carries them across and the gap does not
+exist. after-swap is kept as a second line.
+
+**How it was found, and what was wasted.** Two hours went on Chromium frame
+recorders, build bisection and four hypotheses (a transient empty-state card,
+stacking, the loading shell, the later dock change), all of them wrong. One
+screen recording settled it in minutes: `ffmpeg … signalstats` over the video
+lists every bright frame, and the frames themselves show the light theme.
+**For a visual bug that only the owner's phone shows, ask for a recording
+first.**
+
+**Guarded:** `audit:shell` check E records what `<html>` carries at the instant
+of each swap. It fails on the previous build (theme and backdrop null at every
+swap) and passes on the fix. It checks an attribute, not a pixel, and it is
+Chromium — it proves the gap is closed, not that WebKit stopped flashing.
+
+**Still unexplained:** why only some switches painted inside the gap. The gap
+existed on every swap.
+→ `src/layouts/Base.astro`, `scripts/shell-audit.mjs`
+
 ### A menu opens, its items are visible, and tapping them does nothing
 `[reproduced in Chromium, and the symptom observed to stop]`
 The plan header's ⋯ menu (`ui/ActionMenu`) opened and drew correctly, and
