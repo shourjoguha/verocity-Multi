@@ -68,33 +68,48 @@ const {
         // and there is no toggle reachable there to change it back. Checked
         // inside paint() (not once) so it re-decides on every ClientRouter swap
         // as the visitor moves on and off /showcase.
-        function isShowcase() {
-          var p = window.location.pathname;
+        function isShowcase(p) {
           return p === '/showcase' || p.indexOf('/showcase/') === 0;
         }
-        function paint() {
+        // `doc` and `path` default to the live page. The before-swap handler
+        // below passes the INCOMING document and the path being navigated to.
+        function paint(doc, path) {
+          doc = doc || document;
           try {
             var pref = localStorage.getItem(KEY);
             if (pref !== 'light' && pref !== 'dark' && pref !== 'system') pref = 'system';
-            var r = isShowcase()
+            var r = isShowcase(path || window.location.pathname)
               ? 'dark'
               : pref === 'dark' || (pref === 'system' && mql.matches)
                 ? 'dark'
                 : 'light';
-            document.documentElement.setAttribute('data-theme', r);
-            document.documentElement.style.colorScheme = r;
-            var m = document.querySelector('meta[name="theme-color"]');
+            doc.documentElement.setAttribute('data-theme', r);
+            doc.documentElement.style.colorScheme = r;
+            var m = doc.querySelector('meta[name="theme-color"]');
             if (m) m.setAttribute('content', r === 'dark' ? '#0b0a09' : '#f3f1ec');
             return r;
           } catch (e) {
-            document.documentElement.setAttribute('data-theme', 'light');
+            doc.documentElement.setAttribute('data-theme', 'light');
             return 'light';
           }
         }
         paint();
         if (!window.__vTheme) {
           window.__vTheme = true;
-          document.addEventListener('astro:after-swap', paint);
+          // Stamp the theme onto the INCOMING document before Astro swaps it
+          // in, so the swap copies it across with the rest of <html>'s
+          // attributes and there is never a moment without it. Re-applying
+          // only in after-swap (below, kept as a second line of defence) left
+          // a window: on an installed iOS app the new page was on screen in
+          // the light theme for ~100ms on some tab switches before turning
+          // dark — a white flash, measured frame by frame in a screen
+          // recording. See docs/LESSONS.md.
+          document.addEventListener('astro:before-swap', function (e) {
+            paint(e.newDocument, e.to && e.to.pathname);
+          });
+          document.addEventListener('astro:after-swap', function () {
+            paint();
+          });
           mql.addEventListener('change', function () {
             var p = localStorage.getItem(KEY);
             if (p === 'light' || p === 'dark') return; // manual pin ignores system
@@ -113,13 +128,14 @@ const {
       // a fine pointer and no reduced-motion get the 3D scene; everyone else gets
       // the topography CSS preset (still a depth cue, no WebGL).
       (function () {
-        function apply() {
+        function apply(doc, path) {
+          doc = doc || document;
           try {
             // Pinned on the showcase (see the theme script above for why): the
             // dotted backdrop, always, overriding any stored preference.
-            var p = window.location.pathname;
+            var p = path || window.location.pathname;
             if (p === '/showcase' || p.indexOf('/showcase/') === 0) {
-              document.documentElement.setAttribute('data-bg', 'dots');
+              doc.documentElement.setAttribute('data-bg', 'dots');
               return;
             }
             var v = localStorage.getItem('verocity:bg');
@@ -130,15 +146,22 @@ const {
                 !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
               v = canBoot3D ? 'aurora' : 'topography';
             }
-            document.documentElement.setAttribute('data-bg', v);
+            doc.documentElement.setAttribute('data-bg', v);
           } catch (_) {
-            document.documentElement.setAttribute('data-bg', 'topography');
+            doc.documentElement.setAttribute('data-bg', 'topography');
           }
         }
         apply();
         if (!window.__vBg) {
           window.__vBg = true;
-          document.addEventListener('astro:after-swap', apply);
+          // Same as the theme: on the incoming document first, so the backdrop
+          // is never absent across a swap; after-swap stays as a fallback.
+          document.addEventListener('astro:before-swap', function (e) {
+            apply(e.newDocument, e.to && e.to.pathname);
+          });
+          document.addEventListener('astro:after-swap', function () {
+            apply();
+          });
         }
       })();
     </script>

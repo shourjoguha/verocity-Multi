@@ -77,7 +77,23 @@ await context.route('**/rest/v1/**', (r) =>
   }),
 );
 await context.addInitScript(
-  ([k, v]) => window.localStorage.setItem(k, v),
+  ([k, v]) => {
+    window.localStorage.setItem(k, v);
+    // E (below). Registered before the page's own scripts, so on
+    // astro:after-swap this listener runs BEFORE Base.astro re-applies the
+    // theme and backdrop: it records what <html> carries at the instant the
+    // new page is in the DOM. Anything missing here is a window in which a
+    // frame can paint without it.
+    window.__swapSeen = [];
+    document.addEventListener('astro:after-swap', () => {
+      const el = document.documentElement;
+      window.__swapSeen.push({
+        path: window.location.pathname,
+        theme: el.getAttribute('data-theme'),
+        bg: el.getAttribute('data-bg'),
+      });
+    });
+  },
   ['sb-localhost-auth-token', JSON.stringify(session)],
 );
 
@@ -199,6 +215,26 @@ for (const route of ROUTES) {
     else pass(`${tag}  bar bottom == ${r.innerHeight} at scrollTop ${r.at.map((s) => s.top).join('/')}`);
   }
 }
+
+// E — <html> never loses its theme or backdrop across a ClientRouter swap.
+//     Astro's swap replaces <html>'s attributes with the incoming document's,
+//     which has neither (they are set by script, not by the server). Base.astro
+//     stamps both onto the incoming document in astro:before-swap; when it only
+//     re-applied them in after-swap, an installed iOS app showed the new page in
+//     the LIGHT theme for ~100ms on some tab switches. Chromium never painted
+//     that frame, so this checks the attribute, not a pixel.
+await page.goto(BASE + '/app', { waitUntil: 'networkidle' });
+await page.evaluate(() => (window.__swapSeen = []));
+for (const name of [/training/i, /home/i, /progress/i, /you/i]) {
+  await page.locator('a:visible').filter({ hasText: name }).last().click();
+  await page.waitForTimeout(700);
+}
+const swaps = await page.evaluate(() => window.__swapSeen);
+if (swaps.length < 4) fail(`swap check saw ${swaps.length} ClientRouter swaps, expected 4 — the tabs did not navigate`);
+const bare = swaps.filter((s) => !s.theme || !s.bg);
+if (bare.length)
+  fail(`<html> lost its theme/backdrop during a swap: ${bare.map((s) => `${s.path} theme=${s.theme} bg=${s.bg}`).join('; ')}`);
+else if (swaps.length) pass(`theme and backdrop present on <html> at all ${swaps.length} swaps`);
 
 await browser.close();
 
