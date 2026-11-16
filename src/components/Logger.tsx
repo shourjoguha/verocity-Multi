@@ -101,7 +101,7 @@ import type {
   VibeCheck,
   WorkoutLog,
 } from '@/lib/types';
-import { Button, FIELD, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
+import { Button, FIELD, FilterChip, LoadingScreen, SectionHeader } from '@/components/ui/primitives';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { Modal } from '@/components/ui/Modal';
 import { EASE } from '@/components/anim';
@@ -2211,25 +2211,11 @@ export default function Logger() {
               className={`${FIELD} max-w-max tabular-nums`}
               aria-label="Session date"
             />
-            {Object.entries(ACTIVITY_TAGS).map(([key, v]) => {
-              const on = tags.includes(key);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleTag(key)}
-                  // Fills from `.hill-btn[aria-pressed]` (accent / tappable);
-                  // the activity colour stays as the on chip's outline.
-                  className={`hill-btn flex min-h-11 items-center border px-3 t-control transition-colors ${
-                    on ? '' : 'text-muted hover:text-fg'
-                  }`}
-                  style={on ? { borderColor: v.color } : undefined}
-                  aria-pressed={on}
-                >
-                  {v.label}
-                </button>
-              );
-            })}
+            {/* FilterChip: a 32px chip in a 44px hit box; the activity colour
+                is the on chip's ring. */}
+            {Object.entries(ACTIVITY_TAGS).map(([key, v]) => (
+              <FilterChip key={key} label={v.label} on={tags.includes(key)} onClick={() => toggleTag(key)} color={v.color} />
+            ))}
             {editing ? (
               <button
                 type="button"

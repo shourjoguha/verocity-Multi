@@ -7,6 +7,7 @@ import {
   addExercise,
   addSubroutine,
   copyPlanned,
+  copyWeek,
   moveDay,
   moveExercise,
   nearestEarlierPlanned,
@@ -53,8 +54,8 @@ import { Modal } from '@/components/ui/Modal';
 import { PlusGlyph } from '@/components/ui/icons';
 import { SHEET_GLYPH, SHEET_ICON_BTN } from '@/components/ui/SheetActions';
 import { AddMenu } from '@/components/logger/AddMenu';
+import { toast } from '@/lib/toast';
 
-const SAVE_DEBOUNCE_MS = 1200;
 // Phase rows are a short repeated list, so they keep FIELD_DENSE; FIELD_DENSE
 // is w-full, so fixed widths come from a wrapper.
 const weekCell = `${FIELD_DENSE} text-center tabular-nums`;
@@ -86,13 +87,15 @@ export default function PlanEditor() {
   const [ready, setReady] = useState(false);
   const [planId, setPlanId] = useState<string | null>(null);
   const [plan, setPlan] = useState<ParsedPlan | null>(null);
-  const [save, setSave] = useState<'idle' | 'pending' | 'saving' | 'saved'>('idle');
+  // Edits stay local until Save. `rev` counts edits so a save that lands after
+  // a newer edit does not mark that edit saved.
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const rev = useRef(0);
   const [extraWeeks, setExtraWeeks] = useState(0);
   const [dayIdx, setDayIdx] = useState(0);
   // The open section tab, per day (dayKey is stable across label edits).
   const [renaming, setRenaming] = useState(false);
-
-  const firstRender = useRef(true);
 
   useEffect(() => {
     (async () => {
@@ -110,21 +113,26 @@ export default function PlanEditor() {
     })();
   }, []);
 
-  // Debounced autosave on every edit (skips the initial load).
+  // Leaving with unsaved edits (Done, a tab, a reload) asks first.
   useEffect(() => {
-    if (!plan || !planId) return;
-    if (firstRender.current) {
-      firstRender.current = false;
-      return;
-    }
-    setSave('pending');
-    const t = setTimeout(async () => {
-      setSave('saving');
-      const ok = await updatePlan(planId, plan);
-      setSave(ok ? 'saved' : 'idle');
-    }, SAVE_DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [plan, planId]);
+    if (!dirty) return;
+    const onLeave = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onLeave);
+    return () => window.removeEventListener('beforeunload', onLeave);
+  }, [dirty]);
+
+  async function savePlan() {
+    if (!plan || !planId || saving) return;
+    const at = rev.current;
+    setSaving(true);
+    const ok = await updatePlan(planId, plan);
+    setSaving(false);
+    if (!ok) toast('Couldn’t save the plan. Try again.', 'error');
+    else if (rev.current === at) setDirty(false);
+  }
 
   if (!ready) return <LoadingScreen />;
 
@@ -149,7 +157,11 @@ export default function PlanEditor() {
 
   const cols = Math.max(planWeeks(plan), extraWeeks);
   const weeks = Array.from({ length: cols }, (_, i) => i + 1);
-  const edit: Edit = (fn) => setPlan((p) => (p ? fn(p) : p));
+  const edit: Edit = (fn) => {
+    rev.current += 1;
+    setDirty(true);
+    setPlan((p) => (p ? fn(p) : p));
+  };
   const di = Math.min(dayIdx, Math.max(0, plan.days.length - 1));
   const day: PlanDay | undefined = plan.days[di];
   const dayMenu: ActionMenuItem[] = [
@@ -186,9 +198,10 @@ export default function PlanEditor() {
           <div className="flex items-center justify-between gap-4">
             <p className="t-eyebrow text-muted">Edit plan</p>
             <div className="flex shrink-0 items-center gap-4">
-              <span className="t-control text-muted">
-                {save === 'saving' ? 'Saving…' : save === 'pending' ? 'Editing…' : save === 'saved' ? 'Saved' : ''}
-              </span>
+              {/* -my pulls the 44px button back so the header row keeps its height. */}
+              <Button className="-my-3" onClick={savePlan} disabled={!dirty || saving}>
+                {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+              </Button>
               {/* 44px hit box; -my pulls it back so the header row keeps its height. */}
               <a
                 href="/app/plan/view"
@@ -345,9 +358,32 @@ export default function PlanEditor() {
             <span className="t-label text-muted">
               Plan runs {cols} week{cols === 1 ? '' : 's'}
             </span>
-            <Button variant="ghost" onClick={() => setExtraWeeks(cols + 1)}>
-              + Week
-            </Button>
+            {/* Adding a week asks what it starts as: blank, or a copy of a
+                week already in the plan (every day, every movement). */}
+            <span className="w-40 shrink-0">
+              <select
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  const next = cols + 1;
+                  if (v !== 'blank') edit((p) => copyWeek(p, Number(v), next));
+                  setExtraWeeks(next);
+                }}
+                className={FIELD}
+                aria-label="Add a week"
+              >
+                <option value="" disabled>
+                  + Week
+                </option>
+                <option value="blank">Blank week</option>
+                {weeks.map((x) => (
+                  <option key={x} value={x}>
+                    Copy of W{x}
+                  </option>
+                ))}
+              </select>
+            </span>
           </div>
         </section>
       </Item>
@@ -613,6 +649,8 @@ function WeekEditor({
   const later = weeks.filter((x) => x > w);
   const laterProgrammed = later.filter((x) => has(ex, x));
   const copyTargets = laterProgrammed.length ? laterProgrammed : later;
+  // Copy back: any earlier programmed week onto this one.
+  const earlier = weeks.filter((x) => x < w && has(ex, x));
 
   return (
     <div className="mt-3">
@@ -635,6 +673,35 @@ function WeekEditor({
           />
         </div>
       </div>
+
+      {earlier.length ? (
+        <label className="mt-3 block">
+          <span className="t-label mb-1 block text-muted">W{w} copy from</span>
+          <select
+            value=""
+            onChange={(e) => {
+              const from = Number(e.target.value);
+              if (!from) return;
+              setPending((s) => {
+                const n = new Set(s);
+                n.delete(w);
+                return n;
+              });
+              edit((p) => copyPlanned(p, di, ei, from, [w]));
+            }}
+            className={FIELD}
+          >
+            <option value="" disabled>
+              Choose an earlier week
+            </option>
+            {earlier.map((x) => (
+              <option key={x} value={x}>
+                W{x} · {ex.plannedByWeek[x]}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <div className="mt-3">
         {!open ? (

@@ -4,6 +4,7 @@ import {
   addDay,
   addSubroutine,
   copyPlanned,
+  copyWeek,
   moveDay,
   nearestEarlierPlanned,
   removeBlock,
@@ -152,6 +153,15 @@ describe('skip / restore a week', () => {
     expect(next.days[0].exercises[0].plannedByWeek).toEqual({ 1: '3x5 @75%', 3: '3x5 @75%', 5: '3x5 @75%' });
     // Nothing to copy from an empty week.
     expect(copyPlanned(alt, 0, 0, 2, [4])).toEqual(alt);
+  });
+
+  it('copyWeek copies every exercise’s prescription and cue onto the new week', () => {
+    const cued = setExerciseWeekNote(alt, 0, 0, 1, '+2.5 kg');
+    const next = copyWeek(cued, 1, 6);
+    expect(next.days[0].exercises[0].plannedByWeek[6]).toBe('3x5 @75%');
+    expect(next.days[0].exercises[0].notesByWeek?.[6]).toBe('+2.5 kg');
+    // A week skipped in the source stays skipped in the copy.
+    expect(copyWeek(alt, 2, 6).days[0].exercises[0].plannedByWeek[6]).toBeUndefined();
   });
 });
 
