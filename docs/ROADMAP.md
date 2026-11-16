@@ -79,7 +79,7 @@ Operational detail lives in `docs/HANDOVER.md`.
 - [x] **Unit tests for the parser (6 passing — vitest)** ← genuinely verified
 - [x] PlanUpload: paste markdown → Parse → preview → Save & activate
 - [x] `createPlan` (the adopt-by-id route and its `?adopt=<id>` URL were removed in Phase 18: it read `plans` by id through RLS, so it only ever worked for own or `is_public` rows)
-- [x] Plan edit mode (`/app/plan/edit`): inline-edit title/labels/movements/sections + per-week cells, drag handles + up/down reorder for days & exercises, add/delete, "+ Week", debounced autosave. Pure helpers in `lib/planEdits.ts` (unit-tested); `dayKey` stays stable across renames. Block-phase editing (add/remove/type/week-range) now exposed in the editor (unit-tested).
+- [x] Plan edit mode (`/app/plan/edit`): inline-edit title/labels/movements/sections + per-week cells, drag handles + up/down reorder for days & exercises, add/delete, "+ Week" (blank or a copy of any existing week), per-movement "copy from" an earlier week, explicit Save (no autosave; leaving with unsaved edits asks first). Pure helpers in `lib/planEdits.ts` (unit-tested); `dayKey` stays stable across renames. Block-phase editing (add/remove/type/week-range) now exposed in the editor (unit-tested).
 - verify: ✓ parser + planEdits unit-tested; check/build clean. updatePlan save path
   verified against the live DB.
 

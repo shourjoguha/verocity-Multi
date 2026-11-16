@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ACTIVITY_TAGS, HR_WHEEL, TIMERS } from '@/app.config';
-import { Button } from '@/components/ui/primitives';
+import { Button, FilterChip } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
 import { WheelPicker } from '@/components/ui/WheelPicker';
 
@@ -82,26 +82,9 @@ function FinishDetailsBody({
         <div>
           <div className="mb-2 t-label text-muted">Session type · optional</div>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(ACTIVITY_TAGS).map(([key, v]) => {
-              const on = tags.includes(key);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggle(key)}
-                  // Fills come from `.hill-btn[aria-pressed]`: accent when on,
-                  // tappable when off. The activity colour stays as the on
-                  // chip's outline — data colour, and never the only cue.
-                  className={`hill-btn flex min-h-11 items-center border px-3 t-control transition-colors ${
-                    on ? '' : 'text-muted hover:text-fg'
-                  }`}
-                  style={on ? { borderColor: v.color } : undefined}
-                  aria-pressed={on}
-                >
-                  {v.label}
-                </button>
-              );
-            })}
+            {Object.entries(ACTIVITY_TAGS).map(([key, v]) => (
+              <FilterChip key={key} label={v.label} on={tags.includes(key)} onClick={() => toggle(key)} color={v.color} />
+            ))}
           </div>
         </div>
 

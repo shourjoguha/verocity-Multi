@@ -145,6 +145,28 @@ export function copyPlanned(plan: ParsedPlan, di: number, ei: number, from: numb
   });
 }
 
+// Copy week `from` onto week `to` for every exercise on every day: the
+// prescription and its cue. An exercise skipped in `from` is skipped in `to`.
+export function copyWeek(plan: ParsedPlan, from: number, to: number): ParsedPlan {
+  if (from === to) return plan;
+  return withDays(
+    plan,
+    plan.days.map((d) => ({
+      ...d,
+      exercises: d.exercises.map((e) => {
+        const plannedByWeek = { ...e.plannedByWeek };
+        const value = e.plannedByWeek[from];
+        if (value?.trim()) plannedByWeek[to] = value;
+        else delete plannedByWeek[to];
+        const next: PlanExercise = { ...e, plannedByWeek };
+        const note = e.notesByWeek?.[from];
+        if (note?.trim()) next.notesByWeek = { ...(e.notesByWeek ?? {}), [to]: note };
+        return next;
+      }),
+    })),
+  );
+}
+
 // The rest stepper's increment, in seconds.
 export const REST_STEP_SECONDS = 15;
 

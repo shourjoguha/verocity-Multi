@@ -332,7 +332,11 @@ export function FilterChip({
             ? 'border-accent bg-accent'
             : 'border-transparent bg-tappable group-hover:bg-tappable-hover'
         }`}
-        style={on && color ? { borderColor: color } : undefined}
+        // The data colour is a 2px ring OUTSIDE the fill, 1px clear of it: as
+        // a 1px border it sat on the near-black accent fill, where the dark
+        // light-theme tag colours (Strength, Sport, Hyrox) all but vanished.
+        // An outline, not a shadow, and it takes no layout.
+        style={on && color ? { outline: `2px solid ${color}`, outlineOffset: '1px' } : undefined}
       >
         {label}
       </span>
