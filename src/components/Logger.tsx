@@ -17,6 +17,7 @@ import {
   updateLog,
 } from '@/lib/queries';
 import { loadAllLogs, newestLogs } from '@/lib/logStore';
+import { withoutUnreviewed } from '@/lib/stats';
 import { track } from '@/lib/analytics';
 import {
   buildBlankLog,
@@ -446,8 +447,10 @@ export default function Logger() {
             : getActivePlan(),
         loadAllLogs(),
       ]);
-      const recent = newestLogs(allLogs, 50);
-      setBestByMovement(bestE1rmByTrack(allLogs));
+      // A needs_review row holds a friend's numbers: never a prefill or PR source.
+      const counted = withoutUnreviewed(allLogs);
+      const recent = newestLogs(counted, 50);
+      setBestByMovement(bestE1rmByTrack(counted));
       setLastHr(lastHeartRate(allLogs, null));
 
       // Everything below builds and creates a NEW row, so this is the one
@@ -691,7 +694,13 @@ export default function Logger() {
   // (wall-clock since started_at) — covers sessions left open and reopened. Caps
   // the duration at 2:00 and notifies; the user can edit the end time later.
   async function autoEnd() {
-    if (autoEndedRef.current || statusRef.current === 'done' || statusRef.current === 'cancelled') {
+    if (
+      autoEndedRef.current ||
+      statusRef.current === 'done' ||
+      statusRef.current === 'cancelled' ||
+      // An accepted-from-a-friend row awaiting review is not a live session.
+      statusRef.current === 'needs_review'
+    ) {
       return;
     }
     autoEndedRef.current = true;

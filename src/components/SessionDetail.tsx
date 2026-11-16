@@ -132,7 +132,8 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
           <div className="flex items-center justify-between gap-4">
             <p className="t-eyebrow text-muted">
               {formatDate(log.log_date)}
-              {log.day_key ? ` · Day ${log.day_key}` : ''} · {log.status}
+              {log.day_key ? ` · Day ${log.day_key}` : ''} ·{' '}
+              {log.status === 'needs_review' ? 'Needs review' : log.status}
             </p>
             {/* Every control in this row writes, so the whole row goes on the
                 showcase rather than rendering three inert stubs. */}

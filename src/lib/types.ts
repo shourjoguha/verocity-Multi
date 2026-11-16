@@ -17,7 +17,10 @@ import type {
 
 // ---- DB row types (mirror supabase/migrations) ----
 
-export type LogStatus = 'planned' | 'in_progress' | 'paused' | 'done' | 'cancelled';
+// `needs_review` (0052): accepted from a friend, not yet confirmed. Counts
+// NOWHERE — every metric reads `done` (completedLogs in lib/stats.ts), and
+// planCycles excludes it explicitly. It is never a live session.
+export type LogStatus = 'planned' | 'in_progress' | 'paused' | 'done' | 'cancelled' | 'needs_review';
 export type ShareScope = 'profile' | 'plan' | 'log';
 export type LogSource = 'manual' | 'garmin';
 
@@ -164,6 +167,10 @@ export interface WorkoutLog {
   source: LogSource; // 'garmin' rows are projected from garmin_activities (mig 0014)
   garmin_activity_id: string | null;
   created_at: string;
+  // The shared_items row this log was accepted from (0052) — provenance, and
+  // with a unique index the guard against a retried accept inserting twice.
+  // Optional so fixtures and pre-0052 rows still typecheck.
+  shared_item_id?: string | null;
 }
 
 export interface MovementSub {
@@ -188,6 +195,116 @@ export interface Share {
   created_at: string;
   expires_at: string | null;
   revoked: boolean;
+}
+
+// ---- friends and send-to (migration 0052, docs/FRIENDS_SHARING_PLAN.md).
+// Friendship permits SENDING only; it grants no read of anything. Every write
+// is an RPC. ----
+
+export type FriendshipStatus = 'pending' | 'accepted' | 'blocked';
+export type FriendDirection = 'incoming' | 'outgoing';
+
+/** A `friendships` row as RLS returns it to either party. */
+export interface Friendship {
+  id: string;
+  requester_id: string;
+  addressee_id: string;
+  status: FriendshipStatus;
+  blocked_by: string | null;
+  created_at: string;
+  responded_at: string | null;
+}
+
+/**
+ * One row of `list_friends()` — the only way a friend's name is read. An
+ * OBJECT on purpose (§12.6): a later friend-read feature adds fields (e.g.
+ * grants) here without changing what existing ones mean. A blocked pair is
+ * listed only to whoever blocked.
+ */
+export interface FriendSummary {
+  friendship_id: string;
+  /** The other party. */
+  user_id: string;
+  display_name: string;
+  status: FriendshipStatus;
+  /** outgoing = the caller sent the request. */
+  direction: FriendDirection;
+  created_at: string;
+  responded_at: string | null;
+}
+
+export type SharedItemKind = 'log' | 'plan';
+export type SharedItemStatus = 'pending' | 'accepted' | 'dismissed' | 'removed';
+
+/** A sender's custom movement row named in a shared log (allow-listed). */
+export interface SharedMovementPayload {
+  name: string;
+  category: string | null;
+  tags: string[];
+  default_metrics: MetricKey[];
+  primary_metric: MetricKey;
+  default_rest_seconds: number;
+  taxonomy: MovementTaxonomyOverride | null;
+}
+
+/**
+ * `shared_items.payload` for a log, built server-side by send_shared_items.
+ * `data` carries `sections` only — never `session` (the sender's sleep /
+ * energy / soreness). Written by ANOTHER USER: run it through
+ * validateSharedLogPayload (lib/sharedLog.ts) before anything reads it.
+ */
+export interface SharedLogPayload {
+  log_date: string;
+  started_at: string | null;
+  ended_at: string | null;
+  total_seconds: number | null;
+  activity_type: string | null;
+  tags: string[];
+  data: LogDocument;
+  movements: SharedMovementPayload[];
+}
+
+/** `shared_items.payload` for a plan. Goes through validateParsedPlan only. */
+export interface SharedPlanPayload {
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  parsed: ParsedPlan;
+  source_markdown: string | null;
+}
+
+interface SharedItemBase {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  /** display_name at send time. */
+  sender_name: string;
+  batch_id: string;
+  title: string | null;
+  item_date: string | null;
+  status: SharedItemStatus;
+  created_at: string;
+  acted_at: string | null;
+  sender_seen_at: string | null;
+  accepted_log_id: string | null;
+  accepted_digest: string | null;
+}
+
+/** An inbox row. `payload` is null once the item was acted on. */
+export type SharedItem =
+  | (SharedItemBase & { kind: 'log'; payload: SharedLogPayload | null })
+  | (SharedItemBase & { kind: 'plan'; payload: SharedPlanPayload | null });
+
+/** One row of `list_acceptances()`: a batch of the caller's sent items that a
+ *  friend accepted. Never carries payload or receiver data beyond the name. */
+export interface Acceptance {
+  batch_id: string;
+  recipient_id: string;
+  recipient_name: string;
+  kind: SharedItemKind;
+  accepted_count: number;
+  last_acted_at: string | null;
+  seen: boolean;
 }
 
 // ---- sessions: saved workout templates (SPEC §8). A standalone, named, tagged

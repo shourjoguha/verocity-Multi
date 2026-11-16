@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { clearQueryCache } from '@/lib/queryCache';
 import {
   ASPECT_METRICS_VERSION,
+  INBOX,
   isExperienceKey,
   isMealKindKey,
   isMealSizeKey,
@@ -14,6 +15,7 @@ import {
 import { normalizeMovementName } from '@/lib/movementTaxonomy';
 import { rebasePlanDates } from '@/lib/planRebase';
 import type {
+  Acceptance,
   AspectScores,
   AspectSnapshot,
   AspectSnapshotInput,
@@ -23,6 +25,7 @@ import type {
   CoachObservationInput,
   CoachRuleNote,
   FitnessAssessment,
+  FriendSummary,
   GarminActivity,
   GarminConnectionInfo,
   GarminHealthDaily,
@@ -48,6 +51,9 @@ import type {
   SessionType,
   Share,
   ShareScope,
+  SharedItem,
+  SharedItemKind,
+  SharedItemStatus,
   UserStats,
   WorkoutLog,
 } from '@/lib/types';
@@ -516,19 +522,26 @@ export async function deleteLog(id: string): Promise<boolean> {
 
 // Insert a plan and make it the active one (the partial unique index allows a
 // single active plan per owner, so deactivate any existing active first).
+// `{ activate: false }` inserts it inactive and leaves the current plan alone —
+// "Save for later" on a plan a friend sent. Callers never validate here:
+// validateParsedPlan runs before this, always.
 export async function createPlan(
   parsed: ParsedPlan,
   sourceMarkdown: string,
+  opts: { activate?: boolean } = {},
 ): Promise<Plan | null> {
+  const activate = opts.activate ?? true;
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
-  await supabase
-    .from('plans')
-    .update({ is_active: false })
-    .eq('owner_user_id', user.id)
-    .eq('is_active', true);
+  if (activate) {
+    await supabase
+      .from('plans')
+      .update({ is_active: false })
+      .eq('owner_user_id', user.id)
+      .eq('is_active', true);
+  }
   const { data, error } = await supabase
     .from('plans')
     .insert({
@@ -538,7 +551,7 @@ export async function createPlan(
       end_date: parsed.endDate,
       source_markdown: sourceMarkdown,
       parsed,
-      is_active: true,
+      is_active: activate,
     })
     .select('*')
     .single();
@@ -606,6 +619,175 @@ export async function getPlanTemplates(): Promise<PlanTemplate[]> {
 // they are re-based to today or a new user would open the plan mid-program.
 export async function adoptPlanTemplate(template: PlanTemplate): Promise<Plan | null> {
   return createPlan(rebasePlanDates(template.parsed, new Date()), '');
+}
+
+// ---- friends and send-to (migration 0052, docs/FRIENDS_SHARING_PLAN.md).
+// Thin wrappers over the security-definer RPCs: every write, and every read of
+// another user's name, goes through one of them. The RPCs raise a bare error
+// code as the message ('friend_request_failed', 'not_friends', ...), surfaced
+// here as `error`. Request failures are deliberately ONE code — unknown code,
+// self, already paired and blocked all look alike, so a code cannot be probed.
+// ----
+
+/** RPC error code from a PostgREST error (the exception message), or 'failed'. */
+function rpcError(error: { message?: string } | null): string {
+  const m = error?.message ?? '';
+  return /^[a-z_]+$/.test(m) ? m : 'failed';
+}
+
+/** The caller's friend code, created on first use; `rotate` replaces it. */
+export async function getMyFriendCode(rotate = false): Promise<string | null> {
+  const { data, error } = await supabase.rpc('my_friend_code', { p_rotate: rotate });
+  return error ? null : (data as string);
+}
+
+export type RpcResult<T = undefined> = { ok: true; value: T } | { ok: false; error: string };
+
+/** 'friend_request_failed' covers every reason but the caller's own cap ('request_cap'). */
+export async function requestFriend(code: string): Promise<RpcResult<string>> {
+  const { data, error } = await supabase.rpc('request_friend', { p_code: code });
+  if (error) return { ok: false, error: rpcError(error) };
+  clearQueryCache();
+  return { ok: true, value: data as string };
+}
+
+export async function respondFriend(friendshipId: string, accept: boolean): Promise<boolean> {
+  const { error } = await supabase.rpc('respond_friend', { p_id: friendshipId, p_accept: accept });
+  if (!error) clearQueryCache();
+  return !error;
+}
+
+/** Unfriend / cancel / decline, or block. Block deletes that person's pending
+ *  items to you; neither touches a log you already accepted. */
+export async function removeFriend(friendshipId: string, block = false): Promise<boolean> {
+  const { error } = await supabase.rpc('remove_friend', { p_id: friendshipId, p_block: block });
+  if (!error) clearQueryCache();
+  return !error;
+}
+
+export async function listFriends(): Promise<FriendSummary[]> {
+  const { data, error } = await supabase.rpc('list_friends');
+  return error ? [] : ((data as FriendSummary[]) ?? []);
+}
+
+/** Snapshot own `done` logs (or plans) to one accepted friend, as one batch.
+ *  Errors: not_friends, not_owned, batch_size, daily_cap, payload_too_large. */
+export async function sendSharedItems(
+  recipientId: string,
+  kind: SharedItemKind,
+  ids: string[],
+): Promise<RpcResult<string>> {
+  const { data, error } = await supabase.rpc('send_shared_items', {
+    p_recipient: recipientId,
+    p_kind: kind,
+    p_ids: ids,
+  });
+  if (error) return { ok: false, error: rpcError(error) };
+  return { ok: true, value: data as string };
+}
+
+/** Recipient acts on a pending item. An accepted LOG must pass the id of the
+ *  caller's own row that carries this shared_item_id; a plan passes none. */
+export async function setSharedItemStatus(
+  itemId: string,
+  status: Extract<SharedItemStatus, 'accepted' | 'dismissed'>,
+  logId: string | null = null,
+): Promise<boolean> {
+  const { error } = await supabase.rpc('set_shared_item_status', {
+    p_id: itemId,
+    p_status: status,
+    p_log_id: logId,
+  });
+  if (!error) clearQueryCache();
+  return !error;
+}
+
+/** Batches of the caller's sent items a friend accepted (§12.4). */
+export async function listAcceptances(): Promise<Acceptance[]> {
+  const { data, error } = await supabase.rpc('list_acceptances');
+  return error ? [] : ((data as Acceptance[]) ?? []);
+}
+
+export async function markAcceptancesSeen(batchIds: string[]): Promise<boolean> {
+  if (batchIds.length === 0) return true;
+  const { error } = await supabase.rpc('mark_acceptances_seen', { p_batch_ids: batchIds });
+  if (!error) clearQueryCache();
+  return !error;
+}
+
+/** Delete the caller's logs that came from these accepted items (§12.5).
+ *  `dryRun` only counts: `edited` = logs changed since they were accepted. */
+export async function removeAcceptedItems(
+  itemIds: string[],
+  dryRun: boolean,
+): Promise<{ total: number; edited: number } | null> {
+  const { data, error } = await supabase.rpc('remove_accepted_items', {
+    p_ids: itemIds,
+    p_dry_run: dryRun,
+  });
+  if (error) return null;
+  if (!dryRun) clearQueryCache();
+  return data as { total: number; edited: number };
+}
+
+/**
+ * One page of the caller's inbox, newest first, INBOX.pageSize rows. `page` is
+ * 0-based. Reads one extra row to answer `hasMore` without a count query. RLS
+ * scopes it to rows where the caller is the recipient.
+ */
+export async function getInboxPage(
+  page: number,
+  statuses: SharedItemStatus[] = ['pending'],
+): Promise<{ items: SharedItem[]; hasMore: boolean }> {
+  const size = INBOX.pageSize;
+  const from = Math.max(0, Math.floor(page)) * size;
+  const { data } = await supabase
+    .from('shared_items')
+    .select('*')
+    .in('status', statuses)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: true })
+    .range(from, from + size);
+  const rows = (data as SharedItem[]) ?? [];
+  return { items: rows.slice(0, size), hasMore: rows.length > size };
+}
+
+export interface InboxCounts {
+  pendingItems: number;
+  friendRequests: number;
+  needsReview: number;
+  unseenAcceptances: number;
+  /** What the bell shows. */
+  total: number;
+}
+
+/** Bell count, read on page load only (no realtime, no polling). */
+export async function getInboxCounts(): Promise<InboxCounts> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const zero = { pendingItems: 0, friendRequests: 0, needsReview: 0, unseenAcceptances: 0, total: 0 };
+  if (!user) return zero;
+  const [items, requests, review, acceptances] = await Promise.all([
+    supabase.from('shared_items').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase
+      .from('friendships')
+      .select('id', { count: 'exact', head: true })
+      .eq('addressee_id', user.id)
+      .eq('status', 'pending'),
+    supabase.from('workout_logs').select('id', { count: 'exact', head: true }).eq('status', 'needs_review'),
+    listAcceptances(),
+  ]);
+  const counts = {
+    pendingItems: items.count ?? 0,
+    friendRequests: requests.count ?? 0,
+    needsReview: review.count ?? 0,
+    unseenAcceptances: acceptances.filter((a) => !a.seen).length,
+  };
+  return {
+    ...counts,
+    total: counts.pendingItems + counts.friendRequests + counts.needsReview + counts.unseenAcceptances,
+  };
 }
 
 // ---- share tokens (SPEC §7B). The client stores only the token_hash; the raw

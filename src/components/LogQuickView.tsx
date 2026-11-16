@@ -42,7 +42,11 @@ const shareLabel = (log: WorkoutLog, plan: Plan | null | undefined) =>
     .join(' · ');
 
 // "done" is the normal case and says nothing; anything else is worth a word.
-const STATUS_LABEL: Record<string, string> = { in_progress: 'In progress', paused: 'Paused' };
+const STATUS_LABEL: Record<string, string> = {
+  in_progress: 'In progress',
+  paused: 'Paused',
+  needs_review: 'Needs review',
+};
 
 // Tap-a-log quick popup: a session at a glance with Open / Resume actions,
 // plus inline total-time editing and delete, instead of jumping straight to

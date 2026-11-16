@@ -206,3 +206,14 @@ describe('buildTimeline', () => {
     expect(futureDays.length).toBeGreaterThanOrEqual(10);
   });
 });
+
+// Decision for docs/FRIENDS_SHARING_PLAN.md §7: the activity ribbon is a count
+// of days trained, so an accepted-but-unconfirmed friend's log stays OFF it.
+// Its "Review" marker lives in history and the inbox, not here.
+describe('buildTimeline and needs_review', () => {
+  it('leaves a needs_review log out of the ribbon', () => {
+    const day = ymd(addDays(NOW, -3));
+    const points = buildTimeline(null, [makeLog({ log_date: day, status: 'needs_review' })], NOW);
+    expect(points.find((p) => p.date === day)?.state ?? 'blank').toBe('blank');
+  });
+});

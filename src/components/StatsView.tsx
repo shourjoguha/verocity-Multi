@@ -11,7 +11,7 @@ import type { Holiday, WorkoutLog } from '@/lib/types';
 import { holidayLabel, holidayOn } from '@/lib/holidays';
 import { HolidayGlyph } from '@/components/HolidayScene';
 import { e1rm } from '@/lib/e1rm';
-import { completedLogs, flattenWorkingSets, familyOf } from '@/lib/stats';
+import { completedLogs, flattenWorkingSets, familyOf, withoutUnreviewed } from '@/lib/stats';
 import { trackName } from '@/lib/notations';
 import {
   addWork,
@@ -637,11 +637,14 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // Cache key names the window: with the old 8-week key a revisit would paint a
   // cached 56-day array on the first frame (useAuthedQuery seeds synchronously)
   // and the radar would compute over the wrong span until revalidation landed.
+  // needs_review rows (a friend's unconfirmed numbers) count nowhere on Stats;
+  // the consistency grid reads every status, so they are dropped at the read.
   const { data: logs, loading } = useAuthedQuery(
     () =>
-      mode === 'app'
+      (mode === 'app'
         ? loadAllLogs().then((all) => logsBetween(all, windows.prior.start, windows.current.end))
-        : getLogsInRange(windows.prior.start, windows.current.end, client),
+        : getLogsInRange(windows.prior.start, windows.current.end, client)
+      ).then(withoutUnreviewed),
     {
       auth: mode === 'app',
       key: mode === 'app' ? `stats:logs:${ASPECT_READ_DAYS * 2}d` : undefined,
@@ -659,7 +662,7 @@ export default function StatsView({ mode = 'app' }: { mode?: 'app' | 'showcase' 
   // Every finished session, for the bars' per-tag reference and the load
   // change "vs last time". All time on purpose: the 120-day fetch above held 27
   // of 42 strength sessions, and a reference should not drift as old ones age out.
-  const { data: history, loading: historyLoading } = useAuthedQuery(() => (mode === 'app' ? loadAllLogs() : getAllLogs(client)), {
+  const { data: history, loading: historyLoading } = useAuthedQuery(() => (mode === 'app' ? loadAllLogs() : getAllLogs(client)).then(withoutUnreviewed), {
     auth: mode === 'app',
     key: mode === 'app' ? 'stats:logs:all' : undefined,
   });

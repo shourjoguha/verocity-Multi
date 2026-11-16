@@ -20,6 +20,7 @@ import {
   upsertCoachFindings,
   upsertCoachObservations,
 } from '@/lib/queries';
+import { withoutUnreviewed } from '@/lib/stats';
 import { runCoach } from '@/lib/coach/evaluate';
 import { COACH_WINDOW_DAYS } from '@/lib/coach/signals';
 import { addDays, holidayContext } from '@/lib/holidays';
@@ -625,7 +626,8 @@ export default function CoachView() {
     try {
       const [plan, logs, meals, stats, movements, existing, observations] = await Promise.all([
         getActivePlan(),
-        getRecentLogs(80),
+        // needs_review rows are a friend's unconfirmed numbers: never coached on.
+        getRecentLogs(80).then(withoutUnreviewed),
         getMealLogs(200),
         getUserStats(),
         getMovements(),

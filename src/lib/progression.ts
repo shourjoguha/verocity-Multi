@@ -44,10 +44,16 @@ export function byLoggedOrder(a: WorkoutLog, b: WorkoutLog): number {
 }
 
 // Walk a plan's non-cancelled logs in logged order, opening a new cycle whenever
-// a day repeats.
+// a day repeats. A `needs_review` row (accepted from a friend, not confirmed) is
+// left out too: a stray one here would shift the program week of every later
+// log. Attaching a shared log is gated on its date for the same reason — see
+// choosePlanDay in lib/sharedLog.ts.
 export function planCycles(planId: string, logs: WorkoutLog[]): PlanCycles {
   const ordered = logs
-    .filter((l) => l.plan_id === planId && l.day_key && l.status !== 'cancelled')
+    .filter(
+      (l) =>
+        l.plan_id === planId && l.day_key && l.status !== 'cancelled' && l.status !== 'needs_review',
+    )
     .sort(byLoggedOrder);
   const cycleByLog = new Map<string, number>();
   let current = 1;

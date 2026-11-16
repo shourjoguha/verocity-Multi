@@ -45,3 +45,13 @@ describe('activeSessionOf', () => {
     expect(activeSessionOf(logs, now)).toBeNull();
   });
 });
+
+describe('activeSessionOf and needs_review', () => {
+  // A log accepted from a friend and awaiting review has a started_at (the
+  // sender's) but is never a live session: no Resume, no LogTabButton pulse.
+  it('never treats a review row as live, even with a fresh started_at', () => {
+    const review = { id: 'r', status: 'needs_review' as const, started_at: agoMinutes(5) };
+    expect(activeSessionOf([review], now)).toBeNull();
+    expect(activeSessionOf([review, live('a', 20)], now)?.id).toBe('a');
+  });
+});
