@@ -35,6 +35,8 @@ import { Modal } from '@/components/ui/Modal';
 import { Button, EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
 import { FriendRequestRow } from '@/components/friends/FriendsPanel';
 import { acceptMany, acceptSharedLog, bulkToast, type LogItem } from '@/components/inbox/acceptShared';
+import { canConfirmAsIs, confirmAsIs } from '@/components/inbox/confirmReview';
+import { reviewHref } from '@/lib/reviewFlow';
 
 const TEXT_BTN =
   'inline-flex min-h-11 shrink-0 items-center px-2 t-control text-muted transition-colors hover:text-fg disabled:opacity-40';
@@ -207,7 +209,18 @@ function Inbox() {
       toast(res.error, 'error');
       return;
     }
-    window.location.href = `/app/log?logId=${res.log.id}&edit=1`;
+    window.location.href = reviewHref(res.log.id);
+  }
+
+  // §5.4.5: the receiver did exactly what the sender did. Same Confirm as the
+  // Logger's, plan link by choosePlanDay, without opening the editor.
+  async function confirmOne(log: WorkoutLog) {
+    if (busy) return;
+    setBusy(true);
+    const ok = await confirmAsIs(log, await getActivePlan(), myLogs);
+    setBusy(false);
+    toast(ok ? 'Confirmed' : "Couldn't confirm. Check your connection and try again.", ok ? 'success' : 'error');
+    if (ok) await loadLogs();
   }
 
   async function dismiss(ids: string[]) {
@@ -228,10 +241,13 @@ function Inbox() {
     const res = await acceptMany(items, { review, plan, library, myLogs: [...myLogs] });
     setBusy(false);
     toast(bulkToast(res, review), res.failed.length ? 'error' : 'success');
-    // Review all / selected opens the first; stepping through the rest of the
-    // batch is the Logger's review mode (Phase 3).
+    // Review all / selected opens the first and hands the Logger the reviewed
+    // subset, in inbox order; Confirm steps through it (§5.4.3, §12.2).
     if (review && res.needReview[0]) {
-      window.location.href = `/app/log?logId=${res.needReview[0].id}&edit=1`;
+      window.location.href = reviewHref(
+        res.needReview[0].id,
+        res.needReview.map((l) => l.id),
+      );
       return;
     }
     await refreshAfterAccept();
@@ -297,27 +313,56 @@ function Inbox() {
       {toReview.length > 0 ? (
         <Item>
           <section className="mb-6">
-            <SectionHeader action={<span className="t-label tabular-nums text-muted">{toReview.length}</span>}>
+            <SectionHeader
+              action={
+                toReview.length > 1 ? (
+                  <a
+                    href={reviewHref(toReview[0].id, toReview.map((l) => l.id))}
+                    className="inline-flex min-h-11 items-center t-control text-fg"
+                  >
+                    Review all {toReview.length}
+                  </a>
+                ) : (
+                  <span className="t-label tabular-nums text-muted">{toReview.length}</span>
+                )
+              }
+            >
               To review
             </SectionHeader>
             <ul className="overflow-hidden rounded-card border border-outline bg-surface [&>li+li]:border-t [&>li+li]:border-border-soft">
-              {toReview.map((l) => (
-                <li key={l.id}>
-                  <a
-                    href={`/app/log?logId=${l.id}&edit=1`}
-                    className="flex min-h-11 items-center gap-3 px-3 py-2 transition-colors hover:bg-tappable"
-                  >
-                    <span className="w-14 shrink-0 text-xs tabular-nums text-subtle">{formatDate(l.log_date)}</span>
-                    <span className="min-w-0 flex-1 truncate text-sm text-fg">
-                      {l.activity_type ?? 'Workout'}
-                      {senderByLog.get(l.id) ? (
-                        <span className="text-muted"> · from {senderByLog.get(l.id)}</span>
-                      ) : null}
-                    </span>
-                    <span className="t-control shrink-0 text-muted">Review ›</span>
-                  </a>
-                </li>
-              ))}
+              {toReview.map((l) => {
+                const asIs = canConfirmAsIs(l, myLogs);
+                return (
+                  <li key={l.id} className="flex items-center">
+                    <a
+                      href={reviewHref(l.id, toReview.map((x) => x.id))}
+                      className="flex min-h-11 min-w-0 flex-1 items-center gap-3 py-2 pl-3 pr-2 transition-colors hover:bg-tappable"
+                    >
+                      <span className="w-14 shrink-0 text-xs tabular-nums text-subtle">{formatDate(l.log_date)}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-fg">
+                        {l.activity_type ?? 'Workout'}
+                        {senderByLog.get(l.id) ? (
+                          <span className="text-muted"> · from {senderByLog.get(l.id)}</span>
+                        ) : null}
+                      </span>
+                      <span className="t-control shrink-0 text-muted">{asIs ? '›' : 'Review ›'}</span>
+                    </a>
+                    {/* Not offered over a same-day log of mine: that needs the
+                        duplicates sheet, which only the Logger opens. */}
+                    {asIs ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => confirmOne(l)}
+                        aria-label={`Confirm as is: ${l.activity_type ?? 'Workout'} ${l.log_date}`}
+                        className={`${TEXT_BTN} pr-3`}
+                      >
+                        Confirm as is
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
             <p className="mt-2 text-xs leading-relaxed text-muted">
               These are a friend's numbers until you confirm them. They count nowhere yet.

@@ -49,6 +49,7 @@ export function FocusItem({
   onToggleAll,
   onOptions,
   onDemo,
+  added = false,
 }: {
   item: LogItem;
   /** The set being logged, or null when every set is already logged. */
@@ -65,6 +66,8 @@ export function FocusItem({
   onToggleAll: () => void;
   onOptions: () => void;
   onDemo: () => void;
+  /** Came in from a friend's log via Combine (§5.5) — marked so it is told apart. */
+  added?: boolean;
 }) {
   const live = liveKi != null ? item.sets[liveKi] : null;
   const doneCount = item.sets.filter((s) => s.actual.completed).length;
@@ -96,6 +99,7 @@ export function FocusItem({
             <span className="truncate">{item.movement}</span>
           </span>
           <DemoIconButton name={item.movement} onOpen={onDemo} />
+          {added ? <span className="shrink-0 t-label text-muted">Added</span> : null}
         </div>
         <span className="flex shrink-0 items-center pl-2 t-label text-faint tabular-nums">
           {doneCount}/{item.sets.length}

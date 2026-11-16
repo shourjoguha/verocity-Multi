@@ -252,6 +252,21 @@ export async function getLogById(
   return (data as WorkoutLog) ?? null;
 }
 
+// The caller's log accepted from this shared item, if any. The
+// (owner_user_id, shared_item_id) unique index makes it at most one, and RLS
+// scopes the read to the caller's own rows.
+export async function getLogBySharedItem(
+  sharedItemId: string,
+  client: SupabaseClient = supabase,
+): Promise<WorkoutLog | null> {
+  const { data } = await client
+    .from('workout_logs')
+    .select('*')
+    .eq('shared_item_id', sharedItemId)
+    .maybeSingle();
+  return (data as WorkoutLog) ?? null;
+}
+
 // ---- movement library writes (custom movements only; RLS forbids touching the
 // shared library, where owner_user_id IS NULL — see migration 0005) ----
 
@@ -268,7 +283,13 @@ export type MovementInput = {
   taxonomy?: MovementTaxonomyOverride | null;
 };
 
-export async function createMovement(input: MovementInput): Promise<Movement | null> {
+// `copy` keeps a SENDER's tags and default metrics when a friend's custom
+// movement is copied into the receiver's library (§5.7). Every other caller
+// omits it and gets what it always got: no tags, the primary metric only.
+export async function createMovement(
+  input: MovementInput,
+  copy?: { tags: string[]; default_metrics: MetricKey[] },
+): Promise<Movement | null> {
   // getSession, not getUser: getUser is a network round-trip to the auth
   // server before the insert, which doubled the chance a gym-signal phone lost
   // the write. RLS checks owner_user_id = auth.uid() on the insert regardless.
@@ -281,8 +302,8 @@ export async function createMovement(input: MovementInput): Promise<Movement | n
     .from('movements')
     .insert({
       ...input,
-      tags: [],
-      default_metrics: [input.primary_metric],
+      tags: copy?.tags ?? [],
+      default_metrics: copy?.default_metrics.length ? copy.default_metrics : [input.primary_metric],
       owner_user_id: user.id,
     })
     .select('*')
@@ -750,6 +771,16 @@ export async function getInboxPage(
     .range(from, from + size);
   const rows = (data as SharedItem[]) ?? [];
   return { items: rows.slice(0, size), hasMore: rows.length > size };
+}
+
+/** One inbox row by id (recipient only, under RLS) — the Logger reads the
+ *  sender's name for a review row from it. */
+export async function getSharedItem(
+  id: string,
+  client: SupabaseClient = supabase,
+): Promise<SharedItem | null> {
+  const { data } = await client.from('shared_items').select('*').eq('id', id).maybeSingle();
+  return (data as SharedItem) ?? null;
 }
 
 export interface InboxCounts {

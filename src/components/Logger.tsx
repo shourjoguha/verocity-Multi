@@ -14,9 +14,15 @@ import {
   resolveMovement,
   getPlanById,
   getSessionById,
+  getSharedItem,
+  removeAcceptedItems,
   updateLog,
 } from '@/lib/queries';
 import { loadAllLogs, newestLogs } from '@/lib/logStore';
+import { canLinkOnDate, choosePlanDay, planLinkFor, sameDayOverlap, unionLogs, type PlanLink } from '@/lib/sharedLog';
+import { confirmPatch, duplicateChoice, parseQueue, reviewHref } from '@/lib/reviewFlow';
+import { nextReviewAfter } from '@/components/inbox/confirmReview';
+import { formatDate } from '@/lib/format';
 import { withoutUnreviewed } from '@/lib/stats';
 import { LOG_STATUS_LABEL } from '@/components/friends/friendCopy';
 import { track } from '@/lib/analytics';
@@ -139,6 +145,8 @@ const nextMetric = (current: MetricKey): MetricKey => {
 const ICON_BTN =
   'hill-btn flex h-11 w-11 shrink-0 items-center justify-center transition-colors';
 const GLYPH = 'h-[1.15rem] w-[1.15rem]';
+// Counts toward's value for "leave this log on the (inactive) plan it is on".
+const KEEP_LINK = '__keep';
 
 // The newest other finished session that logged a heart rate — where the
 // finish sheet's HR wheels rest. getAllLogs orders by date only, so a same-day
@@ -339,6 +347,35 @@ export default function Logger() {
   // Set when this page was asked to START a workout while another one is
   // still running. Nothing is created until the user answers.
   const [blockedBy, setBlockedBy] = useState<{ log: WorkoutLog; label: string } | null>(null);
+  // ---- a log a friend sent (docs/FRIENDS_SHARING_PLAN.md §5.4–5.6, §12.3) ----
+  // Review mode: this row is `needs_review` — the friend's numbers until
+  // Confirm. `sender` is read from the shared_items row, else "a friend".
+  const [review, setReview] = useState<{ sender: string; sharedItemId: string | null } | null>(null);
+  // The ordered subset the inbox handed over (`&queue=`); Confirm steps to the
+  // next row of it that is still waiting.
+  const [queue, setQueue] = useState<string[]>([]);
+  // My own counted log on the same day, and the duplicates sheet over it.
+  const [dup, setDup] = useState<{ log: WorkoutLog; overlap: number } | null>(null);
+  const [dupOpen, setDupOpen] = useState(false);
+  // "Use shared": on Confirm, delete my original — after asking once more.
+  const [replaceMine, setReplaceMine] = useState(false);
+  const [askReplace, setAskReplace] = useState(false);
+  const [askDiscardReview, setAskDiscardReview] = useState(false);
+  // Combine: this is MY log with the review row's extra movements merged in
+  // (unsaved until Save combined, which also deletes the review row).
+  const [combine, setCombine] = useState<{ reviewId: string; sender: string } | null>(null);
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  // Counts toward: the active plan's days for a review row or any log that
+  // came from a share. `others` is my history without this row (its own link
+  // must not count as that day already logged). `dirty` = write on save.
+  const [link, setLink] = useState<{
+    plan: Plan;
+    others: WorkoutLog[];
+    choice: string;
+    dirty: boolean;
+    orig: Pick<WorkoutLog, 'plan_id' | 'day_key' | 'week_number'>;
+  } | null>(null);
+  const [leaving, setLeaving] = useState(false);
 
   const stopwatch = useStopwatch(0, false);
 
@@ -351,6 +388,9 @@ export default function Logger() {
   const startedAtRef = useRef(startedAt);
   const editingRef = useRef(editing);
   const autoEndedRef = useRef(false);
+  // Combine holds an unsaved merge: autosave and the instant date/tag writes
+  // stand down so leaving mid-way changes nothing.
+  const combineRef = useRef(false);
   // Set by the Home button so the unload guard below stands down for the one
   // exit that is deliberate and already flushed.
   const leavingRef = useRef(false);
@@ -372,7 +412,7 @@ export default function Logger() {
       }
       const params = new URLSearchParams(window.location.search);
       const resumeId = params.get('logId');
-      const editMode = params.get('edit') === '1';
+      let editMode = params.get('edit') === '1';
       setEditing(editMode);
       const library = await getMovements();
       setMovements(library);
@@ -380,6 +420,12 @@ export default function Logger() {
       if (resumeId) {
         const log = await getLogById(resumeId);
         if (log) {
+          // A friend's unconfirmed row is never a live session: whatever the
+          // URL said, it opens in the editor (no clock, no autoEnd, no Finish).
+          if (log.status === 'needs_review' && !editMode) {
+            editMode = true;
+            setEditing(true);
+          }
           setLogId(log.id);
           setPlanId(log.plan_id);
           setDayKey(log.day_key);
@@ -425,6 +471,7 @@ export default function Logger() {
             // Editing a past workout keeps the recorded duration frozen.
             if (live) stopwatch.start();
           }
+          if (editMode) await setupShared(log, params);
         }
         setReady(true);
         return;
@@ -647,7 +694,7 @@ export default function Logger() {
 
   useEffect(() => {
     const id = setInterval(async () => {
-      if (!idRef.current) return;
+      if (!idRef.current || combineRef.current) return;
       // When editing a past workout, persist the document/date/tags regardless
       // of status, but never touch the recorded duration or status/ended_at.
       if (editingRef.current) {
@@ -737,6 +784,143 @@ export default function Logger() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, status, startedAt]);
 
+  // Review, combine and Counts toward, for a log opened in the editor. Only
+  // reads; nothing is written until Confirm / Save combined / Done.
+  async function setupShared(log: WorkoutLog, params: URLSearchParams) {
+    const q = parseQueue(params.get('queue'));
+    setQueue(q);
+    const combineId = params.get('combine');
+    const needsReview = log.status === 'needs_review';
+    if (!needsReview && !combineId && !log.shared_item_id) return;
+    const allLogs = await loadAllLogs();
+
+    if (combineId && !needsReview && combineId !== log.id) {
+      const other = await getLogById(combineId);
+      if (other && other.status === 'needs_review') {
+        const item = other.shared_item_id ? await getSharedItem(other.shared_item_id) : null;
+        const merged = unionLogs(log.data ?? { sections: [] }, other.data ?? { sections: [] });
+        combineRef.current = true;
+        setDoc(merged.doc);
+        setAddedIds(new Set(merged.addedItemIds));
+        setCombine({ reviewId: other.id, sender: item?.sender_name || 'a friend' });
+        return;
+      }
+    }
+
+    if (needsReview) {
+      const item = log.shared_item_id ? await getSharedItem(log.shared_item_id) : null;
+      setReview({ sender: item?.sender_name || 'a friend', sharedItemId: log.shared_item_id ?? null });
+      const same = sameDayOverlap(log.data ?? { sections: [] }, log.log_date, allLogs, log.id);
+      if (same) {
+        setDup(same);
+        setDupOpen(true);
+      }
+    }
+
+    const plan = await getActivePlan();
+    if (!plan) return;
+    const others = allLogs.filter((l) => l.id !== log.id);
+    let choice = '';
+    if (needsReview) {
+      choice = choosePlanDay({ doc: log.data ?? { sections: [] }, logDate: log.log_date, plan, logs: others })?.day_key ?? '';
+    } else if (log.plan_id === plan.id && log.day_key) {
+      choice = log.day_key;
+    } else if (log.plan_id) {
+      choice = KEEP_LINK;
+    }
+    setLink({
+      plan,
+      others,
+      choice,
+      dirty: needsReview,
+      orig: { plan_id: log.plan_id, day_key: log.day_key, week_number: log.week_number },
+    });
+  }
+
+  // The plan link to write on save: a PlanLink, null to detach, or undefined
+  // to leave the row's link alone (control untouched, or "keep").
+  function chosenLink(): PlanLink | null | undefined {
+    if (!link) return review ? null : undefined;
+    if (!link.dirty || link.choice === KEEP_LINK) return undefined;
+    if (link.choice === '' || !canLinkOnDate(link.plan, link.others, logDateRef.current)) return null;
+    if (link.orig.plan_id === link.plan.id && link.orig.day_key === link.choice && link.orig.week_number != null) {
+      return { plan_id: link.plan.id, day_key: link.choice, week_number: link.orig.week_number };
+    }
+    return planLinkFor(link.plan, link.choice, link.others);
+  }
+
+  function stopWriting() {
+    leavingRef.current = true;
+    idRef.current = null;
+    setLogId(null);
+    setLeaving(true);
+  }
+
+  // Confirm (§5.4.2): `done`, the movements swept into the library, the plan
+  // link from Counts toward; Use shared then deletes my original. Then the
+  // next row of the queue, or the inbox.
+  async function confirmReview(deleteMine: boolean) {
+    const id = idRef.current;
+    if (!id || leaving) return;
+    setLeaving(true);
+    const ok = await updateLog(id, {
+      data: docRef.current,
+      log_date: logDateRef.current,
+      tags: tagsRef.current,
+      ...confirmPatch(chosenLink() ?? null),
+    });
+    if (!ok) {
+      setLeaving(false);
+      toast('Save failed — check your connection and try again', 'error');
+      return;
+    }
+    statusRef.current = 'done';
+    setStatus('done');
+    await persistDocumentMovements(docRef.current);
+    if (deleteMine && dup && !(await deleteLog(dup.log.id))) {
+      toast("Confirmed, but your original couldn't be deleted. Delete it from its session page.", 'error');
+    }
+    stopWriting();
+    window.location.href = await nextReviewAfter(queue, id);
+  }
+
+  // Discard / Keep mine: the review row goes. Through remove_accepted_items so
+  // the inbox item reads "Removed"; a row whose item is gone, or still pending
+  // (the accept's status write failed), is deleted directly.
+  async function discardReview() {
+    const id = idRef.current;
+    if (!id || leaving) return;
+    setLeaving(true);
+    const removed = review?.sharedItemId ? await removeAcceptedItems([review.sharedItemId], false) : null;
+    const ok = (removed?.total ?? 0) > 0 || (await deleteLog(id));
+    if (!ok) {
+      setLeaving(false);
+      toast('Discard failed — check your connection and try again', 'error');
+      return;
+    }
+    stopWriting();
+    window.location.href = await nextReviewAfter(queue, id);
+  }
+
+  // Save combined: my log takes the merge, then the review row is deleted.
+  async function saveCombined() {
+    const id = idRef.current;
+    if (!id || !combine || leaving) return;
+    setLeaving(true);
+    const ok = await updateLog(id, { data: docRef.current, log_date: logDateRef.current, tags: tagsRef.current });
+    if (!ok) {
+      setLeaving(false);
+      toast('Save failed — check your connection and try again', 'error');
+      return;
+    }
+    await persistDocumentMovements(docRef.current);
+    if (!(await deleteLog(combine.reviewId))) {
+      toast("Combined, but the friend's copy couldn't be removed. Discard it from the inbox.", 'error');
+    }
+    stopWriting();
+    window.location.href = await nextReviewAfter(queue, combine.reviewId);
+  }
+
   function saveVibe(vibe: VibeCheck) {
     setDoc((d) => ({ ...d, session: { ...d.session, vibe } }));
     setShowVibe(false);
@@ -744,13 +928,13 @@ export default function Logger() {
 
   function changeDate(value: string) {
     setLogDate(value);
-    if (idRef.current) updateLog(idRef.current, { log_date: value });
+    if (idRef.current && !combineRef.current) updateLog(idRef.current, { log_date: value });
   }
 
   function toggleTag(tag: string) {
     setTags((prev) => {
       const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
-      if (idRef.current) updateLog(idRef.current, { tags: next });
+      if (idRef.current && !combineRef.current) updateLog(idRef.current, { tags: next });
       return next;
     });
   }
@@ -927,10 +1111,16 @@ export default function Logger() {
   // read-only session view.
   async function finishEdit() {
     if (idRef.current) {
+      // A log that came from a share may have been attached to (or detached
+      // from) a plan day with Counts toward (§12.3); status stays as it is.
+      const planLink = chosenLink();
       const ok = await updateLog(idRef.current, {
         data: docRef.current,
         log_date: logDateRef.current,
         tags: tagsRef.current,
+        ...(planLink === undefined
+          ? {}
+          : { plan_id: planLink?.plan_id ?? null, day_key: planLink?.day_key ?? null, week_number: planLink?.week_number ?? null }),
       });
       if (!ok) {
         toast('Save failed — check your connection and try again', 'error');
@@ -1230,6 +1420,8 @@ export default function Logger() {
                 offset. Renders nothing when the movement has no demo. Opens the
                 popup; tapping the scrim (or Escape) closes it. */}
             <DemoIconButton name={item.movement} onOpen={() => setDemoFor(item.movement)} />
+            {/* Combine marks what came in from the friend's log (§5.5). */}
+            {addedIds.has(item.id) ? <span className="shrink-0 t-label text-muted">Added</span> : null}
           </div>
           <button
             onClick={() => setOptionsFor({ si, gi, ii })}
@@ -1593,6 +1785,7 @@ export default function Logger() {
                 <span className="min-w-0 truncate text-sm capitalize text-fg">
                   {item.movement}
                 </span>
+                {addedIds.has(item.id) ? <span className="shrink-0 t-label text-muted">Added</span> : null}
                 {tags.length > 0 ? (
                   <span className="shrink-0 translate-y-[0.15em] text-[0.6rem] leading-none tracking-wide text-faint">
                     {tags.map(notationLabel).join(' ')}
@@ -1661,6 +1854,7 @@ export default function Logger() {
           liveKi={liveKi}
           markKind={markKindOf(item)}
           grouped={grouped}
+          added={addedIds.has(item.id)}
           onPatchSet={(ki, patch) => {
             activate(group.id);
             setDoc((d) => patchSetActual(d, si, gi, ii, ki, patch));
@@ -1763,6 +1957,7 @@ export default function Logger() {
           </span>
         ) : null}
         <span className="min-w-0 flex-1 truncate text-sm capitalize text-fg">{item.movement}</span>
+        {addedIds.has(item.id) ? <span className="shrink-0 t-label text-muted">Added</span> : null}
         {sub ? (
           <span className="shrink-0 t-label text-faint">note</span>
         ) : (
@@ -1849,7 +2044,9 @@ export default function Logger() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           {editing ? (
             <div>
-              <div className="font-display text-3xl uppercase tracking-tight text-fg">Editing</div>
+              <div className="font-display text-3xl uppercase tracking-tight text-fg">
+                {review ? 'Review' : combine ? 'Combine' : 'Editing'}
+              </div>
               <div className={`t-label ${unsaved ? 'text-accent' : 'text-muted'}`}>
                 {LOG_STATUS_LABEL[status]}
                 {saving ? ' · saving…' : ''}
@@ -2044,6 +2241,61 @@ export default function Logger() {
           </details>
         ) : null}
       </header>
+
+      {review || combine || link ? (
+        <section aria-label={review ? 'Review' : 'Shared workout'} className="mb-3 rounded-card border border-outline bg-surface p-3">
+          {review ? (
+            <p className="text-sm text-fg">
+              From {review.sender}. These are {review.sender}&rsquo;s numbers until you confirm.
+            </p>
+          ) : null}
+          {combine ? (
+            <p className="text-sm text-fg">
+              Adding {combine.sender}&rsquo;s movements to your log. New ones are marked Added; nothing is saved
+              until you tap Save combined.
+            </p>
+          ) : null}
+          {review && dup ? (
+            <div className="mt-1 flex flex-wrap items-center gap-x-2">
+              <span className="min-w-0 text-xs text-muted">
+                {replaceMine
+                  ? `Confirming deletes your log from ${formatDate(dup.log.log_date)}.`
+                  : `Same day as your log · ${duplicateChoice(dup).percent}% overlap`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setDupOpen(true)}
+                className="inline-flex min-h-11 items-center t-control text-fg underline underline-offset-2"
+              >
+                {replaceMine ? 'Change' : 'Resolve'}
+              </button>
+            </div>
+          ) : null}
+          {link ? (
+            <label className={`block ${review || combine ? 'mt-3' : ''}`}>
+              <span className="t-label text-muted">Counts toward</span>
+              <select
+                value={link.choice}
+                onChange={(e) => setLink({ ...link, choice: e.target.value, dirty: true })}
+                className={`${FIELD} mt-1`}
+              >
+                <option value="">None</option>
+                {link.choice === KEEP_LINK ? <option value={KEEP_LINK}>Keep its current plan</option> : null}
+                {link.plan.parsed.days.map((d) => (
+                  <option key={d.dayKey} value={d.dayKey} disabled={!canLinkOnDate(link.plan, link.others, logDate)}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-muted">
+                {canLinkOnDate(link.plan, link.others, logDate)
+                  ? `A day of ${link.plan.name}, for plan adherence. None keeps it in your history only.`
+                  : `Dated before your first log on ${link.plan.name}, so it can't count toward it without renumbering your weeks.`}
+              </span>
+            </label>
+          ) : null}
+        </section>
+      ) : null}
 
       {showVibe ? (
         <VibeCheckCard
@@ -2660,7 +2912,31 @@ export default function Logger() {
           `pb-32` bar reserve. */}
       <div className="pb-safe sticky bottom-0 border-t border-border bg-bg px-3 pt-3 pointer-fine:bg-bg/95 pointer-fine:backdrop-blur sm:px-4">
         <div className="mx-auto flex max-w-2xl items-center gap-2">
-          {editing ? (
+          {review ? (
+            <>
+              <Button onClick={() => (replaceMine && dup ? setAskReplace(true) : confirmReview(false))} disabled={leaving} className="flex-1">
+                {leaving ? 'Saving…' : 'Confirm'}
+              </Button>
+              <Button variant="ghost" onClick={() => setAskDiscardReview(true)} disabled={leaving}>
+                Discard
+              </Button>
+            </>
+          ) : combine ? (
+            <>
+              <Button onClick={saveCombined} disabled={leaving} className="flex-1">
+                {leaving ? 'Saving…' : 'Save combined'}
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={leaving}
+                onClick={() => {
+                  window.location.href = reviewHref(combine.reviewId, queue);
+                }}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : editing ? (
             <Button onClick={finishEdit} className="w-full">
               Done
             </Button>
@@ -2706,6 +2982,108 @@ export default function Logger() {
         onClose={() => setAskDetails(false)}
         onSave={finish}
       />
+
+      {/* §5.5: opened over the editor when this review row has a same-day log
+          of mine. Closing it decides nothing — Resolve in the banner reopens it. */}
+      <Modal open={dupOpen && dup !== null} onClose={() => setDupOpen(false)} title="Same day as your log">
+        {dup ? (
+          <div className="flex flex-col gap-4 p-4">
+            <p className="text-sm text-fg">
+              You already logged this day — {duplicateChoice(dup).percent}% of movements overlap.
+            </p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <Button
+                  onClick={() => {
+                    window.location.href = reviewHref(dup.log.id, queue, { combine: logId ?? '' });
+                  }}
+                  className="w-full"
+                >
+                  Combine
+                </Button>
+                <p className="mt-1 text-xs text-muted">Add the movements yours lacks to your log, then remove this copy.</p>
+              </div>
+              <div>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setDupOpen(false);
+                    discardReview();
+                  }}
+                  className="w-full"
+                >
+                  Keep mine
+                </Button>
+                <p className="mt-1 text-xs text-muted">Remove {review?.sender ?? 'the friend'}&rsquo;s copy.</p>
+              </div>
+              <div>
+                <Button
+                  variant="ghost"
+                  disabled={!duplicateChoice(dup).canUseShared}
+                  onClick={() => {
+                    setReplaceMine(true);
+                    setDupOpen(false);
+                  }}
+                  className="w-full"
+                >
+                  Use shared
+                </Button>
+                <p className="mt-1 text-xs text-muted">
+                  {duplicateChoice(dup).canUseShared
+                    ? 'Review theirs; confirming deletes yours.'
+                    : 'Not for a log recorded by Garmin — yours holds the device data.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={askReplace} onClose={() => setAskReplace(false)} title="Replace your log">
+        <div className="flex flex-col gap-4 p-4">
+          <p className="text-sm text-muted">
+            Confirming deletes your log from {dup ? formatDate(dup.log.log_date) : 'that day'} and keeps this one. It
+            can&rsquo;t be undone.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => {
+                setAskReplace(false);
+                confirmReview(true);
+              }}
+              className="w-full"
+            >
+              Delete mine and confirm
+            </Button>
+            <Button variant="ghost" onClick={() => setAskReplace(false)} className="w-full">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={askDiscardReview} onClose={() => setAskDiscardReview(false)} title="Discard this workout">
+        <div className="flex flex-col gap-4 p-4">
+          <p className="text-sm text-muted">
+            This removes {review?.sender ?? 'the friend'}&rsquo;s workout from your logs. Your own logs are not
+            touched.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => {
+                setAskDiscardReview(false);
+                discardReview();
+              }}
+              className="w-full"
+            >
+              Discard
+            </Button>
+            <Button variant="ghost" onClick={() => setAskDiscardReview(false)} className="w-full">
+              Keep reviewing
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={confirmDiscard} onClose={() => setConfirmDiscard(false)} title="Discard session">
         <div className="flex flex-col gap-4 p-4">

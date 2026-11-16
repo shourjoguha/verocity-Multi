@@ -189,6 +189,27 @@ const reviewLog = {
   activity_type: 'Upper body — long friend-sent session title',
   shared_item_id: 'si-h1',
 };
+// A second review row on a day with no log of mine: the Logger's review mode
+// without the duplicates sheet over it (Counts toward, Confirm / Discard), and
+// the inbox's Confirm as is, which is withheld over a same-day log.
+const REVIEW2_ID = '66666666-6666-6666-6666-666666666666';
+const reviewLog2 = {
+  ...reviewLog,
+  id: REVIEW2_ID,
+  log_date: new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10),
+  shared_item_id: 'si-h2',
+  // One movement doneLog lacks, so Combine (doneLog + this) marks an Added row.
+  data: {
+    sections: [
+      ...reviewLog.data.sections,
+      {
+        key: 'accessory',
+        groups: [{ id: 'ga', kind: 'single', items: [{ id: 'ia', movement: 'cable face pull with a long name', primaryMetric: 'reps', sets: [set('15', 20, 15, 7, true)] }] }],
+      },
+    ],
+  },
+};
+const logById = new Map([workoutLog, doneLog, reviewLog, reviewLog2].map((l) => [l.id, l]));
 const sharedPayload = (logDate) => ({
   log_date: logDate,
   started_at: null,
@@ -384,8 +405,14 @@ function fixtureFor(url) {
   if (path.endsWith('/rpc/my_friend_code')) return 'K7MX2QPA';
   if (path.endsWith('/rpc/list_acceptances')) return acceptances;
   if (path.includes('/rpc/')) return null;
-  if (path.includes('/shared_items')) return url.includes('pending') ? pendingItems : historyItems;
-  if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog, doneLog, reviewLog];
+  // getSharedItem (the review banner's sender) is a by-id maybeSingle.
+  const byId = /[?&]id=eq\.([^&]+)/.exec(url)?.[1];
+  if (path.includes('/shared_items')) {
+    if (byId) return historyItems.find((i) => i.id === byId) ?? null;
+    return url.includes('pending') ? pendingItems : historyItems;
+  }
+  if (path.includes('/workout_logs'))
+    return byId ? (logById.get(byId) ?? workoutLog) : [workoutLog, doneLog, reviewLog, reviewLog2];
   if (path.includes('/movements')) return movements;
   if (path.endsWith('/sessions')) return url.includes('id=eq.') ? savedSessions[0] : savedSessions;
   if (path.includes('/profiles')) return url.includes('id=eq.') ? null : [];
@@ -432,6 +459,11 @@ const ROUTES = [
   // Friends (You → Friends, opened by the hash) and the inbox, both with rows.
   '/app/you#friends',
   '/app/inbox',
+  // Review mode (§5.4): with the same-day duplicates sheet open over it, then
+  // plain (Counts toward, Confirm / Discard), then Combine on my own log.
+  `/app/log?logId=${reviewLog.id}&edit=1`,
+  `/app/log?logId=${REVIEW2_ID}&edit=1&queue=${REVIEW2_ID},${reviewLog.id}`,
+  `/app/log?logId=${doneLog.id}&edit=1&combine=${REVIEW2_ID}`,
 ];
 
 const VIEWPORTS = [
@@ -480,7 +512,11 @@ for (const vp of VIEWPORTS) {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      headers: { 'content-range': '0-0/1' },
+      // Supabase is cross-origin (:54321 vs the preview's :4321), so the
+      // browser hides content-range unless it is exposed — as the real API
+      // does. Without this every head count (the inbox bell's three) read 0
+      // and the bell showed 1 where the fixture means 4.
+      headers: { 'content-range': '0-0/1', 'access-control-expose-headers': 'content-range' },
       body: JSON.stringify(body),
     });
   });

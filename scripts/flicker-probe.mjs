@@ -142,12 +142,21 @@ const accepted = (id) => ({
   accepted_log_id: `log-${id}`, accepted_digest: 'x',
 });
 
+// A friend's log awaiting review, dated the same day as workoutLog — so the
+// Logger's review mode opens the same-day duplicates sheet (§5.5) on load.
+const REVIEW_ID = '77777777-7777-7777-7777-777777777777';
+const reviewLog = { ...workoutLog, id: REVIEW_ID, status: 'needs_review', started_at: null, shared_item_id: 'si1' };
+
 function fixtureFor(url) {
   const path = new URL(url).pathname;
+  if (path.includes('/workout_logs') && url.includes(REVIEW_ID)) return reviewLog;
   if (path.endsWith('/rpc/list_friends')) return friends;
   if (path.endsWith('/rpc/remove_accepted_items')) return { total: 2, edited: 1 };
   if (path.includes('/rpc/')) return [];
-  if (path.includes('/shared_items')) return url.includes('pending') ? [] : [accepted('si1'), accepted('si2')];
+  if (path.includes('/shared_items')) {
+    if (url.includes('id=eq.si1')) return accepted('si1');
+    return url.includes('pending') ? [] : [accepted('si1'), accepted('si2')];
+  }
   if (path.includes('/workout_logs') && url.includes(DONE_ID)) return doneLog;
   if (path.endsWith('/sessions')) return savedSessions;
   if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog];
@@ -252,6 +261,22 @@ const SCENARIOS = [
     route: '/app/inbox',
     open: '#inbox-history summary',
     then: 'button:has-text("from my logs")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    // The sheet opens itself on load; `dismiss` closes that one first, then
+    // the banner's Resolve reopens it under the recorder.
+    name: 'Logger review · same-day duplicates sheet',
+    route: `/app/log?logId=${REVIEW_ID}&edit=1`,
+    dismiss: '[role="dialog"] button:has-text("Close")',
+    open: 'button:has-text("Resolve")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Logger review · discard confirm',
+    route: `/app/log?logId=${REVIEW_ID}&edit=1`,
+    dismiss: '[role="dialog"] button:has-text("Close")',
+    open: 'button:has-text("Discard")',
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
@@ -366,6 +391,18 @@ for (const s of SCENARIOS) {
 
   await page.goto(BASE + s.route, { waitUntil: 'networkidle' });
   await page.waitForTimeout(900); // let the CSS entrance stagger finish
+  if (s.dismiss) {
+    // A sheet that opens itself on load: close it before measuring, so the
+    // cycle below starts from a resting page. Missing = the scenario is stale.
+    const pre = page.locator(s.dismiss).first();
+    if ((await pre.count()) === 0) {
+      result.skipped = `no element matching ${s.dismiss} (expected a sheet open on load)`;
+      results.push(result);
+      continue;
+    }
+    await pre.click();
+    await page.waitForTimeout(400);
+  }
 
   const trigger = page.locator(s.open).first();
   if ((await trigger.count()) === 0 || !(await trigger.isVisible().catch(() => false))) {

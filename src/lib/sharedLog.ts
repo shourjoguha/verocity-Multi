@@ -444,11 +444,7 @@ export function choosePlanDay(input: {
 }): PlanLink | null {
   const { doc, logDate, plan, logs, overrides } = input;
   if (!plan) return null;
-
-  const planLogs = logs.filter((l) => l.plan_id === plan.id && l.day_key && isCountedLog(l));
-  const first = planLogs.reduce<string | null>((m, l) => (m == null || l.log_date < m ? l.log_date : m), null);
-  const floor = first ?? plan.start_date;
-  if (floor && logDate < floor) return null;
+  if (!canLinkOnDate(plan, logs, logDate)) return null;
 
   const logged: string[] = [];
   for (const s of doc.sections) {
@@ -463,10 +459,41 @@ export function choosePlanDay(input: {
     if (!best || score > best.score) best = { dayKey: day.dayKey, score };
   }
   if (!best || best.score < FRIENDS.planMatchThreshold) return null;
+  return planLinkFor(plan, best.dayKey, logs);
+}
+
+/**
+ * The earliest date a log may be attached to `plan` on: the receiver's first
+ * counted log on it, or with none yet the plan's start date (null = no floor).
+ * The §7 trap: planCycles walks logs in date order, so attaching a row dated
+ * before this renumbers the program week of everything after it.
+ */
+export function planLinkFloor(plan: Plan, logs: WorkoutLog[]): string | null {
+  let first: string | null = null;
+  for (const l of logs) {
+    if (l.plan_id !== plan.id || !l.day_key || !isCountedLog(l)) continue;
+    if (first == null || l.log_date < first) first = l.log_date;
+  }
+  return first ?? plan.start_date;
+}
+
+/** Whether a log dated `logDate` may count toward `plan` at all. */
+export function canLinkOnDate(plan: Plan, logs: WorkoutLog[], logDate: string): boolean {
+  const floor = planLinkFloor(plan, logs);
+  return !floor || logDate >= floor;
+}
+
+/**
+ * The link for a CHOSEN day of `plan` (the Counts-toward control, or
+ * choosePlanDay's best match): the week is the cycle that day's next log falls
+ * in. `logs` must not contain the log being linked — its own current link
+ * would otherwise count as that day already logged and push it a week on.
+ */
+export function planLinkFor(plan: Plan, dayKey: string, logs: WorkoutLog[]): PlanLink {
   return {
     plan_id: plan.id,
-    day_key: best.dayKey,
-    week_number: nextWeekForDay(logs, plan.id, best.dayKey, planWeekCount(plan.parsed)),
+    day_key: dayKey,
+    week_number: nextWeekForDay(logs, plan.id, dayKey, planWeekCount(plan.parsed)),
   };
 }
 

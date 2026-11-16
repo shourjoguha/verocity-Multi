@@ -11,7 +11,7 @@
 import {
   createLog,
   createMovement,
-  getAllLogs,
+  getLogBySharedItem,
   resolveMovement,
   setSharedItemStatus,
 } from '@/lib/queries';
@@ -40,13 +40,16 @@ async function copyMovements(movements: SharedMovementPayload[], library: Moveme
   if (library.length === 0) return;
   for (const m of movements) {
     if (resolveMovement(m.name, library)) continue;
-    const created = await createMovement({
-      name: m.name,
-      category: m.category,
-      primary_metric: m.primary_metric,
-      default_rest_seconds: m.default_rest_seconds,
-      taxonomy: m.taxonomy,
-    });
+    const created = await createMovement(
+      {
+        name: m.name,
+        category: m.category,
+        primary_metric: m.primary_metric,
+        default_rest_seconds: m.default_rest_seconds,
+        taxonomy: m.taxonomy,
+      },
+      { tags: m.tags, default_metrics: m.default_metrics },
+    );
     if (created) library.push(created);
   }
 }
@@ -70,7 +73,7 @@ export async function acceptSharedLog(
   let log = await createLog(built.value);
   if (!log) {
     // A retry after a lost response: the unique index refused a second row.
-    const existing = (await getAllLogs()).find((l) => l.shared_item_id === item.id);
+    const existing = await getLogBySharedItem(item.id);
     if (!existing) return { ok: false, error: "Couldn't save this workout. Check your connection and try again." };
     log = existing;
   }
