@@ -20,10 +20,14 @@ export function ArmedDelete({
   label,
   name,
   onConfirm,
+  compact = false,
 }: {
   label: string;
   name: string;
   onConfirm: () => Promise<boolean>;
+  // A 32px chip inside the 44px hit box, for a header row of small actions
+  // (the session page) rather than a sheet footer.
+  compact?: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -33,6 +37,21 @@ export function ArmedDelete({
     return () => window.clearTimeout(t);
   }, [confirming]);
 
+  if (!confirming && compact) {
+    return (
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        className="group -mx-0.5 flex h-11 w-11 items-center justify-center"
+        aria-label={label}
+        title={label}
+      >
+        <span className="flex h-8 w-8 items-center justify-center rounded-control bg-tappable text-danger transition-colors group-hover:bg-tappable-hover">
+          <TrashGlyph className="h-4 w-4" />
+        </span>
+      </button>
+    );
+  }
   if (!confirming) {
     return (
       <button

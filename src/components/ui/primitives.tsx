@@ -229,16 +229,19 @@ export function StatCard({
   label,
   value,
   unit,
+  center = false,
 }: {
   label: string;
   value: string | number;
   unit?: string;
+  // Review's tiles stand alone with no headline above them, so they centre.
+  center?: boolean;
 }) {
   // px-2 on phones is not stinginess — it is the 8px that lets a 2-digit-hour
   // duration ("13h 28m") stay on one line in a 375px 3-up column.
   // Restored to px-4 at sm:, where the column is ~171px+ and nothing competes.
   return (
-    <div className="rounded-card border border-outline bg-surface px-2 py-3 sm:px-4">
+    <div className={`rounded-card border border-outline bg-surface px-2 py-3 sm:px-4 ${center ? 'text-center' : ''}`}>
       <div className="t-label text-muted">{label}</div>
       {/* Sized to fit on ONE line, which is the whole point: in a 3-up grid at
           375px each value gets 87.7px, and a duration like "3h 52m" needed

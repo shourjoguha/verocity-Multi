@@ -324,6 +324,8 @@ export default function Logger() {
   // The Done pile is open by default — you should see what you've finished —
   // but it folds away as one unit when the remaining work needs the screen.
   const [doneOpen, setDoneOpen] = useState(true);
+  // The folded empty-sections row's dropdown pick.
+  const [foldPick, setFoldPick] = useState<SectionKey | null>(null);
   // Date + tags are correct on the common path, so they start folded away —
   // they were costing ~120px (three wrapped rows at 375px) above the first set.
   const [showDetails, setShowDetails] = useState(false);
@@ -1234,6 +1236,10 @@ export default function Logger() {
   // A section is "live" while it has a group not yet parked in Done.
   const liveSections = ordered.filter((sec) => sec.groups.some((g) => !parked.has(g.id)));
   const emptySections = ordered.filter((sec) => !sec.groups.some((g) => !parked.has(g.id)));
+  // The folded row's dropdown: a stale pick (that section has filled up)
+  // falls back to the first empty one.
+  const foldSection: SectionKey =
+    foldPick && emptySections.some((sec) => sec.key === foldPick) ? foldPick : (emptySections[0]?.key ?? 'accessory');
   const addTo = (sectionKey: SectionKey, kind: AddKind) =>
     kind === 'movement' ? setPicker({ mode: 'add', sectionKey }) : setSubEditor({ mode: 'add', sectionKey });
   // Parked (completed) groups collected across all sections, in completion
@@ -2371,18 +2377,28 @@ export default function Logger() {
       })}
 
       {/* Sections with nothing left to show — empty, or everything in them
-          already in Done — fold into ONE row with one "+": pick the section,
-          then movement or subroutine. A full header each said nothing. */}
+          already in Done — fold into ONE row: pick the section from the
+          dropdown, then "+" asks movement or subroutine. A full header each
+          said nothing, and their names on one line cut off. */}
       {emptySections.length > 0 ? (
-        <section className="mb-3 flex min-h-11 items-center justify-between gap-3">
-          <span className="min-w-0 truncate t-label text-muted">
-            {emptySections.map((sec) => sectionLabel(sec.key)).join(' · ')}
-          </span>
+        <section className="mb-3 flex items-center gap-2">
+          <select
+            value={foldSection}
+            onChange={(e) => setFoldPick(e.target.value as SectionKey)}
+            aria-label="Section to add to"
+            className={`${FIELD} min-w-0 flex-1`}
+          >
+            {emptySections.map((sec) => (
+              <option key={sec.key} value={sec.key}>
+                {sectionLabel(sec.key)}
+              </option>
+            ))}
+          </select>
           <AddMenu
-            sections={emptySections.map((sec) => sec.key)}
+            sections={[foldSection]}
             labelFor={sectionLabel}
             onPick={addTo}
-            label="Add a movement or subroutine"
+            label={`Add to ${sectionLabel(foldSection)}`}
           />
         </section>
       ) : null}

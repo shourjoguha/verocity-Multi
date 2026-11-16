@@ -154,10 +154,10 @@ function ReviewBody({ review: r }: { review: Review }) {
           {w.label} · {shortDate(w.start)} – {shortDate(w.end)} · {r.sessions} sessions
         </p>
         <div className="mb-8 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard label="Lifts / week" value={one(r.liftsPerWeek)} unit={r.plannedLiftsPerWeek ? `of ${r.plannedLiftsPerWeek}` : undefined} />
-          <StatCard label="Active days / wk" value={one(r.activeDaysPerWeek)} />
-          <StatCard label="Hours" value={formatRound(r.hours)} />
-          <StatCard label="Weeks" value={formatRound(w.weeks)} />
+          <StatCard center label="Lifts / week" value={one(r.liftsPerWeek)} unit={r.plannedLiftsPerWeek ? `of ${r.plannedLiftsPerWeek}` : undefined} />
+          <StatCard center label="Active days / wk" value={one(r.activeDaysPerWeek)} />
+          <StatCard center label="Hours" value={formatRound(r.hours)} />
+          <StatCard center label="Weeks" value={formatRound(w.weeks)} />
         </div>
       </Item>
 

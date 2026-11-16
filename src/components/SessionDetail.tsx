@@ -19,7 +19,7 @@ import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { SessionDetailsSheet } from '@/components/SessionDetailsSheet';
 import { Modal } from '@/components/ui/Modal';
 import { PencilGlyph, ShareGlyph } from '@/components/ui/icons';
-import { ArmedDelete, SHEET_GLYPH, SHEET_ICON_BTN } from '@/components/ui/SheetActions';
+import { ArmedDelete } from '@/components/ui/SheetActions';
 import { localTimeOf } from '@/lib/logWhen';
 import { LogShareControl } from '@/components/LogShareControl';
 import { SendToSheet } from '@/components/friends/SendToSheet';
@@ -29,6 +29,10 @@ import { clientFor, hrefFor, isReadOnly, type Surface } from '@/lib/surface';
 import { notationLabel } from '@/lib/notations';
 
 const sectionLabel = (k: SectionKey) => k.charAt(0).toUpperCase() + k.slice(1);
+// Header actions: a 44px hit box around a 32px visible chip.
+const ACTION_HIT = 'group -mx-0.5 flex h-11 w-11 items-center justify-center';
+const ACTION_CHIP =
+  'flex h-8 w-8 items-center justify-center rounded-control bg-tappable text-fg transition-colors group-hover:bg-tappable-hover';
 
 export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
   // A session is a read surface, so the showcase opens it in full — only the
@@ -123,61 +127,57 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
       <Item>
         <header className="mb-8">
-          {/* Actions first, as icons, in the order Edit · Share · Save as
-              session · Delete. Every one writes, so the row goes on the
-              showcase rather than rendering inert stubs. */}
-          {!readOnly ? (
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <a
-                href={`/app/log?logId=${log.id}&edit=1`}
-                className={`${SHEET_ICON_BTN} text-fg hover:border-fg`}
-                aria-label="Edit sets"
-                title="Edit sets"
-              >
-                <PencilGlyph className={SHEET_GLYPH} />
-              </a>
-              {log.status !== 'needs_review' ? (
-                // A needs_review row is a friend's numbers, not yours: never
-                // published by link nor passed on.
+          {/* The title and its actions share one row. Icons in the order
+              Edit · Share · Save as session · Delete; each is a 32px chip
+              inside a 44px hit box (negative margins give the extra back),
+              so the row stays slim beside the title. Every one writes, so
+              the showcase gets the title alone. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <EchoText text={log.activity_type ?? 'Session'} as="h1" className={`min-w-0 ${ECHO_APP_TITLE}`} />
+            {!readOnly ? (
+              <div className="flex shrink-0 items-center">
+                <a href={`/app/log?logId=${log.id}&edit=1`} className={ACTION_HIT} aria-label="Edit sets" title="Edit sets">
+                  <span className={ACTION_CHIP}>
+                    <PencilGlyph className="h-4 w-4" />
+                  </span>
+                </a>
+                {log.status !== 'needs_review' ? (
+                  // A needs_review row is a friend's numbers, not yours: never
+                  // published by link nor passed on.
+                  <button type="button" onClick={() => setShareOpen(true)} className={ACTION_HIT} aria-label="Share" title="Share">
+                    <span className={ACTION_CHIP}>
+                      <ShareGlyph className="h-4 w-4" />
+                    </span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  onClick={() => setShareOpen(true)}
-                  className={`${SHEET_ICON_BTN} text-fg hover:border-fg`}
-                  aria-label="Share"
-                  title="Share"
+                  onClick={() => saveAsSession(log)}
+                  disabled={savingSession}
+                  className="group flex h-11 items-center px-0.5 disabled:opacity-40"
                 >
-                  <ShareGlyph className={SHEET_GLYPH} />
+                  <span className="flex h-8 items-center rounded-control bg-tappable px-2 text-xs text-fg transition-colors group-hover:bg-tappable-hover">
+                    Save as session
+                  </span>
                 </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => saveAsSession(log)}
-                disabled={savingSession}
-                className="hill-btn flex h-11 items-center border border-transparent bg-tappable px-3 text-sm text-fg transition-colors hover:bg-tappable-hover disabled:opacity-40"
-              >
-                Save as session
-              </button>
-              <ArmedDelete
-                label="Delete session"
-                name="this session"
-                onConfirm={async () => {
-                  const ok = await deleteLog(log.id);
-                  if (!ok) {
-                    toast('Could not delete session', 'error');
-                    return false;
-                  }
-                  toast('Session deleted', 'success');
-                  window.location.href = '/app';
-                  return true;
-                }}
-              />
-            </div>
-          ) : null}
-          <EchoText
-            text={log.activity_type ?? 'Session'}
-            as="h1"
-            className={`mt-2 ${ECHO_APP_TITLE}`}
-          />
+                <ArmedDelete
+                  compact
+                  label="Delete session"
+                  name="this session"
+                  onConfirm={async () => {
+                    const ok = await deleteLog(log.id);
+                    if (!ok) {
+                      toast('Could not delete session', 'error');
+                      return false;
+                    }
+                    toast('Session deleted', 'success');
+                    window.location.href = '/app';
+                    return true;
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
           {log.day_key || log.status !== 'done' ? (
             <p className="mt-1 text-xs text-muted">
               {[log.day_key ? `Day ${log.day_key}` : null, log.status === 'needs_review' ? 'Needs review' : log.status === 'done' ? null : log.status]
