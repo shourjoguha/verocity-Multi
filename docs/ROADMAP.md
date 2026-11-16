@@ -536,30 +536,39 @@ Eight commits on `claude/ui-ux-improvements-m0578f`, `820d92d`..`f8086c3`, ~90 f
   nobody had looked at")
 - [ ] `LogShareControl.tsx` still aliases `FIELD` as a local `inputClass`
 
-### Phase 18 — Friends, send-to and the inbox  `[shipped, migration and function pending]`
-Reads: `docs/SPEC.md` §7C. Four commits on `claude/peaceful-gates-5yis48`, one per
-phase.
+### Phase 18 — Friends, send-to and the inbox  `[shipped]`
+Reads: `docs/SPEC.md` §7C. Merged in PR #289.
 - [x] Schema and RPCs (`0052_friends_sharing.sql`): `friend_codes`, `friendships`,
   `shared_items`, `needs_review` log status, `shared_item_id` provenance
+- [x] Limits (`0053_friends_limits.sql`): failed friend-code attempts capped per
+  day, 120 logs per send, 256 KB per log and 1 MB per plan, refusals that name
+  the item, inbox paged one batch at a time
 - [x] Pure logic with tests: `sharedLog.ts` (validate, sanitise, overlap, union,
   `choosePlanDay`, bulk classification), `sharedPlan.ts`, `shiftPlanStart`
 - [x] Friends panel (You → Friends), `SendToSheet` (session page, date range,
-  plan page), `/app/inbox` and the header bell
+  plan page, a plan's logs), `/app/inbox` and the header bell
 - [x] Logger review mode: Confirm / Discard, batch stepping, the same-day
   duplicates sheet, Counts toward
 - [x] Plans in the inbox: Accept & review sheet (start date, active or save for
   later), send a plan from the plan page
-- [x] `needs_review` excluded from `planCycles` and from `share-read`'s profile and
-  log scopes; every other metric reads `done` only
-- [ ] **Pending ops:** apply `supabase/migrations/0052_friends_sharing.sql` by hand
-  (never applied to the live project; the Supabase MCP was unreachable while it
-  was written, so it was run only against a local Postgres 16 with a stub
-  `auth` schema and the **advisors have not been run** on it)
-- [ ] **Pending ops:** redeploy the `share-read` edge function (it now filters
-  `needs_review`); until then a public profile link can show an unreviewed copy
-- [ ] Until 0052 is applied the inbox, bell and friends panel read as empty/failing
-- [ ] No check observes the accept sheet on a real device; the probe and audits
-  ran against mocked REST in Chromium
+- [x] `needs_review` excluded from `planCycles`, from `share-read`'s profile and
+  log scopes, and from the showcase (a restrictive anon policy); every other
+  metric reads `done` only
+- [x] 0052 and 0053 applied to the live project 2026-11-16 (SQL editor, both
+  recorded in `supabase_migrations.schema_migrations`); advisors run, no new
+  finding beyond the intended RPC-only tables and definer functions
+- [x] `share-read` redeployed (v2) with the `needs_review` filters
+- [x] Live smoke test, 19 assertions, two throwaway users inside a rolled-back
+  block: friend code, failed-attempt counting, send gated on acceptance,
+  payload allow-list, no sender read, no direct insert, idempotent accept,
+  acceptance notice, edited-count removal, block, anon refused
+- [x] `0054_friends_fk_indexes.sql`: the three foreign keys the performance
+  advisor flagged
+- [ ] No check has driven the screens against the live API or on a real device;
+  the audits ran against mocked REST in Chromium
+- [ ] Live never received `0034_showcase_live`, so `logs_select_anon` still
+  carries 0014's `source = 'manual'` guard. Left as is by the owner's decision
+  (2026-11-16); applying 0034 would publish the showcase's Garmin rows
 
 ## Backlog
 
