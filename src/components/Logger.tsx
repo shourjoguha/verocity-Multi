@@ -18,6 +18,7 @@ import {
 } from '@/lib/queries';
 import { loadAllLogs, newestLogs } from '@/lib/logStore';
 import { withoutUnreviewed } from '@/lib/stats';
+import { LOG_STATUS_LABEL } from '@/components/friends/friendCopy';
 import { track } from '@/lib/analytics';
 import {
   buildBlankLog,
@@ -1850,7 +1851,7 @@ export default function Logger() {
             <div>
               <div className="font-display text-3xl uppercase tracking-tight text-fg">Editing</div>
               <div className={`t-label ${unsaved ? 'text-accent' : 'text-muted'}`}>
-                {status}
+                {LOG_STATUS_LABEL[status]}
                 {saving ? ' · saving…' : ''}
                 {unsaved && !saving ? ' · not saved' : ''}
               </div>
@@ -1879,7 +1880,7 @@ export default function Logger() {
                       common path, so printing both would just be noise — but a
                       log resumed as `planned`, or one that has gone `done` or
                       `cancelled` under us, still has to say so. */}
-                  {status !== 'in_progress' && status !== 'paused' ? ` · ${status}` : ''}
+                  {status !== 'in_progress' && status !== 'paused' ? ` · ${LOG_STATUS_LABEL[status]}` : ''}
                   {saving ? ' · saving…' : ''}
                   {unsaved && !saving ? ' · not saved' : ''}
                 </div>

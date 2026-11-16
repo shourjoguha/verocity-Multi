@@ -45,6 +45,7 @@ import { GarminPanel } from '@/components/GarminPanel';
 import { UserStatsPanel } from '@/components/UserStatsPanel';
 import { GoalsEditor } from '@/components/GoalsEditor';
 import ShareManager from '@/components/ShareManager';
+import { FriendsPanel } from '@/components/friends/FriendsPanel';
 
 const exportBtn =
   'hill-btn min-h-11 border border-transparent bg-tappable px-4 t-control text-fg transition-colors hover:bg-tappable-hover disabled:opacity-40';
@@ -94,7 +95,7 @@ const labelOf = <T extends string>(list: readonly { key: T; label: string }[], k
 // children whether or not it is open, so /app/you MOUNTS all seven of its
 // sections on arrival — GoalsEditor, HolidaysSettings, ThemeToggle,
 // BackgroundPicker, CoachSpritePicker, BodyMapStylePicker, GarminPanel,
-// ShareManager and the export block — each with
+// ShareManager, FriendsPanel and the export block — each with
 // its own fetch and its own render. It is the widest crash surface in the app,
 // and it was the one heavy island with no boundary above it, so a single throw
 // anywhere in that set left a blank page with nothing on screen to act on.
@@ -448,6 +449,20 @@ function YouSurface() {
                 {exporting === 'csv' ? 'Exporting…' : 'Export CSV'}
               </button>
             </div>
+          </Disclosure>
+        </div>
+      </Item>
+
+      <Item>
+        <div className="mb-3">
+          <Disclosure
+            id="friends"
+            title={sectionTitle(
+              'Friends',
+              'Pair up by code, then send each other workouts. A friend can send to you; nobody can read your logs.',
+            )}
+          >
+            <FriendsPanel />
           </Disclosure>
         </div>
       </Item>

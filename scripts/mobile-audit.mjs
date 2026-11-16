@@ -175,6 +175,66 @@ const doneLog = {
   },
 };
 
+// Friends / inbox (migration 0052). A needs_review log — a friend's workout
+// accepted but not confirmed — so the history lists render their "Review"
+// marker and /app/inbox its To review block. Without these the inbox would
+// render its empty state and be measured as one.
+const reviewLog = {
+  ...doneLog,
+  id: '44444444-4444-4444-4444-444444444444',
+  status: 'needs_review',
+  plan_id: null,
+  day_key: null,
+  week_number: null,
+  activity_type: 'Upper body — long friend-sent session title',
+  shared_item_id: 'si-h1',
+};
+const sharedPayload = (logDate) => ({
+  log_date: logDate,
+  started_at: null,
+  ended_at: null,
+  total_seconds: 3600,
+  activity_type: null,
+  tags: ['strength'],
+  data: doneLog.data,
+  movements: [],
+});
+const today = new Date().toISOString().slice(0, 10);
+const ymdAgo = (n) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+const sharedItem = (id, batch, sender, date, status, extra = {}) => ({
+  id, sender_id: 'f1', recipient_id: session.user.id, sender_name: sender, kind: 'log',
+  batch_id: batch, title: 'Day 3 — Lower body strength with a long label', item_date: date,
+  payload: status === 'pending' ? sharedPayload(date) : null, status,
+  created_at: new Date().toISOString(), acted_at: null, sender_seen_at: null,
+  accepted_log_id: null, accepted_digest: null, ...extra,
+});
+// Batch b1 has three items, one dated today (same day as doneLog, so its
+// overlap chip renders); b2 is a single item.
+const pendingItems = [
+  sharedItem('si-1', 'b1', 'Samantha Rivera-Longname', today, 'pending'),
+  sharedItem('si-2', 'b1', 'Samantha Rivera-Longname', ymdAgo(2), 'pending'),
+  sharedItem('si-3', 'b1', 'Samantha Rivera-Longname', ymdAgo(4), 'pending'),
+  sharedItem('si-4', 'b2', 'Alex', ymdAgo(1), 'pending'),
+];
+const historyItems = [
+  sharedItem('si-h1', 'b0', 'Alex', ymdAgo(9), 'accepted', { accepted_log_id: reviewLog.id }),
+  sharedItem('si-h2', 'b0', 'Alex', ymdAgo(10), 'accepted', { accepted_log_id: 'gone' }),
+  sharedItem('si-h3', 'b0', 'Alex', ymdAgo(11), 'dismissed'),
+];
+const friendRow = (id, name, status, direction) => ({
+  friendship_id: id, user_id: `u-${id}`, display_name: name, status, direction,
+  created_at: new Date().toISOString(), responded_at: null,
+});
+const friends = [
+  friendRow('fr1', 'Jordan Incoming-Request', 'pending', 'incoming'),
+  friendRow('fr2', 'Samantha Rivera-Longname', 'accepted', 'outgoing'),
+  friendRow('fr3', 'Alex', 'accepted', 'incoming'),
+  friendRow('fr4', 'Morgan Waiting', 'pending', 'outgoing'),
+];
+const acceptances = [
+  { batch_id: 'b9', recipient_id: 'u-fr2', recipient_name: 'Samantha Rivera-Longname', kind: 'log', accepted_count: 5, last_acted_at: new Date().toISOString(), seen: false },
+];
+
 // An ACTIVE PLAN is load-bearing for the same reason m3 below is owned: the
 // fixture used to return [] for plans, so every plan-dependent surface rendered
 // its empty state and was never measured — Home's plan unit and day accordion,
@@ -320,7 +380,12 @@ function fixtureFor(url) {
   if (path.includes('/holidays')) return holidays;
   if (path.includes('/recommendations')) return recommendations;
   if (path.includes('/coach_briefs')) return coachBriefs;
-  if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog, doneLog];
+  if (path.endsWith('/rpc/list_friends')) return friends;
+  if (path.endsWith('/rpc/my_friend_code')) return 'K7MX2QPA';
+  if (path.endsWith('/rpc/list_acceptances')) return acceptances;
+  if (path.includes('/rpc/')) return null;
+  if (path.includes('/shared_items')) return url.includes('pending') ? pendingItems : historyItems;
+  if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog, doneLog, reviewLog];
   if (path.includes('/movements')) return movements;
   if (path.endsWith('/sessions')) return url.includes('id=eq.') ? savedSessions[0] : savedSessions;
   if (path.includes('/profiles')) return url.includes('id=eq.') ? null : [];
@@ -364,6 +429,9 @@ const ROUTES = [
   '/app/activity?mode=holiday',
   '/app/onboarding',
   `/app/log?logId=${LOG_ID}`,
+  // Friends (You → Friends, opened by the hash) and the inbox, both with rows.
+  '/app/you#friends',
+  '/app/inbox',
 ];
 
 const VIEWPORTS = [

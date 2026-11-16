@@ -211,6 +211,10 @@ export function MonthCalendar({
           // number, so the number never sits on a dark fill.
           const colors = [...new Set(sessions.flatMap((s) => sessionTagColors(s.tags, s.activity_type)))];
           const seconds = sessions.reduce((a, s) => a + (s.total_seconds ?? 0), 0);
+          // A friend's log awaiting confirmation (needs_review): marked with a
+          // small ink square in the corner and named in the aria-label, so the
+          // cue survives without colour.
+          const review = sessions.some((s) => s.status === 'needs_review');
           const frac = Math.max(LOG_CALENDAR.minFill, Math.min(1, seconds / LOG_CALENDAR.fullFillSeconds));
           const cellStyle: CSSProperties | undefined = colors.length
             ? { background: tagWash(colors, LOG_CALENDAR.washPct), minHeight: TOUCH.minTargetPx, ...place }
@@ -223,7 +227,7 @@ export function MonthCalendar({
               aria-label={
                 interactive
                   ? sessions.length > 0
-                    ? `${key}, ${formatDuration(seconds)} — view session`
+                    ? `${key}, ${formatDuration(seconds)}${review ? ', needs review' : ''} — view session`
                     : holiday
                       ? `${key}, ${holidayLabel(holiday)} — edit holiday`
                       : `${key} — add session`
@@ -256,6 +260,13 @@ export function MonthCalendar({
               >
                 {day}
               </div>
+              {review ? (
+                <span
+                  aria-hidden
+                  title="Needs review"
+                  className="absolute right-1 top-1 z-[1] block h-1.5 w-1.5 rounded-[1px] border border-fg bg-surface"
+                />
+              ) : null}
               {sessions.length > 0 ? (
                 <div className="relative mt-1 flex-1" aria-hidden>
                   <span

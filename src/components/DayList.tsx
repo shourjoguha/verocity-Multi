@@ -3,6 +3,7 @@ import type { WorkoutLog } from '@/lib/types';
 import { formatDuration } from '@/lib/format';
 import { sessionTagColors } from '@/lib/tags';
 import { sessionSets, sessionsLabel, type DaySummary } from '@/lib/dayLog';
+import { REVIEW_MARK } from '@/components/friends/friendCopy';
 
 // The Log tab's session list, one card per DAY. Every card shows the day's
 // working sets and time while collapsed. A day with one session is a plain row
@@ -29,6 +30,7 @@ function Cells({
   count,
   sets,
   seconds,
+  review = false,
 }: {
   colors: string[];
   date: string | null;
@@ -36,6 +38,9 @@ function Cells({
   count?: number;
   sets: number;
   seconds: number;
+  // A friend's log not yet confirmed (needs_review): it counts nowhere, and
+  // the row says so in words rather than by colour.
+  review?: boolean;
 }) {
   return (
     <>
@@ -54,6 +59,11 @@ function Cells({
         {label}
         {count ? <span className="ml-1.5 text-[0.7rem] text-muted">×{count}</span> : null}
       </span>
+      {review ? (
+        <span className="t-label shrink-0 rounded-chip border border-border px-1.5 py-0.5 text-[0.55rem] text-fg">
+          {REVIEW_MARK}
+        </span>
+      ) : null}
       <span className="shrink-0 text-xs tabular-nums text-muted">{sets ? `${sets} sets` : ''}</span>
       <span className="w-14 shrink-0 text-right text-xs tabular-nums text-subtle">
         {seconds ? formatDuration(seconds) : ''}
@@ -83,6 +93,7 @@ function SessionRow({
       label={sessionsLabel([log])}
       sets={sessionSets(log)}
       seconds={log.total_seconds ?? 0}
+      review={log.status === 'needs_review'}
     />
   );
   const row = (
@@ -125,6 +136,7 @@ export function DayList({
                   count={day.logs.length}
                   sets={day.sets}
                   seconds={day.seconds}
+                  review={day.logs.some((l) => l.status === 'needs_review')}
                 />
                 <span
                   aria-hidden

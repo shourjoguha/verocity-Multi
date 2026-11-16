@@ -169,7 +169,9 @@ export function LogQuickView({
               </button>
             ) : null}
 
-            {!readOnly ? (
+            {/* A needs_review row is a friend's unconfirmed numbers: never minted
+                into a public link. */}
+            {!readOnly && log.status !== 'needs_review' ? (
               <div className="mt-6 border-t border-border-soft pt-4">
                 <LogShareControl logId={log.id} defaultLabel={shareLabel(log, plan)} />
               </div>
@@ -193,6 +195,14 @@ export function LogQuickView({
             >
               Open
             </a>
+            {log.status === 'needs_review' && !readOnly ? (
+              <a
+                href={`/app/log?logId=${log.id}&edit=1`}
+                className="hill-btn inline-flex min-h-12 items-center justify-center border border-accent bg-accent px-4 text-sm uppercase tracking-wider text-accent-fg transition-colors hover:bg-accent/85"
+              >
+                Review
+              </a>
+            ) : null}
             {resumable && !readOnly ? (
               <a
                 href={`/app/log?logId=${log.id}`}

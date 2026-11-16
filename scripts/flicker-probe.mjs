@@ -125,8 +125,30 @@ const savedSessions = Array.from({ length: 30 }, (_, i) => ({
   instructions: null, source: null, source_text: null, source_ref: null,
 }));
 
+// A FINISHED log, reachable only by id, so the session page offers "Send to a
+// friend" (SendToSheet takes `done` logs only) without changing what the list
+// queries return to the other scenarios.
+const DONE_ID = '55555555-5555-5555-5555-555555555555';
+const doneLog = { ...workoutLog, id: DONE_ID, status: 'done', ended_at: new Date().toISOString() };
+// Friends and accepted inbox history, for SendToSheet's toggles and the
+// inbox's "Remove from my logs" confirm sheet.
+const friends = [
+  { friendship_id: 'fr1', user_id: 'u1', display_name: 'Alex', status: 'accepted', direction: 'incoming', created_at: '2026-01-01T00:00:00Z', responded_at: null },
+];
+const accepted = (id) => ({
+  id, sender_id: 'u1', recipient_id: session.user.id, sender_name: 'Alex', kind: 'log', batch_id: 'b0',
+  title: 'Lower body', item_date: '2026-01-05', payload: null, status: 'accepted',
+  created_at: '2026-01-05T00:00:00Z', acted_at: '2026-01-06T00:00:00Z', sender_seen_at: null,
+  accepted_log_id: `log-${id}`, accepted_digest: 'x',
+});
+
 function fixtureFor(url) {
   const path = new URL(url).pathname;
+  if (path.endsWith('/rpc/list_friends')) return friends;
+  if (path.endsWith('/rpc/remove_accepted_items')) return { total: 2, edited: 1 };
+  if (path.includes('/rpc/')) return [];
+  if (path.includes('/shared_items')) return url.includes('pending') ? [] : [accepted('si1'), accepted('si2')];
+  if (path.includes('/workout_logs') && url.includes(DONE_ID)) return doneLog;
   if (path.endsWith('/sessions')) return savedSessions;
   if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog];
   if (path.includes('/movements')) return movements;
@@ -215,6 +237,21 @@ const SCENARIOS = [
     // The handoff is the interesting part: this closes the options sheet and
     // opens the picker. Both scrims used to be on screen together.
     then: '[role="dialog"] button:has-text("Swap movement")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Session · send to a friend (SendToSheet)',
+    route: `/app/session?id=${DONE_ID}`,
+    open: 'button:has-text("Send to a friend")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    // The Disclosure is in-flow (no sheet); the sheet is the confirm that
+    // follows the dry run.
+    name: 'Inbox · remove from my logs (confirm sheet)',
+    route: '/app/inbox',
+    open: '#inbox-history summary',
+    then: 'button:has-text("from my logs")',
     close: '[role="dialog"] button:has-text("Close")',
   },
   {

@@ -60,7 +60,9 @@ export default function ShareManager({ embedded = false }: { embedded?: boolean 
       const [sh, pl, lg] = await Promise.all([
         getShares(),
         getAllPlans(),
-        loadAllLogs().then((all) => newestLogs(all, 30)),
+        // A needs_review row is a friend's numbers awaiting confirmation; it is
+        // never offered as a public link (share-read refuses it too).
+        loadAllLogs().then((all) => newestLogs(all.filter((l) => l.status !== 'needs_review'), 30)),
       ]);
       setShares(sh);
       setPlans(pl);
