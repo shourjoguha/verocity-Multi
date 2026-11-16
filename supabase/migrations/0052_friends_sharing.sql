@@ -1,4 +1,4 @@
--- Friends, send-to and accept (docs/FRIENDS_SHARING_PLAN.md §4, §12).
+-- Friends, send-to and accept (docs/SPEC.md §7C; original plan: git show edd9f53:docs/FRIENDS_SHARING_PLAN.md §4, §12).
 --
 -- FRIENDSHIP IS AN ADDRESS BOOK. It permits SENDING a snapshot to someone and
 -- grants no read of anything. No RLS policy anywhere references `friendships`
