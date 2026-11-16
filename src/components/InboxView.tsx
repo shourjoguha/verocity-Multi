@@ -3,24 +3,33 @@
 // first:
 //   1. To review — your own needs_review logs (accepted, not yet confirmed).
 //   2. Friend requests.
-//   3. Shared with you — pending items, grouped by batch, Newer / Older pages.
+//   3. Shared with you — pending items, ONE BATCH PER PAGE (Newer batch /
+//      Older batch). A batch is never split across pages; a 120-log batch is
+//      one long page whose Accept / Review / Dismiss bar is `sticky bottom-0`
+//      inside [data-scroll-root] (never top-0: App.astro's header is sticky
+//      there and auto-hides; never viewport-anchored — CLAUDE.md shell rule).
+//      Changing page, or following a link out of the inbox, with logs selected
+//      asks first: Accept selected / Discard selection / Stay.
 //   4. Accepted by friends — the sender notice; marked seen once rendered.
 // Then accepted / dismissed history behind a Disclosure, with Remove from my
-// logs.
+// logs — also one batch per page, for the same reason. Its selection is only
+// ever a Remove target, so changing its page just clears it.
 //
 // Read on load only. No realtime and no polling: the bell and this page agree
 // because both count on page load (getInboxCounts / these same reads).
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   getActivePlan,
   getInboxPage,
   getMovements,
+  getSharedItemSenders,
   listAcceptances,
   listFriends,
   markAcceptancesSeen,
   removeAcceptedItems,
   setSharedItemStatus,
+  type InboxPage,
 } from '@/lib/queries';
 import { invalidateLogs, loadAllLogs } from '@/lib/logStore';
 import { sameDayOverlap, validateSharedLogPayload } from '@/lib/sharedLog';
@@ -79,27 +88,26 @@ function SelectToggle({ on, onClick, label }: { on: boolean; onClick: () => void
   );
 }
 
-function Pager({
-  page,
-  hasMore,
-  onPage,
-  label,
-}: {
-  page: number;
-  hasMore: boolean;
-  onPage: (p: number) => void;
-  label: string;
-}) {
-  if (page === 0 && !hasMore) return null;
+const EMPTY_PAGE: InboxPage = { items: [], batch: null, index: 0, total: 0, newerId: null, olderId: null };
+
+// One batch per page. The label is the whole position: "Batch 2 of 5 · from
+// Sam · 72 logs". Hidden when there is only one batch.
+function BatchPager({ page, onGo, label }: { page: InboxPage; onGo: (batchId: string) => void; label: string }) {
+  if (page.total <= 1 || !page.batch) return null;
+  const b = page.batch;
   return (
-    <nav aria-label={label} className="mt-3 flex items-center justify-between gap-2">
-      <Button variant="ghost" disabled={page === 0} onClick={() => onPage(page - 1)}>
-        Newer
-      </Button>
-      <span className="t-label tabular-nums text-muted">Page {page + 1}</span>
-      <Button variant="ghost" disabled={!hasMore} onClick={() => onPage(page + 1)}>
-        Older
-      </Button>
+    <nav aria-label={label} className="my-3">
+      <p className="mb-2 t-label tabular-nums text-muted">
+        Batch {page.index + 1} of {page.total} · from {b.sender_name} · {plural(b.item_count, b.kind === 'plan' ? 'plan' : 'log')}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="ghost" disabled={!page.newerId} onClick={() => page.newerId && onGo(page.newerId)}>
+          Newer batch
+        </Button>
+        <Button variant="ghost" disabled={!page.olderId} onClick={() => page.olderId && onGo(page.olderId)}>
+          Older batch
+        </Button>
+      </div>
     </nav>
   );
 }
@@ -116,13 +124,17 @@ function Inbox() {
   const [ready, setReady] = useState(false);
   const [myLogs, setMyLogs] = useState<WorkoutLog[]>([]);
   const [friends, setFriends] = useState<FriendSummary[]>([]);
-  const [page, setPage] = useState(0);
-  const [pending, setPending] = useState<{ items: SharedItem[]; hasMore: boolean }>({ items: [], hasMore: false });
-  const [histPage, setHistPage] = useState(0);
-  const [history, setHistory] = useState<{ items: SharedItem[]; hasMore: boolean }>({ items: [], hasMore: false });
+  const [pending, setPending] = useState<InboxPage>(EMPTY_PAGE);
+  const [history, setHistory] = useState<InboxPage>(EMPTY_PAGE);
   const [acceptances, setAcceptances] = useState<Acceptance[]>([]);
-  // Selection is local and per page; it never persists (§12.2).
+  // Selection is local and per page; it never persists (§12.2). Pending and
+  // history keep separate sets: one is an Accept target, the other a Remove one.
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [histSelected, setHistSelected] = useState<Set<string>>(new Set());
+  // The leave-with-selection prompt: what to do once the user has chosen, and
+  // an item the continuation acts on itself (left out of Accept selected).
+  const [leave, setLeave] = useState<{ cont: () => void | Promise<void>; exclude?: string } | null>(null);
+  const [senders, setSenders] = useState<Map<string, string>>(new Map());
   const [busy, setBusy] = useState(false);
   const [removal, setRemoval] = useState<{ ids: string[]; total: number; edited: number } | null>(null);
 
@@ -130,11 +142,13 @@ function Inbox() {
     invalidateLogs();
     setMyLogs(await loadAllLogs());
   }, []);
-  const loadPending = useCallback(async (p: number) => {
-    setPending(await getInboxPage(p, ['pending']));
+  // By batch id, so a page survives the list changing under it (an accept that
+  // empties the batch on screen moves to its neighbour, not to an index).
+  const loadPending = useCallback(async (batchId: string | null, fallbackIndex = 0) => {
+    setPending(await getInboxPage(fallbackIndex, ['pending'], batchId));
   }, []);
-  const loadHistory = useCallback(async (p: number) => {
-    setHistory(await getInboxPage(p, ['accepted', 'dismissed', 'removed']));
+  const loadHistory = useCallback(async (batchId: string | null, fallbackIndex = 0) => {
+    setHistory(await getInboxPage(fallbackIndex, ['accepted', 'dismissed', 'removed'], batchId));
   }, []);
 
   useEffect(() => {
@@ -173,11 +187,19 @@ function Inbox() {
     [myLogs],
   );
   const incoming = friends.filter((f) => f.status === 'pending' && f.direction === 'incoming');
-  const senderByLog = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const it of history.items) if (it.accepted_log_id) m.set(it.accepted_log_id, it.sender_name);
-    return m;
-  }, [history.items]);
+  // "from Sam" on To review rows, read by the rows' own shared_item_id: the
+  // history page now holds one batch, so it can no longer answer this.
+  const reviewItemIds = toReview.map((l) => l.shared_item_id).filter((x): x is string => !!x).join(',');
+  useEffect(() => {
+    let active = true;
+    void getSharedItemSenders(reviewItemIds ? reviewItemIds.split(',') : []).then((m) => {
+      if (active) setSenders(m);
+    });
+    return () => {
+      active = false;
+    };
+  }, [reviewItemIds]);
+  const senderOf = (l: WorkoutLog) => (l.shared_item_id ? senders.get(l.shared_item_id) : undefined);
 
   // Validated once per row: the payload is another user's, so nothing below
   // reads it raw. A row that fails can only be dismissed.
@@ -193,8 +215,8 @@ function Inbox() {
   }, [pending.items]);
   const [planTarget, setPlanTarget] = useState<AcceptablePlan | null>(null);
 
-  function toggle(id: string) {
-    setSelected((prev) => {
+  function toggle(id: string, history = false) {
+    (history ? setHistSelected : setSelected)((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -204,7 +226,58 @@ function Inbox() {
 
   async function refreshAfterAccept() {
     setSelected(new Set());
-    await Promise.all([loadLogs(), loadPending(page), loadHistory(histPage)]);
+    await Promise.all([
+      loadLogs(),
+      loadPending(pending.batch?.batch_id ?? null, pending.index),
+      loadHistory(history.batch?.batch_id ?? null, history.index),
+    ]);
+  }
+
+  // Anything that would drop a pending selection asks first.
+  function guard(cont: () => void | Promise<void>, exclude?: string) {
+    const kept = [...selected].filter((id) => id !== exclude);
+    if (kept.length === 0) {
+      void cont();
+      return;
+    }
+    setLeave({ cont, exclude });
+  }
+
+  // A link out of the inbox (To review, Friends, a history row) while logs are
+  // selected. Links inside a sheet are the sheet's business.
+  function onLinkCapture(e: MouseEvent) {
+    if (selected.size === 0 || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = (e.target as Element).closest?.('a[href]') as HTMLAnchorElement | null;
+    if (!a || a.closest('[role="dialog"]')) return;
+    e.preventDefault();
+    const href = a.href;
+    setLeave({
+      cont: () => {
+        window.location.href = href;
+      },
+    });
+  }
+
+  function goPending(batchId: string) {
+    guard(() => {
+      setSelected(new Set());
+      return loadPending(batchId);
+    });
+  }
+
+  async function leaveWith(accept: boolean) {
+    if (!leave || busy) return;
+    const { cont, exclude } = leave;
+    if (accept) {
+      const items = pending.items.filter((i): i is LogItem => i.kind === 'log' && selected.has(i.id) && i.id !== exclude);
+      const ok = await bulk(items, false);
+      setLeave(null);
+      if (!ok) return; // bulk's toast says what failed; stay so nothing else is lost
+    } else {
+      setSelected(new Set());
+      setLeave(null);
+    }
+    await cont();
   }
 
   async function reviewOne(item: LogItem) {
@@ -239,11 +312,15 @@ function Inbox() {
     setBusy(false);
     toast(failed ? `${failed} couldn't be dismissed` : `Dismissed ${plural(ids.length, 'item')}`, failed ? 'error' : 'success');
     setSelected(new Set());
-    await Promise.all([loadPending(page), loadHistory(histPage)]);
+    await Promise.all([
+      loadPending(pending.batch?.batch_id ?? null, pending.index),
+      loadHistory(history.batch?.batch_id ?? null, history.index),
+    ]);
   }
 
-  async function bulk(items: LogItem[], review: boolean) {
-    if (busy || items.length === 0) return;
+  /** True when every item went through. */
+  async function bulk(items: LogItem[], review: boolean): Promise<boolean> {
+    if (busy || items.length === 0) return items.length === 0;
     setBusy(true);
     const [plan, library] = await Promise.all([getActivePlan(), getMovements()]);
     const res = await acceptMany(items, { review, plan, library, myLogs: [...myLogs] });
@@ -256,9 +333,10 @@ function Inbox() {
         res.needReview[0].id,
         res.needReview.map((l) => l.id),
       );
-      return;
+      return true;
     }
     await refreshAfterAccept();
+    return res.failed.length === 0;
   }
 
   async function askRemove(ids: string[]) {
@@ -288,8 +366,8 @@ function Inbox() {
       return;
     }
     toast(`Removed ${plural(res.total, 'log')}`, 'success');
-    setSelected(new Set());
-    await Promise.all([loadLogs(), loadHistory(histPage)]);
+    setHistSelected(new Set());
+    await Promise.all([loadLogs(), loadHistory(history.batch?.batch_id ?? null, history.index)]);
   }
 
   if (!ready) return <LoadingScreen />;
@@ -297,9 +375,12 @@ function Inbox() {
   const pendingGroups = groupByBatch(pending.items);
   const historyGroups = groupByBatch(history.items);
   const nothing =
-    toReview.length === 0 && incoming.length === 0 && pending.items.length === 0 && page === 0 && acceptances.length === 0;
+    toReview.length === 0 && incoming.length === 0 && pending.total === 0 && acceptances.length === 0;
+  const leaveCount = leave ? [...selected].filter((id) => id !== leave.exclude).length : 0;
 
   return (
+    // Capture phase, so a link is held before it navigates (onLinkCapture).
+    <div onClickCapture={onLinkCapture}>
     <PageStagger className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
       <Item>
         <EchoText text="INBOX" as="h1" className={`mb-6 ${ECHO_APP_TITLE}`} />
@@ -349,9 +430,7 @@ function Inbox() {
                       <span className="w-14 shrink-0 text-xs tabular-nums text-subtle">{formatDate(l.log_date)}</span>
                       <span className="min-w-0 flex-1 truncate text-sm text-fg">
                         {l.activity_type ?? 'Workout'}
-                        {senderByLog.get(l.id) ? (
-                          <span className="text-muted"> · from {senderByLog.get(l.id)}</span>
-                        ) : null}
+                        {senderOf(l) ? <span className="text-muted"> · from {senderOf(l)}</span> : null}
                       </span>
                       <span className="t-control shrink-0 text-muted">{asIs ? '›' : 'Review ›'}</span>
                     </a>
@@ -396,16 +475,19 @@ function Inbox() {
         </Item>
       ) : null}
 
-      {pending.items.length > 0 || page > 0 ? (
+      {pending.total > 0 ? (
         <Item>
           <section className="mb-6">
             <SectionHeader>Shared with you</SectionHeader>
+            <BatchPager page={pending} onGo={goPending} label="Shared with you batches" />
             <div className="flex flex-col gap-3">
               {pendingGroups.map((g) => {
                 const logs = g.items.filter((i): i is LogItem => i.kind === 'log');
                 const picked = logs.filter((i) => selected.has(i.id));
                 const target = picked.length ? picked : logs;
-                const suffix = picked.length ? 'selected' : 'all';
+                // Short on purpose: the bar is sticky, and "Accept selected /
+                // Review selected / Dismiss selected" wraps to two rows at 375px.
+                const suffix = picked.length ? String(picked.length) : 'all';
                 const multi = g.items.length > 1;
                 return (
                   <div key={g.batchId} className="rounded-card border border-outline bg-surface">
@@ -416,24 +498,6 @@ function Inbox() {
                           {multi && picked.length ? `${picked.length} of ${g.items.length}` : plural(g.items.length, g.items[0]?.kind === 'plan' ? 'plan' : 'workout')}
                         </span>
                       </div>
-                      {multi ? (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <Button disabled={busy || target.length === 0} onClick={() => bulk(target, false)}>
-                            Accept {suffix}
-                          </Button>
-                          <Button variant="ghost" disabled={busy || target.length === 0} onClick={() => bulk(target, true)}>
-                            Review {suffix}
-                          </Button>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => dismiss((picked.length ? picked : g.items).map((i) => i.id))}
-                            className={TEXT_BTN}
-                          >
-                            Dismiss {suffix}
-                          </button>
-                        </div>
-                      ) : null}
                     </div>
                     <ul className="[&>li+li]:border-t [&>li+li]:border-border-soft">
                       {g.items.map((it) => {
@@ -494,7 +558,7 @@ function Inbox() {
                                 <Button
                                   variant={multi ? 'ghost' : 'primary'}
                                   disabled={busy}
-                                  onClick={() => reviewOne(it)}
+                                  onClick={() => guard(() => reviewOne(it), it.id)}
                                 >
                                   Accept &amp; review
                                 </Button>
@@ -514,20 +578,34 @@ function Inbox() {
                         );
                       })}
                     </ul>
+                    {/* The batch's actions. sticky bottom-0 INSIDE the scroll
+                        root, so on a 120-row batch they stay on screen above
+                        the dock while any of the batch is; opaque, no blur. */}
+                    {multi ? (
+                      <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-b-card border-t border-border-soft bg-surface px-3 py-2">
+                        <Button disabled={busy || target.length === 0} onClick={() => bulk(target, false)}>
+                          Accept {suffix}
+                        </Button>
+                        <Button variant="ghost" disabled={busy || target.length === 0} onClick={() => bulk(target, true)}>
+                          Review {suffix}
+                        </Button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => dismiss((picked.length ? picked : g.items).map((i) => i.id))}
+                          className={TEXT_BTN}
+                        >
+                          Dismiss {suffix}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
             </div>
-            <Pager
-              page={page}
-              hasMore={pending.hasMore}
-              label="Shared with you pages"
-              onPage={(p) => {
-                setPage(p);
-                setSelected(new Set());
-                void loadPending(p);
-              }}
-            />
+            {pending.items.length > 8 ? (
+              <BatchPager page={pending} onGo={goPending} label="Shared with you batches (end)" />
+            ) : null}
           </section>
         </Item>
       ) : null}
@@ -554,14 +632,22 @@ function Inbox() {
       ) : null}
 
       <Item>
-        <Disclosure id="inbox-history" title="Earlier" headerRight={history.items.length ? undefined : 'Nothing yet'}>
+        <Disclosure id="inbox-history" title="Earlier" headerRight={history.total ? undefined : 'Nothing yet'}>
+          <BatchPager
+            page={history}
+            label="Earlier batches"
+            onGo={(id) => {
+              setHistSelected(new Set());
+              void loadHistory(id);
+            }}
+          />
           {historyGroups.length === 0 ? (
             <p className="text-sm text-muted">Accepted and dismissed items appear here.</p>
           ) : (
             <div className="flex flex-col gap-3">
               {historyGroups.map((g) => {
                 const removable = g.items.filter((i) => i.status === 'accepted' && i.accepted_log_id);
-                const picked = removable.filter((i) => selected.has(i.id));
+                const picked = removable.filter((i) => histSelected.has(i.id));
                 const target = picked.length ? picked : removable;
                 const multi = removable.length > 1;
                 return (
@@ -586,8 +672,8 @@ function Inbox() {
                           <li key={it.id} className="flex min-h-11 items-center gap-2 px-3 py-1">
                             {multi && canRemove ? (
                               <SelectToggle
-                                on={selected.has(it.id)}
-                                onClick={() => toggle(it.id)}
+                                on={histSelected.has(it.id)}
+                                onClick={() => toggle(it.id, true)}
                                 label={`Select ${it.title ?? 'workout'} ${it.item_date ?? ''}`.trim()}
                               />
                             ) : null}
@@ -622,16 +708,6 @@ function Inbox() {
               })}
             </div>
           )}
-          <Pager
-            page={histPage}
-            hasMore={history.hasMore}
-            label="Earlier pages"
-            onPage={(p) => {
-              setHistPage(p);
-              setSelected(new Set());
-              void loadHistory(p);
-            }}
-          />
         </Disclosure>
       </Item>
 
@@ -665,6 +741,30 @@ function Inbox() {
           </>
         ) : null}
       </Modal>
+
+      <Modal open={leave !== null} onClose={() => setLeave(null)} title="Selection">
+        {leave ? (
+          <>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <p className="text-base text-fg">You've selected {plural(leaveCount, 'log')}.</p>
+              <p className="mt-2 text-sm text-muted">Accept them before you go, or let the selection go.</p>
+            </div>
+            {/* Stacked on a phone (primary on top), a row from sm up. */}
+            <div className="flex flex-col-reverse gap-2 border-t border-border-soft p-4 sm:flex-row sm:justify-end">
+              <Button variant="ghost" onClick={() => setLeave(null)}>
+                Stay
+              </Button>
+              <Button variant="ghost" disabled={busy} onClick={() => leaveWith(false)}>
+                Discard selection
+              </Button>
+              <Button disabled={busy} onClick={() => leaveWith(true)}>
+                {busy ? 'Accepting…' : 'Accept selected'}
+              </Button>
+            </div>
+          </>
+        ) : null}
+      </Modal>
     </PageStagger>
+    </div>
   );
 }

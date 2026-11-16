@@ -229,12 +229,16 @@ const sharedItem = (id, batch, sender, date, status, extra = {}) => ({
   created_at: new Date().toISOString(), acted_at: null, sender_seen_at: null,
   accepted_log_id: null, accepted_digest: null, ...extra,
 });
-// Batch b1 has three items, one dated today (same day as doneLog, so its
-// overlap chip renders); b2 is a single item.
+// The inbox pages ONE BATCH per page (0053). Batch b1 is 72 logs — a 6-day x
+// 12-week plan's worth, the size the owner sized batchMaxItems for — one dated
+// today (same day as doneLog, so its overlap chip renders); it is page 1, so
+// the long page and its sticky action bar are what /app/inbox measures. b2 is
+// a single item; b3 (below) a plan. `/app/inbox#older=N` steps to them.
 const pendingItems = [
   sharedItem('si-1', 'b1', 'Samantha Rivera-Longname', today, 'pending'),
-  sharedItem('si-2', 'b1', 'Samantha Rivera-Longname', ymdAgo(2), 'pending'),
-  sharedItem('si-3', 'b1', 'Samantha Rivera-Longname', ymdAgo(4), 'pending'),
+  ...Array.from({ length: 71 }, (_, i) =>
+    sharedItem(`si-1-${i}`, 'b1', 'Samantha Rivera-Longname', ymdAgo(i + 2), 'pending'),
+  ),
   sharedItem('si-4', 'b2', 'Alex', ymdAgo(1), 'pending'),
 ];
 const historyItems = [
@@ -406,8 +410,21 @@ const holidays = [
   holiday('h2', 'hike', -20, -27, null),
 ];
 
-function fixtureFor(url) {
+// list_inbox_batches, newest first: the order rows were pushed in.
+function inboxBatches(rows) {
+  const out = new Map();
+  for (const r of rows) {
+    const b = out.get(r.batch_id) ?? { batch_id: r.batch_id, sender_name: r.sender_name, kind: r.kind, item_count: 0, created_at: r.created_at };
+    b.item_count += 1;
+    out.set(r.batch_id, b);
+  }
+  return [...out.values()];
+}
+
+function fixtureFor(url, body) {
   const path = new URL(url).pathname;
+  if (path.endsWith('/rpc/list_inbox_batches'))
+    return inboxBatches(String(body ?? '').includes('pending') ? pendingItems : historyItems);
   if (path.includes('/holidays')) return holidays;
   if (path.includes('/recommendations')) return recommendations;
   if (path.includes('/coach_briefs')) return coachBriefs;
@@ -419,7 +436,9 @@ function fixtureFor(url) {
   const byId = /[?&]id=eq\.([^&]+)/.exec(url)?.[1];
   if (path.includes('/shared_items')) {
     if (byId) return historyItems.find((i) => i.id === byId) ?? null;
-    return url.includes('pending') ? pendingItems : historyItems;
+    const rows = url.includes('pending') ? pendingItems : historyItems;
+    const batch = /[?&]batch_id=eq\.([^&]+)/.exec(url)?.[1];
+    return batch ? rows.filter((i) => i.batch_id === batch) : rows;
   }
   if (path.includes('/workout_logs'))
     return byId ? (logById.get(byId) ?? workoutLog) : [workoutLog, doneLog, reviewLog, reviewLog2];
@@ -469,6 +488,9 @@ const ROUTES = [
   // Friends (You → Friends, opened by the hash) and the inbox, both with rows.
   '/app/you#friends',
   '/app/inbox',
+  // The other two batches: Alex's single log, then the plan.
+  '/app/inbox#older=1',
+  '/app/inbox#older=2',
   // Review mode (§5.4): with the same-day duplicates sheet open over it, then
   // plain (Counts toward, Confirm / Discard), then Combine on my own log.
   `/app/log?logId=${reviewLog.id}&edit=1`,
@@ -518,7 +540,7 @@ for (const vp of VIEWPORTS) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(session) }),
   );
   await context.route('**/rest/v1/**', (route) => {
-    const body = fixtureFor(route.request().url());
+    const body = fixtureFor(route.request().url(), route.request().postData());
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -541,6 +563,20 @@ for (const vp of VIEWPORTS) {
   for (const route of ROUTES) {
     await page.goto(BASE + route, { waitUntil: 'networkidle' });
     await page.waitForTimeout(600);
+    // `#older=N`: step N batches back through the inbox's batch pager (the
+    // inbox ignores the hash; this is the audit's own instruction).
+    const older = Number(/#older=(\d+)/.exec(route)?.[1] ?? 0);
+    // A hash-only goto is a same-document navigation: reload, or the pager
+    // starts wherever the previous route left it.
+    if (older) {
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForTimeout(600);
+    }
+    for (let i = 0; i < older; i++) {
+      await page.locator('button:has-text("Older batch")').first().click();
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(300);
+    }
 
     const report = await page.evaluate(({ allowSrc, deviceWidth }) => {
       const allow = allowSrc.map((s) => new RegExp(s.slice(1, s.lastIndexOf('/')), 'i'));

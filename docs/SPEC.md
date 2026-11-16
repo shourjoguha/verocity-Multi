@@ -186,19 +186,38 @@ messaging, a feed, groups or a directory.
   (`request_friend`, `respond_friend`, `remove_friend`, `list_friends`) that
   answers a bad code, self, duplicate and blocked with one generic error, so a
   code cannot be probed. Friends panel: You → Friends (`#friends`).
+  **Code rate limit** *(0053)*: at most `FRIENDS.failedCodeAttemptsPerDay` (20)
+  failed `request_friend` calls per user per rolling 24h; past it every attempt,
+  even a valid code, gets `too_many_attempts` ("try again tomorrow").
+  `request_friend` **returns** `{ ok, id | error }` instead of raising, because a
+  raise would roll back the failure row it records (`friend_code_attempts`: no
+  client policies, pruned per caller on each call).
 - **Delivery is a snapshot.** `send_shared_items(recipient, kind, ids[])` verifies
   the accepted friendship and ownership, builds `payload` **server-side from an
   allow-list** (never `select *`) and inserts one `shared_items` row per id under
   one `batch_id`. Caps (`FRIENDS` in `app.config.ts`, mirrored in the RPC and
-  pinned by `friendsConfig.test.ts`). Later edits by the sender change nothing.
+  pinned by `friendsConfig.test.ts`): 120 items a send (a 6-day x 12-week plan's
+  logs), 200 a day, 256 KB per log `data`, 1 MB per plan (`parsed` +
+  `source_markdown`). **No silent refusal**: every refusal is a specific code
+  (`SEND_ERRORS` in `friendCopy.ts`, test-checked against the SQL) and
+  `not_owned` / `not_done` / `payload_too_large` name the refused ids in the
+  error detail, which `SendToSheet` maps to a date or plan title. Later edits by
+  the sender change nothing.
   Logs drop `data.session` (readiness), heart rate, plan link, Garmin ids and
   row notes, and carry the sender's custom movements; plans carry `parsed`.
   Entry points: the session page, a date-range send on the history surface, and
-  the plan page's actions menu (`SendToSheet`, one plan per send).
+  the plan page's actions menu (`SendToSheet`, one plan per send; and **Send this
+  plan's logs**, every `done` log of that plan — over 120 the sheet says so and
+  the user opts in to the most recent 120, never a silent cut).
 - **Inbox** (`/app/inbox`, bell in the header, counted on load only): To review,
-  Friend requests, Shared with you (grouped by batch, paginated), Accepted by
-  friends. The recipient reads only their own rows; status changes go through
-  `set_shared_item_status`, which nulls `payload`.
+  Friend requests, Shared with you, Accepted by friends. **One batch per page**
+  (`list_inbox_batches`, newest first; Newer batch / Older batch, "Batch 2 of 5 ·
+  from Sam · 72 logs"); a batch is never split, the history pages the same way,
+  and the batch's Accept / Review / Dismiss bar is `sticky bottom-0` inside the
+  scroll root. Changing page or following a link with logs selected asks first:
+  Accept selected / Discard selection / Stay. The recipient reads only their own
+  rows; status changes go through `set_shared_item_status`, which nulls
+  `payload`.
 - **Untrusted input.** The payload was written by another user. Logs go through
   `validateSharedLogPayload` then `sanitiseSharedLog` (`src/lib/sharedLog.ts`:
   reject never repair, fresh ids, sets `prefilled`, `rpeRated: false`, safe
@@ -344,7 +363,9 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
 - **`shares`** *(new)* — read-only share tokens: `id, token_hash, owner_user_id,
   scope (profile|plan|log), resource_id (nullable), label, created_at, expires_at,
   revoked boolean`.
-- **`friend_codes`, `friendships`, `shared_items`** *(0052, §7C)* — the address
+- **`friend_codes`, `friendships`, `shared_items`** *(0052, §7C)*, and
+  **`friend_code_attempts`** *(0053: failed code attempts, RLS on, zero
+  policies, reached only by `request_friend`)* — the address
   book and the inbox. `friend_codes` (one rotatable code per user) and
   `friendships` take **no client write**; `friendships` is selectable by either
   party; `shared_items` is selectable by its **recipient only** (no sender view)

@@ -43,6 +43,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [matrixDayId, setMatrixDayId] = useState<string | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
+  const [sendLogsOpen, setSendLogsOpen] = useState(false);
 
   if (loading) return <LoadingScreen />;
 
@@ -201,6 +202,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
                 { label: 'Edit plan', href: '/app/plan/edit' },
                 { label: 'Switch plan', href: '/app/plan/upload' },
                 { label: 'Send to a friend', onSelect: () => setSendOpen(true) },
+                { label: "Send this plan's logs", onSelect: () => setSendLogsOpen(true) },
                 { label: 'Review past training', href: '/app/plan' },
               ]}
             />
@@ -495,7 +497,16 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               </a>
         </Item>
       )}
-      {showcase ? null : <SendToSheet open={sendOpen} onClose={() => setSendOpen(false)} planId={plan.id} />}
+      {showcase ? null : (
+        <SendToSheet open={sendOpen} onClose={() => setSendOpen(false)} planId={plan.id} planName={plan.name} />
+      )}
+      {showcase ? null : (
+        <SendToSheet
+          open={sendLogsOpen}
+          onClose={() => setSendLogsOpen(false)}
+          planLogs={logs.filter((l) => l.plan_id === plan.id)}
+        />
+      )}
     </PageStagger>
   );
 }

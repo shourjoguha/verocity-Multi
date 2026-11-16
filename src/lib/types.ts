@@ -307,6 +307,16 @@ export interface Acceptance {
   seen: boolean;
 }
 
+/** One row of `list_inbox_batches()` (0053): a batch of the caller's inbox
+ *  with items in the asked-for statuses. The inbox pages by these, never by row. */
+export interface InboxBatch {
+  batch_id: string;
+  sender_name: string;
+  kind: SharedItemKind;
+  item_count: number;
+  created_at: string;
+}
+
 // ---- sessions: saved workout templates (SPEC §8). A standalone, named, tagged
 // frame — a plan day without the per-week dimension (one planned string per
 // exercise). owner-scoped; `tags` are ActivityTagKey strings. ----

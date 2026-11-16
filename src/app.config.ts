@@ -183,20 +183,27 @@ export const HR_WHEEL = { minBpm: 30, maxBpm: 230, restAvg: 140, restMax: 175 } 
 // UI (maxLength) and the plan validator.
 export const SUBROUTINE = { maxDescriptionChars: 300 } as const;
 
-// Friends and send-to (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C)). The first four are
-// MIRRORED in supabase/migrations/0052_friends_sharing.sql as `c_* constant`
-// lines tagged `-- FRIENDS.<key>`, and codeLength by the friend_codes check
-// constraint; friendsConfig.test.ts fails when the two disagree — the RPC is
-// the cap, this is what the UI says about it.
+// Friends and send-to (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C)). The numeric caps
+// below are MIRRORED in the latest SQL definition of their function
+// (migrations 0052, 0053) as `c_* constant` lines tagged `-- FRIENDS.<key>`,
+// and codeLength by the friend_codes check constraint; friendsConfig.test.ts
+// fails when the two disagree — the RPC is the cap, this is what the UI says
+// about it.
 export const FRIENDS = {
-  // Logs or plans in one send (a date-range send is one batch).
-  batchMaxItems: 31,
+  // Logs or plans in one send (a date-range send is one batch). Sized so a
+  // 6-day x 12-week plan's logs go in one send.
+  batchMaxItems: 120,
   // Items one sender may send in a rolling 24h, across all friends.
   dailySendCap: 200,
   // Outgoing friend requests a user may have waiting at once.
   pendingRequestCap: 20,
-  // Largest log `data` / plan document a send will snapshot, in bytes of JSON.
-  maxPayloadBytes: 262_144,
+  // FAILED request_friend calls per user per rolling 24h. Past it every
+  // attempt, even a valid code, is refused with too_many_attempts.
+  failedCodeAttemptsPerDay: 20,
+  // Largest log `data` a send will snapshot, in bytes of JSON.
+  maxLogPayloadBytes: 262_144,
+  // Largest plan a send will snapshot: parsed JSON + source_markdown, in bytes.
+  maxPlanPayloadBytes: 1_048_576,
   codeLength: 8,
   // Dice overlap (2·matched / (logged + prescribed)) a plan day must reach
   // before a shared log is attached to it automatically. Matching is
@@ -221,10 +228,6 @@ export const FRIENDS = {
   },
 } as const;
 
-export const INBOX = {
-  // Rows per page of "Shared with you"; Newer / Older buttons, no infinite scroll.
-  pageSize: 20,
-} as const;
 
 // ---------------------------------------------------------------------------
 // Owner stats (`user_stats`, edited on /app/you).

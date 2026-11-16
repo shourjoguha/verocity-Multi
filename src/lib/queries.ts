@@ -3,7 +3,6 @@ import { supabase } from '@/lib/supabase';
 import { clearQueryCache } from '@/lib/queryCache';
 import {
   ASPECT_METRICS_VERSION,
-  INBOX,
   isExperienceKey,
   isMealKindKey,
   isMealSizeKey,
@@ -26,6 +25,7 @@ import type {
   CoachRuleNote,
   FitnessAssessment,
   FriendSummary,
+  InboxBatch,
   GarminActivity,
   GarminConnectionInfo,
   GarminHealthDaily,
@@ -634,12 +634,16 @@ export async function adoptPlanTemplate(template: PlanTemplate): Promise<Plan | 
   return createPlan(rebasePlanDates(template.parsed, new Date()), '');
 }
 
-// ---- friends and send-to (migration 0052, the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C)).
+// ---- friends and send-to (migrations 0052, 0053; SPEC §7C).
 // Thin wrappers over the security-definer RPCs: every write, and every read of
-// another user's name, goes through one of them. The RPCs raise a bare error
-// code as the message ('friend_request_failed', 'not_friends', ...), surfaced
-// here as `error`. Request failures are deliberately ONE code — unknown code,
-// self, already paired and blocked all look alike, so a code cannot be probed.
+// another user's name, goes through one of them. send_shared_items raises a
+// bare error code as the message ('not_friends', 'payload_too_large', ...) and
+// names what it refused in the DETAIL (ids, or a number), surfaced here as
+// `error` / `detail`. request_friend RETURNS its refusal instead (so the
+// attempt it records for the rate limit is not rolled back), and request
+// failures are deliberately ONE code — unknown code, self, already paired and
+// blocked all look alike, so a code cannot be probed. The full code lists are
+// FRIEND_REQUEST_ERRORS / SEND_ERRORS in components/friends/friendCopy.ts.
 // ----
 
 /** RPC error code from a PostgREST error (the exception message), or 'failed'. */
@@ -654,14 +658,17 @@ export async function getMyFriendCode(rotate = false): Promise<string | null> {
   return error ? null : (data as string);
 }
 
-export type RpcResult<T = undefined> = { ok: true; value: T } | { ok: false; error: string };
+export type RpcResult<T = undefined> = { ok: true; value: T } | { ok: false; error: string; detail?: string };
 
-/** 'friend_request_failed' covers every reason but the caller's own cap ('request_cap'). */
+/** 'friend_request_failed' covers every reason about the code; the others are
+ *  the caller's own state ('request_cap', 'too_many_attempts'). */
 export async function requestFriend(code: string): Promise<RpcResult<string>> {
   const { data, error } = await supabase.rpc('request_friend', { p_code: code });
   if (error) return { ok: false, error: rpcError(error) };
+  const res = data as { ok?: boolean; id?: string; error?: string } | null;
+  if (!res?.ok || !res.id) return { ok: false, error: res?.error ?? 'failed' };
   clearQueryCache();
-  return { ok: true, value: data as string };
+  return { ok: true, value: res.id };
 }
 
 export async function respondFriend(friendshipId: string, accept: boolean): Promise<boolean> {
@@ -684,7 +691,9 @@ export async function listFriends(): Promise<FriendSummary[]> {
 }
 
 /** Snapshot own `done` logs (or plans) to one accepted friend, as one batch.
- *  Errors: not_friends, not_owned, batch_size, daily_cap, payload_too_large. */
+ *  Errors: SEND_ERRORS; `detail` is the refused ids (comma-separated) for
+ *  not_owned / not_done / payload_too_large, the cap for batch_size, and the
+ *  items still sendable today for daily_cap. */
 export async function sendSharedItems(
   recipientId: string,
   kind: SharedItemKind,
@@ -695,7 +704,7 @@ export async function sendSharedItems(
     p_kind: kind,
     p_ids: ids,
   });
-  if (error) return { ok: false, error: rpcError(error) };
+  if (error) return { ok: false, error: rpcError(error), detail: (error as { details?: string }).details ?? undefined };
   return { ok: true, value: data as string };
 }
 
@@ -743,26 +752,65 @@ export async function removeAcceptedItems(
   return data as { total: number; edited: number };
 }
 
+export interface InboxPage {
+  /** Every row of the one batch on this page, in send order. */
+  items: SharedItem[];
+  batch: InboxBatch | null;
+  /** 0-based position of `batch` among `total` batches, newest first. */
+  index: number;
+  total: number;
+  /** Neighbouring batch ids, so a caller can move to a batch by id after the
+   *  list has changed under it (an accept that empties this batch). */
+  newerId: string | null;
+  olderId: string | null;
+}
+
 /**
- * One page of the caller's inbox, newest first, INBOX.pageSize rows. `page` is
- * 0-based. Reads one extra row to answer `hasMore` without a count query. RLS
- * scopes it to rows where the caller is the recipient.
+ * One BATCH of the caller's inbox per page — a batch is never split across
+ * pages. Reads the batch list (list_inbox_batches, newest first), then the
+ * rows of one batch in `statuses`. `batchId`, when it is still listed, wins
+ * over `page`; `page` is clamped to the list. RLS scopes both reads to rows
+ * where the caller is the recipient.
  */
 export async function getInboxPage(
   page: number,
   statuses: SharedItemStatus[] = ['pending'],
-): Promise<{ items: SharedItem[]; hasMore: boolean }> {
-  const size = INBOX.pageSize;
-  const from = Math.max(0, Math.floor(page)) * size;
-  const { data } = await supabase
-    .from('shared_items')
-    .select('*')
-    .in('status', statuses)
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: true })
-    .range(from, from + size);
-  const rows = (data as SharedItem[]) ?? [];
-  return { items: rows.slice(0, size), hasMore: rows.length > size };
+  batchId?: string | null,
+): Promise<InboxPage> {
+  const { data: list } = await supabase.rpc('list_inbox_batches', { p_statuses: statuses });
+  const batches = (list as InboxBatch[] | null) ?? [];
+  const byId = batchId ? batches.findIndex((b) => b.batch_id === batchId) : -1;
+  const index = byId >= 0 ? byId : Math.min(Math.max(0, Math.floor(page)), Math.max(0, batches.length - 1));
+  const batch = batches[index] ?? null;
+  let items: SharedItem[] = [];
+  if (batch) {
+    const { data } = await supabase
+      .from('shared_items')
+      .select('*')
+      .eq('batch_id', batch.batch_id)
+      .in('status', statuses)
+      .order('item_date', { ascending: true, nullsFirst: true })
+      .order('id', { ascending: true });
+    items = (data as SharedItem[]) ?? [];
+  }
+  return {
+    items,
+    batch,
+    index,
+    total: batches.length,
+    newerId: batches[index - 1]?.batch_id ?? null,
+    olderId: batches[index + 1]?.batch_id ?? null,
+  };
+}
+
+/** Sender names for the caller's inbox rows by id — the To review list's
+ *  "from Sam", which no longer depends on which history batch is on screen. */
+export async function getSharedItemSenders(ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (ids.length === 0) return out;
+  const { data } = await supabase.from('shared_items').select('id, sender_name').in('id', ids);
+  for (const r of (data as { id: string; sender_name: string }[] | null) ?? []) out.set(r.id, r.sender_name);
+  return out;
 }
 
 /** One inbox row by id (recipient only, under RLS) — the Logger reads the

@@ -171,20 +171,48 @@ const pendingPlanItem = {
   payload: { name: 'Strength block', start_date: '2026-01-06', end_date: '2026-03-01', parsed: planDoc, source_markdown: null },
 };
 
+// Two pending LOGS in their own batch, newer than the plan's: only the leave-
+// with-selection scenario sees them (`inboxLogs`), so the plan scenario still
+// lands on the plan batch. Selecting one and pressing Older batch is what
+// opens the prompt.
+let inboxLogs = false;
+const pendingLog = (id, date) => ({
+  id, sender_id: 'u1', recipient_id: session.user.id, sender_name: 'Alex', kind: 'log', batch_id: 'bl',
+  title: 'Lower body', item_date: date, status: 'pending', created_at: '2026-01-07T00:00:00Z', acted_at: null,
+  sender_seen_at: null, accepted_log_id: null, accepted_digest: null,
+  payload: { log_date: date, started_at: null, ended_at: null, total_seconds: 3600, activity_type: null, tags: [], data: { sections: [] }, movements: [] },
+});
+const pendingLogs = [pendingLog('pl1', '2026-01-05'), pendingLog('pl2', '2026-01-06')];
+const pendingRows = () => (inboxLogs ? [...pendingLogs, pendingPlanItem] : [pendingPlanItem]);
+const historyRows = () => [accepted('si1'), accepted('si2')];
+function inboxBatches(rows) {
+  const out = new Map();
+  for (const r of rows) {
+    const b = out.get(r.batch_id) ?? { batch_id: r.batch_id, sender_name: r.sender_name, kind: r.kind, item_count: 0, created_at: r.created_at };
+    b.item_count += 1;
+    out.set(r.batch_id, b);
+  }
+  return [...out.values()];
+}
+
 // A friend's log awaiting review, dated the same day as workoutLog — so the
 // Logger's review mode opens the same-day duplicates sheet (§5.5) on load.
 const REVIEW_ID = '77777777-7777-7777-7777-777777777777';
 const reviewLog = { ...workoutLog, id: REVIEW_ID, status: 'needs_review', started_at: null, shared_item_id: 'si1' };
 
-function fixtureFor(url) {
+function fixtureFor(url, body) {
   const path = new URL(url).pathname;
+  if (path.endsWith('/rpc/list_inbox_batches'))
+    return inboxBatches(String(body ?? '').includes('pending') ? pendingRows() : historyRows());
   if (path.includes('/workout_logs') && url.includes(REVIEW_ID)) return reviewLog;
   if (path.endsWith('/rpc/list_friends')) return friends;
   if (path.endsWith('/rpc/remove_accepted_items')) return { total: 2, edited: 1 };
   if (path.includes('/rpc/')) return [];
   if (path.includes('/shared_items')) {
     if (url.includes('id=eq.si1')) return accepted('si1');
-    return url.includes('pending') ? [pendingPlanItem] : [accepted('si1'), accepted('si2')];
+    const rows = url.includes('pending') ? pendingRows() : historyRows();
+    const batch = /[?&]batch_id=eq\.([^&]+)/.exec(url)?.[1];
+    return batch ? rows.filter((r) => r.batch_id === batch) : rows;
   }
   if (path.includes('/workout_logs') && url.includes(DONE_ID)) return doneLog;
   if (path.includes('/plans')) return !withPlan ? [] : url.includes('is_active=eq.true') ? activePlan : [activePlan];
@@ -295,9 +323,28 @@ const SCENARIOS = [
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
+    name: "Plan · send this plan's logs (SendToSheet, plan-logs mode)",
+    route: '/app/plan/view',
+    withPlan: true,
+    open: '[aria-label="Plan actions"]',
+    then: '[role="menuitem"]:has-text("Send this plan\'s logs")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
     name: 'Inbox · accept a friend\'s plan (AcceptPlanSheet)',
     route: '/app/inbox',
     open: 'button:has-text("Accept & review")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    // One batch per page: changing page with logs selected asks first
+    // (Accept selected / Discard selection / Stay). The select toggle is
+    // in-flow; the sheet is what Older batch opens.
+    name: 'Inbox · leave with a selection (Accept / Discard / Stay)',
+    route: '/app/inbox',
+    inboxLogs: true,
+    open: 'button[aria-pressed][aria-label^="Select"]',
+    then: 'button:has-text("Older batch")',
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
@@ -421,7 +468,7 @@ await context.route('**/rest/v1/**', (route) =>
     status: 200,
     contentType: 'application/json',
     headers: { 'content-range': '0-0/1' },
-    body: JSON.stringify(fixtureFor(route.request().url())),
+    body: JSON.stringify(fixtureFor(route.request().url(), route.request().postData())),
   }),
 );
 await context.addInitScript(
@@ -435,6 +482,7 @@ const results = [];
 for (const s of SCENARIOS) {
   const result = { name: s.name, skipped: null, failures: [] };
   withPlan = !!s.withPlan;
+  inboxLogs = !!s.inboxLogs;
 
   await page.goto(BASE + s.route, { waitUntil: 'networkidle' });
   await page.waitForTimeout(900); // let the CSS entrance stagger finish

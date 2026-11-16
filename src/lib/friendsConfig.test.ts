@@ -3,18 +3,36 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FRIENDS } from '@/app.config';
 
-// The caps in FRIENDS are ENFORCED by the RPCs in migration 0052; app.config
-// only tells the UI what they are. The SQL tags each mirrored constant with
-// `-- FRIENDS.<key>`, and this reads the file, so a cap changed on one side
-// fails here instead of shipping a UI that promises what the server refuses.
-const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/0052_friends_sharing.sql'), 'utf8');
+// The caps in FRIENDS are ENFORCED by the RPCs in migrations 0052 and 0053;
+// app.config only tells the UI what they are. The SQL tags each mirrored
+// constant with `-- FRIENDS.<key>`. A later migration replaces a function
+// wholesale, so only the LATEST definition of each function counts: a cap
+// changed on one side fails here instead of shipping a UI that promises what
+// the server refuses.
+const FILES = ['0052_friends_sharing.sql', '0053_friends_limits.sql'];
+const sources = FILES.map((f) => readFileSync(resolve(__dirname, '../../supabase/migrations', f), 'utf8'));
+const sql = sources.join('\n');
 
-describe('FRIENDS caps mirror migration 0052', () => {
-  const mirrored = [...sql.matchAll(/:=\s*(\d+);\s*--\s*FRIENDS\.(\w+)/g)].map((m) => [m[2], Number(m[1])] as const);
+const latestFunctions = new Map<string, string>();
+for (const m of sql.matchAll(/create (?:or replace )?function public\.(\w+)\([\s\S]*?\n\$\$;/g)) {
+  latestFunctions.set(m[1], m[0]);
+}
 
-  it('tags every mirrored cap', () => {
+describe('FRIENDS caps mirror the live SQL', () => {
+  const mirrored = [...latestFunctions.values()].flatMap((body) =>
+    [...body.matchAll(/:=\s*(\d+);\s*--\s*FRIENDS\.(\w+)/g)].map((m) => [m[2], Number(m[1])] as const),
+  );
+
+  it('tags every numeric cap exactly once', () => {
     expect(mirrored.map(([k]) => k).sort()).toEqual(
-      ['batchMaxItems', 'dailySendCap', 'maxPayloadBytes', 'pendingRequestCap'].sort(),
+      [
+        'batchMaxItems',
+        'dailySendCap',
+        'failedCodeAttemptsPerDay',
+        'maxLogPayloadBytes',
+        'maxPlanPayloadBytes',
+        'pendingRequestCap',
+      ].sort(),
     );
   });
 
@@ -31,7 +49,7 @@ describe('FRIENDS caps mirror migration 0052', () => {
 // anywhere outside its own table would be the start of an ambient cross-user
 // read, which this feature must never grant.
 describe('no RLS policy references friendships', () => {
-  it('holds in 0052', () => {
+  it('holds in 0052 and 0053', () => {
     const policies = [...sql.matchAll(/create policy (\w+) on public\.(\w+)([\s\S]*?);/g)];
     for (const [, name, table, body] of policies) {
       if (table === 'friendships') continue;
