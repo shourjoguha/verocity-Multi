@@ -21,6 +21,8 @@ import { distinctSessionMovements, formatSessionMeta, sessionMovementKeys, TYPE_
 import { SessionSheet } from '@/components/SessionSheet';
 import { Button, EmptyState, FIELD, FIELD_DENSE, FilterChip, ListCard, LoadingScreen } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
+import { PlusGlyph } from '@/components/ui/icons';
+import { SHEET_GLYPH, SHEET_ICON_BTN } from '@/components/ui/SheetActions';
 import { Disclosure } from '@/components/ui/Disclosure';
 import SegmentedTabs from '@/components/ui/SegmentedTabs';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
@@ -639,16 +641,22 @@ export default function SessionsView({ mode = 'app' }: { mode?: Surface }) {
   return (
     <PageStagger className="mx-auto max-w-3xl px-4 pb-8 pt-5 sm:px-6">
       <Item>
-        <div className="mb-6 flex items-end justify-between gap-4">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <EchoText
             text="SESSIONS"
             as="h1"
             className={ECHO_APP_TITLE}
           />
           {!adding ? (
-            <div className="shrink-0">
-              <Button variant="ghost" onClick={startAdd}>+ Session</Button>
-            </div>
+            <button
+              type="button"
+              onClick={startAdd}
+              className={`${SHEET_ICON_BTN} text-fg hover:border-fg`}
+              aria-label="New session"
+              title="New session"
+            >
+              <PlusGlyph className={SHEET_GLYPH} />
+            </button>
           ) : null}
         </div>
       </Item>

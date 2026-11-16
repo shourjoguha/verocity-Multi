@@ -246,6 +246,26 @@ export default function ActivityLogger() {
         ))}
       </div>
 
+      <label className="mb-2 block t-control text-muted">Tags</label>
+      <div className="mb-5 flex flex-wrap gap-2">
+        {Object.entries(ACTIVITY_TAGS).map(([key, { label, color }]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => toggleTag(key)}
+            // Multi-select toggles: fills from `.hill-btn[aria-pressed]`, and
+            // the activity colour stays as the on chip's outline.
+            aria-pressed={tags.includes(key)}
+            className={`hill-btn flex min-h-11 items-center border px-3 t-control transition-colors ${
+              tags.includes(key) ? '' : 'text-muted hover:text-fg'
+            }`}
+            style={tags.includes(key) ? { borderColor: color } : undefined}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-5 grid grid-cols-2 gap-4">
         <div>
           <label className="mb-2 block t-control text-muted">Date</label>
@@ -268,46 +288,33 @@ export default function ActivityLogger() {
         </div>
       </div>
 
-      <label className="mb-2 block t-control text-muted">Minutes</label>
-      <input
-        type="number"
-        inputMode="decimal"
-        value={minutes}
-        onChange={(e) => setMinutes(e.target.value)}
-        placeholder="30"
-        className={`${FIELD} mb-5`}
-      />
-
-      <label className="mb-2 block t-control text-muted">
-        Distance ({METRICS.distance.unit}, optional)
-      </label>
-      <input
-        type="number"
-        inputMode="decimal"
-        value={distance}
-        onChange={(e) => setDistance(e.target.value)}
-        placeholder="5000"
-        className={`${FIELD} mb-5`}
-      />
-
-      <label className="mb-2 block t-control text-muted">Tags</label>
-      <div className="mb-5 flex flex-wrap gap-2">
-        {Object.entries(ACTIVITY_TAGS).map(([key, { label, color }]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => toggleTag(key)}
-            // Multi-select toggles: fills from `.hill-btn[aria-pressed]`, and
-            // the activity colour stays as the on chip's outline.
-            aria-pressed={tags.includes(key)}
-            className={`hill-btn flex min-h-11 items-center border px-3 t-control transition-colors ${
-              tags.includes(key) ? '' : 'text-muted hover:text-fg'
-            }`}
-            style={tags.includes(key) ? { borderColor: color } : undefined}
-          >
-            {label}
-          </button>
-        ))}
+      {/* Side by side: both are short numbers, and stacked they took two
+          full-width rows. The unit rides in the label; "optional" is the
+          placeholder's job. */}
+      <div className="mb-5 grid grid-cols-2 gap-4">
+        <div>
+          <label className="mb-2 block t-control text-muted">Minutes</label>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+            placeholder="30"
+            className={`${FIELD} min-w-0`}
+          />
+        </div>
+        <div>
+          <label className="mb-2 block t-control text-muted">Distance ({METRICS.distance.unit})</label>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={distance}
+            onChange={(e) => setDistance(e.target.value)}
+            placeholder="Optional"
+            aria-label={`Distance (${METRICS.distance.unit}, optional)`}
+            className={`${FIELD} min-w-0`}
+          />
+        </div>
       </div>
 
       <label className="mb-2 block t-control text-muted">Notes</label>

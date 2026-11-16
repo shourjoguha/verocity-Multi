@@ -34,7 +34,7 @@ import {
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
 import { Item, PageStagger } from '@/components/anim';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Disclosure } from '@/components/ui/Disclosure';
+import { Modal } from '@/components/ui/Modal';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { BackgroundPicker } from '@/components/BackgroundPicker';
@@ -50,14 +50,64 @@ import { FriendsPanel } from '@/components/friends/FriendsPanel';
 const exportBtn =
   'hill-btn min-h-11 border border-transparent bg-tappable px-4 t-control text-fg transition-colors hover:bg-tappable-hover disabled:opacity-40';
 
-// Open the section the URL's hash names — `/app/you#holidays` is where Log
-// Activity's Holiday mode and the retired /app/settings?tab=holidays land. Any
-// <details> ancestor opens too, so a row nested in a section (#coach-icon) is
-// reachable. Sets the DOM `open` directly rather than lifting it into React
-// state: Disclosure stays browser-driven and works before hydration.
-function openFromHash() {
+type SectionKey = 'goals' | 'holidays' | 'friends' | 'sharing' | 'appearance' | 'integrations' | 'data' | 'account';
+
+// Grouped by what you came to do, not listed in build order.
+const YOU_GROUPS: { label: string; keys: SectionKey[] }[] = [
+  { label: 'Training', keys: ['goals', 'holidays'] },
+  { label: 'People', keys: ['friends', 'sharing'] },
+  { label: 'App', keys: ['appearance', 'integrations'] },
+  { label: 'Account', keys: ['data', 'account'] },
+];
+
+const SECTION_META: Record<SectionKey, { title: string; intro?: string }> = {
+  goals: {
+    title: 'Goals',
+    intro:
+      'Rank and weight what you want out of training. Order is priority. These drive the rep ranges and section emphasis the AI proposes when you generate a plan.',
+  },
+  holidays: { title: 'Holidays' },
+  friends: {
+    title: 'Friends',
+    intro: 'Pair up by code, then send each other workouts. A friend can send to you; nobody can read your logs.',
+  },
+  sharing: {
+    title: 'Sharing',
+    intro:
+      'Mint a read-only link to your profile, a plan, or a single workout. Holders can view but never edit. The full link is shown once on creation; revoke any time.',
+  },
+  appearance: { title: 'Appearance' },
+  integrations: {
+    title: 'Integrations',
+    intro:
+      'Connect Garmin for automatic sync, or upload your "Export All Data" ZIP to bring in activities, sleep, and daily health. Imported activities appear on your calendar; re-importing is safe — duplicates merge.',
+  },
+  data: { title: 'Data', intro: 'JSON is the complete backup. CSV is a flattened per-set view for spreadsheets.' },
+  account: { title: 'Account' },
+};
+
+// A URL hash names a section, or a row nested in one: `/app/you#holidays` is
+// where Log Activity's Holiday mode and the retired /app/settings?tab=holidays
+// land, and `#coach-icon` / `#body-map` are rows inside Appearance.
+const HASH_TO_SECTION: Record<string, SectionKey> = {
+  goals: 'goals',
+  holidays: 'holidays',
+  friends: 'friends',
+  sharing: 'sharing',
+  appearance: 'appearance',
+  'coach-icon': 'appearance',
+  'body-map': 'appearance',
+  integrations: 'integrations',
+  data: 'data',
+  account: 'account',
+};
+
+// After the sheet renders, open any <details> the hash names (a nested row)
+// and bring it into view inside the sheet. Sets the DOM `open` directly:
+// Disclosure stays browser-driven.
+function openNestedFromHash() {
   const id = decodeURIComponent(window.location.hash.slice(1));
-  if (!id) return;
+  if (!id || HASH_TO_SECTION[id] === id) return;
   const target = document.getElementById(id);
   if (!target) return;
   let node: Element | null = target;
@@ -144,11 +194,21 @@ function YouSurface() {
 
   const readiness = readinessOf(stats);
 
+  const [openKey, setOpenKey] = useState<SectionKey | null>(null);
+  const openSection = (k: SectionKey) => setOpenKey(k);
   useEffect(() => {
-    openFromHash();
-    window.addEventListener('hashchange', openFromHash);
-    return () => window.removeEventListener('hashchange', openFromHash);
+    const fromHash = () => {
+      const k = HASH_TO_SECTION[decodeURIComponent(window.location.hash.slice(1))];
+      if (k) setOpenKey(k);
+    };
+    fromHash();
+    window.addEventListener('hashchange', fromHash);
+    return () => window.removeEventListener('hashchange', fromHash);
   }, []);
+  // A nested row (#coach-icon) opens once its sheet has mounted.
+  useEffect(() => {
+    if (openKey) openNestedFromHash();
+  }, [openKey]);
 
   // "Dark · Dotted" on the collapsed Appearance row. It has to be LIVE: the two
   // controls that change it live inside this very section, so a value read once
@@ -207,6 +267,82 @@ function YouSurface() {
     }
   }
 
+  const summaryFor = (k: SectionKey): string | undefined => {
+    if (k === 'goals')
+      return stats && (stats.goals?.length ?? 0) > 0
+        ? stats.goals
+            .slice(0, 2)
+            .map((g) => g.label)
+            .join(' · ')
+        : 'Not set';
+    if (k === 'appearance') return appearanceSummary;
+    if (k === 'data') return 'Export & delete';
+    if (k === 'account') return email ?? undefined;
+    return undefined;
+  };
+
+  const sectionBody = (k: SectionKey) => {
+    switch (k) {
+      case 'goals':
+        return <GoalsEditor />;
+      case 'holidays':
+        return <HolidaysSettings />;
+      case 'friends':
+        return <FriendsPanel />;
+      case 'sharing':
+        return <ShareManager embedded />;
+      case 'integrations':
+        return <GarminPanel />;
+      case 'appearance':
+        return (
+          <div className="-mx-4 -mt-4 [&>*+*]:border-t [&>*+*]:border-border-soft">
+            <div className="flex min-h-11 items-center justify-between gap-3 px-3 py-2">
+              <span className="t-label shrink-0 text-muted">Theme</span>
+              <ThemeToggle className="min-w-0 max-w-60 flex-1" />
+            </div>
+            <div className="px-3 pb-3 pt-1">
+              <BackgroundPicker />
+            </div>
+            <CoachSpritePicker
+              id="coach-icon"
+              title={sectionTitle('Coach icon', "The character on Home's Active plan card. Tap it to open Coach.")}
+            />
+            <BodyMapStylePicker
+              id="body-map"
+              title={sectionTitle(
+                'Body map',
+                'How the Body page draws muscles: seven shades, untrained to busiest. Plates ink in grey or colour. Saved on this device.',
+              )}
+            />
+          </div>
+        );
+      case 'data':
+        return (
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => handleExport('json')} disabled={!!exporting} className={exportBtn}>
+              {exporting === 'json' ? 'Exporting…' : 'Export JSON'}
+            </button>
+            <button type="button" onClick={() => handleExport('csv')} disabled={!!exporting} className={exportBtn}>
+              {exporting === 'csv' ? 'Exporting…' : 'Export CSV'}
+            </button>
+          </div>
+        );
+      case 'account':
+        return (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-fg">{email ?? '—'}</span>
+            <button
+              type="button"
+              onClick={() => signOut().then(() => (window.location.href = '/login'))}
+              className={exportBtn}
+            >
+              Sign out
+            </button>
+          </div>
+        );
+    }
+  };
+
   const sectionTitle = (label: string, info?: React.ReactNode) => (
     <span className="inline-flex items-center gap-2">
       {label}
@@ -220,18 +356,18 @@ function YouSurface() {
         <EchoText
           text="YOU"
           as="h1"
-          className={`mb-6 ${ECHO_APP_TITLE}`}
+          className={`mb-4 ${ECHO_APP_TITLE}`}
         />
       </Item>
 
       {/* Read before you write. The page opens on what the form CONTAINS, with
           one Edit button that opens the form in this card. */}
       <Item>
-        <section className="lift mb-3 rounded-card border border-outline bg-surface p-4">
+        <section className="lift mb-4 rounded-card border border-outline bg-surface p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="t-label text-muted">Profile · private</div>
-              <h2 className="mt-1 truncate font-display text-xl uppercase tracking-[-0.02em] text-fg">
+              <h2 className="mt-0.5 truncate text-base font-medium text-fg">
                 {name ?? 'Athlete'}
               </h2>
             </div>
@@ -246,7 +382,7 @@ function YouSurface() {
             </button>
           </div>
 
-          <dl className="mt-4 grid grid-cols-3 gap-x-3 gap-y-4">
+          <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2.5">
             {[
               ['Bodyweight', stats?.body_weight_kg != null ? `${stats.body_weight_kg} kg` : '—'],
               ['Height', stats?.height_cm != null ? `${stats.height_cm} cm` : '—'],
@@ -270,7 +406,7 @@ function YouSurface() {
             ].map(([label, value]) => (
               <div key={label} className="min-w-0">
                 <dt className="t-label text-muted">{label}</dt>
-                <dd className="mt-1 truncate font-display text-sm tabular-nums text-fg">
+                <dd className="mt-0.5 truncate text-sm tabular-nums text-fg">
                   {value}
                 </dd>
               </div>
@@ -278,8 +414,8 @@ function YouSurface() {
           </dl>
 
           {stats && (stats.equipment?.length ?? 0) > 0 ? (
-            <div className="mt-4 border-t border-border-soft pt-4">
-              <div className="t-label mb-2 text-muted">
+            <div className="mt-3 border-t border-border-soft pt-3">
+              <div className="t-label mb-1.5 text-muted">
                 Equipment · {stats.equipment.length} of {EQUIPMENT.length}
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -296,8 +432,8 @@ function YouSurface() {
           ) : null}
 
           {stats && (stats.disciplines?.length ?? 0) > 0 ? (
-            <div className="mt-4">
-              <div className="t-label mb-2 text-muted">Disciplines</div>
+            <div className="mt-3">
+              <div className="t-label mb-1.5 text-muted">Disciplines</div>
               <div className="flex flex-wrap gap-1.5">
                 {stats.disciplines.map((d) => (
                   <Tag key={d} label={labelOf(DISCIPLINES, d)} selected />
@@ -344,158 +480,50 @@ function YouSurface() {
         </section>
       </Item>
 
-      <Item>
-        <div className="mb-3">
-          <Disclosure
-            title={sectionTitle(
-              'Goals',
-              'Rank and weight what you want out of training. Order is priority. These drive the rep ranges and section emphasis the AI proposes when you generate a plan.',
-            )}
-            headerRight={
-              stats && (stats.goals?.length ?? 0) > 0
-                ? stats.goals
-                    .slice(0, 2)
-                    .map((g) => g.label)
-                    .join(' · ')
-                : 'Not set'
-            }
-          >
-            <GoalsEditor />
-          </Disclosure>
-        </div>
-      </Item>
+      {/* Every section below the profile is one row in a themed group, and
+          opens in a bottom sheet. They used to be eight full-height cards in
+          no particular order, each with its own "!" caption. The caption is
+          now the sheet's first line. */}
+      {YOU_GROUPS.map((g) => (
+        <Item key={g.label}>
+          <section className="mb-4">
+            <h2 className="t-label mb-1.5 text-muted">{g.label}</h2>
+            <ul className="divide-y divide-border-soft rounded-card border border-outline bg-surface">
+              {g.keys.map((k) => (
+                <li key={k}>
+                  <button
+                    type="button"
+                    onClick={() => openSection(k)}
+                    className="flex min-h-11 w-full items-center gap-3 px-3 text-left"
+                  >
+                    <span className="flex-1 text-sm text-fg">{SECTION_META[k].title}</span>
+                    {summaryFor(k) ? (
+                      <span className="min-w-0 shrink truncate text-xs text-muted">{summaryFor(k)}</span>
+                    ) : null}
+                    <span aria-hidden className="shrink-0 text-muted">›</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </Item>
+      ))}
 
-      <Item>
-        <div className="mb-3">
-          <Disclosure
-            id="holidays"
-            title={sectionTitle('Holidays')}
-          >
-            <HolidaysSettings />
-          </Disclosure>
-        </div>
-      </Item>
-
-      {/* One card of rows. -mx-4 -my-4 cancels the Disclosure body's padding so
-          the rows run edge to edge under its summary divider, divided by the
-          same soft hairline the row-disclosures carry. */}
-      <Item>
-        <div className="mb-3">
-          <Disclosure id="appearance" title={sectionTitle('Appearance')} headerRight={appearanceSummary}>
-            <div className="-mx-4 -my-4 [&>*+*]:border-t [&>*+*]:border-border-soft">
-              <div className="flex min-h-11 items-center justify-between gap-3 px-3 py-2">
-                <span className="t-label shrink-0 text-muted">Theme</span>
-                <ThemeToggle className="min-w-0 max-w-60 flex-1" />
-              </div>
-              <div className="px-3 pb-3 pt-1">
-                <BackgroundPicker />
-              </div>
-              <CoachSpritePicker
-                id="coach-icon"
-                title={sectionTitle(
-                  'Coach icon',
-                  "The character on Home's Active plan card. Tap it to open Coach.",
-                )}
-              />
-              <BodyMapStylePicker
-                id="body-map"
-                title={sectionTitle(
-                  'Body map',
-                  'How the Body page draws muscles: seven shades, untrained to busiest. Plates ink in grey or colour. Saved on this device.',
-                )}
-              />
-            </div>
-          </Disclosure>
-        </div>
-      </Item>
-
-      <Item>
-        <div className="mb-3">
-          <Disclosure
-            title={sectionTitle(
-              'Integrations',
-              'Connect Garmin for automatic sync, or upload your "Export All Data" ZIP to bring in activities, sleep, and daily health. Imported activities appear on your calendar; re-importing is safe — duplicates merge.',
-            )}
-          >
-            <GarminPanel />
-          </Disclosure>
-        </div>
-      </Item>
-
-      <Item>
-        <div className="mb-3">
-          <Disclosure
-            title={sectionTitle(
-              'Data',
-              'JSON is the complete backup. CSV is a flattened per-set view for spreadsheets.',
-            )}
-            headerRight="Export & delete"
-          >
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => handleExport('json')}
-                disabled={!!exporting}
-                className={exportBtn}
-              >
-                {exporting === 'json' ? 'Exporting…' : 'Export JSON'}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExport('csv')}
-                disabled={!!exporting}
-                className={exportBtn}
-              >
-                {exporting === 'csv' ? 'Exporting…' : 'Export CSV'}
-              </button>
-            </div>
-          </Disclosure>
-        </div>
-      </Item>
-
-      <Item>
-        <div className="mb-3">
-          <Disclosure
-            id="friends"
-            title={sectionTitle(
-              'Friends',
-              'Pair up by code, then send each other workouts. A friend can send to you; nobody can read your logs.',
-            )}
-          >
-            <FriendsPanel />
-          </Disclosure>
-        </div>
-      </Item>
-
-      <Item>
-        <div className="mb-3">
-          <Disclosure
-            title={sectionTitle(
-              'Sharing',
-              'Mint a read-only link to your profile, a plan, or a single workout. Holders can view but never edit. The full link is shown once on creation; revoke any time.',
-            )}
-          >
-            <ShareManager embedded />
-          </Disclosure>
-        </div>
-      </Item>
-
-      <Item>
-        <div className="mb-3">
-          <Disclosure title={sectionTitle('Account')} headerRight={email ?? undefined}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-sm text-fg">{email ?? '—'}</span>
-              <button
-                type="button"
-                onClick={() => signOut().then(() => (window.location.href = '/login'))}
-                className={exportBtn}
-              >
-                Sign out
-              </button>
-            </div>
-          </Disclosure>
-        </div>
-      </Item>
+      <Modal
+        open={openKey != null}
+        onClose={() => setOpenKey(null)}
+        title={openKey ? SECTION_META[openKey].title : undefined}
+        maxHeight="max-h-[80dvh]"
+      >
+        {openKey ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {SECTION_META[openKey].intro ? (
+              <p className="mb-3 text-xs text-muted">{SECTION_META[openKey].intro}</p>
+            ) : null}
+            {sectionBody(openKey)}
+          </div>
+        ) : null}
+      </Modal>
     </PageStagger>
   );
 }

@@ -128,6 +128,7 @@ export function Modal({
   title,
   ariaLabel,
   keyboardInset = false,
+  maxHeight = 'max-h-[85dvh]',
   children,
 }: {
   open: boolean;
@@ -143,6 +144,8 @@ export function Modal({
   // before. Only the meal drawer (a form, in a drawer, with a software
   // keyboard) passes true. See docs/MEAL_LOGGING.md §0.3.
   keyboardInset?: boolean;
+  // The panel's height cap as a class. You's section drawers pass 80dvh.
+  maxHeight?: string;
   children: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -198,7 +201,7 @@ export function Modal({
         ref={panelRef}
         data-sheet-panel
         tabIndex={-1}
-        className="sheet-panel lift-fixed pb-safe relative flex max-h-[85dvh] w-full max-w-lg flex-col border border-outline bg-surface outline-none"
+        className={`sheet-panel lift-fixed pb-safe relative flex ${maxHeight} w-full max-w-lg flex-col border border-outline bg-surface outline-none`}
       >
         {title ? (
           <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">

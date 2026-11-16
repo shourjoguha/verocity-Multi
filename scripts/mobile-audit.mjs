@@ -642,6 +642,15 @@ for (const vp of VIEWPORTS) {
     const triggerCount = Math.min(await triggers.count(), 6);
     for (let i = 0; i < triggerCount; i++) {
       await triggers.nth(i).evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      // A trigger under an open sheet's scrim cannot be tapped by anyone, so
+      // there is no menu of its to measure (the review routes open the
+      // duplicates sheet over the Logger's section "+" menus).
+      const reachable = await triggers.nth(i).evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return !!top && (top === el || el.contains(top));
+      });
+      if (!reachable) continue;
       await triggers.nth(i).tap();
       await page.waitForTimeout(120);
       const covered = await page.evaluate(() => {

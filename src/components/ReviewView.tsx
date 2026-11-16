@@ -7,10 +7,6 @@ import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy'
 import {
   buildReview,
   effortHeadline,
-  frequencyHeadline,
-  goalsHeadline,
-  staplesHeadline,
-  volumeHeadline,
   type Review,
   type ReviewPeriod,
   type StapleSet,
@@ -157,12 +153,11 @@ function ReviewBody({ review: r }: { review: Review }) {
         <p className="t-label mb-2 text-muted tabular-nums">
           {w.label} · {shortDate(w.start)} – {shortDate(w.end)} · {r.sessions} sessions
         </p>
-        <h2 className="mb-4 text-lg leading-snug text-fg">{frequencyHeadline(r)}</h2>
         <div className="mb-8 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard label="Lifts / week" value={one(r.liftsPerWeek)} unit={r.plannedLiftsPerWeek ? `of ${r.plannedLiftsPerWeek}` : undefined} />
-          <StatCard label="Active days / wk" value={one(r.activeDaysPerWeek)} />
-          <StatCard label="Hours" value={formatRound(r.hours)} />
-          <StatCard label="Weeks" value={formatRound(w.weeks)} />
+          <StatCard center label="Lifts / week" value={one(r.liftsPerWeek)} unit={r.plannedLiftsPerWeek ? `of ${r.plannedLiftsPerWeek}` : undefined} />
+          <StatCard center label="Active days / wk" value={one(r.activeDaysPerWeek)} />
+          <StatCard center label="Hours" value={formatRound(r.hours)} />
+          <StatCard center label="Weeks" value={formatRound(w.weeks)} />
         </div>
       </Item>
 
@@ -171,14 +166,6 @@ function ReviewBody({ review: r }: { review: Review }) {
           <SectionHeader
             action={
               <span className="inline-flex items-center gap-3">
-                {r.adherence ? (
-                  <span className="text-xs text-muted tabular-nums">
-                    Plan adherence <span className="text-fg">{r.adherence.pct}%</span>
-                    {r.adherence.mainPct != null ? (
-                      <> · main <span className="text-fg">{r.adherence.mainPct}%</span></>
-                    ) : null}
-                  </span>
-                ) : null}
                 <InfoPopover label="How to read the calendar">
                   Colour is the session's activity tag; the letter is its plan day or activity.
                 </InfoPopover>
@@ -194,7 +181,6 @@ function ReviewBody({ review: r }: { review: Review }) {
       <Item>
         <section className="mb-8">
           <SectionHeader>Where the time went</SectionHeader>
-          {goalsHeadline(r) ? <h3 className="mb-3 text-base leading-snug text-fg">{goalsHeadline(r)}</h3> : null}
           <HoursBar review={r} />
           {r.goals.length >= 2 ? <GoalsChart review={r} /> : null}
           {r.unmeasuredGoals.length ? (
@@ -215,7 +201,6 @@ function ReviewBody({ review: r }: { review: Review }) {
           >
             Hard sets per muscle, per week
           </SectionHeader>
-          <h3 className="mb-3 text-base leading-snug text-fg">{volumeHeadline(r)}</h3>
           <VolumeChart review={r} />
         </section>
       </Item>
@@ -262,7 +247,6 @@ function ReviewBody({ review: r }: { review: Review }) {
             >
               Staple lifts
             </SectionHeader>
-            <h3 className="mb-3 text-base leading-snug text-fg">{staplesHeadline(r)}</h3>
             <StaplesTable review={r} />
           </section>
         </Item>

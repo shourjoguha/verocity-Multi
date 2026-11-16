@@ -25,11 +25,14 @@ const inputClass = FIELD;
 export function LogShareControl({
   logId,
   defaultLabel = '',
+  bare = false,
 }: {
   logId: string;
   defaultLabel?: string;
+  // Inside a sheet that already says "Share": no toggle, the form shows.
+  bare?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(bare);
   // Default validity is 7 days.
   const [validity, setValidity] = useState('7');
   const [label, setLabel] = useState(defaultLabel);
@@ -76,7 +79,7 @@ export function LogShareControl({
 
   return (
     <div className="flex flex-col gap-2">
-      <button
+      {bare ? null : <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
@@ -86,7 +89,7 @@ export function LogShareControl({
         <span aria-hidden className={`text-[0.7rem] transition-transform ${open ? 'rotate-90' : ''}`}>
           ▸
         </span>
-      </button>
+      </button>}
 
       {open ? (
         <div className="flex flex-col gap-2 rounded-control bg-bg p-3">

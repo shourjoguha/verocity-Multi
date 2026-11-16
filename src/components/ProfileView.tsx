@@ -21,11 +21,11 @@ import { MealDrawer } from '@/components/meals/MealDrawer';
 import { SavedMealsSheet } from '@/components/meals/SavedMealsSheet';
 import { activeSessionOf } from '@/lib/activeSession';
 import { currentWeekStreak } from '@/lib/streak';
+import { FlameGlyph } from '@/components/ui/icons';
 import type { Plan, PlanDay, Profile, WorkoutLog } from '@/lib/types';
-import { bestE1rm } from '@/lib/e1rm';
 import { currentProgramWeek, planWeekCount } from '@/lib/progression';
 import { completedLogs } from '@/lib/stats';
-import { formatDuration, formatRound } from '@/lib/format';
+import { formatDuration } from '@/lib/format';
 import { buildTimeline, DAY_NAMES, dayNameFromLabel, typeFromLabel, ymd } from '@/lib/timeline';
 import { toWeeks, windowPoints } from '@/lib/activityWindow';
 import {
@@ -54,18 +54,6 @@ import { CoachRunner } from '@/components/CoachRunner';
 import { coachSignal, getCoachSeenAt } from '@/lib/coachSignal';
 import { SendToSheet } from '@/components/friends/SendToSheet';
 
-function topE1rm(logs: WorkoutLog[]): number | null {
-  let best: number | null = null;
-  for (const log of logs) {
-    const sets = (log.data?.sections ?? []).flatMap((s) =>
-      s.groups.flatMap((g) => g.items.flatMap((i) => i.sets)),
-    );
-    const est = bestE1rm(sets.map((s) => ({ weight: s.actual.weight, reps: s.actual.reps })));
-    if (est != null && (best == null || est > best)) best = est;
-  }
-  return best;
-}
-
 // A collapsed day card shows its position, not its name: A, B, C… Past Z (no
 // real plan gets there) it falls back to the 1-based index.
 function dayBadge(i: number): string {
@@ -79,7 +67,7 @@ function dayBadge(i: number): string {
 // ("Last 4 weeks"): no chevron, no underline, and on iOS the platform's own
 // scroll-wheel picker. The headline and the session count are summed from the
 // SAME columns the bars show, so the number always describes the chart under it.
-// All-time totals and the top e1RM are one muted line under the strip.
+// The session count appears only while scrubbing, beside the date range.
 //
 // The window sets how many columns are IN VIEW; the strip itself holds the
 // whole history back to the first logged day and scrolls sideways through it
@@ -155,12 +143,10 @@ function ActivityStrip({
   plan,
   logs,
   done,
-  top,
 }: {
   plan: Plan | null;
   logs: WorkoutLog[];
   done: WorkoutLog[];
-  top: number | null;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stripRef = useRef<HTMLDivElement | null>(null);
@@ -242,11 +228,6 @@ function ActivityStrip({
       seconds: inWindow.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0),
     };
   }, [done, win.days, sumFrom, sumTo]);
-  const allTime = useMemo(
-    () => ({ count: done.length, seconds: done.reduce((acc, l) => acc + (l.total_seconds ?? 0), 0) }),
-    [done],
-  );
-
   const gap = columnGap(n);
   // Width units per column: 1 for a day (or week), MULTI_SESSION_SHARE per
   // session on a multi-session day. colW is one unit, solved so the latest n
@@ -429,11 +410,10 @@ function ActivityStrip({
       </div>
 
       <div className="mt-1 flex items-baseline gap-2">
+        {/* Time is the headline; the session count only shows while the
+            strip is being scrubbed, beside the date range (labelFor). */}
         <span className="font-display text-[28px] leading-none text-fg tabular-nums">
           {formatDuration(sum.seconds)}
-        </span>
-        <span className="text-xs leading-none text-muted tabular-nums">
-          <span className="font-semibold text-fg">{sum.count}</span> session{sum.count === 1 ? '' : 's'}
         </span>
       </div>
 
@@ -449,7 +429,11 @@ function ActivityStrip({
             count={count}
             visible={n}
             ariaLabel={daily ? 'One bar per day' : 'One bar per week'}
-            labelFor={(r) => formatDateRange(...datesOf(r))}
+            labelFor={(r) => {
+              const [from, to] = datesOf(r);
+              const c = done.filter((l) => l.log_date >= from && l.log_date <= to).length;
+              return `${formatDateRange(from, to)} · ${c} session${c === 1 ? '' : 's'}`;
+            }}
             onRangeChange={(r) => setScrolled(r.end === count - 1 ? null : { ...r, count })}
             className="items-end"
             style={{ height: STRIP_HEIGHT + FOOT_LANE, gap }}
@@ -459,14 +443,6 @@ function ActivityStrip({
         ) : null}
       </div>
 
-      {win.days != null ? (
-        <p className="mt-2 text-[11px] leading-none text-muted tabular-nums">
-          All time · {allTime.count} session{allTime.count === 1 ? '' : 's'} · {formatDuration(allTime.seconds)}
-          {top != null ? ` · e1RM ${formatRound(top)} kg` : ''}
-        </p>
-      ) : top != null ? (
-        <p className="mt-2 text-[11px] leading-none text-muted tabular-nums">Top e1RM {formatRound(top)} kg</p>
-      ) : null}
     </div>
   );
 }
@@ -725,7 +701,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
   // feeds "Recent sessions" below. Off that window "Sessions" was pinned at 30
   // once you had 30 logs, total time was a sliding sum that could fall after a
   // workout, and a PR dropped out of Top e1RM as soon as 30 newer sessions
-  // existed. Memoised because topE1rm walks every set in every log, and this
+  // existed. Memoised because completedLogs walks every log, and this
   // component re-renders whenever a sheet opens. Must sit above the early
   // returns below — hooks cannot run conditionally.
   const done = useMemo(() => completedLogs(allLogs), [allLogs]);
@@ -807,7 +783,6 @@ export default function ProfileView({ mode }: { mode: Surface }) {
     setCached('meals:today', next);
   };
 
-  const top = topE1rm(done);
   const streak = currentWeekStreak(allLogs, new Date(), holidays);
   const totalWeeks = plan ? planWeekCount(plan.parsed) : 0;
   const week = plan ? currentProgramWeek(plan.id, allLogs, totalWeeks) : null;
@@ -849,28 +824,10 @@ export default function ProfileView({ mode }: { mode: Surface }) {
             stat tiles, and a line above the ribbon) saying so at three
             different points down the page. */}
         <header className="mb-6">
-          {/* The date, the week and the streak read the same live data on both
-              surfaces now, so they render on both. Only the leading word
-              differs: the showcase says what it is. */}
-          <div className="t-eyebrow flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
-            <span>{readOnly ? 'Showcase' : new Date().toDateString()}</span>
-            {week ? (
-              <>
-                <span aria-hidden>·</span>
-                <span>Week {week}</span>
-              </>
-            ) : null}
-            {streak >= 2 ? (
-              <>
-                <span aria-hidden>·</span>
-                <span className="flex items-center gap-1.5 text-teal">
-                  <span aria-hidden className="inline-block h-1.5 w-1.5 bg-teal" />
-                  {streak}-week streak
-                </span>
-              </>
-            ) : null}
-          </div>
-          <div className="mt-2">
+          {/* The name leads; the streak rides on its line as a flame chip, and
+              the date and program week sit under it in small type — the three
+              used to stack above the name as one shouty eyebrow. */}
+          <div className="flex items-center gap-2.5">
             {/* displayNameFor, not the raw column: the showcase is served to
                 anyone with the URL, and the redaction lives in one place now
                 that every surface renders there. */}
@@ -879,6 +836,25 @@ export default function ProfileView({ mode }: { mode: Surface }) {
               as="h1"
               className={ECHO_APP_TITLE}
             />
+            {streak >= 2 ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-chip bg-tappable px-1.5 py-0.5 text-xs font-medium tabular-nums text-teal"
+                aria-label={`${streak}-week streak`}
+                title={`${streak}-week streak`}
+              >
+                <FlameGlyph className="h-3.5 w-3.5" />
+                {streak}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+            <span>{readOnly ? 'Showcase' : new Date().toDateString()}</span>
+            {week ? (
+              <>
+                <span aria-hidden>·</span>
+                <span>Week {week}</span>
+              </>
+            ) : null}
           </div>
         </header>
       </Item>
@@ -1118,7 +1094,7 @@ export default function ProfileView({ mode }: { mode: Surface }) {
           strip plus a separate three-tile StatStrip. */}
       <Item>
         <section className="mb-6">
-          <ActivityStrip plan={plan} logs={allLogs} done={done} top={top} />
+          <ActivityStrip plan={plan} logs={allLogs} done={done} />
         </section>
       </Item>
 

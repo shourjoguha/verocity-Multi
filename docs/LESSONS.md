@@ -2221,7 +2221,7 @@ The warm palette and the retired Settings page:
   behind a `Disclosure`.** Both halves are gone. `/app/plan/upload` is in its
   `ROUTES`, with a `plan_templates` stub so the picker renders, and the Settings
   page is a redirect: its controls live on `/app/you`, and the audit loads
-  `/app/you#holidays` and `/app/you#coach-icon`, which `openFromHash()` unfolds,
+  `/app/you#holidays` and `/app/you#coach-icon`, which `HASH_TO_SECTION` opens as sheets,
   so the folded sections are measured open. The by-hand check it recorded
   (`Copy fix request` at 179x44 at 375 and 390) was right at the time.
 
