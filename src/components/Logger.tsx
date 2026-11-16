@@ -61,6 +61,7 @@ import {
   toggleItemNotation,
 } from '@/lib/logEdits';
 import { isSubroutine } from '@/lib/subroutine';
+import { AddMenu, type AddKind } from '@/components/logger/AddMenu';
 import { inToCm, markKindOf } from '@/lib/jumpMark';
 import { formatSetActual } from '@/lib/format';
 import { activeSessionOf } from '@/lib/activeSession';
@@ -1230,6 +1231,11 @@ export default function Logger() {
   const ordered = doc.sections
     .slice()
     .sort((a, b) => SECTIONS.indexOf(a.key) - SECTIONS.indexOf(b.key));
+  // A section is "live" while it has a group not yet parked in Done.
+  const liveSections = ordered.filter((sec) => sec.groups.some((g) => !parked.has(g.id)));
+  const emptySections = ordered.filter((sec) => !sec.groups.some((g) => !parked.has(g.id)));
+  const addTo = (sectionKey: SectionKey, kind: AddKind) =>
+    kind === 'movement' ? setPicker({ mode: 'add', sectionKey }) : setSubEditor({ mode: 'add', sectionKey });
   // Parked (completed) groups collected across all sections, in completion
   // order, rendered under the "Done" header. Real (si, gi) indices are kept so
   // every mutation/handler works exactly as it does in-section.
@@ -2308,16 +2314,14 @@ export default function Logger() {
       ) : null}
 
 
-      {ordered.map((section) => {
+      {liveSections.map((section) => {
         const si = doc.sections.findIndex((s) => s.key === section.key);
         const groups = doc.sections[si].groups;
         return (
           <section key={section.key} className="mb-3">
-            {/* The two add-affordances go in SectionHeader's `action` slot
-                rather than a second flex row around it — SectionHeader is
-                itself a `flex justify-between` with its own mb-3, so wrapping
-                it stacked two of them and left the label sitting in a nested
-                row it did not own. */}
+            {/* The one "+" goes in SectionHeader's `action` slot rather than a
+                second flex row around it — SectionHeader is itself a
+                `flex justify-between` with its own mb-3. */}
             <SectionHeader
               // `mb-1.5!` — SectionHeader hardcodes `mb-3` and Tailwind does no
               // class-merging here, so an unmarked override loses the cascade
@@ -2326,20 +2330,12 @@ export default function Logger() {
               // shares.
               className="mb-1.5!"
               action={
-                <div className="-my-2 flex shrink-0 gap-1">
-                  <button
-                    onClick={() => setPicker({ mode: 'add', sectionKey: section.key })}
-                    className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
-                  >
-                    + Movement
-                  </button>
-                  <button
-                    onClick={() => setSubEditor({ mode: 'add', sectionKey: section.key })}
-                    className="flex min-h-11 items-center px-2 t-control text-muted hover:text-fg"
-                  >
-                    + Subroutine
-                  </button>
-                </div>
+                <AddMenu
+                  sections={[section.key]}
+                  labelFor={sectionLabel}
+                  onPick={addTo}
+                  label={`Add to ${sectionLabel(section.key)}`}
+                />
               }
             >
               {sectionLabel(section.key)}{' '}
@@ -2369,13 +2365,27 @@ export default function Logger() {
                   </div>
                 );
               })()}
-              {groups.length === 0 ? (
-                <p className="text-sm text-muted">No movements yet.</p>
-              ) : null}
             </div>
           </section>
         );
       })}
+
+      {/* Sections with nothing left to show — empty, or everything in them
+          already in Done — fold into ONE row with one "+": pick the section,
+          then movement or subroutine. A full header each said nothing. */}
+      {emptySections.length > 0 ? (
+        <section className="mb-3 flex min-h-11 items-center justify-between gap-3">
+          <span className="min-w-0 truncate t-label text-muted">
+            {emptySections.map((sec) => sectionLabel(sec.key)).join(' · ')}
+          </span>
+          <AddMenu
+            sections={emptySections.map((sec) => sec.key)}
+            labelFor={sectionLabel}
+            onPick={addTo}
+            label="Add a movement or subroutine"
+          />
+        </section>
+      ) : null}
 
       {doneGroups.length > 0 ? (
         <section className="mb-3 border-t border-border pt-2">

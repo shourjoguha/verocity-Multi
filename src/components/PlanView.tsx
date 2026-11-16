@@ -40,7 +40,9 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   // audits are green on it" (both audit:shell and audit:mobile pass on a
   // blank page — they have nothing to measure).
   const [weekIndex, setWeekIndex] = useState<number | null>(null);
-  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
+  // Days start collapsed: the header row says which day and how far through
+  // it you are; the movements are one tap away.
+  const [openDays, setOpenDays] = useState<Set<string>>(new Set());
   const [matrixDayId, setMatrixDayId] = useState<string | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
   const [sendLogsOpen, setSendLogsOpen] = useState(false);
@@ -155,7 +157,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const weekNote = parsed.weekNotes?.[activeWeek];
 
   const toggleDay = (dayKey: string) => {
-    setCollapsedDays((prev) => {
+    setOpenDays((prev) => {
       const next = new Set(prev);
       if (next.has(dayKey)) next.delete(dayKey);
       else next.add(dayKey);
@@ -213,6 +215,15 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           <PlanAdherenceSection adherence={adherence} />
         </div>
 
+        {/* The week's note sits right under adherence, above the week picker
+            that changes it. */}
+        {weekNote ? (
+          <div className="mb-6 rounded-card border border-outline bg-surface px-4 py-3">
+            <p className="t-label text-muted">W{activeWeek} · how this week progresses</p>
+            <p className="mt-1 text-sm text-fg">{weekNote}</p>
+          </div>
+        ) : null}
+
         {/* Deliberately not `ui/SegmentedTabs` — CLAUDE.md says "do not roll a
             sixth" segmented control, so the next reader will otherwise want to
             fold this in. It can't be one: each cell needs its own phase-colour
@@ -258,19 +269,13 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
           </div>
         </div>
 
-        {weekNote ? (
-          <div className="mb-6 rounded-card border border-outline bg-surface px-4 py-3">
-            <p className="t-label text-muted">W{activeWeek} · how this week progresses</p>
-            <p className="mt-1 text-sm text-fg">{weekNote}</p>
-          </div>
-        ) : null}
       </Item>
 
       {parsed.days.map((day, i) => {
         const letter = String.fromCharCode(65 + i);
         const count = countForWeek(day, activeWeek);
         const hasContent = count > 0;
-        const isCollapsed = collapsedDays.has(day.dayKey);
+        const isCollapsed = !openDays.has(day.dayKey);
         const isMatrix = matrixDayId === day.dayKey;
         const { next: cycle, missed } = dayStatus(day.dayKey);
         const finished = cycle > maxWeek;

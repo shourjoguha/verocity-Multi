@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { createSession, getLogById, getLogsInRange, updateLog } from '@/lib/queries';
+import { createSession, deleteLog, getLogById, getLogsInRange } from '@/lib/queries';
 import { frameFromLogDocument } from '@/lib/logBuilder';
 import { toast } from '@/lib/toast';
-import type { VibeCheck, WorkoutLog } from '@/lib/types';
-import { VibeCheckCard } from '@/components/logger/VibeCheckCard';
+import type { WorkoutLog } from '@/lib/types';
 import { tagColor } from '@/lib/tags';
 import { formatDate, formatDuration, formatSetActual } from '@/lib/format';
 import { SECTIONS, type SectionKey } from '@/app.config';
@@ -15,12 +14,13 @@ import {
   soreLabel,
   type SorenessCandidate,
 } from '@/lib/soreness';
-import { EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
+import { Button, EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
 import { ECHO_APP_TITLE, EchoText } from '@/components/EchoText';
-import { SessionTime } from '@/components/SessionTime';
-import { SessionWhen } from '@/components/SessionWhen';
-import { HeartRate } from '@/components/HeartRate';
-import { DeleteLogButton } from '@/components/DeleteLogButton';
+import { SessionDetailsSheet } from '@/components/SessionDetailsSheet';
+import { Modal } from '@/components/ui/Modal';
+import { PencilGlyph, ShareGlyph } from '@/components/ui/icons';
+import { ArmedDelete, SHEET_GLYPH, SHEET_ICON_BTN } from '@/components/ui/SheetActions';
+import { localTimeOf } from '@/lib/logWhen';
 import { LogShareControl } from '@/components/LogShareControl';
 import { SendToSheet } from '@/components/friends/SendToSheet';
 import { InfoPopover } from '@/components/ui/InfoPopover';
@@ -39,28 +39,20 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
   const [savingSession, setSavingSession] = useState(false);
   const [savedAsSession, setSavedAsSession] = useState(false);
   const [soreFrom, setSoreFrom] = useState<SorenessCandidate[]>([]);
-  const [editingVibe, setEditingVibe] = useState(false);
-  const [savingVibe, setSavingVibe] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
 
-  async function saveVibe(next: VibeCheck) {
-    if (!log) return;
-    const data = { ...(log.data ?? { sections: [] }), session: { ...log.data?.session, vibe: next } };
-    setSavingVibe(true);
-    const ok = await updateLog(log.id, { data });
-    setSavingVibe(false);
-    if (!ok) {
-      toast('Could not update readiness', 'error');
-      return;
-    }
-    setLog({ ...log, data });
-    setEditingVibe(false);
-    toast('Readiness updated', 'success');
-    // The "likely from" attribution was computed from the old sore areas.
-    if (next.sore?.length) {
-      const { from, to } = lagWindow(log.log_date);
+  // The details sheet saved: refresh the "likely from" attribution only when
+  // the sore areas could have changed.
+  async function onDetailsSaved(next: WorkoutLog, vibeChanged: boolean) {
+    setLog(next);
+    setDetailsOpen(false);
+    if (!vibeChanged) return;
+    if (next.data?.session?.vibe?.sore?.length) {
+      const { from, to } = lagWindow(next.log_date);
       const prior = await getLogsInRange(from, to, clientFor(mode));
-      setSoreFrom(likelySources(attributeSoreness({ ...log, data }, prior)));
+      setSoreFrom(likelySources(attributeSoreness(next, prior)));
     } else {
       setSoreFrom([]);
     }
@@ -131,140 +123,131 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
     <PageStagger className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
       <Item>
         <header className="mb-8">
-          <div className="flex items-center justify-between gap-4">
-            <p className="t-eyebrow text-muted">
-              {formatDate(log.log_date)}
-              {log.day_key ? ` · Day ${log.day_key}` : ''} ·{' '}
-              {log.status === 'needs_review' ? 'Needs review' : log.status}
-            </p>
-            {/* Every control in this row writes, so the whole row goes on the
-                showcase rather than rendering three inert stubs. */}
-            {!readOnly ? (
-              <div className="flex items-center gap-3">
-                <a
-                  href={`/app/log?logId=${log.id}&edit=1`}
-                  className="t-control text-muted transition-colors hover:text-fg"
-                >
-                  Edit
-                </a>
+          {/* Actions first, as icons, in the order Edit · Share · Save as
+              session · Delete. Every one writes, so the row goes on the
+              showcase rather than rendering inert stubs. */}
+          {!readOnly ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <a
+                href={`/app/log?logId=${log.id}&edit=1`}
+                className={`${SHEET_ICON_BTN} text-fg hover:border-fg`}
+                aria-label="Edit sets"
+                title="Edit sets"
+              >
+                <PencilGlyph className={SHEET_GLYPH} />
+              </a>
+              {log.status !== 'needs_review' ? (
+                // A needs_review row is a friend's numbers, not yours: never
+                // published by link nor passed on.
                 <button
                   type="button"
-                  onClick={() => saveAsSession(log)}
-                  disabled={savingSession}
-                  className="t-control text-muted transition-colors hover:text-fg disabled:opacity-40"
+                  onClick={() => setShareOpen(true)}
+                  className={`${SHEET_ICON_BTN} text-fg hover:border-fg`}
+                  aria-label="Share"
+                  title="Share"
                 >
-                  Save as session
+                  <ShareGlyph className={SHEET_GLYPH} />
                 </button>
-                <DeleteLogButton id={log.id} onDeleted={() => (window.location.href = '/app')} />
-              </div>
-            ) : null}
-          </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => saveAsSession(log)}
+                disabled={savingSession}
+                className="hill-btn flex h-11 items-center border border-transparent bg-tappable px-3 text-sm text-fg transition-colors hover:bg-tappable-hover disabled:opacity-40"
+              >
+                Save as session
+              </button>
+              <ArmedDelete
+                label="Delete session"
+                name="this session"
+                onConfirm={async () => {
+                  const ok = await deleteLog(log.id);
+                  if (!ok) {
+                    toast('Could not delete session', 'error');
+                    return false;
+                  }
+                  toast('Session deleted', 'success');
+                  window.location.href = '/app';
+                  return true;
+                }}
+              />
+            </div>
+          ) : null}
           <EchoText
             text={log.activity_type ?? 'Session'}
             as="h1"
             className={`mt-2 ${ECHO_APP_TITLE}`}
           />
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {log.tags.map((t) => (
-              <Tag key={t} label={t} color={tagColor(t)} />
-            ))}
-            {readOnly ? (
-              <span className="t-control tabular-nums text-muted">
-                {formatDuration(log.total_seconds ?? 0)}
-              </span>
-            ) : (
-              <>
-                <SessionWhen log={log} onUpdate={(patch) => setLog({ ...log, ...patch })} />
-                <SessionTime log={log} onUpdate={(s) => setLog({ ...log, total_seconds: s })} />
-                <HeartRate log={log} onUpdate={(hr) => setLog({ ...log, ...hr })} />
-              </>
-            )}
-          </div>
-          {editingVibe ? (
-            <div className="mt-3">
-              <VibeCheckCard
-                initial={vibe}
-                saveLabel="Save"
-                skipLabel="Cancel"
-                saving={savingVibe}
-                onSave={saveVibe}
-                onSkip={() => setEditingVibe(false)}
-              />
-            </div>
-          ) : vibe ? (
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 t-control text-muted">
-              <span>Sleep {vibe.sleep}</span>
-              <span>Energy {vibe.energy}</span>
-              <span>Soreness {vibe.soreness}</span>
-              {!readOnly ? (
-                <button
-                  type="button"
-                  onClick={() => setEditingVibe(true)}
-                  className="inline-flex min-h-11 items-center text-[0.6rem] uppercase tracking-wider transition-colors hover:text-fg"
-                >
-                  edit
-                </button>
-              ) : null}
-            </div>
-          ) : !readOnly ? (
-            <button
-              type="button"
-              onClick={() => setEditingVibe(true)}
-              className="mt-3 inline-flex min-h-11 items-center t-control text-muted transition-colors hover:text-fg"
-            >
-              Add readiness
-            </button>
-          ) : null}
-          {!editingVibe && vibe?.sore?.length ? (
-            <p className="mt-1 t-control text-muted">
-              Sore:{' '}
-              {vibe.sore.map(soreLabel).join(', ')}
-              {soreFrom.length ? (
-                <>
-                  {' · likely from '}
-                  {soreFrom.map((c, i) => (
-                    <span key={c.log.id}>
-                      {i > 0 ? ' or ' : ''}
-                      <a
-                        href={`${hrefFor('/app/session', mode)}?id=${c.log.id}`}
-                        className="text-fg underline decoration-border underline-offset-2 hover:decoration-fg"
-                      >
-                        {c.log.activity_type ?? (c.log.day_key ? `Day ${c.log.day_key}` : 'Session')}
-                      </a>{' '}
-                      ({c.daysBefore}d before)
-                    </span>
-                  ))}
-                </>
-              ) : null}
+          {log.day_key || log.status !== 'done' ? (
+            <p className="mt-1 text-xs text-muted">
+              {[log.day_key ? `Day ${log.day_key}` : null, log.status === 'needs_review' ? 'Needs review' : log.status === 'done' ? null : log.status]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
           ) : null}
-          {/* A needs_review row is a friend's numbers, not yours: it is never
-              published by link nor passed on. Sending takes `done` only (the
-              RPC refuses anything else). */}
-          {!readOnly && log.status !== 'needs_review' ? (
-            <div className="mt-5 flex flex-col border-t border-border pt-4">
-              <LogShareControl
-                logId={log.id}
-                defaultLabel={[
-                  log.day_key ? `Day ${log.day_key}` : log.activity_type,
-                  formatDate(log.log_date),
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              />
-              {log.status === 'done' ? (
-                <button
-                  type="button"
-                  onClick={() => setSendOpen(true)}
-                  className="flex min-h-11 items-center self-start t-control text-muted transition-colors hover:text-fg"
-                >
-                  Send to a friend
-                </button>
+          {/* Every detail in one compact block with ONE edit: when, how long,
+              heart rate, readiness and soreness. Each used to carry its own
+              "edit" word and its own row. */}
+          <div className="mt-4 flex items-start gap-2 rounded-card border border-outline bg-surface px-3 py-2.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-1 text-sm tabular-nums text-muted">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {log.tags.map((t) => (
+                  <Tag key={t} label={t} color={tagColor(t)} />
+                ))}
+                <span className="text-fg">
+                  {formatDate(log.log_date)}
+                  {localTimeOf(log.started_at) ? ` · ${localTimeOf(log.started_at)}` : ''}
+                </span>
+                <span>· {formatDuration(log.total_seconds ?? 0)}</span>
+                {log.hr_avg != null || log.hr_max != null ? (
+                  <span>
+                    · <span aria-hidden="true">♥</span> {log.hr_avg ?? '—'}
+                    {log.hr_max != null ? ` / ${log.hr_max}` : ''}
+                  </span>
+                ) : null}
+              </div>
+              {vibe ? (
+                <div>
+                  Sleep {vibe.sleep} · Energy {vibe.energy} · Soreness {vibe.soreness}
+                </div>
+              ) : null}
+              {vibe?.sore?.length ? (
+                <div className="text-xs">
+                  Sore: {vibe.sore.map(soreLabel).join(', ')}
+                  {soreFrom.length ? (
+                    <>
+                      {' · likely from '}
+                      {soreFrom.map((c, i) => (
+                        <span key={c.log.id}>
+                          {i > 0 ? ' or ' : ''}
+                          <a
+                            href={`${hrefFor('/app/session', mode)}?id=${c.log.id}`}
+                            className="text-fg underline decoration-border underline-offset-2 hover:decoration-fg"
+                          >
+                            {c.log.activity_type ?? (c.log.day_key ? `Day ${c.log.day_key}` : 'Session')}
+                          </a>{' '}
+                          ({c.daysBefore}d before)
+                        </span>
+                      ))}
+                    </>
+                  ) : null}
+                </div>
               ) : null}
             </div>
-          ) : null}
+            {!readOnly ? (
+              <button
+                type="button"
+                onClick={() => setDetailsOpen(true)}
+                className="-my-1.5 -mr-1.5 flex h-11 w-11 shrink-0 items-center justify-center text-muted transition-colors hover:text-fg"
+                aria-label="Edit session details"
+                title="Edit session details"
+              >
+                <PencilGlyph className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
           {!readOnly && log.status === 'needs_review' ? (
-            <div className="mt-5 border-t border-border pt-4">
+            <div className="mt-3">
               <a
                 href={`/app/log?logId=${log.id}&edit=1`}
                 className="flex min-h-11 items-center t-control text-fg underline underline-offset-2"
@@ -336,6 +319,35 @@ export default function SessionDetail({ mode = 'app' }: { mode?: Surface }) {
         ))
       )}
       {!readOnly ? <SendToSheet open={sendOpen} onClose={() => setSendOpen(false)} logIds={[log.id]} /> : null}
+      {!readOnly ? (
+        <SessionDetailsSheet log={log} open={detailsOpen} onClose={() => setDetailsOpen(false)} onSaved={onDetailsSaved} />
+      ) : null}
+      {!readOnly && log.status !== 'needs_review' ? (
+        // Share holds both ways out: a read-only link, and (for a finished
+        // session) sending a copy to a friend.
+        <Modal open={shareOpen} onClose={() => setShareOpen(false)} title="Share">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+            <LogShareControl
+              bare
+              logId={log.id}
+              defaultLabel={[log.day_key ? `Day ${log.day_key}` : log.activity_type, formatDate(log.log_date)]
+                .filter(Boolean)
+                .join(' · ')}
+            />
+            {log.status === 'done' ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShareOpen(false);
+                  setSendOpen(true);
+                }}
+              >
+                Send to a friend
+              </Button>
+            ) : null}
+          </div>
+        </Modal>
+      ) : null}
     </PageStagger>
   );
 }

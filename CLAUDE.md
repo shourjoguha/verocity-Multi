@@ -214,8 +214,9 @@ UI audit have both run.
   `thermal`; `src/lib/bodyMapPrefs.ts`), also picked in Appearance. Plates also
   take an ink pref (`mono` default, `colour`).
   There is no Settings page: `/app/settings` is a redirect to `/app/you`
-  (`?tab=holidays` → `#holidays`), and `YouView`'s `openFromHash()` opens
-  whichever `Disclosure` the hash names, nested ones included.
+  (`?tab=holidays` → `#holidays`). `YouView`'s sections are rows in themed
+  groups that each open a bottom sheet; `HASH_TO_SECTION` maps a hash to the
+  sheet it opens, and a nested row (`#coach-icon`) opens inside it.
 - **Body-map shade is a share of the TOTAL, in seven fixed bands.**
   `src/lib/bodyMapShade.ts`: untrained plus six worked bands with edges at
   1 / 2.5 / 5 / 8 / 12 % of the active measure's total, never relative to the

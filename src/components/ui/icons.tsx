@@ -179,3 +179,23 @@ export function MoreGlyph({ className }: GlyphProps) {
     </svg>
   );
 }
+
+// Flame — the week streak on Home. Stroked like the rest; the chip around it
+// carries the number.
+export function FlameGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M12 3c.5 3.2 4.5 5.2 4.5 10a4.5 4.5 0 0 1-9 0c0-2.2 1-3.6 2-4.6.3 1.6 1 2.6 2 3 0-3.4-.9-5.6.5-8.4z" />
+    </Glyph>
+  );
+}
+
+// Arrow out of a tray — "share". Opens the share menu (link + send to a friend).
+export function ShareGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className}>
+      <path d="M12 15V4M8 8l4-4 4 4" />
+      <path d="M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12" />
+    </Glyph>
+  );
+}

@@ -303,16 +303,18 @@ const railIndex = dockTabs.findIndex((t) => tabActive(t));
                 {l.svgGlyph && (
                   <svg
                     aria-hidden="true"
-                    viewBox="0 0 24 28"
+                    viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    stroke-width="1.8"
+                    stroke-width="1.75"
                     stroke-linecap="round"
                     stroke-linejoin="round"
                     class="h-4 w-4 shrink-0"
                   >
-                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" transform="translate(-4 -1) rotate(-90 12 9)" />
-                    <path d="M3 17h18a2 2 0 0 1 2 2v1a11 8 0 0 1-22 0v-1a2 2 0 0 1 2-2Z" />
+                    {/* The dock's You glyph, so the menu and the dock name the
+                        same place with the same mark. */}
+                    <circle cx="12" cy="8.5" r="3.75" />
+                    <path d="M4.75 20c.9-3.7 3.7-5.75 7.25-5.75s6.35 2.05 7.25 5.75z" />
                   </svg>
                 )}
                 {l.label}

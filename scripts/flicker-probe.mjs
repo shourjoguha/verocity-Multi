@@ -307,9 +307,29 @@ const SCENARIOS = [
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
+    // Send to a friend lives inside the Share sheet now: Share hands off to it.
     name: 'Session · send to a friend (SendToSheet)',
     route: `/app/session?id=${DONE_ID}`,
-    open: 'button:has-text("Send to a friend")',
+    open: '[aria-label="Share"]',
+    then: '[role="dialog"] button:has-text("Send to a friend")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Session · share (link sheet)',
+    route: `/app/session?id=${DONE_ID}`,
+    open: '[aria-label="Share"]',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Session · details (SessionDetailsSheet)',
+    route: `/app/session?id=${DONE_ID}`,
+    open: '[aria-label="Edit session details"]',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'You · section drawer (Appearance)',
+    route: '/app/you',
+    open: 'button:has-text("Appearance")',
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
