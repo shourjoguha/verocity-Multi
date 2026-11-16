@@ -12,18 +12,18 @@ export function friendRequestError(code: string): string {
   return "Couldn't send the request. Check your connection and try again.";
 }
 
-export function sendError(code: string, name?: string): string {
+export function sendError(code: string, name?: string, kind: 'log' | 'plan' = 'log'): string {
   switch (code) {
     case 'not_friends':
       return `${name ?? 'That person'} isn't on your friends list any more.`;
     case 'not_owned':
-      return 'Only finished workouts of yours can be sent.';
+      return kind === 'plan' ? "That plan isn't yours to send." : 'Only finished workouts of yours can be sent.';
     case 'batch_size':
       return `Send at most ${FRIENDS.batchMaxItems} workouts at once.`;
     case 'daily_cap':
       return `You've reached today's limit of ${FRIENDS.dailySendCap} sent items. Try again tomorrow.`;
     case 'payload_too_large':
-      return 'One of those workouts is too large to send.';
+      return kind === 'plan' ? 'That plan is too large to send.' : 'One of those workouts is too large to send.';
     default:
       return "Couldn't send. Check your connection and try again.";
   }

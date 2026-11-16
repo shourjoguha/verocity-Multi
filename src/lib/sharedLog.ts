@@ -3,7 +3,7 @@
 // The payload in `shared_items` was written by ANOTHER USER through
 // send_shared_items (migration 0052). The RPC builds it from an allow-list,
 // but this module treats it as hostile anyway — defence in depth, and the
-// validator is what the tests exercise (docs/FRIENDS_SHARING_PLAN.md §6).
+// validator is what the tests exercise (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C) §6).
 //
 // - validateLogDocument / validateSharedLogPayload REJECT, never repair. What
 //   they return is rebuilt from known fields only, so an unknown key in the

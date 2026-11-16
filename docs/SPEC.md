@@ -44,7 +44,7 @@ original's full feature inventory is captured in §9; v2 enhancements in §10.
 | Data/Auth/Realtime | **Supabase** (Postgres + Auth + RLS + Realtime + Edge Functions). |
 | Heavy jobs | **Railway**, only where Supabase Edge Functions fall short (e.g. future scheduled "coach" engine). Not needed for the core app. |
 | Auth | **Real per-profile auth** (Supabase Auth) + a **public read-only role** for the showcase profile. RLS enforces read-only server-side. |
-| Visibility | **Private by default** — each profile reads only its own data. Cross-user access is explicit, via **share links** (read-only tokens). |
+| Visibility | **Private by default** — each profile reads only its own data. Cross-user access is explicit, via **share links** (read-only tokens) or a **friend-addressed snapshot** (§7C). |
 | View-only | **Both**: one always-on **public showcase** profile *and* **per-profile share links** for any profile/plan/log. |
 | Signup | **Invite codes** — new profiles require a valid code (caps at <100). |
 | Visual | **Keep & elevate** the Swiss-minimalist identity (no fresh redesign). |
@@ -123,15 +123,20 @@ shared key plus a name picker, with fully-open RLS).
 - **Reads (authenticated):** **own rows only** (`owner_user_id = auth.uid()`).
   No implicit cross-user visibility.
 - **Writes (authenticated):** own rows only. → Real per-profile protection.
-- **Cross-user access is explicit**, granted through **share links** (§7), never
-  ambient. This replaces the original's communal model.
+- **Cross-user access is explicit**, granted through **share links** (§7B) or a
+  **friend-addressed snapshot** (§7C), never ambient. This replaces the original's
+  communal model. A friendship is an address book: it permits *sending* and grants
+  no read of anything, and **no RLS policy may reference `friendships`** — any
+  future friend read goes through a grant-scoped `security definer` RPC.
 - **Shared movement library** (`movements` with `owner_user_id IS NULL`) remains
   readable by all authenticated users — it's curated reference data, not personal.
 - **Anonymous:** `SELECT` restricted to `owner_user_id = <SHOWCASE_PROFILE_ID>`;
   everything else denied.
 
-> Consequence: the original's "adopt another user's plan" feature now flows through
-> an explicit share (or an opt-in `is_public` plan), not ambient browsing — see §10.
+> Consequence: the original's "adopt another user's plan" feature no longer browses
+> anyone's plans. A plan reaches you only when a friend sends it (§7C) or from the
+> curated `plan_templates` catalogue (§8); share tokens are read-only views and do
+> not adopt — see §10.
 
 ---
 
@@ -165,8 +170,66 @@ profile, a single plan, or a single log.
     check. More moving parts; the edge function is simpler and equally safe.
 - **Read-only guarantee:** holders never receive a writable key; the function
   exposes no mutations. Revocation = flip `revoked` / set `expires_at`.
-- **This token also powers "adopt a plan"** (§10): adoption = open a shared plan,
-  then copy it into your own account.
+- **Share tokens do not adopt.** `ShareView` is read-only and `share-read` has no
+  copy path. An earlier `?adopt=<plan id>` route read `plans` through RLS and so
+  worked only for own or `is_public` rows; it was removed. Adoption is §7C (a
+  friend's plan) or `plan_templates`.
+- `share-read` never returns a `needs_review` log (§7C), so a friend's unreviewed
+  copy cannot appear on a public profile link.
+
+### C. Friends and send-to (friend-addressed snapshots)
+People who train together hand each other a log or a plan inside the app. Not
+messaging, a feed, groups or a directory.
+- **Friendship permits sending only.** Added by a short rotatable **friend code**
+  (`friend_codes`); `friendships` is `pending|accepted|blocked`. Every write, and
+  every read of another user's name, goes through a `security definer` RPC
+  (`request_friend`, `respond_friend`, `remove_friend`, `list_friends`) that
+  answers a bad code, self, duplicate and blocked with one generic error, so a
+  code cannot be probed. Friends panel: You → Friends (`#friends`).
+- **Delivery is a snapshot.** `send_shared_items(recipient, kind, ids[])` verifies
+  the accepted friendship and ownership, builds `payload` **server-side from an
+  allow-list** (never `select *`) and inserts one `shared_items` row per id under
+  one `batch_id`. Caps (`FRIENDS` in `app.config.ts`, mirrored in the RPC and
+  pinned by `friendsConfig.test.ts`). Later edits by the sender change nothing.
+  Logs drop `data.session` (readiness), heart rate, plan link, Garmin ids and
+  row notes, and carry the sender's custom movements; plans carry `parsed`.
+  Entry points: the session page, a date-range send on the history surface, and
+  the plan page's actions menu (`SendToSheet`, one plan per send).
+- **Inbox** (`/app/inbox`, bell in the header, counted on load only): To review,
+  Friend requests, Shared with you (grouped by batch, paginated), Accepted by
+  friends. The recipient reads only their own rows; status changes go through
+  `set_shared_item_status`, which nulls `payload`.
+- **Untrusted input.** The payload was written by another user. Logs go through
+  `validateSharedLogPayload` then `sanitiseSharedLog` (`src/lib/sharedLog.ts`:
+  reject never repair, fresh ids, sets `prefilled`, `rpeRated: false`, safe
+  `http(s)` links only). Plans go through `readSharedPlanPayload` and
+  `validateParsedPlan` (`src/lib/sharedPlan.ts`) — never bypassed.
+- **Logs: two accept paths.** *Accept & review* inserts a `needs_review` row
+  (provenance `shared_item_id`, unique per owner, so a retry cannot double-insert)
+  and opens the Logger in review mode: Confirm saves it `done`, Discard deletes
+  it. *Accept all / selected* inserts `done` at once, except a same-day conflict
+  with the receiver's own log, which lands as `needs_review`. A same-day review
+  shows the duplicates sheet (x% of movements overlap): keep mine, combine, or
+  use shared. Custom movements resolve by name, else copy into the receiver's
+  library. The plan link is nulled, then re-attached to the receiver's active
+  plan by `choosePlanDay` (`compareMovements`, never `familyOf`; never before
+  their first log on that plan, so a backdated row cannot renumber weeks).
+- **`needs_review` rows count nowhere** — stats, body map, coach, adherence,
+  `planCycles`, the profile share. They show in history with a Review marker.
+- **Plans.** *Accept & review* opens a sheet; nothing is inserted until Save:
+  name, day count, a start date defaulting to the sender's (the end date shifts
+  with it, `shiftPlanStart` in `src/lib/planRebase.ts`), and pick-one
+  **Make it my active plan / Save for later**. Save validates, calls
+  `createPlan(parsed, md, { activate })`, then `set_shared_item_status(id,
+  'accepted')` with no log id. `createPlan` still activates by default.
+- **Sender notice, and taking logs back.** `list_acceptances` tells the sender
+  "Sam accepted 5 of your logs" (never payload; dismissals are not reported;
+  suppressed once blocked). Accepted logs stay after unfriend or block; the inbox
+  history offers **Remove from my logs** (`remove_accepted_items`, with a dry run
+  that counts logs the receiver edited since accepting).
+- **Room for later.** `list_friends()` returns an object, and
+  `friendships.status` can gain values, so a grants-based read is additive. Not
+  built; do not add a grants table or any read path without that decision.
 
 ---
 
@@ -196,7 +259,7 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   every `plans` read relies on RLS for owner scoping, so a public row would
   leak into every user's active plan and history.
 - **`workout_logs`** — `owner_user_id, plan_id, log_date, day_key, week_number,
-  status (planned|in_progress|paused|done|cancelled), started_at, ended_at,
+  status (planned|in_progress|paused|done|cancelled|needs_review), started_at, ended_at,
   total_seconds, notes, activity_type, tags[], data jsonb`. Realtime enabled.
   `in_progress` means **live right now**, not merely "the Logger is open": the
   Logger's Home button leaves the row in that state so you can browse the app
@@ -269,6 +332,8 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   prompt name a region the rubric has substitution rules for. `body_type`
   remains the deliberate exception, stored and read by nothing.
   `goals` is a **jsonb array, not an object**: list order is the priority rank.
+  `shared_item_id` (0052, nullable, `on delete set null`, unique per owner) marks
+  a log that came from a friend's snapshot.
   `UserStatsInput` is `Partial` because two forms write this one row and neither
   may clobber the other's columns.
   One current row, **not a time series** — a six-month-old log is priced with
@@ -279,6 +344,13 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
 - **`shares`** *(new)* — read-only share tokens: `id, token_hash, owner_user_id,
   scope (profile|plan|log), resource_id (nullable), label, created_at, expires_at,
   revoked boolean`.
+- **`friend_codes`, `friendships`, `shared_items`** *(0052, §7C)* — the address
+  book and the inbox. `friend_codes` (one rotatable code per user) and
+  `friendships` take **no client write**; `friendships` is selectable by either
+  party; `shared_items` is selectable by its **recipient only** (no sender view)
+  and holds the snapshot `payload` (null once accepted or dismissed) with status
+  `pending|accepted|dismissed|removed`. Reached through RPCs, all `security
+  definer`, `auth.uid()` checked first, `authenticated` only.
 - **`meal_logs`** *(new, migration 0032)* — capture only, nothing derives
   anything from these rows: `owner_user_id, log_date (date), eaten_time (time),
   size, kind, source, tags[], note, hunger_before, hunger_after (1-5),
@@ -307,7 +379,7 @@ Port the original schema, plus auth-backed ownership. Postgres on Supabase.
   be created from a migration on this project (`postgres` is not an owner or
   member of `supabase_storage_admin` here) and must be created by hand from
   Dashboard → Storage → Policies — see `0033_meal_photos_bucket.sql`'s
-  comment block for the verbatim SQL. Backs §7B share links and plan adoption.
+  comment block for the verbatim SQL. Backs §7B share links.
 
 ### 8.1 Movement taxonomy (region · modality · plane)
 
@@ -489,6 +561,9 @@ insert/update: id = auth.uid()
 select: authenticated → owner_user_id = auth.uid()         -- own only
         anon          → owner_user_id = :SHOWCASE_ID
         (plans may also expose owner_user_id-agnostic rows where is_public = true)
+-- friendships: select where auth.uid() is either party; no client writes
+-- shared_items: select where recipient_id = auth.uid(); no client writes
+-- (no policy anywhere references friendships — see §6)
 insert/update/delete: owner_user_id = auth.uid()           -- anon: none
 
 -- movements
@@ -542,7 +617,7 @@ Function, which validates the token and performs scoped read-only queries.
   (drag-reorder days, inline-edit movements/cells, add via library, delete,
   autosave); block-type color markers; shows actual best-set from last log.
 - **PlanUpload** — paste/upload markdown → strict local parse, AI fallback later;
-  preview; save (activates, deactivates prior); **adopt** another user's plan.
+  preview; save (activates, deactivates prior); a friend's plan arrives through the inbox (§7C).
 - **Logger (core)** — sectioned, grouped (single/superset/circuit) movement
   logging; per-set weight/reps|time|distance/RPE/notes; completion checks;
   **WeightWheel** drum picker, **RepsStepper** (voice input was retired 2026-11); per-movement rest tag
@@ -605,9 +680,10 @@ Single source of truth for blocks/sections, metrics, RPE, timers, activity tags
 1. **Real auth & per-profile data protection** (§6) — fixes the original's open-write model.
 2. **Private-by-default + explicit sharing** (§6) — your data is yours; sharing is a deliberate act.
 3. **Public showcase + per-profile share links** (§7) — net-new.
-4. **Plan adoption via sharing** — open a shared/public plan, copy it into your
-   account (replaces the original's ambient "browse everyone's plans"). Optional
-   `is_public` plan flag enables a lightweight adoption marketplace.
+4. **Plan adoption via friends** — a friend sends you a plan (§7C) and you save it
+   on your own start date (replaces the original's ambient "browse everyone's
+   plans"). Share tokens are read-only and do not adopt. The `is_public` flag is
+   not used for this: every `plans` read relies on RLS owner scoping.
 5. **Better visuals** (§11) — elevated motion, depth, data-viz polish, Astro View Transitions.
 6. **Performance** — static-first delivery, smaller JS (islands only), faster cold loads than the Vite SPA.
 7. **Invite-gated signup** — caps profiles, removes the shared-password friction.
@@ -788,7 +864,7 @@ modeled on the routing / hard-rules / numbered-principles template**.
 
 **All five originally-open questions are settled** — the decisions table in
 `docs/ROADMAP.md` is the canonical record. In short: showcase is static +
-client-fetch; plan adoption is share-link-only; the PWA ships with a
+client-fetch; plan adoption is friend-sent only (§7C) or from `plan_templates`; the PWA ships with a
 stale-while-revalidate shell (see the Caching entry in `docs/LESSONS.md`);
 units are kg-only; auth is email + password.
 
@@ -801,8 +877,8 @@ units are kg-only; auth is email + password.
   avoid sprinkling many tiny islands (hydration cost). Mitigation: one Logger
   island, `client:load`, with internal routing/state.
 - **Private-by-default migration of "adopt plan."** The original let users browse
-  everyone's plans; v2 routes this through explicit shares / `is_public`. Make sure
-  the adoption UX stays easy despite the privacy default.
+  everyone's plans; v2 routes this through a friend sending the plan (§7C) or the
+  template catalogue. Make sure the adoption UX stays easy despite the privacy default.
 - **Read-only key & share tokens.** The anon key is public by design; safety rests
   entirely on RLS, and share tokens on the `share-read` function. Both need a
   **denied-write / denied-cross-read test suite**.

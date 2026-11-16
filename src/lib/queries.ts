@@ -615,14 +615,6 @@ export async function dismissMovementSub(id: string): Promise<void> {
   await supabase.from('movement_subs').update({ dismissed_at: new Date().toISOString() }).eq('id', id);
 }
 
-// Adopt a shared/public plan: copy its parsed content into a new owned plan.
-export async function adoptPlan(planId: string): Promise<Plan | null> {
-  const { data } = await supabase.from('plans').select('*').eq('id', planId).maybeSingle();
-  if (!data) return null;
-  const src = data as Plan;
-  return createPlan(src.parsed, src.source_markdown ?? '');
-}
-
 // ---- plan templates (0050): the curated catalogue a new user can start from
 // instead of authoring a plan. Separate from `plans` on purpose — see the
 // migration header. ----
@@ -642,7 +634,7 @@ export async function adoptPlanTemplate(template: PlanTemplate): Promise<Plan | 
   return createPlan(rebasePlanDates(template.parsed, new Date()), '');
 }
 
-// ---- friends and send-to (migration 0052, docs/FRIENDS_SHARING_PLAN.md).
+// ---- friends and send-to (migration 0052, the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C)).
 // Thin wrappers over the security-definer RPCs: every write, and every read of
 // another user's name, goes through one of them. The RPCs raise a bare error
 // code as the message ('friend_request_failed', 'not_friends', ...), surfaced

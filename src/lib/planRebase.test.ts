@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planWeeks, rebasePlanDates } from '@/lib/planRebase';
+import { planWeeks, rebasePlanDates, shiftPlanStart } from '@/lib/planRebase';
 import type { ParsedPlan } from '@/lib/types';
 
 const base: ParsedPlan = {
@@ -33,5 +33,32 @@ describe('rebasePlanDates', () => {
 
   it('planWeeks reads the last block', () => {
     expect(planWeeks(base)).toBe(8);
+  });
+});
+
+describe('shiftPlanStart', () => {
+  it('moves the end date by the same number of days as the start', () => {
+    const out = shiftPlanStart(base, '2026-04-27');
+    expect(out.startDate).toBe('2026-04-27');
+    expect(out.endDate).toBe('2026-11-07');
+  });
+
+  it('works backwards too', () => {
+    expect(shiftPlanStart(base, '2026-04-13').endDate).toBe('2026-10-24');
+  });
+
+  it('falls back to the block-derived span when the source has no start date', () => {
+    const out = shiftPlanStart({ ...base, startDate: null }, '2026-11-04');
+    expect(out.endDate).toBe('2026-12-29'); // 8 weeks, inclusive
+  });
+
+  it('keeps an open-ended source open-ended', () => {
+    expect(shiftPlanStart({ ...base, endDate: null }, '2026-05-01').endDate).toBeNull();
+  });
+
+  it('ignores a malformed date and leaves the plan body untouched', () => {
+    expect(shiftPlanStart(base, '')).toBe(base);
+    expect(shiftPlanStart(base, '2026-13-45')).toBe(base);
+    expect(shiftPlanStart(base, '2026-05-01').days).toBe(base.days);
   });
 });

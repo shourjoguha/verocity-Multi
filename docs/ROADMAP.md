@@ -8,7 +8,7 @@ while building. Update as work lands.
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
 | 1 | Showcase rendering | Static shell + client-side read-only fetch | Zero Vercel compute (SPEC §5 default). SSR can be added per-route later if SEO matters. |
-| 2 | Plan adoption | Share-link path now; `is_public` column in schema | Build the explicit-share flow; marketplace is a later flip of one flag. |
+| 2 | Plan adoption | Friend-sent plans (Phase 18) and the `plan_templates` catalogue; share links are read-only and do not adopt | The original share-token adoption was never built and the `?adopt=` route could not work through RLS. `is_public` stays unused: every `plans` read relies on owner scoping. |
 | 3 | PWA / offline | Installable PWA shell, no offline-first sync in v1 | Offline log sync is a large state-design cost; defer to Phase 4+. |
 | 4 | Units | kg-only, config-driven | Matches original; `app.config.ts` holds the unit so a toggle is additive. |
 | 5 | Auth method | Email + password, invite-gated | Deterministic to build/test; magic-link is an additive Supabase option. |
@@ -78,7 +78,7 @@ Operational detail lives in `docs/HANDOVER.md`.
 - [x] Strict markdown plan parser (`planParser.ts`) → ParsedPlan
 - [x] **Unit tests for the parser (6 passing — vitest)** ← genuinely verified
 - [x] PlanUpload: paste markdown → Parse → preview → Save & activate
-- [x] Adopt a shared/public plan (`adoptPlan` + `?adopt=<id>`) and `createPlan`
+- [x] `createPlan` (the adopt-by-id route and its `?adopt=<id>` URL were removed in Phase 18: it read `plans` by id through RLS, so it only ever worked for own or `is_public` rows)
 - [x] Plan edit mode (`/app/plan/edit`): inline-edit title/labels/movements/sections + per-week cells, drag handles + up/down reorder for days & exercises, add/delete, "+ Week", debounced autosave. Pure helpers in `lib/planEdits.ts` (unit-tested); `dayKey` stays stable across renames. Block-phase editing (add/remove/type/week-range) now exposed in the editor (unit-tested).
 - verify: ✓ parser + planEdits unit-tested; check/build clean. updatePlan save path
   verified against the live DB.
@@ -535,6 +535,31 @@ Eight commits on `claude/ui-ux-improvements-m0578f`, `820d92d`..`f8086c3`, ~90 f
   both themes are the evidence (LESSONS § "Audits were green on a palette
   nobody had looked at")
 - [ ] `LogShareControl.tsx` still aliases `FIELD` as a local `inputClass`
+
+### Phase 18 — Friends, send-to and the inbox  `[shipped, migration and function pending]`
+Reads: `docs/SPEC.md` §7C. Four commits on `claude/peaceful-gates-5yis48`, one per
+phase.
+- [x] Schema and RPCs (`0052_friends_sharing.sql`): `friend_codes`, `friendships`,
+  `shared_items`, `needs_review` log status, `shared_item_id` provenance
+- [x] Pure logic with tests: `sharedLog.ts` (validate, sanitise, overlap, union,
+  `choosePlanDay`, bulk classification), `sharedPlan.ts`, `shiftPlanStart`
+- [x] Friends panel (You → Friends), `SendToSheet` (session page, date range,
+  plan page), `/app/inbox` and the header bell
+- [x] Logger review mode: Confirm / Discard, batch stepping, the same-day
+  duplicates sheet, Counts toward
+- [x] Plans in the inbox: Accept & review sheet (start date, active or save for
+  later), send a plan from the plan page
+- [x] `needs_review` excluded from `planCycles` and from `share-read`'s profile and
+  log scopes; every other metric reads `done` only
+- [ ] **Pending ops:** apply `supabase/migrations/0052_friends_sharing.sql` by hand
+  (never applied to the live project; the Supabase MCP was unreachable while it
+  was written, so it was run only against a local Postgres 16 with a stub
+  `auth` schema and the **advisors have not been run** on it)
+- [ ] **Pending ops:** redeploy the `share-read` edge function (it now filters
+  `needs_review`); until then a public profile link can show an unreviewed copy
+- [ ] Until 0052 is applied the inbox, bell and friends panel read as empty/failing
+- [ ] No check observes the accept sheet on a real device; the probe and audits
+  ran against mocked REST in Chromium
 
 ## Backlog
 

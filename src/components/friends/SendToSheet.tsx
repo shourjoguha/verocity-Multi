@@ -2,10 +2,11 @@
 // ui/Modal — no hand-rolled sheet — so it inherits the flicker contract: no
 // animated scrim, immediate unmount, focus stops at the panel on touch.
 //
-// Two shapes, one sheet:
+// Three shapes, one sheet:
 //   - `logIds`: a fixed set (the session page's single log).
 //   - `rangeLogs`: the owner's history; the sheet shows a from/to picker and
 //     sends every `done` log in that range, capped at FRIENDS.batchMaxItems.
+//   - `planId`: one plan (the plan page). Always exactly one per send.
 //
 // Friendship lets you SEND; what goes is a snapshot built server-side by
 // send_shared_items from an allow-list. Later edits here change nothing sent.
@@ -25,15 +26,17 @@ export function SendToSheet({
   onClose,
   logIds,
   rangeLogs,
+  planId,
 }: {
   open: boolean;
   onClose: () => void;
   logIds?: string[];
   rangeLogs?: WorkoutLog[];
+  planId?: string;
 }) {
   return (
     <Modal open={open} onClose={onClose} title="Send to a friend">
-      <SendBody onClose={onClose} logIds={logIds} rangeLogs={rangeLogs} />
+      <SendBody onClose={onClose} logIds={logIds} rangeLogs={rangeLogs} planId={planId} />
     </Modal>
   );
 }
@@ -45,10 +48,12 @@ function SendBody({
   onClose,
   logIds,
   rangeLogs,
+  planId,
 }: {
   onClose: () => void;
   logIds?: string[];
   rangeLogs?: WorkoutLog[];
+  planId?: string;
 }) {
   const [friends, setFriends] = useState<FriendSummary[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -71,13 +76,14 @@ function SendBody({
   // Only `done` logs can be sent (the RPC refuses anything else as not_owned),
   // so a range never counts an in-progress or needs_review row.
   const ids = useMemo(() => {
+    if (planId) return [planId];
     if (!rangeLogs) return logIds ?? [];
     const lo = from <= to ? from : to;
     const hi = from <= to ? to : from;
     return rangeLogs
       .filter((l) => l.status === 'done' && l.log_date >= lo && l.log_date <= hi)
       .map((l) => l.id);
-  }, [rangeLogs, logIds, from, to]);
+  }, [rangeLogs, logIds, planId, from, to]);
 
   const overCap = ids.length > FRIENDS.batchMaxItems;
 
@@ -99,12 +105,12 @@ function SendBody({
     const sentTo: string[] = [];
     // One batch per friend: send_shared_items addresses one recipient.
     for (const f of targets) {
-      const res = await sendSharedItems(f.user_id, 'log', ids);
+      const res = await sendSharedItems(f.user_id, planId ? 'plan' : 'log', ids);
       if (res.ok) sentTo.push(f.display_name);
-      else failed.push(`${f.display_name}: ${sendError(res.error, f.display_name)}`);
+      else failed.push(`${f.display_name}: ${sendError(res.error, f.display_name, planId ? 'plan' : 'log')}`);
     }
     setSending(false);
-    if (sentTo.length > 0) toast(`Sent ${plural(ids.length, 'workout')} to ${sentTo.join(', ')}`, 'success');
+    if (sentTo.length > 0) toast(`Sent ${planId ? 'your plan' : plural(ids.length, 'workout')} to ${sentTo.join(', ')}`, 'success');
     if (failed.length === 0) {
       onClose();
       return;
@@ -181,7 +187,9 @@ function SendBody({
         ) : null}
 
         <p className="mt-4 text-xs leading-relaxed text-muted">
-          They get a copy of the movements and sets as they are now. Movement notes go with it; your heart rate and readiness do not.
+          {planId
+            ? 'They get a copy of the plan as it is now, and choose their own start date. Your logs do not go with it.'
+            : 'They get a copy of the movements and sets as they are now. Movement notes go with it; your heart rate and readiness do not.'}
         </p>
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-border-soft p-4">

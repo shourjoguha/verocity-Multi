@@ -207,7 +207,7 @@ describe('buildTimeline', () => {
   });
 });
 
-// Decision for docs/FRIENDS_SHARING_PLAN.md §7: the activity ribbon is a count
+// Decision for the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C) §7: the activity ribbon is a count
 // of days trained, so an accepted-but-unconfirmed friend's log stays OFF it.
 // Its "Review" marker lives in history and the inbox, not here.
 describe('buildTimeline and needs_review', () => {

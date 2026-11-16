@@ -347,7 +347,7 @@ export default function Logger() {
   // Set when this page was asked to START a workout while another one is
   // still running. Nothing is created until the user answers.
   const [blockedBy, setBlockedBy] = useState<{ log: WorkoutLog; label: string } | null>(null);
-  // ---- a log a friend sent (docs/FRIENDS_SHARING_PLAN.md §5.4–5.6, §12.3) ----
+  // ---- a log a friend sent (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C) §5.4–5.6, §12.3) ----
   // Review mode: this row is `needs_review` — the friend's numbers until
   // Confirm. `sender` is read from the shared_items row, else "a friend".
   const [review, setReview] = useState<{ sender: string; sharedItemId: string | null } | null>(null);

@@ -1,4 +1,4 @@
-// You → Friends (docs/FRIENDS_SHARING_PLAN.md §5.1). An address book and
+// You → Friends (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C) §5.1). An address book and
 // nothing more: a friendship lets either side SEND the other a workout. It
 // grants no read of anything, so there is no profile, no search and no list
 // of other users here — only your code, the people you have paired with, and

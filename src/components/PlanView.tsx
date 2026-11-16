@@ -17,6 +17,7 @@ import { isSubroutine } from '@/lib/subroutine';
 import { dayCycleStatus, planWeekByLog, planWeekCount } from '@/lib/progression';
 import { computePlanAdherence } from '@/lib/planAdherence';
 import { PlanAdherenceSection } from '@/components/PlanAdherence';
+import { SendToSheet } from '@/components/friends/SendToSheet';
 
 export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }) {
   const showcase = mode === 'showcase';
@@ -41,6 +42,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
   const [weekIndex, setWeekIndex] = useState<number | null>(null);
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [matrixDayId, setMatrixDayId] = useState<string | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
 
   if (loading) return <LoadingScreen />;
 
@@ -198,6 +200,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               items={[
                 { label: 'Edit plan', href: '/app/plan/edit' },
                 { label: 'Switch plan', href: '/app/plan/upload' },
+                { label: 'Send to a friend', onSelect: () => setSendOpen(true) },
                 { label: 'Review past training', href: '/app/plan' },
               ]}
             />
@@ -492,6 +495,7 @@ export default function PlanView({ mode = 'app' }: { mode?: 'app' | 'showcase' }
               </a>
         </Item>
       )}
+      {showcase ? null : <SendToSheet open={sendOpen} onClose={() => setSendOpen(false)} planId={plan.id} />}
     </PageStagger>
   );
 }

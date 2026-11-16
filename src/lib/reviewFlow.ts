@@ -1,4 +1,4 @@
-// Reviewing a log a friend sent (docs/FRIENDS_SHARING_PLAN.md §5.4–5.6, §12.3).
+// Reviewing a log a friend sent (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C) §5.4–5.6, §12.3).
 // The pure half of the Logger's review mode and the inbox's Confirm as is:
 //
 // - The review QUEUE is the ordered subset the inbox handed over (Review all /

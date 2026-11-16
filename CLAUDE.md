@@ -19,6 +19,7 @@ intent, LESSONS describes what actually happened.
 | Change mobile / touch behaviour                                          | `docs/LESSONS.md`, then `npm run audit:mobile`    |
 | Claim something is verified                                              | `docs/LESSONS.md` § Testing — what each check *cannot* see |
 | Touch the data model, RLS, or sharing                                    | `docs/SPEC.md` §6 (auth), §8 (data)               |
+| **Touch friends, send-to, the inbox, the bell or accepting a shared log/plan** | `docs/SPEC.md` §7C, then `src/lib/sharedLog.ts`, `src/lib/sharedPlan.ts`, skill db-change |
 | Build the public showcase or share links                                 | `docs/SPEC.md` §7                                 |
 | Edit plan/log JSONB or domain types                                      | `docs/SPEC.md` §8, `lib/types.ts`                 |
 | Touch saved sessions (templates / frames)                                | `docs/SPEC.md` §8, `SessionsView.tsx`             |
@@ -100,7 +101,20 @@ UI audit have both run.
   (`owner_user_id = auth.uid()`). The shared movement library
   (`owner_user_id IS NULL`) is the only ambient cross-user read.
 - **Cross-user access is explicit** — via read-only share tokens served by the
-  `share-read` Edge Function. Never grant ambient cross-profile reads.
+  `share-read` Edge Function, or a friend-addressed snapshot (the `payload` that
+  `send_shared_items` builds server-side from an allow-list). Never grant ambient
+  cross-profile reads.
+- **A friendship is an address book, not a grant.** It permits *sending* and reads
+  nothing. **No RLS policy may reference `friendships`**; a future friend read goes
+  through a grant-scoped `security definer` RPC like `list_friends`, so the boundary
+  stays in one reviewable place. A shared payload is another user's input:
+  `validateSharedLogPayload` / `readSharedPlanPayload` before anything is inserted,
+  and `validateParsedPlan` is never bypassed.
+- **`needs_review` rows count nowhere.** A friend's log accepted but not confirmed is
+  their numbers, not yours: no stats, body map, coach, adherence, `planCycles` or
+  share link. New metrics go through `completedLogs` in `src/lib/stats.ts` or filter
+  `done` themselves; `getRecentLogs` and friends still return the rows, because
+  history shows them with a Review marker.
 - **Anon key reads only the showcase profile** (SELECT-only) plus the shared library.
 - **Never ship the service-role key to the client.** It lives only in Edge Functions
   / Railway env.

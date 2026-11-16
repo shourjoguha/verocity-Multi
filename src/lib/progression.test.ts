@@ -184,7 +184,7 @@ describe('blockForWeek', () => {
   });
 });
 
-describe('needs_review and plan cycles (docs/FRIENDS_SHARING_PLAN.md §7)', () => {
+describe('needs_review and plan cycles (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C) §7)', () => {
   it('a needs_review row never advances or renumbers a cycle', () => {
     const a = log('lower-jump', '2026-05-01');
     const review = log('lower-jump', '2026-05-03', 'needs_review');

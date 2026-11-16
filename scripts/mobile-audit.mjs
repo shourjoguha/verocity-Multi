@@ -311,6 +311,16 @@ const activePlan = {
   created_at: '2026-01-06T00:00:00Z',
 };
 
+// A PLAN a friend sent (phase 4), in its own batch, so the inbox renders a plan
+// row — long title, its day count, Dismiss + Accept & review — rather than
+// only log rows. Pushed here because activePlan must exist first.
+pendingItems.push({
+  ...sharedItem('si-5', 'b3', 'Samantha Rivera-Longname', ymdAgo(0), 'pending'),
+  kind: 'plan',
+  title: 'Endurance & Cut Block with a deliberately long plan name',
+  payload: { name: activePlan.name, start_date: '2026-01-06', end_date: null, parsed: activePlan.parsed, source_markdown: null },
+});
+
 // m3 is OWNED (owner_user_id set), and that is load-bearing: Library renders
 // its per-row controls (Map / Edit / ×) only for rows the user owns, so a
 // fixture of purely shared rows meant this audit never measured them at all.

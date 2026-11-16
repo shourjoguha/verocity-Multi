@@ -142,6 +142,35 @@ const accepted = (id) => ({
   accepted_log_id: `log-${id}`, accepted_digest: 'x',
 });
 
+// A plan, for the plan page's "Send to a friend" and a plan a friend sent
+// (the inbox's Accept & review sheet). Minimal but valid: the sheet validates.
+// Only the plan page's scenario gets an active plan: with one, Home swaps its
+// "Start workout" button for the plan unit, and the Home scenario would skip.
+let withPlan = false;
+const PLAN_ID = '33333333-3333-3333-3333-333333333333';
+const planDoc = {
+  title: 'Strength block',
+  startDate: '2026-01-06',
+  endDate: '2026-03-01',
+  blocks: [{ type: 'accumulation', startWeek: 1, endWeek: 8 }],
+  weeklyTemplate: ['mon', 'wed'],
+  days: ['mon', 'wed'].map((k) => ({
+    dayKey: k,
+    label: k === 'mon' ? 'Monday — Lower' : 'Wednesday — Upper',
+    exercises: [{ movement: 'back squat', section: 'primary', primaryMetric: 'weight', plannedByWeek: { 1: '5x5' } }],
+  })),
+};
+const activePlan = {
+  id: PLAN_ID, owner_user_id: session.user.id, name: 'Strength block', start_date: '2026-01-06', end_date: '2026-03-01',
+  source_markdown: null, parsed: planDoc, is_active: true, is_public: false, created_at: '2026-01-06T00:00:00Z',
+};
+const pendingPlanItem = {
+  id: 'sp1', sender_id: 'u1', recipient_id: session.user.id, sender_name: 'Alex', kind: 'plan', batch_id: 'bp',
+  title: 'Strength block', item_date: null, status: 'pending', created_at: '2026-01-05T00:00:00Z', acted_at: null,
+  sender_seen_at: null, accepted_log_id: null, accepted_digest: null,
+  payload: { name: 'Strength block', start_date: '2026-01-06', end_date: '2026-03-01', parsed: planDoc, source_markdown: null },
+};
+
 // A friend's log awaiting review, dated the same day as workoutLog — so the
 // Logger's review mode opens the same-day duplicates sheet (§5.5) on load.
 const REVIEW_ID = '77777777-7777-7777-7777-777777777777';
@@ -155,9 +184,10 @@ function fixtureFor(url) {
   if (path.includes('/rpc/')) return [];
   if (path.includes('/shared_items')) {
     if (url.includes('id=eq.si1')) return accepted('si1');
-    return url.includes('pending') ? [] : [accepted('si1'), accepted('si2')];
+    return url.includes('pending') ? [pendingPlanItem] : [accepted('si1'), accepted('si2')];
   }
   if (path.includes('/workout_logs') && url.includes(DONE_ID)) return doneLog;
+  if (path.includes('/plans')) return !withPlan ? [] : url.includes('is_active=eq.true') ? activePlan : [activePlan];
   if (path.endsWith('/sessions')) return savedSessions;
   if (path.includes('/workout_logs')) return url.includes('id=eq.') ? workoutLog : [workoutLog];
   if (path.includes('/movements')) return movements;
@@ -252,6 +282,22 @@ const SCENARIOS = [
     name: 'Session · send to a friend (SendToSheet)',
     route: `/app/session?id=${DONE_ID}`,
     open: 'button:has-text("Send to a friend")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    // The plan page's actions menu opens a floating layer first; picking its
+    // entry hands off to the sheet, like the movement options above.
+    name: 'Plan · send to a friend (SendToSheet, plan mode)',
+    route: '/app/plan/view',
+    withPlan: true,
+    open: '[aria-label="Plan actions"]',
+    then: '[role="menuitem"]:has-text("Send to a friend")',
+    close: '[role="dialog"] button:has-text("Close")',
+  },
+  {
+    name: 'Inbox · accept a friend\'s plan (AcceptPlanSheet)',
+    route: '/app/inbox',
+    open: 'button:has-text("Accept & review")',
     close: '[role="dialog"] button:has-text("Close")',
   },
   {
@@ -388,6 +434,7 @@ const results = [];
 
 for (const s of SCENARIOS) {
   const result = { name: s.name, skipped: null, failures: [] };
+  withPlan = !!s.withPlan;
 
   await page.goto(BASE + s.route, { waitUntil: 'networkidle' });
   await page.waitForTimeout(900); // let the CSS entrance stagger finish

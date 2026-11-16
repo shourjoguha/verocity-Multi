@@ -1,4 +1,4 @@
-// /app/inbox (docs/FRIENDS_SHARING_PLAN.md §5.3, §12.1, §12.2, §12.4, §12.5).
+// /app/inbox (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C) §5.3, §12.1, §12.2, §12.4, §12.5).
 // Four blocks, in this order, and the order is the point — what needs YOU
 // first:
 //   1. To review — your own needs_review logs (accepted, not yet confirmed).
@@ -24,6 +24,7 @@ import {
 } from '@/lib/queries';
 import { invalidateLogs, loadAllLogs } from '@/lib/logStore';
 import { sameDayOverlap, validateSharedLogPayload } from '@/lib/sharedLog';
+import { readSharedPlanPayload } from '@/lib/sharedPlan';
 import type { Acceptance, FriendSummary, SharedItem, WorkoutLog } from '@/lib/types';
 import { formatDate } from '@/lib/format';
 import { toast } from '@/lib/toast';
@@ -34,6 +35,7 @@ import { Disclosure } from '@/components/ui/Disclosure';
 import { Modal } from '@/components/ui/Modal';
 import { Button, EmptyState, LoadingScreen, SectionHeader, Tag } from '@/components/ui/primitives';
 import { FriendRequestRow } from '@/components/friends/FriendsPanel';
+import { AcceptPlanSheet, type AcceptablePlan } from '@/components/inbox/AcceptPlanSheet';
 import { acceptMany, acceptSharedLog, bulkToast, type LogItem } from '@/components/inbox/acceptShared';
 import { canConfirmAsIs, confirmAsIs } from '@/components/inbox/confirmReview';
 import { reviewHref } from '@/lib/reviewFlow';
@@ -184,6 +186,12 @@ function Inbox() {
     for (const it of pending.items) if (it.kind === 'log') m.set(it.id, validateSharedLogPayload(it.payload));
     return m;
   }, [pending.items]);
+  const parsedPlans = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof readSharedPlanPayload>>();
+    for (const it of pending.items) if (it.kind === 'plan') m.set(it.id, readSharedPlanPayload(it.payload));
+    return m;
+  }, [pending.items]);
+  const [planTarget, setPlanTarget] = useState<AcceptablePlan | null>(null);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -405,7 +413,7 @@ function Inbox() {
                       <div className="flex items-baseline justify-between gap-2">
                         <span className="min-w-0 truncate text-sm text-fg">From {g.sender}</span>
                         <span className="t-label shrink-0 tabular-nums text-muted">
-                          {multi && picked.length ? `${picked.length} of ${g.items.length}` : plural(g.items.length, 'workout')}
+                          {multi && picked.length ? `${picked.length} of ${g.items.length}` : plural(g.items.length, g.items[0]?.kind === 'plan' ? 'plan' : 'workout')}
                         </span>
                       </div>
                       {multi ? (
@@ -440,6 +448,8 @@ function Inbox() {
                               ),
                             ).size
                           : 0;
+                        const planRead = it.kind === 'plan' ? parsedPlans.get(it.id) : undefined;
+                        const planOk = planRead?.ok ? planRead : null;
                         const overlap = valid ? sameDayOverlap(valid.data, valid.log_date, myLogs) : null;
                         return (
                           <li key={it.id} className="px-3 py-2">
@@ -452,10 +462,11 @@ function Inbox() {
                                 />
                               ) : null}
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm text-fg">{it.title ?? 'Workout'}</div>
+                                <div className="truncate text-sm text-fg">{it.title ?? (it.kind === 'plan' ? 'Plan' : 'Workout')}</div>
                                 <div className="text-xs tabular-nums text-muted">
-                                  {it.item_date ? formatDate(it.item_date) : '—'}
+                                  {it.item_date ? formatDate(it.item_date) : it.kind === 'plan' ? '' : '—'}
                                   {valid ? ` · ${plural(moves, 'movement')}` : ''}
+                                  {planOk ? `${it.item_date ? ' · ' : ''}${plural(planOk.dayCount, 'day')}` : ''}
                                 </div>
                                 {overlap ? (
                                   <div className="mt-1">
@@ -471,8 +482,8 @@ function Inbox() {
                               </div>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
-                              {it.kind !== 'log' ? (
-                                <span className="mr-auto t-label text-muted">Plans arrive in a later update</span>
+                              {it.kind === 'plan' ? (
+                                <span className="mr-auto t-label text-muted">{planOk ? 'Plan' : "Can't be read"}</span>
                               ) : !valid ? (
                                 <span className="mr-auto t-label text-muted">Can't be read</span>
                               ) : null}
@@ -484,6 +495,16 @@ function Inbox() {
                                   variant={multi ? 'ghost' : 'primary'}
                                   disabled={busy}
                                   onClick={() => reviewOne(it)}
+                                >
+                                  Accept &amp; review
+                                </Button>
+                              ) : null}
+                              {planOk ? (
+                                <Button
+                                  disabled={busy}
+                                  onClick={() =>
+                                    setPlanTarget({ itemId: it.id, sender: it.sender_name, plan: planOk.value, dayCount: planOk.dayCount })
+                                  }
                                 >
                                   Accept &amp; review
                                 </Button>
@@ -613,6 +634,15 @@ function Inbox() {
           />
         </Disclosure>
       </Item>
+
+      <AcceptPlanSheet
+        target={planTarget}
+        onClose={() => setPlanTarget(null)}
+        onDone={() => {
+          setPlanTarget(null);
+          void refreshAfterAccept();
+        }}
+      />
 
       <Modal open={removal !== null} onClose={() => setRemoval(null)} title="Remove from my logs">
         {removal ? (

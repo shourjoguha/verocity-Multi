@@ -183,7 +183,7 @@ export const HR_WHEEL = { minBpm: 30, maxBpm: 230, restAvg: 140, restMax: 175 } 
 // UI (maxLength) and the plan validator.
 export const SUBROUTINE = { maxDescriptionChars: 300 } as const;
 
-// Friends and send-to (docs/FRIENDS_SHARING_PLAN.md). The first four are
+// Friends and send-to (the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C)). The first four are
 // MIRRORED in supabase/migrations/0052_friends_sharing.sql as `c_* constant`
 // lines tagged `-- FRIENDS.<key>`, and codeLength by the friend_codes check
 // constraint; friendsConfig.test.ts fails when the two disagree — the RPC is

@@ -197,7 +197,7 @@ export interface Share {
   revoked: boolean;
 }
 
-// ---- friends and send-to (migration 0052, docs/FRIENDS_SHARING_PLAN.md).
+// ---- friends and send-to (migration 0052, the retired friends plan (git show edd9f53:docs/FRIENDS_SHARING_PLAN.md; now SPEC §7C)).
 // Friendship permits SENDING only; it grants no read of anything. Every write
 // is an RPC. ----
 
