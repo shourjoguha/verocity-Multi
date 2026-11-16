@@ -125,12 +125,13 @@ create unique index workout_logs_shared_item_unique
   where shared_item_id is not null;
 
 -- A showcase owner who accepts a friend's log must not publish the unreviewed
--- copy to anon. Same predicate as 0034 plus the new status.
-alter policy logs_select_anon on public.workout_logs
-  using (
-    owner_user_id = (select public.showcase_profile_id())
-    and status not in ('cancelled', 'needs_review')
-  );
+-- copy to anon. RESTRICTIVE, so it ANDs onto whatever logs_select_anon says
+-- rather than restating it: live never received 0034, and its policy still
+-- carries 0014's `source = 'manual'` guard, which a rewrite here would have
+-- silently dropped (exposing the showcase's Garmin rows to anon).
+create policy logs_select_anon_no_review on public.workout_logs
+  as restrictive for select to anon
+  using (status <> 'needs_review');
 
 -- ---------------------------------------------------------------------------
 -- RPCs
