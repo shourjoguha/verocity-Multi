@@ -70,6 +70,7 @@ interface FormState {
   weight: string;
   height: string;
   birthYear: string;
+  restingHr: string;
   gender: GenderKey | '';
   bodyType: string;
   injuries: Injury[];
@@ -84,6 +85,7 @@ const EMPTY: FormState = {
   weight: '',
   height: '',
   birthYear: '',
+  restingHr: '',
   gender: '',
   bodyType: '',
   injuries: [],
@@ -100,6 +102,7 @@ function toForm(stats: UserStats | null): FormState {
     weight: stats.body_weight_kg?.toString() ?? '',
     height: stats.height_cm?.toString() ?? '',
     birthYear: stats.birth_year?.toString() ?? '',
+    restingHr: stats.resting_hr?.toString() ?? '',
     gender: stats.gender ?? '',
     bodyType: stats.body_type ?? '',
     injuries: stats.injuries ?? [],
@@ -199,6 +202,7 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
       body_weight_kg: bounded(form.weight, STATS_LIMITS.weightKg),
       height_cm: bounded(form.height, STATS_LIMITS.heightCm),
       birth_year: bounded(form.birthYear, STATS_LIMITS.birthYear),
+      resting_hr: bounded(form.restingHr, STATS_LIMITS.restingHr),
       gender: form.gender === '' ? null : form.gender,
       body_type: form.bodyType === '' ? null : form.bodyType,
       // Blank rows are noise, not data.
@@ -225,7 +229,7 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
         Private to you. These never appear on your public showcase or in a share link.
       </p>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <InfoLabel
             htmlFor="stat-weight"
@@ -273,6 +277,24 @@ export function UserStatsPanel({ onSaved }: { onSaved?: () => void } = {}) {
             max={STATS_LIMITS.birthYear.max}
             value={form.birthYear}
             onChange={(e) => patch({ birthYear: e.target.value })}
+            className={numField}
+          />
+        </div>
+        <div>
+          <InfoLabel
+            htmlFor="stat-resting-hr"
+            text="Resting heart rate"
+            info="Lets an activity's average heart rate stand in for an effort rating when you don't give one."
+          />
+          <input
+            id="stat-resting-hr"
+            type="number"
+            inputMode="numeric"
+            step="1"
+            min={STATS_LIMITS.restingHr.min}
+            max={STATS_LIMITS.restingHr.max}
+            value={form.restingHr}
+            onChange={(e) => patch({ restingHr: e.target.value })}
             className={numField}
           />
         </div>

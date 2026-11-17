@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { createLog, getHolidays } from '@/lib/queries';
+import { createLog, getHolidays, getUserStats } from '@/lib/queries';
 import { track } from '@/lib/analytics';
-import { ACTIVITY_TAGS, ACTIVITY_TYPE_TAGS, ACTIVITY_TYPES, METRICS, SORENESS } from '@/app.config';
+import { ACTIVITY_TAGS, ACTIVITY_TYPE_TAGS, ACTIVITY_TYPES, ENDURANCE_INTENSITY, METRICS, RPE, SORENESS } from '@/app.config';
+import { loadAllLogs } from '@/lib/logStore';
+import { completedLogs } from '@/lib/stats';
+import { observedPeakHr, rpeFromHeartRate } from '@/lib/enduranceIntensity';
+import { hrMaxFromAge, restingHrFrom } from '@/lib/userStats';
 import { retagForType } from '@/lib/tags';
 import { retimeLog } from '@/lib/logWhen';
 import type { Holiday, LogDocument, VibeCheck } from '@/lib/types';
@@ -36,6 +40,10 @@ const MAX_BPM = 230;
 const clampBpm = (n: number) => Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(n)));
 
 const VIBE_SCALE = [1, 2, 3, 4, 5];
+// Effort for the whole activity, in whole RPE steps from the logger's picker
+// floor. Written to the activity's one set as a RATED RPE, which the endurance
+// tiers read before heart rate (lib/enduranceIntensity.ts).
+const EFFORT_SCALE = Array.from({ length: RPE.max - RPE.pickerMin + 1 }, (_, i) => RPE.pickerMin + i);
 const VIBE_FIELDS: { key: VibeScore; label: string }[] = [
   { key: 'sleep', label: 'Sleep' },
   { key: 'energy', label: 'Energy' },
@@ -46,7 +54,7 @@ type PartialVibe = { [K in VibeScore]: number | null } & Pick<VibeCheck, 'sore'>
 
 // Build a contract-faithful log: a single conditioning movement carrying the
 // session's distance/time, so the activity shows up in stats like any session.
-function buildActivityDoc(type: string, durationSec: number, distanceM: number): LogDocument {
+function buildActivityDoc(type: string, durationSec: number, distanceM: number, effort: number | null): LogDocument {
   if (!durationSec && !distanceM) return { sections: [] };
   return {
     sections: [
@@ -68,6 +76,7 @@ function buildActivityDoc(type: string, durationSec: number, distanceM: number):
                     actual: {
                       distance: distanceM || undefined,
                       time: durationSec || undefined,
+                      ...(effort != null ? { rpe: effort, rpeRated: true } : {}),
                       completed: true,
                       prefilled: false,
                     },
@@ -110,6 +119,12 @@ export default function ActivityLogger() {
   const [vibe, setVibe] = useState<PartialVibe>({ sleep: null, energy: null, soreness: null });
   const [hrAvg, setHrAvg] = useState('');
   const [hrMax, setHrMax] = useState('');
+  const [effort, setEffort] = useState<number | null>(null);
+  // Resting and peak heart rate, for the Finish check. Null until loaded or
+  // when unknown; the check then simply does not run.
+  const [hrRef, setHrRef] = useState<{ resting: number | null; peak: number | null }>({ resting: null, peak: null });
+  // Logged effort and heart rate disagree: the question shown before saving.
+  const [check, setCheck] = useState<{ suggested: number; zone: number } | null>(null);
   const [mode, setMode] = useState<'session' | 'holiday'>(initialMode);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
 
@@ -123,6 +138,13 @@ export default function ActivityLogger() {
       // Holidays are needed for the overlap check and for ?holiday=<id>.
       setHolidays(await getHolidays());
       setReady(true);
+      // Not awaited before first paint: only the Finish check needs these.
+      try {
+        const [stats, logs] = await Promise.all([getUserStats(), loadAllLogs()]);
+        setHrRef({ resting: restingHrFrom(stats), peak: observedPeakHr(completedLogs(logs)) ?? hrMaxFromAge(stats) });
+      } catch {
+        // No reference: the check stays off.
+      }
     })();
   }, []);
 
@@ -140,16 +162,28 @@ export default function ActivityLogger() {
     setAutoTag(next.autoTag);
   };
 
-  async function save() {
+  async function save(opts: { effort?: number | null; checked?: boolean } = {}) {
     if (!type.trim()) {
       setError('Pick an activity type.');
       return;
     }
+    const rated = opts.effort !== undefined ? opts.effort : effort;
+    // Finish check: a rated effort far from what the heart rate implies gets one
+    // question before saving. Activities only — a workout already rates effort
+    // per movement.
+    if (!opts.checked && rated != null && hrAvg.trim() !== '') {
+      const fromHr = rpeFromHeartRate(clampBpm(Number(hrAvg)), hrRef.resting, hrRef.peak);
+      if (fromHr && Math.abs(fromHr.rpe - rated) >= ENDURANCE_INTENSITY.mismatchRpe) {
+        setCheck({ suggested: fromHr.rpe, zone: fromHr.zone });
+        return;
+      }
+    }
+    setCheck(null);
     setSaving(true);
     setError(null);
     const durationSec = Math.round((parseFloat(minutes) || 0) * 60);
     const distanceM = Math.round(parseFloat(distance) || 0);
-    const doc = buildActivityDoc(type.trim(), durationSec, distanceM);
+    const doc = buildActivityDoc(type.trim(), durationSec, distanceM, rated);
     // Attach the vibe check only if the user set at least one field; unset
     // fields fall back to the neutral 3 the workout logger also defaults to.
     if (vibe.sleep != null || vibe.energy != null || vibe.soreness != null) {
@@ -317,6 +351,38 @@ export default function ActivityLogger() {
         </div>
       </div>
 
+      <div role="radiogroup" aria-label="Effort (RPE)" className="mb-5 flex items-center justify-between gap-3">
+        <span className="t-control text-muted">Effort (RPE)</span>
+        <div className="flex gap-1">
+          {EFFORT_SCALE.map((n) => (
+            // Same chip as the readiness scale: 36px glyph, 44px hit box.
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={effort === n}
+              aria-label={`Effort ${n}`}
+              onClick={() => {
+                setEffort((v) => (v === n ? null : n));
+                setCheck(null);
+              }}
+              className="-my-2 flex h-11 w-11 items-center justify-center"
+            >
+              <span
+                aria-hidden
+                className={`flex h-9 w-9 items-center justify-center rounded-chip border text-sm tabular-nums transition-colors ${
+                  effort === n
+                    ? 'border-accent bg-accent text-accent-fg'
+                    : 'border-transparent bg-tappable text-muted hover:text-fg'
+                }`}
+              >
+                {n}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <label className="mb-2 block t-control text-muted">Notes</label>
       <textarea
         value={notes}
@@ -402,8 +468,24 @@ export default function ActivityLogger() {
 
       {error ? <p className="mb-3 text-sm text-accent">{error}</p> : null}
 
+      {check && effort != null ? (
+        <div role="alert" className="mb-4 flex flex-col gap-3 rounded-card border border-outline bg-surface p-4">
+          <p className="text-sm text-fg">
+            Your heart rate suggests about RPE {check.suggested} (zone {check.zone}). You logged {effort}. Change it?
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={() => { setEffort(check.suggested); void save({ effort: check.suggested, checked: true }); }} disabled={saving} className="flex-1">
+              Use {check.suggested}
+            </Button>
+            <Button variant="ghost" onClick={() => void save({ checked: true })} disabled={saving} className="flex-1">
+              Keep {effort}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex gap-3">
-        <Button onClick={save} disabled={saving} className="flex-1">
+        <Button onClick={() => void save()} disabled={saving} className="flex-1">
           {saving ? 'Saving…' : 'Save activity'}
         </Button>
         <Button variant="ghost" onClick={() => (window.location.href = '/app')}>

@@ -76,6 +76,8 @@ export interface UserStats {
   owner_user_id: string;
   body_weight_kg: number | null;
   height_cm: number | null;
+  /** Beats per minute at rest (0055). Null: heart-rate effort stays off. */
+  resting_hr: number | null;
   birth_year: number | null;
   gender: GenderKey | null;
   body_type: string | null;

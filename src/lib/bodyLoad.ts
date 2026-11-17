@@ -17,8 +17,8 @@
 import {
   BODY_LENSES,
   BODY_LENS_KEYS,
-  COMPOUND,
   ENDURANCE,
+  ENDURANCE_INTENSITY,
   LOAD,
   MODALITY_KEYS,
   MUSCLE_KEYS,
@@ -40,6 +40,8 @@ import {
 } from '@/app.config';
 import { classifyMovement, isPlaceholder, type OverrideMap } from '@/lib/movementTaxonomy';
 import { isHeld, isVariant } from '@/lib/notations';
+import { setClockSeconds, setWorkSeconds } from '@/lib/setTime';
+import { isActivity, itemIntensity } from '@/lib/enduranceIntensity';
 import { workingSections } from '@/lib/stats';
 import { isSubroutine } from '@/lib/subroutine';
 import type { LogItem, LogSet, WorkoutLog } from '@/lib/types';
@@ -59,6 +61,9 @@ export interface UnmappedMovement {
 export interface BodyLoadOptions {
   /** Kg-equivalent of one unweighted rep. From `unweightedRepKg(stats)`. */
   unweightedKg?: number;
+  /** For an activity's heart-rate effort (lib/enduranceIntensity.ts). */
+  restingHr?: number | null;
+  peakHr?: number | null;
 }
 
 export interface BodyLoadSummary {
@@ -191,6 +196,14 @@ export interface BodyLoadSummary {
   // classified / (classified + unmapped), 0..1
   coverage: number;
   sessions: number;
+  /** Minutes of conditioning blocks inside training sessions, by the modality
+   *  of the movement. All of it serves endurance (owner, 2026-11-17), so the
+   *  goal chart moves it out of its modality's pool. Activities never land
+   *  here: they are stored as a conditioning block but route by movement. */
+  conditioningBlockMinutes: Record<ModalityKey, number>;
+  /** The endurance pool — endurance-modality minutes plus every conditioning
+   *  block in a training session — split by intensity (ENDURANCE_INTENSITY). */
+  enduranceTiers: { light: number; hard: number };
 }
 
 function zeroed<K extends string>(keys: readonly K[]): Record<K, number> {
@@ -200,14 +213,12 @@ function zeroed<K extends string>(keys: readonly K[]): Record<K, number> {
 // Minutes of work represented by one set. Only completed sets count —
 // DELIBERATELY unlike sessionVolume, which counts every set. A planned-but-not-
 // performed set is not work done to a region.
-export function setMinutes(set: LogSet): number {
-  const a = set.actual;
-  if (!a.completed) return 0;
-  if (a.time != null) return a.time / 60;
-  if (a.reps != null) return (a.reps * LOAD.repSeconds) / 60;
-  if (a.distance != null) return a.distance / LOAD.metersPerMinute;
-  if (a.calories != null) return (a.calories * LOAD.secondsPerCalorie) / 60;
-  return LOAD.fallbackSetMinutes;
+//
+// A rep-counted set is priced by lib/setTime.ts (the owner's SET_TIME), not a
+// flat 3 s a rep: a paused back squat and a rear-delt fly no longer cost the
+// same. Work only — setup and rest are the clock split's business.
+export function setMinutes(set: LogSet, profile: MovementProfile | null = null, sectionKey?: string): number {
+  return setWorkSeconds(set, profile, sectionKey) / 60;
 }
 
 /**
@@ -495,11 +506,11 @@ export function summarizeTrainingVolume(
         for (const item of group.items ?? []) {
           if (isSubroutine(item) || isPlaceholder(item.movement)) continue;
 
-          const minutes = item.sets.reduce((acc, s) => acc + setMinutes(s), 0);
+          const c = classifyMovement(item.movement, { overrides });
+          const minutes = item.sets.reduce((acc, s) => acc + setMinutes(s, c.profile, section.key), 0);
           if (minutes <= 0) continue;
           logWorkingMinutes += minutes;
 
-          const c = classifyMovement(item.movement, { overrides });
           if (Object.keys(c.profile.regions).length === 0) continue;
 
           const modality =
@@ -618,38 +629,23 @@ function lensFor(modality: ModalityKey | null): BodyLensKey | null {
 // session's own wall clock rather than summed from `setMinutes`.
 
 /**
- * How much more of a session one set of this movement is worth than one set of
- * an isolation movement. Read off what the taxonomy already knows — region
- * spread and `systemic` — so there is no new hand-maintained column, and
- * clamped to COMPOUND.range so it can only nudge the split.
- */
-function compoundFactor(profile: MovementProfile): number {
-  const regions = Object.keys(profile.regions).length;
-  if (regions === 0) return 1;
-  return clamp(
-    1 + (regions - 1) * COMPOUND.perExtraRegion + (profile.systemic ? COMPOUND.systemicBonus : 0),
-    COMPOUND.range,
-  );
-}
-
-/**
- * The key the remainder is spread by: what this item plausibly COST the clock.
+ * The key the remainder is spread by: what this item plausibly COST the clock —
+ * setup, work and rest per set (lib/setTime.ts, the owner's SET_TIME).
  *
- * Rest is in it deliberately. A set of squats and a set of curls do not occupy
- * the session equally, and `setMinutes` — time under tension only — says they
- * nearly do. `restSeconds` is real logged intent on most items and is the one
- * recorded number that captures the difference; the compound factor covers the
- * rest of it. Only a distribution key, never a total: it decides how the
- * remainder splits, never how big the remainder is.
+ * Rest is in it deliberately: `restSeconds` is real logged intent on most items.
+ * Setup and seconds-per-rep differ by kind of movement, which is what the old
+ * compound factor (0.8-1.4 by region count) approximated; it is gone, because
+ * keeping both would count the compound difference twice. Only a distribution
+ * key, never a total: it decides how the remainder splits, never how big it is.
  */
-function itemShareWeight(item: LogItem, profile: MovementProfile): number {
-  const rest = item.restSeconds ?? SESSION_CLOCK.restFallbackSeconds;
+function itemShareWeight(item: LogItem, profile: MovementProfile, sectionKey: string): number {
   let seconds = 0;
   for (const s of item.sets) {
     if (!s.actual.completed) continue;
-    seconds += setMinutes(s) * 60 + rest;
+    const rest = s.actual.rest ?? item.restSeconds ?? SESSION_CLOCK.restFallbackSeconds;
+    seconds += setClockSeconds(s, profile, sectionKey) + rest;
   }
-  return (seconds / 60) * compoundFactor(profile);
+  return seconds / 60;
 }
 
 /**
@@ -728,7 +724,7 @@ function ownerModality(log: WorkoutLog, walk: WalkItem[]): ModalityKey | null {
   const byModality = new Map<ModalityKey, number>();
   for (const w of candidates) {
     if (w.modality) {
-      byModality.set(w.modality, (byModality.get(w.modality) ?? 0) + itemShareWeight(w.item, w.profile));
+      byModality.set(w.modality, (byModality.get(w.modality) ?? 0) + itemShareWeight(w.item, w.profile, w.section));
     }
   }
   const ranked = [...byModality.entries()].sort((a, b) => b[1] - a[1]);
@@ -790,7 +786,7 @@ function allocateSession(log: WorkoutLog, walk: WalkItem[]): void {
   }
   const remainder = Math.max(0, sessionMinutes - claimed);
 
-  const weights = walk.map((w, i) => (isClaim[i] ? 0 : itemShareWeight(w.item, w.profile)));
+  const weights = walk.map((w, i) => (isClaim[i] ? 0 : itemShareWeight(w.item, w.profile, w.section)));
   const weightTotal = weights.reduce((a, b) => a + b, 0);
   const rawRemainder = walk.reduce((a, w, i) => a + (isClaim[i] ? 0 : w.raw), 0);
   const remainderCount = isClaim.filter((x) => !x).length;
@@ -828,10 +824,10 @@ function buildWalk(log: WorkoutLog, overrides: OverrideMap): WalkItem[] {
       for (const item of group.items ?? []) {
         if (isSubroutine(item) || isPlaceholder(item.movement)) continue;
 
-        const raw = item.sets.reduce((acc, s) => acc + setMinutes(s), 0);
+        const c = classifyMovement(item.movement, { overrides });
+        const raw = item.sets.reduce((acc, s) => acc + setMinutes(s, c.profile, section.key), 0);
         if (raw <= 0) continue;
 
-        const c = classifyMovement(item.movement, { overrides });
         walk.push({
           item,
           section: section.key,
@@ -928,6 +924,9 @@ export function summarizeBodyLoad(
     work: zeroed(MUSCLE_KEYS),
   };
 
+  const conditioningBlockMinutes = zeroed(MODALITY_KEYS);
+  const enduranceTiers = { light: 0, hard: 0 };
+  const hr = { resting: opts.restingHr ?? null, peak: opts.peakHr ?? null };
   let systemicMinutes = 0;
   let classifiedMinutes = 0;
   let unmappedMinutes = 0;
@@ -952,9 +951,27 @@ export function summarizeBodyLoad(
     // PREP_SECTIONS.
     const loadSections = new Set(workingSections(log).map((s) => s.key));
 
+    // Endurance intensity. A session with no lifting in it (an activity, a
+    // run) spends its first minutes warming up; a block after lifting does not.
+    const activity = isActivity(log);
+    const standalone =
+      activity ||
+      !walk.some((w) => w.modality === 'resistance' && !(SESSION_CLOCK.claimSections as readonly string[]).includes(w.section));
+    let warmLeft = standalone ? ENDURANCE_INTENSITY.warmupMinutes : 0;
+
     // PASS 3 — attribute the allocated minutes.
     for (const { item, section, profile, hasRegions, modality, minutes } of walk) {
       const lens = itemLens(modality, section, profile);
+
+      const inBlock = section === 'conditioning' && !activity;
+      if (inBlock && modality) conditioningBlockMinutes[modality] += minutes;
+      if ((inBlock || modality === 'endurance') && minutes > 0) {
+        const warm = Math.min(warmLeft, minutes);
+        warmLeft -= warm;
+        const hard = itemIntensity(log, item, section, hr) >= ENDURANCE_INTENSITY.hardFromRpe;
+        enduranceTiers.light += warm + (hard ? 0 : minutes - warm);
+        enduranceTiers.hard += hard ? minutes - warm : 0;
+      }
 
       // WORK, before the minutes gate on purpose: it counts sets, not clock,
       // so an item the allocation happened to leave at zero minutes still
@@ -1117,6 +1134,8 @@ export function summarizeBodyLoad(
     totalMinutes,
     coverage: totalMinutes > 0 ? classifiedMinutes / totalMinutes : 0,
     sessions: countedLogs.size,
+    conditioningBlockMinutes,
+    enduranceTiers,
   };
 }
 

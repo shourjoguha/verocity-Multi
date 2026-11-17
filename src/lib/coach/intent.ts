@@ -35,8 +35,9 @@
 // `hypertrophyReps`' floor. All are passed in from the claim-cited pack.
 
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
-import { LOAD, type RegionKey } from '@/app.config';
-import type { LogGroup, LogItem, LogSet } from '@/lib/types';
+import type { RegionKey } from '@/app.config';
+import { setClockSeconds } from '@/lib/setTime';
+import type { LogGroup, LogItem } from '@/lib/types';
 
 /** What a piece of loaded work appears to be for. */
 export type LoadedIntent =
@@ -83,10 +84,6 @@ export function loggedRestAfter(item: LogItem, group: LogGroup, ki: number): num
   return movers.length > 1 && movers[movers.length - 1] !== item ? 0 : group.restSeconds;
 }
 
-/** How long a set itself took: its logged time, else reps at LOAD.repSeconds. */
-function setWorkSeconds(set: LogSet): number {
-  return set.actual.time ?? (set.actual.reps ?? 0) * LOAD.repSeconds;
-}
 
 export interface RestGap {
   /** Effective seconds of recovery for this movement's muscles. */
@@ -150,9 +147,11 @@ export function restGap(
     if (it.kind === 'subroutine') continue;
     const set = it.sets[idx];
     if (!set?.actual.completed) continue;
-    const ov = regionOverlap(mine, classifyMovement(it.movement, { overrides: opts.overrides }).profile.regions);
+    const partner = classifyMovement(it.movement, { overrides: opts.overrides }).profile;
+    const ov = regionOverlap(mine, partner.regions);
     if (partnerOverlap == null || ov > partnerOverlap) partnerOverlap = ov;
-    elapsed += setWorkSeconds(set);
+    // The partner's setup and work, priced like every other set (lib/setTime.ts).
+    elapsed += setClockSeconds(set, partner);
     reload = Math.max(reload, ov * elapsed);
     const r = restOf(it, idx);
     if (!r.logged) assumed = true;
@@ -226,17 +225,22 @@ export interface IntentMix {
   strength: number;
   hypertrophy: number;
   conditioning: number;
+  /** Estimated clock seconds (setup + work + rest, lib/setTime.ts) behind each
+   *  intent — what the goal chart splits time by, since a strength set with
+   *  three minutes' rest costs the clock far more than a set of flies. */
+  seconds: Record<LoadedIntent, number>;
   /** Of the above, how many were classified on an assumed rest. Not a fourth
    *  category — these are already counted in the three. */
   assumed: number;
 }
 
 export function emptyMix(): IntentMix {
-  return { strength: 0, hypertrophy: 0, conditioning: 0, assumed: 0 };
+  return { strength: 0, hypertrophy: 0, conditioning: 0, seconds: { strength: 0, hypertrophy: 0, conditioning: 0 }, assumed: 0 };
 }
 
-export function countIntent(mix: IntentMix, verdict: IntentVerdict, sets = 1): void {
+export function countIntent(mix: IntentMix, verdict: IntentVerdict, sets = 1, seconds = 0): void {
   mix[verdict.intent] += sets;
+  mix.seconds[verdict.intent] += seconds;
   if (verdict.restAssumed) mix.assumed += sets;
 }
 

@@ -354,7 +354,6 @@ function HoursBar({ review: r }: { review: Review }) {
 function GoalsChart({ review: r }: { review: Review }) {
   const max = Math.max(0.5, ...r.goals.flatMap((g) => [g.intent, g.actual]));
   const x = (v: number) => `${(v / max) * 100}%`;
-  const liftingPair = r.goals.some((g) => g.id === 'strength') && r.goals.some((g) => g.id === 'hypertrophy');
   return (
     <div className="rounded-card border border-outline bg-surface p-3">
       <p className="mb-2 text-xs text-muted">By movement — time inside each session split by the work in it.</p>
@@ -383,16 +382,17 @@ function GoalsChart({ review: r }: { review: Review }) {
               />
               <span className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-fg" style={{ left: x(g.actual) }} />
             </div>
-            <span className="whitespace-nowrap text-right text-xs tabular-nums text-fg">
-              {pct(g.actual)}
-              <span className="text-muted"> of {pct(g.intent)}</span>
+            <span className="flex flex-col whitespace-nowrap text-right text-xs tabular-nums text-fg">
+              <span>
+                {pct(g.actual)}
+                <span className="text-muted"> of {pct(g.intent)}</span>
+              </span>
+              {g.hardShare != null ? <span className="text-[0.65rem] text-muted">{pct(g.hardShare)} hard</span> : null}
             </span>
           </div>
         );
       })}
-      {liftingPair ? (
-        <p className="mt-2 text-xs text-muted">{goalSplitNote(r)}</p>
-      ) : null}
+      <p className="mt-2 text-xs text-muted">{goalSplitNote(r)}</p>
     </div>
   );
 }

@@ -380,6 +380,22 @@ UI audit have both run.
   kg.m made a 20 m sled push read ~2.5x a ski interval of the same effort and
   a time-logged interval read zero. Distance work needs a working pace
   (`paceMpm` in the taxonomy) — `LOAD.metersPerMinute` is a running pace.
+- **How long a set took is estimated in ONE place, and endurance time carries
+  intensity.** `src/lib/setTime.ts` prices every rep-counted set from
+  `SET_TIME` (the owner's numbers): setup + reps × sides × (seconds per rep for
+  the movement's kind + pause + tempo) × intent × effort. The body map's
+  minutes, Stats, conditioning `RPE·min`, superset rest (`restGap`) and the
+  goal chart all read it — **never price set time with `LOAD.repSeconds`**,
+  which now survives only in volume's rep-equivalents. On Review's goal chart,
+  lifting time splits between strength and hypertrophy by
+  `loadedIntent.seconds` (setup + work + rest), not set count; **every minute
+  of a conditioning block inside a workout is endurance**; activities route by
+  movement — they are stored as a conditioning block, so reading the section
+  alone files a yoga class under endurance. Endurance minutes split Light /
+  Hard (`ENDURANCE_INTENSITY`): rated RPE, then heart rate (activities only,
+  from `user_stats.resting_hr` and the observed peak), then the kind's
+  default. **Never read a finisher's intensity from the session's heart
+  rate** — it is the whole session's.
 - **The body map's Work measure is a third count, not either of those.**
   `regionWork` / `muscleWork` / `byLens.work` in `src/lib/bodyLoad.ts`: each
   `isLoadedSet` working set (prep excluded) is ONE unit, split by the movement's

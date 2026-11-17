@@ -12,6 +12,7 @@ import {
   type WorkTotals,
 } from '@/lib/work';
 import { classifyMovement } from '@/lib/movementTaxonomy';
+import { setWorkSeconds } from '@/lib/setTime';
 import { LOAD, RPE, VOLUME, WORK, type SectionKey } from '@/app.config';
 import type { LogItem, LogSet, UserStats, WorkoutLog } from '@/lib/types';
 
@@ -394,7 +395,8 @@ describe('sessionWork books work to the block it was logged in', () => {
     const inMain = sessionWork(log([{ key: 'accessory', items: [snatch] }]), BW);
     expect(inMain.cardio).toBe(0);
     expect(inMain.resistance).toBeGreaterThan(0);
-    expect(inCond).toEqual({ resistance: 0, cardio: ((10 * LOAD.repSeconds) / 60) * RPE.default });
+    const secs = setWorkSeconds(snatch.sets[0], classifyMovement('Dumbbell Snatch').profile, 'conditioning');
+    expect(inCond).toEqual({ resistance: 0, cardio: (secs / 60) * RPE.default });
   });
 
   it('counts distance work in a lifting block as lifting, priced as distance', () => {

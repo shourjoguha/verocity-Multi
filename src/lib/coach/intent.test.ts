@@ -8,7 +8,7 @@ import {
   regionOverlap,
   restGap,
 } from '@/lib/coach/intent';
-import { LOAD } from '@/app.config';
+import { setClockSeconds } from '@/lib/setTime';
 import { TRAINING } from '@/lib/coach/knowledge';
 import { isLoadedSet, meaningfulRegionShare } from '@/lib/bodyLoad';
 import { classifyMovement } from '@/lib/movementTaxonomy';
@@ -74,7 +74,8 @@ describe('regionOverlap', () => {
 });
 
 describe('restGap — a superset alternates its sets', () => {
-  const W = (reps: number) => reps * LOAD.repSeconds;
+  // A dip set's clock cost (setup + work), priced like every other set.
+  const W = (reps: number) => setClockSeconds(set({ weight: 20, reps }), classifyMovement('Weighted Dips').profile);
   const opts = { unloggedRestSeconds: 0 };
   const ov = regionOverlap(
     classifyMovement('Pull-Up').profile.regions,
@@ -233,7 +234,7 @@ describe('loggedRestAfter — a superset rests at the end of the round', () => {
 
 describe('mixShares', () => {
   it('reports shares over every loaded set, with the assumed part beside it', () => {
-    const m = { strength: 3, hypertrophy: 6, conditioning: 1, assumed: 7 };
+    const m = { strength: 3, hypertrophy: 6, conditioning: 1, seconds: { strength: 0, hypertrophy: 0, conditioning: 0 }, assumed: 7 };
     const out = mixShares(m);
     expect(out.total).toBe(10);
     expect(out.shares.hypertrophy).toBe(0.6);

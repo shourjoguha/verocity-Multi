@@ -1889,6 +1889,25 @@ The new field **must never be totalled** — a squat legitimately counts twice.
 -> `src/lib/bodyLoad.ts` (`meaningfulRegionShare`, `isLoadedSet`),
 `src/lib/coach/signals.ts`, `src/lib/coach/rules/training.ts`
 
+### A paused squat and a rear-delt fly cost the same time per rep
+`[2026-11-17]`
+Every rep-counted set was `reps × LOAD.repSeconds` (3 s) wherever time was
+read: the body map's clock split, conditioning `RPE·min`, superset rest, and so
+the goal chart. Setup, per-side work, pauses, tempo, intent and effort were all
+invisible, and a compound factor (0.8–1.4 by region count) tried to patch the
+clock split alone. Now `src/lib/setTime.ts` prices a set by the movement's kind
+(read off the taxonomy) with the owner's `SET_TIME` numbers, and the compound
+factor is gone — keeping both would count the compound difference twice.
+**The kind cut is a top-region share of 0.85, not 0.6**: at 0.6 Back Squat
+(quads 0.60) and Bench (chest 0.60) read as isolation; 0.85 still catches
+rear-delt fly and cable fly (0.85) and leaves hip thrust (0.80) compound.
+**`resting_hr` was not where it was said to be.** It was described to the owner
+as already on their profile; it existed only in `garmin_health_daily`. Migration
+0055 put it on `user_stats` with a field in You → Stats. Grep the row type
+before telling anyone a field exists.
+-> `src/lib/setTime.ts`, `src/lib/enduranceIntensity.ts`, `SET_TIME` and
+`ENDURANCE_INTENSITY` in `src/app.config.ts`
+
 ### Strength reads as almost none of the lifting time
 `[2026-11-17]`
 The goals chart's Strength and Hypertrophy rows used to split resistance

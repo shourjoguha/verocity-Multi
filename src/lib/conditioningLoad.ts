@@ -17,27 +17,19 @@
 //
 // An unrated set scores at RPE.default: absence is never a penalty.
 
-import { LOAD, RPE, type MovementProfile } from '@/app.config';
+import { RPE, type MovementProfile } from '@/app.config';
+import { setWorkSeconds } from '@/lib/setTime';
 import type { LogSet } from '@/lib/types';
 
 export const CONDITIONING_UNIT = 'RPE·min';
 
 /**
- * Seconds of work in one completed set, from whatever was logged: time as
- * logged; calories, distance and reps through their pace constants; one
- * fallback slot when nothing measurable was recorded.
+ * Seconds of work in one completed set, from whatever was logged — priced by
+ * lib/setTime.ts at conditioning intent, the same estimate every other reader
+ * of set time uses.
  */
 export function workSeconds(set: LogSet, profile: MovementProfile | null): number {
-  const a = set.actual;
-  if (!a.completed) return 0;
-  if (a.time != null) return a.time;
-  if (a.calories != null) return a.calories * LOAD.secondsPerCalorie;
-  if (a.distance != null) return (a.distance / (profile?.paceMpm ?? LOAD.metersPerMinute)) * 60;
-  if (a.reps != null) {
-    const side = set.notations.includes('/side') ? 2 : 1;
-    return a.reps * side * LOAD.repSeconds;
-  }
-  return LOAD.fallbackSetMinutes * 60;
+  return setWorkSeconds(set, profile, 'conditioning');
 }
 
 /** Working minutes x RPE for one set. */

@@ -8,7 +8,7 @@
 // by hand and no model writes any of it. The one-line headlines are templates
 // over those numbers, so a headline can never say more than its chart shows.
 
-import { LOAD_EQUIVALENCE, MUSCLE_REGIONS, RPE_LADDER, type BodyLensKey, type RegionKey } from '@/app.config';
+import { ENDURANCE_INTENSITY, LOAD_EQUIVALENCE, MUSCLE_REGIONS, RPE_LADDER, type BodyLensKey, type RegionKey } from '@/app.config';
 import { sessionClockSeconds, sessionLens } from '@/lib/bodyLoad';
 import { TRAINING as T } from '@/lib/coach/knowledge';
 import { heavyFractionFor } from '@/lib/coach/rules/training';
@@ -21,7 +21,7 @@ import { completedLogs, flattenWorkingSets, workingSections } from '@/lib/stats'
 import { isSubroutine } from '@/lib/subroutine';
 import { sessionTagColors } from '@/lib/tags';
 import type { Plan, UserStats, WorkoutLog } from '@/lib/types';
-import { unweightedRepKg } from '@/lib/userStats';
+import { hrMaxFromAge, restingHrFrom, unweightedRepKg } from '@/lib/userStats';
 
 export type ReviewPeriod = { kind: 'all' } | { kind: 'quarter' } | { kind: 'plan'; planId: string };
 
@@ -225,6 +225,8 @@ export function buildReview(period: ReviewPeriod, input: ReviewInput): Review | 
       heavyRestSeconds: T.strengthRest.value,
       overrides,
       unweightedKg: unweightedRepKg(input.stats),
+      restingHr: restingHrFrom(input.stats),
+      hrMaxFallback: hrMaxFromAge(input.stats),
     },
     new Date(`${window.end}T12:00:00Z`),
     window.days,
@@ -253,7 +255,9 @@ export function buildReview(period: ReviewPeriod, input: ReviewInput): Review | 
     goals,
     unmeasuredGoals,
     goalSplit: {
-      byIntent: training.loadedIntent.sufficiency !== 'insufficient' && training.loadedIntent.value.total > 0,
+      byIntent:
+        training.loadedIntent.sufficiency !== 'insufficient' &&
+        training.loadedIntent.value.mix.seconds.strength + training.loadedIntent.value.mix.seconds.hypertrophy > 0,
       assumedShare: training.loadedIntent.value.assumedShare,
     },
     regionSets,
@@ -490,7 +494,7 @@ export function goalSplitNote(r: Review): string {
   if (!r.goalSplit.byIntent) {
     return 'Too few loaded sets to read strength vs hypertrophy, so lifting time is split by your goal weights.';
   }
-  const rule = `Strength is ${T.strengthReps.value} reps or fewer, or under ${T.hypertrophyReps.value[0]} with ${Math.round(T.strengthRest.value[0] / 60)} min or more of rest (a superset partner's set counts as rest); loaded work in a conditioning block counts as endurance.`;
+  const rule = `Strength is ${T.strengthReps.value} reps or fewer, or under ${T.hypertrophyReps.value[0]} with ${Math.round(T.strengthRest.value[0] / 60)} min or more of rest (a superset partner's set counts as rest). Lifting time is split by each set's estimated time, rest included. All of a conditioning block counts as endurance; hard is RPE ${ENDURANCE_INTENSITY.hardFromRpe} or above.`;
   return r.goalSplit.assumedShare > 0
     ? `${rule} ${pct(r.goalSplit.assumedShare)} of sets had too little rest logged to tell and were read on reps alone.`
     : rule;
