@@ -9,18 +9,20 @@
 //      a HIIT circuit has none by design, and an EMOM or AMRAP's rest is
 //      whatever the athlete had left on the day — absence there is the
 //      prescription, not missing data.
-//   2. A superset (or circuit) outside a conditioning block is hypertrophy.
-//   3. A single movement is strength when it was rested for at least
-//      `strengthRest`'s floor (120s) AND ran under `hypertrophyReps`' floor
-//      (8). Anything else is hypertrophy.
-//   4. A single movement with no rest logged is read on its reps alone, and the
-//      verdict says so (`restAssumed`). Rest tagging was added to the logger
-//      after the first logs, so its absence on old work is not a statement
-//      about short rest.
+//   2. A set of `strengthReps` (5) or fewer is strength, whatever the rest.
+//   3. A set under `hypertrophyReps`' floor (8) is strength when its TOTAL rest
+//      reached `strengthRest`'s floor (120s). In a superset that total is the
+//      movement's own rest plus the partner's set and the partner's rest
+//      (`restGap`): the partner works other muscles while these recover.
+//   4. Anything else is hypertrophy.
+//   5. A set under 8 reps with no rest logged — or too little logged to reach
+//      120s — is read on its reps alone, and the verdict says so
+//      (`restAssumed`). Rest tagging was added to the logger after the first
+//      logs, so its absence on old work is not a statement about short rest.
 //
-// Reps alone do not separate the jobs — on one athlete's log the mean reps
-// barely moved (11.7 -> 10.2) while top load climbed 35 -> 58.5 kg with tagged
-// rest — which is why rule 3 needs BOTH, and rule 4 is flagged as inference.
+// Rest alone does not separate the jobs and neither do reps — on one athlete's
+// log the mean reps barely moved (11.7 -> 10.2) while top load climbed 35 ->
+// 58.5 kg with tagged rest — which is why the 6-7 rep middle needs both.
 //
 // THE REST TAG. Rest lives on the item as `restSeconds` and optionally per set
 // as `SetActual.rest` ("vary by set"); both mean the rest taken AFTER the set.
@@ -29,8 +31,8 @@
 // movements (`loggedRestAfter`), unless an item carries its own tag.
 //
 // NOTHING HERE IS A THRESHOLD OF ITS OWN. 120 seconds is `strengthRest`'s floor
-// and `hypertrophyRest`'s ceiling; 8 reps is `hypertrophyReps`' floor. Both are
-// passed in from the claim-cited pack.
+// and `hypertrophyRest`'s ceiling; 5 reps is `strengthReps`; 8 reps is
+// `hypertrophyReps`' floor. All are passed in from the claim-cited pack.
 
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import { LOAD, type RegionKey } from '@/app.config';
@@ -173,36 +175,43 @@ export interface IntentInput {
   sectionKey: string;
   /** `TRAINING.strengthRest.value[0]`, which is also `hypertrophyRest.value`. */
   restBoundarySeconds: number;
-  /** `TRAINING.hypertrophyReps.value[0]`: strength runs below it. */
+  /** `TRAINING.strengthReps.value`: at or under it a set is strength outright. */
+  strengthRepMax: number;
+  /** `TRAINING.hypertrophyReps.value[0]`: under it, rest decides. */
   hypertrophyRepFloor: number;
+  overrides?: OverrideMap;
 }
 
 export interface IntentVerdict {
   intent: LoadedIntent;
-  /** The rest logged after the set; null when the verdict did not need it or
-   *  none was logged. */
+  /** Total rest the verdict was reached on (`restGap`); null when the verdict
+   *  did not need it. */
   restSeconds: number | null;
-  /** True when a single movement had no rest logged and was read on reps
-   *  alone. A caller that does not report this overstates what it knows. */
+  /** True when the set was read on its reps because no rest — or too little
+   *  to decide — was logged. A caller that does not report this overstates
+   *  what it knows. */
   restAssumed: boolean;
 }
 
-/** Classify one set by where it sits and how it was spaced — see the header. */
+/** Classify one set by where it sits, its reps and its rest — see the header. */
 export function classifyIntent(input: IntentInput): IntentVerdict {
-  const { item, group, setIndex, sectionKey } = input;
-  if (sectionKey === 'conditioning') return { intent: 'conditioning', restSeconds: null, restAssumed: false };
-  const grouped = group.items.filter((it) => it.kind !== 'subroutine').length > 1;
-  if (grouped) return { intent: 'hypertrophy', restSeconds: null, restAssumed: false };
-
+  const { item, group, setIndex } = input;
+  if (input.sectionKey === 'conditioning') return { intent: 'conditioning', restSeconds: null, restAssumed: false };
   const reps = item.sets[setIndex]?.actual.reps;
-  const lowReps = reps != null && reps < input.hypertrophyRepFloor;
-  const rest = loggedRestAfter(item, group, setIndex);
-  if (rest == null) return { intent: lowReps ? 'strength' : 'hypertrophy', restSeconds: null, restAssumed: true };
-  return {
-    intent: lowReps && rest >= input.restBoundarySeconds ? 'strength' : 'hypertrophy',
-    restSeconds: rest,
-    restAssumed: false,
-  };
+  if (reps == null || reps >= input.hypertrophyRepFloor) {
+    return { intent: 'hypertrophy', restSeconds: null, restAssumed: false };
+  }
+  if (reps <= input.strengthRepMax) return { intent: 'strength', restSeconds: null, restAssumed: false };
+
+  // 6-7 reps: rest decides. Unlogged rest counts as nothing, so a total that
+  // reaches the boundary anyway is a real answer; one that falls short only
+  // because something was unlogged is not, and reps decide instead.
+  const found = group.items.findIndex((it) => it.id === item.id);
+  const g = found >= 0 ? group : { ...group, items: [item] };
+  const gap = restGap(g, Math.max(0, found), setIndex, { unloggedRestSeconds: 0, overrides: input.overrides });
+  if (gap.seconds >= input.restBoundarySeconds) return { intent: 'strength', restSeconds: gap.seconds, restAssumed: false };
+  if (gap.assumed) return { intent: 'strength', restSeconds: gap.seconds, restAssumed: true };
+  return { intent: 'hypertrophy', restSeconds: gap.seconds, restAssumed: false };
 }
 
 /**

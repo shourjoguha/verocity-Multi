@@ -689,7 +689,9 @@ export function measureTraining(
                   setIndex: ki,
                   sectionKey: section.key,
                   restBoundarySeconds: opts.heavyRestSeconds[0],
+                  strengthRepMax: opts.strengthRepMax,
                   hypertrophyRepFloor: opts.hypertrophyReps[0],
+                  overrides,
                 }),
               );
             }

@@ -1896,17 +1896,18 @@ minutes by the athlete's own goal weights, so both rows always showed the same
 actual/intent ratio and measured nothing. `measureGoals` now splits them by
 `loadedIntent`, and the owner restated what intent means, in this order:
 a loaded set in a **conditioning** block is conditioning (an EMOM, AMRAP or
-HIIT circuit has no rest tag by design — absence is the prescription); a
-**superset** is hypertrophy; a **single** movement is strength only when rested
-at least `strengthRest`'s floor (120s) **and** under `hypertrophyReps`' floor
-(8); a single with no rest logged is read on reps alone, flagged `restAssumed`.
-A superset's **group** rest is taken once at the end of the round
-(`loggedRestAfter`), not after every movement in it.
-On the July–August fixture that leaves Strength at ~6–8% of time against a 32%
-ranking. That is the data, not the rule misfiring: of 27 main-block single
-sets only 9 met both halves; six low-rep sets were tagged under 120s and 13
-carried no rest at all. **If Strength reads low, check whether the heavy
-singles were tagged 120s+ before touching the classifier.**
+HIIT circuit has no rest tag by design — absence is the prescription); **5 reps
+or fewer** is strength whatever the rest; **8+** is hypertrophy; **6–7** is
+strength when its total rest reached 120s, where a superset's total includes
+the partner's set and rest (`restGap`) because the partner works other muscles;
+a 6–7 rep set with too little rest logged is read on reps alone, flagged
+`restAssumed`. A superset's **group** rest is taken once at the end of the
+round (`loggedRestAfter`), not after every movement in it.
+A first cut that required 120s **and** under 8 reps on single movements only
+(supersets always hypertrophy) left Strength at ~6–8% of time on the
+July–August fixture against a 32% ranking: low-rep main sets were often tagged
+under 120s, or not at all. **If Strength reads low, check the reps and rest
+tags on the heavy sets before touching the classifier.**
 This reverses two earlier decisions, both now in Superseded: that reps say
 nothing, and that an untouched picker means 30s of rest.
 -> `src/lib/coach/intent.ts` (`classifyIntent`, `loggedRestAfter`),

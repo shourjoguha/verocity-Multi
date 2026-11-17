@@ -404,16 +404,18 @@ UI audit have both run.
   time spent). A session with nothing outside prep — a yoga class logged as one
   cooldown block — counts in full; real data has two. A new metric that walks
   `log.data.sections` directly is the bug this rule exists to stop.
-- **What loaded work was FOR is read from block, structure, rest and reps — in
-  that order** (`src/lib/coach/intent.ts`, the owner's rules of 2026-11-17).
+- **What loaded work was FOR is read from block, reps and rest — in that
+  order** (`src/lib/coach/intent.ts`, the owner's rules of 2026-11-17).
   A loaded set in a conditioning block is conditioning, with no rest asked — an
-  EMOM, AMRAP or HIIT circuit is untagged by design. A superset is hypertrophy.
-  A single movement is strength only when rested at least 120s **and** under 8
-  reps; both numbers come from the pack (`strengthRest`'s floor, which is
-  `hypertrophyRest`'s ceiling, and `hypertrophyReps`' floor), not new
-  thresholds. A single with no rest logged is read on reps alone and the verdict
-  carries `restAssumed`, so the surface can report how much is inference. A
-  superset's group rest is taken once, at the end of the round. **Never use
+  EMOM, AMRAP or HIIT circuit is untagged by design. A set of 5 reps or fewer
+  is strength whatever the rest; 8 or more is hypertrophy; 6–7 is strength when
+  its **total** rest reached 120s. In a superset that total is the movement's
+  own rest plus the partner's set and rest (`restGap`): the partner works other
+  muscles, discounted only where it shares them. A superset's group rest is
+  taken once, at the end of the round. All three numbers come from the pack
+  (`strengthReps`, `hypertrophyReps`' floor, `strengthRest`'s floor), not new
+  thresholds. A 6–7 rep set with too little rest logged to decide is read on
+  reps alone and carries `restAssumed`. **Never use
   `TIMERS.defaultRestSeconds` for this** — it is 120, it belongs to a new
   movement's tag rather than to what was rested, and it would classify most of
   a real log as strength work.

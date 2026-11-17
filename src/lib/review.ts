@@ -490,9 +490,9 @@ export function goalSplitNote(r: Review): string {
   if (!r.goalSplit.byIntent) {
     return 'Too few loaded sets to read strength vs hypertrophy, so lifting time is split by your goal weights.';
   }
-  const rule = `Strength is a single lift rested ${Math.round(T.strengthRest.value[0] / 60)} min or more for under ${T.hypertrophyReps.value[0]} reps; supersets are hypertrophy; loaded work in a conditioning block counts as endurance.`;
+  const rule = `Strength is ${T.strengthReps.value} reps or fewer, or under ${T.hypertrophyReps.value[0]} with ${Math.round(T.strengthRest.value[0] / 60)} min or more of rest (a superset partner's set counts as rest); loaded work in a conditioning block counts as endurance.`;
   return r.goalSplit.assumedShare > 0
-    ? `${rule} ${pct(r.goalSplit.assumedShare)} of sets had no rest logged and were read on reps alone.`
+    ? `${rule} ${pct(r.goalSplit.assumedShare)} of sets had too little rest logged to tell and were read on reps alone.`
     : rule;
 }
 

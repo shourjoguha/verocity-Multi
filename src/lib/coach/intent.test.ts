@@ -37,8 +37,18 @@ const group = (kind: LogGroup['kind'], items: LogItem[], restSeconds?: number): 
 
 const REP_FLOOR = TRAINING.hypertrophyReps.value[0];
 
+const STRENGTH_MAX = TRAINING.strengthReps.value;
+
 const verdict = (it: LogItem, g: LogGroup, setIndex = 0, sectionKey = 'primary') =>
-  classifyIntent({ item: it, group: g, setIndex, sectionKey, restBoundarySeconds: BOUNDARY, hypertrophyRepFloor: REP_FLOOR });
+  classifyIntent({
+    item: it,
+    group: g,
+    setIndex,
+    sectionKey,
+    restBoundarySeconds: BOUNDARY,
+    strengthRepMax: STRENGTH_MAX,
+    hypertrophyRepFloor: REP_FLOOR,
+  });
 
 /** `n` completed sets of `reps`, each with rest-after `rest` when given. */
 const sets = (n: number, reps = 5, rest?: number): LogSet[] =>
@@ -124,72 +134,77 @@ describe('restGap — a superset alternates its sets', () => {
 });
 
 describe('classifyIntent', () => {
-  // The owner's rules (2026-11-17), in order: conditioning block, then
-  // superset, then rest AND reps on a single movement, then reps alone when no
-  // rest was logged.
-  const heavy = (over: Partial<LogItem> = {}) => item('Back Squat', { sets: sets(3, 5), ...over });
+  // The owner's rules (2026-11-17), in order: conditioning block; 5 reps or
+  // fewer; 6-7 reps on total rest; 8+ reps; reps alone when rest is missing.
+  const six = (over: Partial<LogItem> = {}) => item('Back Squat', { sets: sets(3, 6), ...over });
 
-  it('reads a single lift rested at the boundary for under 8 reps as strength', () => {
-    const sq = heavy({ restSeconds: BOUNDARY });
-    expect(verdict(sq, group('single', [sq])).intent).toBe('strength');
-  });
-
-  it('needs BOTH: long rest at 8+ reps is hypertrophy', () => {
-    const sq = item('Back Squat', { sets: sets(3, REP_FLOOR), restSeconds: BOUNDARY + 60 });
-    expect(verdict(sq, group('single', [sq])).intent).toBe('hypertrophy');
-  });
-
-  it('needs BOTH: low reps on short rest is hypertrophy', () => {
-    const sq = heavy({ restSeconds: BOUNDARY - 30 });
-    expect(verdict(sq, group('single', [sq])).intent).toBe('hypertrophy');
-  });
-
-  it('reads every superset as hypertrophy, however it was rested', () => {
-    const sq = heavy({ restSeconds: 300 });
-    const press = item('Bench Press', { sets: sets(3, 5), restSeconds: 300 });
-    const v = verdict(sq, group('superset', [sq, press]));
-    expect(v.intent).toBe('hypertrophy');
+  it('reads 5 reps or fewer as strength whatever the rest, single or superset', () => {
+    const sq = item('Back Squat', { sets: sets(3, STRENGTH_MAX), restSeconds: 0 });
+    const v = verdict(sq, group('single', [sq]));
+    expect(v.intent).toBe('strength');
     expect(v.restAssumed).toBe(false);
+    const bench = item('Bench Press', { sets: sets(3, 3) });
+    const row = item('Barbell Row', { sets: sets(3, 8) });
+    expect(verdict(bench, group('superset', [bench, row])).intent).toBe('strength');
   });
 
-  it('reads loaded work in a conditioning block as conditioning, with no rest needed', () => {
+  it('reads 8+ reps as hypertrophy however long the rest', () => {
+    const sq = item('Back Squat', { sets: sets(3, REP_FLOOR), restSeconds: 300 });
+    expect(verdict(sq, group('single', [sq])).intent).toBe('hypertrophy');
+  });
+
+  it('6-7 reps: strength at the rest boundary, hypertrophy under it', () => {
+    const long = six({ restSeconds: BOUNDARY });
+    expect(verdict(long, group('single', [long])).intent).toBe('strength');
+    const short = six({ restSeconds: BOUNDARY - 30 });
+    expect(verdict(short, group('single', [short])).intent).toBe('hypertrophy');
+  });
+
+  it('a superset adds the partner set and its rest to the total', () => {
+    // 60s after the bench, a row set, 60s after the row: each alone is under
+    // the boundary, the total for the bench is over it.
+    const bench = item('Bench Press', { sets: sets(3, 6), restSeconds: 60 });
+    const row = item('Barbell Row', { sets: sets(3, 8), restSeconds: 60 });
+    const v = verdict(bench, group('superset', [bench, row]));
+    expect(v.restSeconds).toBeGreaterThanOrEqual(BOUNDARY);
+    expect(v.intent).toBe('strength');
+  });
+
+  it('a superset with only an end-of-round rest counts the partner set and that rest', () => {
+    const bench = item('Bench Press', { sets: sets(3, 6) });
+    const row = item('Barbell Row', { sets: sets(3, 8) });
+    const v = verdict(bench, group('superset', [bench, row], BOUNDARY));
+    expect(v.restAssumed).toBe(false);
+    expect(v.intent).toBe('strength');
+  });
+
+  it('reads loaded work in a conditioning block as conditioning, even at low reps', () => {
     // An EMOM or AMRAP has no rest tag by design — that is not missing data.
-    const pu = item('Pull-Up', { sets: sets(5, 6) });
+    const pu = item('Pull-Up', { sets: sets(5, 3) });
     const dp = item('Weighted Dips', { sets: sets(5, 8) });
     const v = verdict(pu, group('circuit', [pu, dp]), 0, 'conditioning');
     expect(v.intent).toBe('conditioning');
     expect(v.restAssumed).toBe(false);
-    const fs = heavy({ restSeconds: 300 });
-    expect(verdict(fs, group('single', [fs]), 0, 'conditioning').intent).toBe('conditioning');
   });
 
-  it('reads an unlogged single on its reps alone, and says so', () => {
-    const low = heavy();
-    const lv = verdict(low, group('single', [low]));
-    expect(lv.intent).toBe('strength');
-    expect(lv.restAssumed).toBe(true);
-    expect(lv.restSeconds).toBeNull();
-    const high = item('Back Squat', { sets: sets(3, 10) });
-    expect(verdict(high, group('single', [high])).intent).toBe('hypertrophy');
-  });
-
-  it('falls back to the group rest on a single movement', () => {
-    const sq = heavy();
-    expect(verdict(sq, group('single', [sq], BOUNDARY)).intent).toBe('strength');
+  it('reads an unlogged 6-7 rep set on its reps alone, and says so', () => {
+    const sq = six();
+    const v = verdict(sq, group('single', [sq]));
+    expect(v.intent).toBe('strength');
+    expect(v.restAssumed).toBe(true);
   });
 
   it('treats a picked 0s as a real choice, not an absent one', () => {
-    const sq = heavy({ restSeconds: 0 });
+    const sq = six({ restSeconds: 0 });
     const v = verdict(sq, group('single', [sq]));
     expect(v.restAssumed).toBe(false);
     expect(v.restSeconds).toBe(0);
     expect(v.intent).toBe('hypertrophy');
   });
 
-  it('grounds both boundaries in the pack rather than inventing them', () => {
-    // 120s arrives from both directions: strengthRest's floor and
-    // hypertrophyRest's ceiling are the same number. 8 is hypertrophyReps' floor.
+  it('grounds every boundary in the pack rather than inventing one', () => {
     expect(TRAINING.strengthRest.value[0]).toBe(TRAINING.hypertrophyRest.value);
+    expect(STRENGTH_MAX).toBe(5);
     expect(REP_FLOOR).toBe(8);
   });
 });
@@ -238,9 +253,9 @@ describe('mixShares', () => {
 describe('countIntent', () => {
   it('counts the verdict and tallies the assumption separately', () => {
     const mix = emptyMix();
-    const squat = item('Back Squat');
+    const squat = item('Back Squat', { sets: sets(1, 6) });
     countIntent(mix, verdict(squat, group('single', [squat])), 3);
-    expect(mix.hypertrophy).toBe(3);
+    expect(mix.strength).toBe(3);
     expect(mix.assumed).toBe(3);
   });
 

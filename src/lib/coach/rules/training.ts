@@ -99,7 +99,7 @@ export function loadedTooLight(
   const shape =
     i.sufficiency === 'insufficient'
       ? ''
-      : ` Of your ${i.value.total} loaded sets, ${pct(i.value.shares.strength)} are spaced like strength work and ${pct(i.value.shares.conditioning)} like loaded conditioning — though ${pct(i.value.assumedShare)} of that read is on reps alone, for sets with no rest logged.`;
+      : ` Of your ${i.value.total} loaded sets, ${pct(i.value.shares.strength)} are spaced like strength work and ${pct(i.value.shares.conditioning)} like loaded conditioning — though ${pct(i.value.assumedShare)} of that read is on reps alone, for sets with too little rest logged to tell.`;
 
   return {
     ruleId: 'training.intent.loaded-too-light',
