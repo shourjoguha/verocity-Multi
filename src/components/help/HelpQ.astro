@@ -1,0 +1,20 @@
+---
+// One question in the Help page. Native <details> (no JS), the question is the
+// summary and the answer sits under it. `keys` are extra words the page's
+// search matches on — synonyms a reader might type that the text never says.
+interface Props {
+  q: string;
+  keys?: string;
+}
+const { q, keys = '' } = Astro.props;
+---
+
+<details class="help-q group/q border-t border-border-soft first:border-t-0" data-help-q data-keys={keys}>
+  <summary class="flex min-h-11 cursor-pointer list-none items-center gap-3 py-2 text-sm text-fg outline-none focus-visible:ring-1 focus-visible:ring-teal">
+    <span class="flex-1">{q}</span>
+    <span aria-hidden="true" class="shrink-0 text-muted transition-transform duration-200 group-open/q:rotate-90">›</span>
+  </summary>
+  <div class="pb-3 text-sm leading-relaxed text-subtle [&_b]:font-semibold [&_b]:text-fg">
+    <slot />
+  </div>
+</details>

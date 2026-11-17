@@ -19,6 +19,7 @@ const fullStats = (): UserStats => ({
   owner_user_id: 'u1',
   body_weight_kg: 68,
   height_cm: 170,
+  resting_hr: null,
   birth_year: 1992,
   gender: 'female',
   body_type: null,

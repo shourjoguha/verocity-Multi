@@ -1,0 +1,243 @@
+---
+// Help — short answers, found fast. Reached only from the drawer (the menu at
+// the top left), never the dock: it is a place you look things up, not a place
+// you train from.
+//
+// Static on purpose: every level is native <details>, so it opens with no
+// hydration, and the search below is a plain script. Every number comes from
+// app.config.ts or the knowledge pack — change a value there and this page
+// follows; never type one in here.
+import App from '@/layouts/App.astro';
+import HelpQ from '@/components/help/HelpQ.astro';
+import HelpGroup from '@/components/help/HelpGroup.astro';
+import HelpDiagrams from '@/components/help/HelpDiagrams.astro';
+import { EchoText, ECHO_APP_TITLE } from '@/components/EchoText';
+import { FIELD } from '@/components/ui/primitives';
+import { ENDURANCE_INTENSITY, RPE, SET_TIME } from '@/app.config';
+import { BODY_SHADE_EDGES } from '@/lib/bodyMapShade';
+import { TRAINING } from '@/lib/coach/knowledge';
+
+const E = ENDURANCE_INTENSITY;
+const kinds = Object.values(SET_TIME.kinds);
+const restMin = Math.round(TRAINING.strengthRest.value[0] / 60);
+const x = (n: number) => `×${n}`;
+---
+
+<App title="Help · Verocity">
+  <div class="mx-auto max-w-3xl px-4 pb-10 pt-6 sm:px-6">
+    <EchoText text="HELP" as="h1" className={`mb-4 ${ECHO_APP_TITLE}`} />
+
+    <label for="help-search" class="sr-only">Search help</label>
+    <input
+      id="help-search"
+      type="search"
+      placeholder="Search: rest, superset, RPE…"
+      autocomplete="off"
+      class={`${FIELD} mb-3`}
+    />
+    <p id="help-empty" hidden class="mb-3 text-sm text-muted">Nothing matches. Try one word.</p>
+
+    <div class="flex flex-col gap-3">
+      <!-- ================= USING THE APP ================= -->
+      <details class="group/s rounded-card border border-outline bg-surface" data-help-section>
+        <summary class="flex min-h-13 cursor-pointer list-none items-center gap-3 px-4 outline-none focus-visible:ring-1 focus-visible:ring-teal">
+          <span class="flex-1 font-display text-sm uppercase tracking-[0.04em] text-fg">Using the app</span>
+          <span aria-hidden="true" class="text-muted transition-transform duration-200 group-open/s:rotate-90">›</span>
+        </summary>
+        <div class="border-t border-border-soft">
+          <HelpGroup title="Getting good numbers">
+            <HelpQ q="Which profile details matter?" keys="stats bodyweight weight birth age resting heart experience profile settings">
+              <b>You → profile → Edit.</b> Bodyweight prices push-ups and jumps. Birth year sets your heart-rate ceiling.
+              Resting heart rate lets an activity's heart rate stand in for effort. Experience sets your strength line.
+            </HelpQ>
+            <HelpQ q="How do goals work?" keys="goals weights priority rank strength hypertrophy endurance mobility">
+              <b>You → Goals.</b> Rank and weight what you want. Review compares those weights with where your time
+              actually went. Skill and free-text goals can't be measured from a log, so they're named, not scored.
+            </HelpQ>
+            <HelpQ q="What should I log every time?" keys="discipline habits rpe rest tags notations timer warm-up">
+              <ul class="list-disc space-y-0.5 pl-4">
+                <li><b>RPE</b> on sets you rate — an untouched {RPE.default} reads as unrated.</li>
+                <li><b>Rest</b> tag on each movement (or per set).</li>
+                <li><b>(p)</b> paused, <b>(t)</b> tempo, <b>/side</b> for one-sided sets.</li>
+                <li>Warm-ups in <b>Warm-up</b>, finishers in <b>Conditioning</b>.</li>
+                <li>Keep the <b>timer</b> running — session length is the only real clock.</li>
+              </ul>
+            </HelpQ>
+          </HelpGroup>
+
+          <HelpGroup title="Friends">
+            <HelpQ q="How do I add a friend?" keys="friend code pair connect">
+              <b>You → Friends.</b> Share your code or enter theirs. Friends can only send you things — nobody can read
+              your logs.
+            </HelpQ>
+            <HelpQ q="How do I send a workout or plan?" keys="share send to friend snapshot">
+              Open the session, or the plan's menu → <b>Send to</b>. It's a snapshot: later edits don't follow it.
+            </HelpQ>
+            <HelpQ q="Something was sent to me" keys="inbox bell accept review received">
+              <b>Bell → Inbox.</b> <b>Accept &amp; review</b> to check it first, or <b>Accept</b>. A log you haven't
+              confirmed counts nowhere — not in stats, body map or coach.
+            </HelpQ>
+          </HelpGroup>
+
+          <HelpGroup title="Plans">
+            <HelpQ q="How do I start a plan?" keys="create new add plan ready ai spreadsheet csv markdown upload">
+              <b>Training → Plan → Add plan.</b> Pick a <b>Ready plan</b>, or <b>Build my own</b>: AI prompt,
+              spreadsheet template or Markdown. Check the preview, then <b>Save &amp; activate</b>.
+            </HelpQ>
+            <HelpQ q="How do I edit a plan?" keys="change modify edit plan phases movements">
+              <b>View plan → Edit.</b> Change phases, sections and movements; it saves as you go. Your logged history stays.
+            </HelpQ>
+            <HelpQ q="How do I use a friend's plan?" keys="adopt shared plan friend accept">
+              <b>Inbox → Accept &amp; review</b>, set the start date, then <b>Make it my active plan</b> or <b>Save for later</b>.
+            </HelpQ>
+            <HelpQ q="Short on time?" keys="express half shorter quick">
+              When you start a plan day, pick <b>Express</b> or <b>Half</b>.
+            </HelpQ>
+          </HelpGroup>
+
+          <HelpGroup title="Logging">
+            <HelpQ q="My movement isn't in the list" keys="custom movement new create add exercise">
+              In <b>Add movement</b>, type its name and pick <b>Add “…”</b>. It joins <b>Yours</b> in the Library. Or
+              <b>Library → Add to library</b>.
+            </HelpQ>
+            <HelpQ q="What's a subroutine?" keys="subroutine routine note block flow link video">
+              A note block among your movements — title, description, link (say, a mobility flow). <b>Add → section →
+              Subroutine.</b> It's shown, never measured.
+            </HelpQ>
+            <HelpQ q="How do supersets work?" keys="superset circuit group pair rest round">
+              Group movements in a section. Rest goes after the round unless a movement has its own tag.
+            </HelpQ>
+            <HelpQ q="Logging tennis, a run or a class" keys="activity tennis run ride class sport effort heart rate">
+              <b>Log → Log activity.</b> Add minutes, <b>Effort</b> and heart rate. If effort and heart rate disagree a
+              lot, it asks before saving.
+            </HelpQ>
+          </HelpGroup>
+
+          <HelpGroup title="Library & sessions">
+            <HelpQ q="What's in the Library?" keys="library movements muscles default rest shared yours">
+              <b>Training → Library.</b> Every movement: what it's measured in, default rest, muscles worked.
+              <b>Shared</b> is everyone's, <b>Yours</b> is what you added.
+            </HelpQ>
+            <HelpQ q="What are Sessions?" keys="sessions saved workouts templates repeat filter">
+              <b>Training → Sessions.</b> Saved single workouts plus days from your plans. Filter by type, duration and
+              movements. Start one from <b>Log → Past plans &amp; saved sessions</b>.
+            </HelpQ>
+          </HelpGroup>
+        </div>
+      </details>
+
+      <!-- ================= YOUR NUMBERS ================= -->
+      <details class="group/s rounded-card border border-outline bg-surface" data-help-section>
+        <summary class="flex min-h-13 cursor-pointer list-none items-center gap-3 px-4 outline-none focus-visible:ring-1 focus-visible:ring-teal">
+          <span class="flex-1 font-display text-sm uppercase tracking-[0.04em] text-fg">Your numbers</span>
+          <span aria-hidden="true" class="text-muted transition-transform duration-200 group-open/s:rotate-90">›</span>
+        </summary>
+        <div class="border-t border-border-soft">
+          <HelpGroup title="What we measure — and don't">
+            <HelpQ q="Where does time come from?" keys="time minutes clock timer set duration estimate">
+              Your session timer is the only real clock. Each set's share is estimated — setup, work, rest — so the
+              session can be split between movements and goals.
+              <HelpDiagrams kind="set-time" />
+            </HelpQ>
+            <HelpQ q="Strength or hypertrophy?" keys="strength hypertrophy reps rest intent classify superset">
+              Read from reps, then rest. In a superset the partner's set counts as rest.
+              <HelpDiagrams kind="reps" />
+            </HelpQ>
+            <HelpQ q="Conditioning and endurance" keys="conditioning endurance cardio finisher emom amrap circuit hard light">
+              Every minute of a conditioning block in a workout is <b>endurance</b>. Each minute is
+              <b>light</b> or <b>hard</b> (RPE {E.hardFromRpe}+): your RPE → heart rate (activities only) → a default.
+              Activities get their first {E.warmupMinutes} min as warm-up.
+              <HelpDiagrams kind="hr-zones" />
+            </HelpQ>
+            <HelpQ q="Why does Body look different from Review?" keys="body map review bar mismatch differ share">
+              Body shades muscles by share of your <b>total</b>. Review's bar files each session whole under what it
+              mostly was; the goal chart splits time inside sessions.
+            </HelpQ>
+            <HelpQ q="What's left out?" keys="excluded ignored not counted warm-up cooldown skill">
+              <ul class="list-disc space-y-0.5 pl-4">
+                <li>Warm-up and cooldown — time counts, load doesn't.</li>
+                <li>Friend logs you haven't confirmed.</li>
+                <li>Skill and free-text goals.</li>
+                <li>Heart rate inside a workout — it's the whole session's.</li>
+                <li>Rest you took but didn't tag.</li>
+              </ul>
+            </HelpQ>
+          </HelpGroup>
+
+          <HelpGroup title="Base values">
+            <HelpQ q="Set time" keys="seconds per rep setup kind compound isolation tempo pause side">
+              <table class="mt-1 w-full text-xs tabular-nums">
+                <thead class="text-muted"><tr><th class="py-1 text-left font-normal">Kind</th><th class="text-right font-normal">s / rep</th><th class="text-right font-normal">Setup</th></tr></thead>
+                <tbody class="text-fg">
+                  {kinds.map((k) => <tr class="border-t border-border-soft"><td class="py-1">{k.label}</td><td class="text-right">{k.repSeconds}</td><td class="text-right">{k.setupSeconds} s</td></tr>)}
+                </tbody>
+              </table>
+              <p class="mt-2 text-xs text-muted">
+                Pause +{SET_TIME.pauseSecondsPerRep} s/rep · tempo +{SET_TIME.tempoSecondsPerRep} s/rep · per side ×2 +{SET_TIME.sideSwitchSeconds} s ·
+                strength {x(SET_TIME.intent.strength)} · conditioning {x(SET_TIME.intent.conditioning)} · RPE {SET_TIME.nearFailureRpe}+ {x(SET_TIME.nearFailureFactor)}
+              </p>
+            </HelpQ>
+            <HelpQ q="Effort when unrated" keys="default rpe sport steady intervals circuit warm-up check">
+              <p class="tabular-nums">
+                Sport <b>{E.defaults.sport}</b> · steady <b>{E.defaults.steady}</b> · intervals <b>{E.defaults.intervals}</b> ·
+                circuit <b>{E.defaults.circuit}</b>
+              </p>
+              <p class="mt-1 text-xs text-muted">
+                Hard from RPE {E.hardFromRpe} · warm-up {E.warmupMinutes} min · activity check when effort and heart rate differ by {E.mismatchRpe}+
+              </p>
+            </HelpQ>
+            <HelpQ q="Lines the coach uses" keys="thresholds sets per week hypertrophy floor strength rest rpe scale">
+              <ul class="list-disc space-y-0.5 pl-4 tabular-nums">
+                <li>Strength: ≤{TRAINING.strengthReps.value} reps, or &lt;{TRAINING.hypertrophyReps.value[0]} with {restMin}+ min rest.</li>
+                <li>Hypertrophy: {TRAINING.hypertrophyReps.value[0]}–{TRAINING.hypertrophyReps.value[1]} reps, {TRAINING.hypertrophyWeeklySets.value}+ hard sets a muscle a week.</li>
+                <li>RPE {RPE.min}–{RPE.max}: 8 ≈ last good rep, 10 = nothing left.</li>
+                <li>Body map bands: {BODY_SHADE_EDGES.map((e) => `${Math.round(e * 1000) / 10}%`).join(' · ')} of your total.</li>
+              </ul>
+            </HelpQ>
+          </HelpGroup>
+        </div>
+      </details>
+    </div>
+  </div>
+</App>
+
+<script>
+  // Search: show only matching questions, open their section and group, and
+  // open the questions themselves when there are few enough to read at once.
+  // Clearing the box puts everything back, folded.
+  const input = document.getElementById('help-search') as HTMLInputElement | null;
+  const empty = document.getElementById('help-empty');
+  const qs = [...document.querySelectorAll<HTMLDetailsElement>('[data-help-q]')];
+  const groups = [...document.querySelectorAll<HTMLDetailsElement>('[data-help-group]')];
+  const sections = [...document.querySelectorAll<HTMLDetailsElement>('[data-help-section]')];
+  const text = new Map(qs.map((q) => [q, `${q.textContent ?? ''} ${q.dataset.keys ?? ''}`.toLowerCase()]));
+  const OPEN_UP_TO = 3;
+
+  input?.addEventListener('input', () => {
+    const words = input.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      for (const el of [...qs, ...groups, ...sections]) {
+        el.hidden = false;
+        el.open = false;
+      }
+      if (empty) empty.hidden = true;
+      return;
+    }
+    const hits = qs.filter((q) => words.every((w) => text.get(q)!.includes(w)));
+    for (const q of qs) {
+      q.hidden = !hits.includes(q);
+      q.open = hits.length <= OPEN_UP_TO && hits.includes(q);
+    }
+    for (const g of groups) {
+      const any = hits.some((q) => g.contains(q));
+      g.hidden = !any;
+      g.open = any;
+    }
+    for (const s of sections) {
+      const any = hits.some((q) => s.contains(q));
+      s.hidden = !any;
+      s.open = any;
+    }
+    if (empty) empty.hidden = hits.length > 0;
+  });
+</script>

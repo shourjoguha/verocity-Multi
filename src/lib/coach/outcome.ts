@@ -156,6 +156,41 @@ export const DEFINITION_CHANGES: readonly DefinitionChange[] = [
     on: '2026-11-05',
     what: 'a session done as a variation is no longer read as a step on the plain lift’s progression',
   },
+  {
+    ruleId: 'goal.underserved.strength',
+    on: '2026-11-17',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; a set of five reps or fewer is strength, as is one under eight reps rested two minutes or more (a superset partner’s set counts as rest); lifting time is split by each set’s estimated time, rest included, not by set count; and every minute of a conditioning block inside a workout counts toward endurance',
+  },
+  {
+    ruleId: 'goal.underserved.hypertrophy',
+    on: '2026-11-17',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; a set of five reps or fewer is strength, as is one under eight reps rested two minutes or more (a superset partner’s set counts as rest); lifting time is split by each set’s estimated time, rest included, not by set count; and every minute of a conditioning block inside a workout counts toward endurance',
+  },
+  {
+    ruleId: 'goal.underserved.endurance',
+    on: '2026-11-17',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; a set of five reps or fewer is strength, as is one under eight reps rested two minutes or more (a superset partner’s set counts as rest); lifting time is split by each set’s estimated time, rest included, not by set count; and every minute of a conditioning block inside a workout counts toward endurance',
+  },
+  {
+    ruleId: 'goal.underserved.mobility',
+    on: '2026-11-17',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; a set of five reps or fewer is strength, as is one under eight reps rested two minutes or more (a superset partner’s set counts as rest); lifting time is split by each set’s estimated time, rest included, not by set count; and every minute of a conditioning block inside a workout counts toward endurance',
+  },
+  {
+    ruleId: 'training.intent.loaded-too-light',
+    on: '2026-11-17',
+    what: 'how your loaded work is described now reads a set of five reps or fewer as strength, one under eight reps as strength when rested two minutes or more (a superset partner’s set counts as rest), and loaded work in a conditioning block as conditioning; a set with too little rest logged is read on its reps',
+  },
+  {
+    ruleId: 'training.strength.rest-too-short',
+    on: '2026-11-17',
+    what: 'a superset’s rest is now counted once, at the end of the round, instead of after every movement in it',
+  },
+  {
+    ruleId: 'training.endurance.zone2-short',
+    on: '2026-11-17',
+    what: 'a session’s time is now divided using an estimate of how long each set took — by kind of movement, sides, pauses, tempo, intent and effort — instead of three seconds a rep, which moves some minutes between endurance and lifting',
+  },
 ];
 
 /** Changes recorded for a rule on or after the day it was decided. */

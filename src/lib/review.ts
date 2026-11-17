@@ -8,7 +8,7 @@
 // by hand and no model writes any of it. The one-line headlines are templates
 // over those numbers, so a headline can never say more than its chart shows.
 
-import { LOAD_EQUIVALENCE, MUSCLE_REGIONS, RPE_LADDER, type BodyLensKey, type RegionKey } from '@/app.config';
+import { ENDURANCE_INTENSITY, LOAD_EQUIVALENCE, MUSCLE_REGIONS, RPE_LADDER, type BodyLensKey, type RegionKey } from '@/app.config';
 import { sessionClockSeconds, sessionLens } from '@/lib/bodyLoad';
 import { TRAINING as T } from '@/lib/coach/knowledge';
 import { heavyFractionFor } from '@/lib/coach/rules/training';
@@ -21,7 +21,7 @@ import { completedLogs, flattenWorkingSets, workingSections } from '@/lib/stats'
 import { isSubroutine } from '@/lib/subroutine';
 import { sessionTagColors } from '@/lib/tags';
 import type { Plan, UserStats, WorkoutLog } from '@/lib/types';
-import { unweightedRepKg } from '@/lib/userStats';
+import { hrMaxFromAge, restingHrFrom, unweightedRepKg } from '@/lib/userStats';
 
 export type ReviewPeriod = { kind: 'all' } | { kind: 'quarter' } | { kind: 'plan'; planId: string };
 
@@ -164,6 +164,10 @@ export interface Review {
   goals: GoalShare[];
   /** Goals it cannot (free text, skill), named rather than scored as zero. */
   unmeasuredGoals: string[];
+  /** How resistance time was divided between strength and hypertrophy: by the
+   *  rest-based intent of the loaded sets, or (too few of them) by goal weight.
+   *  `assumedShare` is how much of an intent split rests on an unlogged rest. */
+  goalSplit: { byIntent: boolean; assumedShare: number };
   regionSets: { key: RegionKey; label: string; perWeek: number }[];
   setFloor: number;
   effort: { hard: number; total: number; ratedSessions: number; unratedSessions: number; byGroup: EffortGroup[] };
@@ -221,6 +225,8 @@ export function buildReview(period: ReviewPeriod, input: ReviewInput): Review | 
       heavyRestSeconds: T.strengthRest.value,
       overrides,
       unweightedKg: unweightedRepKg(input.stats),
+      restingHr: restingHrFrom(input.stats),
+      hrMaxFallback: hrMaxFromAge(input.stats),
     },
     new Date(`${window.end}T12:00:00Z`),
     window.days,
@@ -248,6 +254,12 @@ export function buildReview(period: ReviewPeriod, input: ReviewInput): Review | 
     calendar: buildCalendar(window, inWindow, lensOf, dayLabel),
     goals,
     unmeasuredGoals,
+    goalSplit: {
+      byIntent:
+        training.loadedIntent.sufficiency !== 'insufficient' &&
+        training.loadedIntent.value.mix.seconds.strength + training.loadedIntent.value.mix.seconds.hypertrophy > 0,
+      assumedShare: training.loadedIntent.value.assumedShare,
+    },
     regionSets,
     setFloor: T.hypertrophyWeeklySets.value,
     effort: measureEffort(inWindow, dayLabel),
@@ -475,6 +487,17 @@ export function goalsHeadline(r: Review): string | null {
   const widest = [...r.goals].sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))[0];
   if (Math.abs(widest.gap) < 0.05) return 'Time split matches your goal weights within 5 points';
   return `${widest.label} gets ${pct(widest.actual)} of your time on ${pct(widest.intent)} of your goal weight`;
+}
+
+/** How the chart divided lifting time between strength and hypertrophy. */
+export function goalSplitNote(r: Review): string {
+  if (!r.goalSplit.byIntent) {
+    return 'Too few loaded sets to read strength vs hypertrophy, so lifting time is split by your goal weights.';
+  }
+  const rule = `Strength is ${T.strengthReps.value} reps or fewer, or under ${T.hypertrophyReps.value[0]} with ${Math.round(T.strengthRest.value[0] / 60)} min or more of rest (a superset partner's set counts as rest). Lifting time is split by each set's estimated time, rest included. All of a conditioning block counts as endurance; hard is RPE ${ENDURANCE_INTENSITY.hardFromRpe} or above.`;
+  return r.goalSplit.assumedShare > 0
+    ? `${rule} ${pct(r.goalSplit.assumedShare)} of sets had too little rest logged to tell and were read on reps alone.`
+    : rule;
 }
 
 export function volumeHeadline(r: Review): string {

@@ -46,6 +46,13 @@ export function hrMaxFromAge(stats: UserStats | null, today: Date = new Date()):
   return HR_MAX_FROM_AGE.base - age;
 }
 
+/** Resting heart rate the athlete entered, or null when absent or implausible. */
+export function restingHrFrom(stats: UserStats | null): number | null {
+  const hr = stats?.resting_hr;
+  if (hr == null || !Number.isFinite(hr)) return null;
+  return hr >= STATS_LIMITS.restingHr.min && hr <= STATS_LIMITS.restingHr.max ? hr : null;
+}
+
 /**
  * A lift as a multiple of bodyweight, or null when bodyweight is unknown. The
  * direct reading of "use weight as a reference for weight moved" — a 140kg

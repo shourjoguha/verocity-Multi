@@ -446,9 +446,10 @@ describe('summarizeBodyLoad', () => {
         },
       ]),
     ]);
-    const each = (10 * LOAD.repSeconds) / 60;
-    expect(s.rotaryMinutes.rotational).toBeCloseTo(each, 3);
-    expect(s.rotaryMinutes.antiRotational).toBeCloseTo(each, 3);
+    // Each priced by lib/setTime.ts for its own kind of movement.
+    const mins = (name: string, x: LogSet) => setMinutes(x, classifyMovement(name).profile, 'accessory');
+    expect(s.rotaryMinutes.rotational).toBeCloseTo(mins('Landmine Twist', set({ weight: 10, reps: 10 })), 3);
+    expect(s.rotaryMinutes.antiRotational).toBeCloseTo(mins('Pallof Press', set({ reps: 10 })), 3);
   });
 
   it('ignores logs that are not done', () => {

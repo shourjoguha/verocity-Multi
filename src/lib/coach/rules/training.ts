@@ -90,16 +90,16 @@ export function loadedTooLight(
       ? ` Your highest estimated 1RM in the window is ${topMovement} at ${topMovementBestKg} kg, and your working sets on it average ${pct(topMovementMeanFraction)} of that.`
       : '';
 
-  // How the loaded work is SHAPED, where it said. Rest and superset structure
-  // separate strength from hypertrophy from loaded conditioning; reps do not
-  // (see ../intent.ts). Stated only when enough sets carried a rest tag to make
+  // How the loaded work is SHAPED: block, superset structure, rest and reps
+  // separate strength from hypertrophy from loaded conditioning (see
+  // ../intent.ts). Stated only when enough sets carried a rest tag to make
   // a split mean anything, and always against the sets that SAID — never
   // against all of them, which would turn silence into a percentage.
   const i = s.loadedIntent;
   const shape =
     i.sufficiency === 'insufficient'
       ? ''
-      : ` Of your ${i.value.total} loaded sets, ${pct(i.value.shares.strength)} are spaced like strength work and ${pct(i.value.shares.conditioning)} like loaded conditioning — though ${pct(i.value.assumedShare)} of that read rests on the default for sets where the rest picker was never touched.`;
+      : ` Of your ${i.value.total} loaded sets, ${pct(i.value.shares.strength)} are spaced like strength work and ${pct(i.value.shares.conditioning)} like loaded conditioning — though ${pct(i.value.assumedShare)} of that read is on reps alone, for sets with too little rest logged to tell.`;
 
   return {
     ruleId: 'training.intent.loaded-too-light',

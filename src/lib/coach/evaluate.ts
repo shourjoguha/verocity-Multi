@@ -76,7 +76,7 @@ import { themeOf } from '@/lib/coach/themes';
 import type { EvidencePayload, Finding } from '@/lib/coach/types';
 import { SOURCES, CLAIMS } from '@/lib/coach/knowledge';
 import { RPE_LADDER } from '@/app.config';
-import { unweightedRepKg } from '@/lib/userStats';
+import { hrMaxFromAge, restingHrFrom, unweightedRepKg } from '@/lib/userStats';
 import type { OverrideMap } from '@/lib/movementTaxonomy';
 import type { HolidayRange } from '@/lib/holidays';
 import type {
@@ -375,6 +375,8 @@ export function runCoach(input: CoachInput): {
       // flat constant, exactly as the radar does. Falls back on its own when
       // there is no bodyweight on file.
       unweightedKg: unweightedRepKg(input.stats),
+      restingHr: restingHrFrom(input.stats),
+      hrMaxFallback: hrMaxFromAge(input.stats),
       sorenessPeakDays: hoursToDays(R.domsPeak.value),
       holidays: input.holidays,
     },

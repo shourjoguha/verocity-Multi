@@ -1,0 +1,18 @@
+---
+// A subsection of the Help page: a collapsed row inside a section card, the
+// same shape as `ui/Disclosure`'s 'row' variant, holding HelpQ items.
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+
+<details class="disclosure group/g border-t border-border-soft first:border-t-0" data-help-group>
+  <summary class="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 text-muted outline-none hover:text-fg focus-visible:ring-1 focus-visible:ring-teal">
+    <span class="t-label flex-1">{title}</span>
+    <span aria-hidden="true" class="transition-transform duration-200 group-open/g:rotate-90">›</span>
+  </summary>
+  <div class="px-4 pb-1">
+    <slot />
+  </div>
+</details>

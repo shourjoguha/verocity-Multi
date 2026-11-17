@@ -35,6 +35,7 @@ intent, LESSONS describes what actually happened.
 | Write coach output from a Claude Code session                            | `src/lib/coach/governor.ts` (the boundary), `supabase/migrations/0043_coach_briefs_notes.sql` |
 | **Run or change the weekly coach-tuning routine**                        | `docs/COACH_TUNING.md` (budget + boundary), `scripts/coach-tuning/scorecard.sql` |
 | **Give someone an invite/promo code, or check how many signups are left** | skill invite-user — `.claude/skills/invite-user/SKILL.md` |
+| **Change a feature users ask about, or a number on the Help page**     | `src/pages/app/help.astro` — answers are short and every number is read from `app.config.ts` / the pack, never typed in |
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
 | **Change a component, sheet, token or layout**                           | skill ui-change — `.claude/skills/ui-change/SKILL.md` |
 | **Add a migration, RLS policy, edge function or query helper**           | skill db-change — `.claude/skills/db-change/SKILL.md` |
@@ -380,6 +381,22 @@ UI audit have both run.
   kg.m made a 20 m sled push read ~2.5x a ski interval of the same effort and
   a time-logged interval read zero. Distance work needs a working pace
   (`paceMpm` in the taxonomy) — `LOAD.metersPerMinute` is a running pace.
+- **How long a set took is estimated in ONE place, and endurance time carries
+  intensity.** `src/lib/setTime.ts` prices every rep-counted set from
+  `SET_TIME` (the owner's numbers): setup + reps × sides × (seconds per rep for
+  the movement's kind + pause + tempo) × intent × effort. The body map's
+  minutes, Stats, conditioning `RPE·min`, superset rest (`restGap`) and the
+  goal chart all read it — **never price set time with `LOAD.repSeconds`**,
+  which now survives only in volume's rep-equivalents. On Review's goal chart,
+  lifting time splits between strength and hypertrophy by
+  `loadedIntent.seconds` (setup + work + rest), not set count; **every minute
+  of a conditioning block inside a workout is endurance**; activities route by
+  movement — they are stored as a conditioning block, so reading the section
+  alone files a yoga class under endurance. Endurance minutes split Light /
+  Hard (`ENDURANCE_INTENSITY`): rated RPE, then heart rate (activities only,
+  from `user_stats.resting_hr` and the observed peak), then the kind's
+  default. **Never read a finisher's intensity from the session's heart
+  rate** — it is the whole session's.
 - **The body map's Work measure is a third count, not either of those.**
   `regionWork` / `muscleWork` / `byLens.work` in `src/lib/bodyLoad.ts`: each
   `isLoadedSet` working set (prep excluded) is ONE unit, split by the movement's
@@ -404,19 +421,21 @@ UI audit have both run.
   time spent). A session with nothing outside prep — a yoga class logged as one
   cooldown block — counts in full; real data has two. A new metric that walks
   `log.data.sections` directly is the bug this rule exists to stop.
-- **What loaded work was FOR is a rest-and-structure question, not a rep one.**
-  Reps barely move across the range; prescribed rest and superset relatedness
-  separate strength from hypertrophy from loaded conditioning
-  (`src/lib/coach/intent.ts`). The 120s boundary is `strengthRest`'s floor and
-  `hypertrophyRest`'s ceiling — the same number from both claims, not a new
-  threshold. A superset only argues against strength when the partner trains the
-  **same** muscles, because `strengthRest`'s caveat explicitly allows rest to be
-  filled by an unrelated one. An untouched rest picker resolves to
-  `UNLOGGED_REST_SECONDS` (30s) and the verdict carries `restAssumed`, so the
-  surface can report how much of its answer is inference. **Never use
-  `TIMERS.defaultRestSeconds` for this** — it is 120, it belongs to the
-  countdown rather than to what was rested, and it would classify most of a real
-  log as strength work.
+- **What loaded work was FOR is read from block, reps and rest — in that
+  order** (`src/lib/coach/intent.ts`, the owner's rules of 2026-11-17).
+  A loaded set in a conditioning block is conditioning, with no rest asked — an
+  EMOM, AMRAP or HIIT circuit is untagged by design. A set of 5 reps or fewer
+  is strength whatever the rest; 8 or more is hypertrophy; 6–7 is strength when
+  its **total** rest reached 120s. In a superset that total is the movement's
+  own rest plus the partner's set and rest (`restGap`): the partner works other
+  muscles, discounted only where it shares them. A superset's group rest is
+  taken once, at the end of the round. All three numbers come from the pack
+  (`strengthReps`, `hypertrophyReps`' floor, `strengthRest`'s floor), not new
+  thresholds. A 6–7 rep set with too little rest logged to decide is read on
+  reps alone and carries `restAssumed`. **Never use
+  `TIMERS.defaultRestSeconds` for this** — it is 120, it belongs to a new
+  movement's tag rather than to what was rested, and it would classify most of
+  a real log as strength work.
 - **Whether a finding may re-speak is a trajectory question, not a clock one.**
   `coach_observations` records one drift reading per rule per check-in day
   whether or not the rule spoke, and `src/lib/coach/recurrence.ts` scores

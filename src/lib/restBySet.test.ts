@@ -50,10 +50,12 @@ describe('coach reads the set rest first', () => {
   const group = (it: LogItem): LogGroup => ({ id: 'g', kind: 'single', items: [it] });
 
   it('a long rest on one set makes that set strength work', () => {
-    const it = item([set()], 60);
-    expect(classifyIntent({ item: it, group: group(it), setIndex: 0, restBoundarySeconds: 120 }).intent).not.toBe('strength');
-    const long = item([set(180), set()], 60);
-    const v = classifyIntent({ item: long, group: group(long), setIndex: 0, restBoundarySeconds: 120 });
+    // 6 reps: rest decides (5 or fewer is strength whatever the rest).
+    const six = (rest?: number): LogSet => ({ ...set(rest), actual: { ...set(rest).actual, reps: 6 } });
+    const it = item([six()], 60);
+    expect(classifyIntent({ item: it, group: group(it), setIndex: 0, sectionKey: 'primary', restBoundarySeconds: 120, strengthRepMax: 5, hypertrophyRepFloor: 8 }).intent).not.toBe('strength');
+    const long = item([six(180), six()], 60);
+    const v = classifyIntent({ item: long, group: group(long), setIndex: 0, sectionKey: 'primary', restBoundarySeconds: 120, strengthRepMax: 5, hypertrophyRepFloor: 8 });
     expect(v.intent).toBe('strength');
     expect(v.restSeconds).toBe(180);
     expect(v.restAssumed).toBe(false);

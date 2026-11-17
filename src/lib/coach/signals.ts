@@ -19,6 +19,7 @@
 
 import {
   ALL_OUT_HR,
+  SESSION_CLOCK,
   MODALITY_KEYS,
   MUSCLE_REGION_KEYS,
   RPE,
@@ -27,7 +28,7 @@ import {
   type ModalityKey,
   type RegionKey,
 } from '@/app.config';
-import { summarizeBodyLoad } from '@/lib/bodyLoad';
+import { isLoadedSet, summarizeBodyLoad } from '@/lib/bodyLoad';
 import { holidayContext, type HolidayContext, type HolidayRange } from '@/lib/holidays';
 import { bestE1rmByMovement } from '@/lib/prs';
 import { isVariant } from '@/lib/notations';
@@ -35,7 +36,9 @@ import { completedLogs, workingSections } from '@/lib/stats';
 import { explainSoreness, type AreaExplanation } from '@/lib/soreness';
 import { buildDayInsights, summarizeTiming, toHours } from '@/lib/mealInsights';
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
-import { classifyIntent, countIntent, emptyMix, mixShares, restGap, type IntentMix } from '@/lib/coach/intent';
+import { classifyIntent, countIntent, emptyMix, loggedRestAfter, mixShares, restGap, type IntentMix } from '@/lib/coach/intent';
+import { setClockSeconds } from '@/lib/setTime';
+import { observedPeakHr } from '@/lib/enduranceIntensity';
 import type { MealLog, UserStats, WorkoutLog } from '@/lib/types';
 import { summarizeMealText, type MealTextSummary } from '@/lib/coach/mealText';
 import type { Measured, Sufficiency } from '@/lib/coach/types';
@@ -92,16 +95,9 @@ export function setRpeIsRating(
   return actual.rpeRated ?? sessionRated;
 }
 
-/**
- * The athlete's own max heart rate reference: the highest hr_max ever logged,
- * once enough sessions carry one for it to be a reference rather than a single
- * reading. Null otherwise — the HR channel then says nothing.
- */
-export function observedPeakHr(allLogs: WorkoutLog[]): number | null {
-  const readings = allLogs.map((l) => l.hr_max).filter((v): v is number => v != null && v > 0);
-  if (readings.length < ALL_OUT_HR.minSessionsForPeak) return null;
-  return Math.max(...readings);
-}
+// observedPeakHr moved to lib/enduranceIntensity.ts (the activity logger reads it
+// too); re-exported so existing imports keep working.
+export { observedPeakHr };
 
 /**
  * Mean soreness reported on the session AFTER each session of a given kind.
@@ -203,6 +199,11 @@ export interface TrainingSignals {
    * being dropped, so a badly-logged session still counts as something.
    */
   sessionMinutesPerWeek: Measured<Record<ModalityKey, number>>;
+  /** Of `sessionMinutesPerWeek`, the minutes spent in conditioning blocks
+   *  inside training sessions, by modality. All of it serves endurance. */
+  conditioningBlockMinutesPerWeek: Record<ModalityKey, number>;
+  /** The endurance pool per week, split by intensity (lib/enduranceIntensity.ts). */
+  enduranceTiersPerWeek: { light: number; hard: number };
   /**
    * Hard sets per week, per muscle region. Sets, because the hypertrophy
    * evidence is stated in sets — and WHOLE sets, because that is the unit the
@@ -443,6 +444,10 @@ export interface TrainingOptions {
   heavyRestSeconds: [number, number];
   overrides?: OverrideMap;
   unweightedKg?: number;
+  /** `user_stats.resting_hr`, for an activity's heart-rate effort. */
+  restingHr?: number | null;
+  /** 220 - age, used as peak only until enough sessions carry an hr_max. */
+  hrMaxFallback?: number | null;
   /** Calendar days back the evidence puts peak soreness at. */
   sorenessPeakDays?: readonly number[];
   /** Planned breaks. Their days leave every weekly denominator. */
@@ -512,7 +517,12 @@ export function measureTraining(
   const weeks = Math.max(availableDays, 7) / 7;
   const overrides = opts.overrides ?? {};
 
-  const body = summarizeBodyLoad(logs, overrides, { unweightedKg: opts.unweightedKg });
+  const peakHr = observedPeakHr(completedLogs(allLogs));
+  const body = summarizeBodyLoad(logs, overrides, {
+    unweightedKg: opts.unweightedKg,
+    restingHr: opts.restingHr ?? null,
+    peakHr: peakHr ?? opts.hrMaxFallback ?? null,
+  });
 
   // WHOLE sets, not each region's share of one. `resistanceSets` splits a set
   // across the muscles it trains and sums to 1 per set; the evidence this feeds
@@ -580,7 +590,6 @@ export function measureTraining(
   let boutRpeSum = 0;
   let boutRpeCount = 0;
   const boutSessions = new Set<string>();
-  const peakHr = observedPeakHr(completedLogs(allLogs));
   const hrSessions = new Set<string>();
   const hrAllOutSessions = new Set<string>();
   let condSets = 0;
@@ -673,6 +682,31 @@ export function measureTraining(
                 }
               }
             }
+            // What this loaded set was FOR (coach/intent.ts): every loaded set
+            // in a working or conditioning block, whether or not the movement
+            // has a best to measure it against. Counted per set because rest
+            // may be varied per set.
+            const intentProfile = classifyMovement(item.movement, { overrides }).profile;
+            if ((isResistance || isConditioning) && isLoadedSet(set, intentProfile)) {
+              // Weighted by what the set cost the clock, the same estimate the
+              // body map divides sessions by (lib/setTime.ts).
+              const restAfter = loggedRestAfter(item, group, ki) ?? SESSION_CLOCK.restFallbackSeconds;
+              countIntent(
+                intentMix,
+                classifyIntent({
+                  item,
+                  group,
+                  setIndex: ki,
+                  sectionKey: section.key,
+                  restBoundarySeconds: opts.heavyRestSeconds[0],
+                  strengthRepMax: opts.strengthRepMax,
+                  hypertrophyRepFloor: opts.hypertrophyReps[0],
+                  overrides,
+                }),
+                1,
+                setClockSeconds(set, intentProfile, section.key) + restAfter,
+              );
+            }
             if (isResistance) {
               if (!sawResistance) {
                 sawResistance = true;
@@ -747,21 +781,6 @@ export function measureTraining(
                     heavyRestCount += 1;
                     if (rest < opts.heavyRestSeconds[0]) heavyRestBelow += 1;
                   }
-                  // What this loaded set was FOR. Counted per set rather than
-                  // per item because rest is tagged on the item, applies to
-                  // each of its sets, and may be varied per set — the same shape as the `/side` and
-                  // `(p)` notations, which are written item-level and priced
-                  // set-level.
-                  countIntent(
-                    intentMix,
-                    classifyIntent({
-                      item,
-                      group,
-                      setIndex: ki,
-                      restBoundarySeconds: opts.heavyRestSeconds[0],
-                      overrides,
-                    }),
-                  );
                 }
               }
             }
@@ -835,6 +854,10 @@ export function measureTraining(
       6,
       'a training-time split needs more sessions to be stable',
     ),
+    conditioningBlockMinutesPerWeek: Object.fromEntries(
+      MODALITY_KEYS.map((k) => [k, body.conditioningBlockMinutes[k] / weeks]),
+    ) as Record<ModalityKey, number>,
+    enduranceTiersPerWeek: { light: body.enduranceTiers.light / weeks, hard: body.enduranceTiers.hard / weeks },
     regionOutsideSets,
     regionSetsPerWeek: measured(
       regionPerWeek,
@@ -1012,10 +1035,13 @@ export interface GoalShare {
   label: string;
   /** Stated weight, renormalised so the goals sum to 1. */
   intent: number;
-  /** Share of working minutes that went to the modalities this goal maps to. */
+  /** Share of elapsed minutes that served this goal. Resistance minutes are
+   *  divided by what the loaded work was for (`loadedIntent`), not by weight. */
   actual: number;
   /** actual − intent. Negative means underserved. */
   gap: number;
+  /** Endurance only: the part of `actual` that was hard (ENDURANCE_INTENSITY). */
+  hardShare?: number;
 }
 
 /**
@@ -1043,28 +1069,69 @@ export function measureGoals(
   const goals = (stats?.goals ?? []).filter((g) => GOAL_MODALITIES[g.id] && g.weight > 0);
   // Elapsed, not working — see the note on sessionMinutesPerWeek.
   const minutes = training.sessionMinutesPerWeek.value;
+  const block = training.conditioningBlockMinutesPerWeek;
+  const has = (id: string) => goals.some((g) => g.id === id);
 
-  // Strength and hypertrophy both map to resistance, so the actual shares would
-  // double-count it. Split the modality's minutes across the goals claiming it,
-  // in proportion to their stated weights — the athlete's own ranking is the
-  // only defensible splitter, and it keeps sum(actual) === 1.
-  const weightTotal = goals.reduce((s, g) => s + g.weight, 0);
-  const claimants = new Map<ModalityKey, number>();
-  for (const g of goals) {
-    for (const m of GOAL_MODALITIES[g.id]) claimants.set(m, (claimants.get(m) ?? 0) + g.weight);
+  // POOLS of weekly minutes (owner's rules, 2026-11-17):
+  //  - endurance: endurance-modality time outside conditioning blocks, plus
+  //    EVERY minute of a conditioning block inside a training session, whatever
+  //    its movements — a box jump or a swing in a metcon is conditioning.
+  //  - mobility: mobility time outside those blocks.
+  //  - lifting: resistance time outside those blocks, split between strength
+  //    and hypertrophy by the estimated clock seconds of each intent's sets
+  //    (`loadedIntent.seconds`: setup + work + rest, lib/setTime.ts). Set
+  //    COUNTS understated strength, whose sets carry long rest. Until
+  //    2026-11-17 the split followed the goal weights, which made the two rows
+  //    an echo of the ranking; it still does when too few sets are classified.
+  // Each pool goes to the goals that claim it, by goal weight when several
+  // do, so sum(actual) stays 1. A lifting pool whose own goal is not ranked
+  // falls to the other lifting goal rather than vanishing.
+  const sumBlock = Object.values(block).reduce((a, b) => a + b, 0);
+  const lifting = Math.max(0, minutes.resistance - block.resistance);
+  const intent = training.loadedIntent;
+  const sec = intent.value.mix.seconds;
+  const liftSeconds = sec.strength + sec.hypertrophy;
+  const split = intent.sufficiency !== 'insufficient' && liftSeconds > 0;
+  const pools: Record<string, number> = {
+    endurance: Math.max(0, minutes.endurance - block.endurance) + sumBlock,
+    mobility: Math.max(0, minutes.mobility - block.mobility),
+  };
+  if (split) {
+    pools['lifting:strength'] = (lifting * sec.strength) / liftSeconds;
+    pools['lifting:hypertrophy'] = (lifting * sec.hypertrophy) / liftSeconds;
+  } else {
+    pools.lifting = lifting;
   }
+  const claims = (id: string): string[] => {
+    if (id !== 'strength' && id !== 'hypertrophy') return [id];
+    if (!split) return ['lifting'];
+    const other = id === 'strength' ? 'hypertrophy' : 'strength';
+    return [`lifting:${id}`, ...(has(other) ? [] : [`lifting:${other}`])];
+  };
 
-  const servedMinutes = [...claimants.keys()].reduce((s, m) => s + minutes[m], 0);
+  const weightTotal = goals.reduce((s, g) => s + g.weight, 0);
+  const claimants = new Map<string, number>();
+  for (const g of goals) for (const pool of claims(g.id)) claimants.set(pool, (claimants.get(pool) ?? 0) + g.weight);
+  const servedMinutes = [...claimants.keys()].reduce((s, pool) => s + (pools[pool] ?? 0), 0);
+  const tiers = training.enduranceTiersPerWeek;
+  const tierTotal = tiers.light + tiers.hard;
 
   const shares: GoalShare[] = goals.map((g) => {
-    const intent = weightTotal ? g.weight / weightTotal : 0;
+    const intentShare = weightTotal ? g.weight / weightTotal : 0;
     const actual = servedMinutes
-      ? GOAL_MODALITIES[g.id].reduce(
-          (s, m) => s + (minutes[m] * (g.weight / (claimants.get(m) as number))) / servedMinutes,
+      ? claims(g.id).reduce(
+          (s, pool) => s + ((pools[pool] ?? 0) * (g.weight / (claimants.get(pool) as number))) / servedMinutes,
           0,
         )
       : 0;
-    return { id: g.id, label: g.label, intent, actual, gap: actual - intent };
+    return {
+      id: g.id,
+      label: g.label,
+      intent: intentShare,
+      actual,
+      gap: actual - intentShare,
+      ...(g.id === 'endurance' && tierTotal > 0 ? { hardShare: tiers.hard / tierTotal } : {}),
+    };
   });
 
   return {

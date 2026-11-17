@@ -7,6 +7,7 @@ const stats = (patch: Partial<UserStats> = {}): UserStats => ({
   owner_user_id: 'u1',
   body_weight_kg: null,
   height_cm: null,
+  resting_hr: null,
   birth_year: null,
   gender: null,
   body_type: null,

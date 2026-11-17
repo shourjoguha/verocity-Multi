@@ -368,6 +368,7 @@ export const STATS_LIMITS = {
   weightKg: { min: 25, max: 300 },
   heightCm: { min: 100, max: 250 },
   birthYear: { min: 1920, max: 2020 },
+  restingHr: { min: 25, max: 120 },
   maxInjuries: 20,
   injuryLabelChars: 80,
   daysPerWeek: { min: 1, max: 7 },
@@ -877,17 +878,57 @@ export const SESSION_CLOCK = {
   },
 } as const;
 
-// How much more of a session a compound movement is worth than an isolation one
-// when the remainder is spread across items. A set of back squats and a set of
-// curls do not cost the same clock, and rest alone does not capture it.
-//
-// Derived from what the taxonomy already knows — how many regions the movement
-// spans, and whether it is `systemic` — rather than a new hand-maintained
-// column. Clamped, so this can only ever nudge the split.
-export const COMPOUND = {
-  perExtraRegion: 0.08,
-  systemicBonus: 0.15,
-  range: [0.8, 1.4] as [number, number],
+// How long a set takes — the owner's numbers (2026-11-17, set in the Time &
+// Effort Model page). No set is timed: the session clock is the measurement,
+// and these only decide how it is DIVIDED — between movements (the body map's
+// minutes, Stats) and between strength and hypertrophy (Review's goal chart).
+//   work  = reps x sides x (repSeconds + pause + tempo) x intent x effort
+//   clock = setupSeconds + work + rest
+// `kinds` is read off the movement's profile in lib/setTime.ts. The two share
+// cutoffs (`isolationTopShare`, `coreShare`) are this file's, not the owner's.
+// (t) is only a flag in the log, never digits, so tempo adds a flat amount.
+export const SET_TIME = {
+  kinds: {
+    lower: { label: 'Compound lower', repSeconds: 4, setupSeconds: 20 },
+    upper: { label: 'Compound upper', repSeconds: 3, setupSeconds: 15 },
+    isolation: { label: 'Isolation', repSeconds: 2.5, setupSeconds: 5 },
+    core: { label: 'Core', repSeconds: 2.5, setupSeconds: 5 },
+    ballistic: { label: 'Ballistic', repSeconds: 1.5, setupSeconds: 10 },
+  },
+  sideSwitchSeconds: 5,
+  pauseSecondsPerRep: 2,
+  tempoSecondsPerRep: 3,
+  intent: { strength: 1.25, hypertrophy: 1, conditioning: 0.75 },
+  nearFailureRpe: 8.5,
+  nearFailureFactor: 1.15,
+  isolationTopShare: 0.85,
+  coreShare: 0.5,
+} as const;
+
+// How hard endurance minutes were — the owner's numbers (2026-11-17, Time &
+// Effort Model page). Endurance time on Review's goal chart stays in MINUTES,
+// split Light / Hard, so every goal is still measured in one unit.
+//   intensity = RPE the athlete rated, else (activities only) RPE inferred from
+//   heart rate, else the default for the kind of work below.
+// A conditioning block INSIDE a training session is endurance whatever its
+// movements, and is already warm. An activity (tennis, a run) is routed by its
+// movement and gets `warmupMinutes` of light time before its intensity counts.
+// `hrZones` is % of heart-rate reserve, (avg - resting) / (peak - resting),
+// with peak the athlete's highest logged (ALL_OUT_HR). The edges are this
+// app's convention, not a claim: the pack defines zone 2 by talk test, not bpm.
+export const ENDURANCE_INTENSITY = {
+  defaults: { sport: 7.5, steady: 6, intervals: 9, circuit: 9 },
+  hardFromRpe: 8,
+  warmupMinutes: 10,
+  hrZones: [
+    { zone: 5, fromReserve: 0.9, rpe: 9.5 },
+    { zone: 4, fromReserve: 0.8, rpe: 8.5 },
+    { zone: 3, fromReserve: 0.7, rpe: 7 },
+    { zone: 2, fromReserve: 0.6, rpe: 6 },
+    { zone: 1, fromReserve: 0, rpe: 5 },
+  ],
+  // Activity Finish: ask when logged effort and heart rate disagree by this much.
+  mismatchRpe: 1.5,
 } as const;
 
 export const LOAD = {
