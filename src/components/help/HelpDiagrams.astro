@@ -1,0 +1,107 @@
+---
+// The Help page's three pictures, drawn from the same numbers the app measures
+// with, so the page cannot drift from the code. Colour is data only (the
+// activity tag tokens), chrome stays on the neutral scale.
+import { ACTIVITY_TAGS, ENDURANCE_INTENSITY, SET_TIME } from '@/app.config';
+import { TRAINING } from '@/lib/coach/knowledge';
+
+interface Props {
+  kind: 'set-time' | 'reps' | 'hr-zones';
+}
+const { kind } = Astro.props;
+
+// A worked set: back squat, 5 reps, strength, rested at strengthRest's floor.
+const lower = SET_TIME.kinds.lower;
+const sq = {
+  setup: lower.setupSeconds,
+  work: 5 * lower.repSeconds * SET_TIME.intent.strength,
+  rest: TRAINING.strengthRest.value[0],
+};
+const sqTotal = sq.setup + sq.work + sq.rest;
+const fmt = (s: number) => (s >= 90 ? `${Math.round(s / 60)} min` : `${Math.round(s)} s`);
+
+const strengthMax = TRAINING.strengthReps.value;
+const hypFloor = TRAINING.hypertrophyReps.value[0];
+const restMin = Math.round(TRAINING.strengthRest.value[0] / 60);
+const reps = Array.from({ length: 12 }, (_, i) => i + 1);
+const repTone = (n: number) => (n <= strengthMax ? 'strength' : n < hypFloor ? 'middle' : 'hyp');
+
+const zones = [...ENDURANCE_INTENSITY.hrZones].reverse();
+const zoneRange = (i: number) => {
+  const from = Math.round(zones[i].fromReserve * 100);
+  const next = zones[i + 1];
+  return next ? (from === 0 ? `<${Math.round(next.fromReserve * 100)}%` : `${from}–${Math.round(next.fromReserve * 100)}%`) : `≥${from}%`;
+};
+---
+
+{
+  kind === 'set-time' && (
+    <figure class="my-2 rounded-control bg-bg p-3">
+      <div class="flex h-3 w-full overflow-hidden rounded-chip" aria-hidden="true">
+        <span style={`width:${(sq.setup / sqTotal) * 100}%`} class="bg-fg/40" />
+        <span style={`width:${(sq.work / sqTotal) * 100}%;background:${ACTIVITY_TAGS.strength.color}`} />
+        <span style={`width:${(sq.rest / sqTotal) * 100}%`} class="bg-fg/10" />
+      </div>
+      <figcaption class="mt-1.5 flex flex-wrap gap-x-3 text-xs tabular-nums text-muted">
+        <span>{fmt(sq.setup)} setup</span>
+        <span class="text-fg">{fmt(sq.work)} work</span>
+        <span>{fmt(sq.rest)} rest</span>
+        <span>· back squat, 5 reps</span>
+      </figcaption>
+    </figure>
+  )
+}
+
+{
+  kind === 'reps' && (
+    <figure class="my-2 rounded-control bg-bg p-3">
+      <div class="grid grid-cols-12 gap-[2px]" aria-hidden="true">
+        {reps.map((n) => (
+          <span
+            class:list={['h-5 rounded-[2px]', repTone(n) === 'hyp' && 'bg-fg/20']}
+            style={
+              repTone(n) === 'strength'
+                ? `background:${ACTIVITY_TAGS.strength.color}`
+                : repTone(n) === 'middle'
+                  ? `background:${ACTIVITY_TAGS.strength.color};opacity:.45`
+                  : undefined
+            }
+          />
+        ))}
+      </div>
+      <div class="mt-1 grid grid-cols-12 gap-[2px] text-center text-[0.65rem] tabular-nums text-muted" aria-hidden="true">
+        {reps.map((n) => <span>{n === 12 ? '12+' : n}</span>)}
+      </div>
+      <figcaption class="mt-1.5 text-xs text-muted">
+        <b class="font-semibold text-fg">1–{strengthMax}</b> strength · <b class="font-semibold text-fg">{strengthMax + 1}–{hypFloor - 1}</b> strength if rested {restMin}+ min ·{' '}
+        <b class="font-semibold text-fg">{hypFloor}+</b> hypertrophy
+      </figcaption>
+    </figure>
+  )
+}
+
+{
+  kind === 'hr-zones' && (
+    <figure class="my-2 rounded-control bg-bg p-3">
+      <div class="grid grid-cols-5 gap-[2px]" aria-hidden="true">
+        {zones.map((z) => (
+          <span
+            class="h-5 rounded-[2px]"
+            style={`background:${ACTIVITY_TAGS.endurance.color};opacity:${z.rpe >= ENDURANCE_INTENSITY.hardFromRpe ? 1 : 0.35}`}
+          />
+        ))}
+      </div>
+      <div class="mt-1 grid grid-cols-5 gap-[2px] text-center text-[0.65rem] leading-tight tabular-nums text-muted">
+        {zones.map((z, i) => (
+          <span>
+            <span class="block text-fg">Z{z.zone} · {z.rpe}</span>
+            {zoneRange(i)}
+          </span>
+        ))}
+      </div>
+      <figcaption class="mt-1.5 text-xs text-muted">
+        % of heart-rate reserve → RPE. Solid = counted as hard.
+      </figcaption>
+    </figure>
+  )
+}

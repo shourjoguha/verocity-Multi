@@ -35,6 +35,7 @@ intent, LESSONS describes what actually happened.
 | Write coach output from a Claude Code session                            | `src/lib/coach/governor.ts` (the boundary), `supabase/migrations/0043_coach_briefs_notes.sql` |
 | **Run or change the weekly coach-tuning routine**                        | `docs/COACH_TUNING.md` (budget + boundary), `scripts/coach-tuning/scorecard.sql` |
 | **Give someone an invite/promo code, or check how many signups are left** | skill invite-user — `.claude/skills/invite-user/SKILL.md` |
+| **Change a feature users ask about, or a number on the Help page**     | `src/pages/app/help.astro` — answers are short and every number is read from `app.config.ts` / the pack, never typed in |
 | Sequence work or check what shipped                                      | `docs/ROADMAP.md`                                 |
 | **Change a component, sheet, token or layout**                           | skill ui-change — `.claude/skills/ui-change/SKILL.md` |
 | **Add a migration, RLS policy, edge function or query helper**           | skill db-change — `.claude/skills/db-change/SKILL.md` |

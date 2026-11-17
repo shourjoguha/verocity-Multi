@@ -481,6 +481,7 @@ const ROUTES = [
   '/app/you#holidays',
   '/app/you#coach-icon',
   '/app/shares',
+  '/app/help',
   '/app/activity',
   '/app/activity?mode=holiday',
   '/app/onboarding',
