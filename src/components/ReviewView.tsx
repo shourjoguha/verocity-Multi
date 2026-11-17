@@ -320,6 +320,7 @@ function HoursBar({ review: r }: { review: Review }) {
   const parts = LENSES.map((l) => ({ ...l, hours: r.hoursByLens[l.key] })).filter((l) => l.hours > 0);
   return (
     <div className="mb-4">
+      <p className="mb-1.5 text-xs text-muted">By session — each one counted whole under what it mostly was.</p>
       <div className="flex h-3 w-full overflow-hidden rounded-chip bg-fg/[0.05]" aria-hidden>
         {parts.map((p) => (
           <span
@@ -347,11 +348,15 @@ function HoursBar({ review: r }: { review: Review }) {
 
 // Goal weight (hollow) against share of time (filled), one row per goal the app
 // can measure. Scale is fixed to the larger of the two so both dots fit.
+// Its time is split INSIDE each session (a lift's warm-up is mobility), which
+// is why it does not match the bar above, which counts each session whole.
 function GoalsChart({ review: r }: { review: Review }) {
   const max = Math.max(0.5, ...r.goals.flatMap((g) => [g.intent, g.actual]));
   const x = (v: number) => `${(v / max) * 100}%`;
+  const liftingPair = r.goals.some((g) => g.id === 'strength') && r.goals.some((g) => g.id === 'hypertrophy');
   return (
     <div className="rounded-card border border-outline bg-surface p-3">
+      <p className="mb-2 text-xs text-muted">By movement — time inside each session split by the work in it.</p>
       <div className="mb-2 flex flex-wrap gap-x-4 text-[0.65rem] text-muted">
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-muted bg-surface" /> Goal weight
@@ -384,6 +389,17 @@ function GoalsChart({ review: r }: { review: Review }) {
           </div>
         );
       })}
+      {liftingPair ? (
+        <p className="mt-2 text-xs text-muted">
+          {r.goalSplit.byIntent
+            ? `Strength vs hypertrophy is read from rest between loaded sets.${
+                r.goalSplit.assumedShare > 0
+                  ? ` ${pct(r.goalSplit.assumedShare)} of sets had no rest logged and were read as short.`
+                  : ''
+              }`
+            : 'Too few loaded sets to read strength vs hypertrophy, so lifting time is split by your goal weights.'}
+        </p>
+      ) : null}
     </div>
   );
 }

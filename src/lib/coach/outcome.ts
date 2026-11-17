@@ -156,6 +156,26 @@ export const DEFINITION_CHANGES: readonly DefinitionChange[] = [
     on: '2026-11-05',
     what: 'a session done as a variation is no longer read as a step on the plain lift’s progression',
   },
+  {
+    ruleId: 'goal.underserved.strength',
+    on: '2026-11-17',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; lifting time now goes by how the sets were rested, and short-rest circuits of loaded work count toward endurance',
+  },
+  {
+    ruleId: 'goal.underserved.hypertrophy',
+    on: '2026-11-17',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; lifting time now goes by how the sets were rested, and short-rest circuits of loaded work count toward endurance',
+  },
+  {
+    ruleId: 'goal.underserved.endurance',
+    on: '2026-11-17',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; lifting time now goes by how the sets were rested, and short-rest circuits of loaded work count toward endurance',
+  },
+  {
+    ruleId: 'goal.underserved.mobility',
+    on: '2026-11-17',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; lifting time now goes by how the sets were rested, and short-rest circuits of loaded work count toward endurance',
+  },
 ];
 
 /** Changes recorded for a rule on or after the day it was decided. */

@@ -1012,7 +1012,8 @@ export interface GoalShare {
   label: string;
   /** Stated weight, renormalised so the goals sum to 1. */
   intent: number;
-  /** Share of working minutes that went to the modalities this goal maps to. */
+  /** Share of elapsed minutes that served this goal. Resistance minutes are
+   *  divided by what the loaded work was for (`loadedIntent`), not by weight. */
   actual: number;
   /** actual − intent. Negative means underserved. */
   gap: number;
@@ -1043,28 +1044,59 @@ export function measureGoals(
   const goals = (stats?.goals ?? []).filter((g) => GOAL_MODALITIES[g.id] && g.weight > 0);
   // Elapsed, not working — see the note on sessionMinutesPerWeek.
   const minutes = training.sessionMinutesPerWeek.value;
+  const has = (id: string) => goals.some((g) => g.id === id);
 
-  // Strength and hypertrophy both map to resistance, so the actual shares would
-  // double-count it. Split the modality's minutes across the goals claiming it,
-  // in proportion to their stated weights — the athlete's own ranking is the
-  // only defensible splitter, and it keeps sum(actual) === 1.
-  const weightTotal = goals.reduce((s, g) => s + g.weight, 0);
-  const claimants = new Map<ModalityKey, number>();
-  for (const g of goals) {
-    for (const m of GOAL_MODALITIES[g.id]) claimants.set(m, (claimants.get(m) ?? 0) + g.weight);
+  // Strength and hypertrophy both train with resistance, so the modality alone
+  // cannot tell them apart. Until 2026-11-17 the resistance minutes were split
+  // between them by the athlete's own goal weights, which made the two rows an
+  // echo of the ranking: their actual/intent ratio was identical by
+  // construction. Now resistance minutes are split by what the loaded work was
+  // FOR (`loadedIntent`: rest and superset structure, coach/intent.ts) — set
+  // shares, applied to time. Loaded conditioning (short rest against a partner
+  // that shares muscles) serves endurance, not either lifting goal.
+  //
+  // Each POOL of minutes goes to the goals that claim it, split by goal weight
+  // when more than one does, so sum(actual) stays 1. A pool whose own goal is
+  // not ranked falls to its neighbours rather than vanishing: hypertrophy-shaped
+  // sets still serve a strength-only athlete, as they did before.
+  const intent = training.loadedIntent;
+  const split = intent.sufficiency !== 'insufficient' && intent.value.total > 0;
+  const pools: Record<string, number> = { endurance: minutes.endurance, mobility: minutes.mobility };
+  if (split) {
+    const { mix, total } = intent.value;
+    pools['resistance:strength'] = (minutes.resistance * mix.strength) / total;
+    pools['resistance:hypertrophy'] = (minutes.resistance * mix.hypertrophy) / total;
+    pools['resistance:conditioning'] = (minutes.resistance * mix.conditioning) / total;
+  } else {
+    pools.resistance = minutes.resistance;
   }
+  const claims = (id: string): string[] => {
+    if (!split) return id === 'strength' || id === 'hypertrophy' ? ['resistance'] : [id];
+    const lifting = id === 'strength' || id === 'hypertrophy';
+    if (id === 'endurance') return ['endurance', 'resistance:conditioning'];
+    if (!lifting) return [id];
+    const other = id === 'strength' ? 'hypertrophy' : 'strength';
+    return [
+      `resistance:${id}`,
+      ...(has(other) ? [] : [`resistance:${other}`]),
+      ...(has('endurance') ? [] : ['resistance:conditioning']),
+    ];
+  };
 
-  const servedMinutes = [...claimants.keys()].reduce((s, m) => s + minutes[m], 0);
+  const weightTotal = goals.reduce((s, g) => s + g.weight, 0);
+  const claimants = new Map<string, number>();
+  for (const g of goals) for (const pool of claims(g.id)) claimants.set(pool, (claimants.get(pool) ?? 0) + g.weight);
+  const servedMinutes = [...claimants.keys()].reduce((s, pool) => s + (pools[pool] ?? 0), 0);
 
   const shares: GoalShare[] = goals.map((g) => {
-    const intent = weightTotal ? g.weight / weightTotal : 0;
+    const intentShare = weightTotal ? g.weight / weightTotal : 0;
     const actual = servedMinutes
-      ? GOAL_MODALITIES[g.id].reduce(
-          (s, m) => s + (minutes[m] * (g.weight / (claimants.get(m) as number))) / servedMinutes,
+      ? claims(g.id).reduce(
+          (s, pool) => s + ((pools[pool] ?? 0) * (g.weight / (claimants.get(pool) as number))) / servedMinutes,
           0,
         )
       : 0;
-    return { id: g.id, label: g.label, intent, actual, gap: actual - intent };
+    return { id: g.id, label: g.label, intent: intentShare, actual, gap: actual - intentShare };
   });
 
   return {

@@ -164,6 +164,10 @@ export interface Review {
   goals: GoalShare[];
   /** Goals it cannot (free text, skill), named rather than scored as zero. */
   unmeasuredGoals: string[];
+  /** How resistance time was divided between strength and hypertrophy: by the
+   *  rest-based intent of the loaded sets, or (too few of them) by goal weight.
+   *  `assumedShare` is how much of an intent split rests on an unlogged rest. */
+  goalSplit: { byIntent: boolean; assumedShare: number };
   regionSets: { key: RegionKey; label: string; perWeek: number }[];
   setFloor: number;
   effort: { hard: number; total: number; ratedSessions: number; unratedSessions: number; byGroup: EffortGroup[] };
@@ -248,6 +252,10 @@ export function buildReview(period: ReviewPeriod, input: ReviewInput): Review | 
     calendar: buildCalendar(window, inWindow, lensOf, dayLabel),
     goals,
     unmeasuredGoals,
+    goalSplit: {
+      byIntent: training.loadedIntent.sufficiency !== 'insufficient' && training.loadedIntent.value.total > 0,
+      assumedShare: training.loadedIntent.value.assumedShare,
+    },
     regionSets,
     setFloor: T.hypertrophyWeeklySets.value,
     effort: measureEffort(inWindow, dayLabel),

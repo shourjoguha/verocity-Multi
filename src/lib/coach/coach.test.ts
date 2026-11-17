@@ -181,6 +181,54 @@ describe('signals', () => {
     expect(shares.map((g) => g.id)).not.toContain('skill');
   });
 
+  it('splits lifting time by how the sets were rested, not by the goal ranking', () => {
+    // Until 2026-11-17 strength and hypertrophy took resistance minutes in the
+    // ratio of their goal weights, so actual/intent was identical for both by
+    // construction. Fix the time and the ranking, change only the rest mix,
+    // and the split must follow the rest.
+    const goals = [
+      { id: 'strength', label: 'Strength', weight: 50 },
+      { id: 'hypertrophy', label: 'Hypertrophy', weight: 50 },
+      { id: 'endurance', label: 'Endurance', weight: 50 },
+    ];
+    const stats = { ...STATS, goals } as UserStats;
+    const minutes = Object.fromEntries(MODALITY_KEYS.map((k) => [k, 0])) as Record<string, number>;
+    Object.assign(minutes, { resistance: 100, endurance: 100 });
+    const withMix = (strength: number, hypertrophy: number, conditioning: number) => {
+      const total = strength + hypertrophy + conditioning;
+      return {
+        ...training,
+        sessionMinutesPerWeek: { ...training.sessionMinutesPerWeek, value: minutes },
+        loadedIntent: {
+          ...training.loadedIntent,
+          sufficiency: 'ok' as const,
+          value: { ...training.loadedIntent.value, mix: { strength, hypertrophy, conditioning, assumed: 0 }, total },
+        },
+      } as typeof training;
+    };
+    const by = (t: typeof training) => Object.fromEntries(measureGoals(stats, t).value.map((g) => [g.id, g.actual]));
+
+    const a = by(withMix(30, 10, 0));
+    expect(a.strength).toBeCloseTo(0.375, 5);
+    expect(a.hypertrophy).toBeCloseTo(0.125, 5);
+    expect(a.endurance).toBeCloseTo(0.5, 5);
+
+    // Loaded conditioning serves endurance, not either lifting goal.
+    const b = by(withMix(10, 10, 20));
+    expect(b.endurance).toBeCloseTo(0.75, 5);
+    expect(b.strength).toBeCloseTo(0.125, 5);
+
+    // Too few loaded sets to read: fall back to the ranking, and still sum to 1.
+    const thin = by({ ...withMix(1, 0, 0), loadedIntent: { ...training.loadedIntent, sufficiency: 'insufficient' } } as typeof training);
+    expect(thin.strength).toBeCloseTo(0.25, 5);
+    expect(thin.hypertrophy).toBeCloseTo(0.25, 5);
+
+    // With no endurance goal, conditioning stays with the lifting goals.
+    const lifters = { ...STATS, goals: goals.slice(0, 2) } as UserStats;
+    const c = measureGoals(lifters, withMix(10, 10, 20)).value;
+    expect(c.reduce((s, g) => s + g.actual, 0)).toBeCloseTo(1, 5);
+  });
+
   it('counts nutrition timing from wall clock and never from portion size', () => {
     const n = measureNutrition(MEALS, LOGS, TODAY);
     expect(n.firstMealHour.value).toBeGreaterThan(6);
