@@ -159,22 +159,32 @@ export const DEFINITION_CHANGES: readonly DefinitionChange[] = [
   {
     ruleId: 'goal.underserved.strength',
     on: '2026-11-17',
-    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; lifting time now goes by how the sets were rested, and short-rest circuits of loaded work count toward endurance',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; a single lift rested two minutes or more for under eight reps is strength, a superset is hypertrophy, and loaded work in a conditioning block counts toward endurance',
   },
   {
     ruleId: 'goal.underserved.hypertrophy',
     on: '2026-11-17',
-    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; lifting time now goes by how the sets were rested, and short-rest circuits of loaded work count toward endurance',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; a single lift rested two minutes or more for under eight reps is strength, a superset is hypertrophy, and loaded work in a conditioning block counts toward endurance',
   },
   {
     ruleId: 'goal.underserved.endurance',
     on: '2026-11-17',
-    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; lifting time now goes by how the sets were rested, and short-rest circuits of loaded work count toward endurance',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; a single lift rested two minutes or more for under eight reps is strength, a superset is hypertrophy, and loaded work in a conditioning block counts toward endurance',
   },
   {
     ruleId: 'goal.underserved.mobility',
     on: '2026-11-17',
-    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; lifting time now goes by how the sets were rested, and short-rest circuits of loaded work count toward endurance',
+    what: 'your training minutes are no longer split between strength and hypertrophy by how you ranked them; a single lift rested two minutes or more for under eight reps is strength, a superset is hypertrophy, and loaded work in a conditioning block counts toward endurance',
+  },
+  {
+    ruleId: 'training.intent.loaded-too-light',
+    on: '2026-11-17',
+    what: 'how your loaded work is described now reads a superset as hypertrophy, loaded work in a conditioning block as conditioning, and a single lift as strength only when rested two minutes or more for under eight reps; a set with no rest logged is read on its reps',
+  },
+  {
+    ruleId: 'training.strength.rest-too-short',
+    on: '2026-11-17',
+    what: 'a superset’s rest is now counted once, at the end of the round, instead of after every movement in it',
   },
 ];
 

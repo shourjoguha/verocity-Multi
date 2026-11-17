@@ -2,47 +2,35 @@
 //
 // Strength, hypertrophy and loaded conditioning are three different jobs done
 // with the same equipment, and a log records all three identically: a movement,
-// a weight, some reps. The obvious discriminator is the rep count, and on real
-// data it does not work. Across one athlete's four rest bands the mean reps
-// moved 11.7 -> 10.2 while the mean top load moved 35 -> 58.5 kg. Reps alone
-// would have called every one of those sets hypertrophy.
+// a weight, some reps. Which job a set did is read from WHERE it sits and HOW it
+// was spaced, in this order (the owner's rules, 2026-11-17):
 //
-// WHAT DOES SEPARATE THEM is how the set is SPACED and what it is spaced
-// AGAINST — tagged rest, and whether the movement shares a superset with
-// something that fatigues the same muscles. On the same data, as tagged
-// rest lengthened the load climbed monotonically and supersets disappeared
-// (39% -> 50% -> 13% -> 0%).
+//   1. A loaded set in a conditioning block is conditioning. Rest is not asked:
+//      a HIIT circuit has none by design, and an EMOM or AMRAP's rest is
+//      whatever the athlete had left on the day — absence there is the
+//      prescription, not missing data.
+//   2. A superset (or circuit) outside a conditioning block is hypertrophy.
+//   3. A single movement is strength when it was rested for at least
+//      `strengthRest`'s floor (120s) AND ran under `hypertrophyReps`' floor
+//      (8). Anything else is hypertrophy.
+//   4. A single movement with no rest logged is read on its reps alone, and the
+//      verdict says so (`restAssumed`). Rest tagging was added to the logger
+//      after the first logs, so its absence on old work is not a statement
+//      about short rest.
 //
-// THE REST TAG IS THE RIGHT FIELD. Rest lives on the item as `restSeconds`,
-// which the plan pre-fills and the athlete re-taps from TIMERS.restPresets to
-// say what they actually rested, and optionally per set as `SetActual.rest`
-// ("vary by set"). Both mean the rest taken AFTER the set. There is
-// deliberately no countdown behind it (it paused when the phone locked and was
-// fiddly mid-set, so it was removed): the tag is a statement, not a timing.
-// An untouched tag therefore reads as "rested as prescribed".
+// Reps alone do not separate the jobs — on one athlete's log the mean reps
+// barely moved (11.7 -> 10.2) while top load climbed 35 -> 58.5 kg with tagged
+// rest — which is why rule 3 needs BOTH, and rule 4 is flagged as inference.
 //
-// A SUPERSET'S REST IS NOT ONE TAG. Sets alternate: pull-up 1, dip 1, pull-up 2.
-// The pull-up's rest is the wait after the pull-up, before the dip; the time a
-// pull-up muscle actually gets between its own sets is that rest, plus the dip
-// set, plus the dip's rest. `restGap` adds those up. Reading the item's own tag
-// alone (as this module did until 2026-11-01) made every superset look shorter
-// rested than it was.
+// THE REST TAG. Rest lives on the item as `restSeconds` and optionally per set
+// as `SetActual.rest` ("vary by set"); both mean the rest taken AFTER the set.
+// There is no countdown behind it: the tag is a statement, not a timing. A
+// superset's GROUP rest is taken at the end of the round, not between its
+// movements (`loggedRestAfter`), unless an item carries its own tag.
 //
-// THE CORPUS CORRECTS THE OBVIOUS VERSION OF THIS RULE. "Superset means it is
-// not strength work" is wrong, and `TRAINING.strengthRest`'s own caveat says
-// so: Galpin "explicitly allows the rest to be filled by supersetting an
-// unrelated muscle group — resting is not the same as standing still." The
-// partner's set is rest for the muscles it does NOT share, and fresh load for
-// the ones it does — so it counts in proportion to how unrelated it is
-// (`regionOverlap`), continuously. There used to be a hard 0.3 cutoff between
-// "unrelated" and "same muscles"; Pull-Up against Dips sat exactly on it and a
-// push/pull superset read as loaded conditioning. There is no cutoff now.
-//
-// NOTHING HERE IS A THRESHOLD OF ITS OWN. The boundary is 120 seconds, and it
-// arrives from both directions in the existing pack: `strengthRest` puts heavy
-// work at two-to-four minutes, `hypertrophyRest` puts hypertrophy at "the two
-// minute range at most". The same number, named by both claims. This module
-// applies them; it does not invent.
+// NOTHING HERE IS A THRESHOLD OF ITS OWN. 120 seconds is `strengthRest`'s floor
+// and `hypertrophyRest`'s ceiling; 8 reps is `hypertrophyReps`' floor. Both are
+// passed in from the claim-cited pack.
 
 import { classifyMovement, type OverrideMap } from '@/lib/movementTaxonomy';
 import { LOAD, type RegionKey } from '@/app.config';
@@ -77,36 +65,20 @@ export function regionOverlap(
   return Number(shared.toFixed(2));
 }
 
-/** Effective rest at or under which a superset/circuit reads as deliberately
- *  dense. Below the hypertrophy ceiling by a clear margin, so the middle band
- *  stays the middle. */
-export const DENSE_REST_SECONDS = 60;
-
-/**
- * What to assume when the rest PICKER was never touched.
- *
- * `LogItem.restSeconds` is set by the manual selector in the movement sheet
- * (`TIMERS.restPresets`). Absent means the athlete never opened it — and the
- * athlete whose log this was built against says that reliably means a short
- * rest, which the data agrees with: their unlogged loaded items sit with the
- * under-60s band on load and on superset share, not with the long-rest one.
- *
- * DO NOT REACH FOR `TIMERS.defaultRestSeconds` HERE. That constant is 120 and
- * is only the default a brand-new movement's tag opens on — not a claim about
- * what was rested. (It used to seed an on-screen countdown, since removed.) Using it would put every unlogged
- * item at exactly the strength boundary and classify the majority of a real log
- * as strength work, which is the precise opposite of what it is.
- *
- * This is an ASSUMPTION and is reported as one: every verdict carries
- * `restAssumed`, and the mix counts assumed sets separately so a surface can
- * say how much of its own answer rests on this number.
- */
-export const UNLOGGED_REST_SECONDS = 30;
-
 /** The rest LOGGED after set `ki`: the set's own override ("vary by set"),
- *  else the item's tag, else the group's. Null when none was logged. */
+ *  else the item's tag, else the group's. Null when none was logged.
+ *
+ *  A group's rest belongs to the END of a superset's round: between its
+ *  movements the athlete goes straight on, so an untagged item that is not the
+ *  last in the round rested 0 — a stated 0, because the group's tag said where
+ *  the rest goes. Reading the group's rest after every movement counted it once
+ *  per movement and made a two-movement superset look twice as rested. */
 export function loggedRestAfter(item: LogItem, group: LogGroup, ki: number): number | null {
-  return item.sets[ki]?.actual.rest ?? item.restSeconds ?? group.restSeconds ?? null;
+  const own = item.sets[ki]?.actual.rest ?? item.restSeconds;
+  if (own != null) return own;
+  if (group.restSeconds == null) return null;
+  const movers = group.items.filter((it) => it.kind !== 'subroutine');
+  return movers.length > 1 && movers[movers.length - 1] !== item ? 0 : group.restSeconds;
 }
 
 /** How long a set itself took: its logged time, else reps at LOAD.repSeconds. */
@@ -197,54 +169,40 @@ export interface IntentInput {
   group: LogGroup;
   /** Which of the item's sets is being classified. */
   setIndex: number;
+  /** The logger section the group sits in (`SECTIONS`). */
+  sectionKey: string;
   /** `TRAINING.strengthRest.value[0]`, which is also `hypertrophyRest.value`. */
   restBoundarySeconds: number;
-  /** Override the assumption for an untouched picker. Defaults to
-   *  UNLOGGED_REST_SECONDS; pass it explicitly to test the sensitivity. */
-  unloggedRestSeconds?: number;
-  overrides?: OverrideMap;
+  /** `TRAINING.hypertrophyReps.value[0]`: strength runs below it. */
+  hypertrophyRepFloor: number;
 }
 
 export interface IntentVerdict {
   intent: LoadedIntent;
-  /** The effective rest the verdict was reached on (see `restGap`). */
-  restSeconds: number;
-  /** True when any rest in it is the assumption rather than a logged choice. A
-   *  caller that does not report this is overstating what it knows. */
+  /** The rest logged after the set; null when the verdict did not need it or
+   *  none was logged. */
+  restSeconds: number | null;
+  /** True when a single movement had no rest logged and was read on reps
+   *  alone. A caller that does not report this overstates what it knows. */
   restAssumed: boolean;
-  /** Highest region overlap with a partner in the same superset or circuit. */
-  partnerOverlap: number | null;
 }
 
-/**
- * Classify one item's loaded work.
- *
- * An untouched rest picker resolves to UNLOGGED_REST_SECONDS rather than
- * refusing to answer — but the verdict says so via `restAssumed`, and every
- * caller must carry that through. This is the narrow case where assuming beats
- * abstaining: the alternative left most of a real log unclassified, and the
- * assumption is a stated fact about how the picker gets used rather than an
- * inference the engine invented for itself. It is NOT a licence to do the same
- * with a missing RPE or a missing reading — those have no such fact behind
- * them, which is why `rpeWasRated` and `coach_observations` still refuse.
- */
+/** Classify one set by where it sits and how it was spaced — see the header. */
 export function classifyIntent(input: IntentInput): IntentVerdict {
-  const { item, group, restBoundarySeconds } = input;
-  const found = group.items.findIndex((it) => it.id === item.id);
-  // An item not found in its group is classified as if alone.
-  const g = found >= 0 ? group : { ...group, items: [item] };
-  const gap = restGap(g, Math.max(0, found), input.setIndex, {
-    unloggedRestSeconds: input.unloggedRestSeconds ?? UNLOGGED_REST_SECONDS,
-    overrides: input.overrides,
-  });
-  const grouped = g.items.filter((it) => it.kind !== 'subroutine').length > 1;
-  const base = { restSeconds: gap.seconds, restAssumed: gap.assumed, partnerOverlap: gap.partnerOverlap };
+  const { item, group, setIndex, sectionKey } = input;
+  if (sectionKey === 'conditioning') return { intent: 'conditioning', restSeconds: null, restAssumed: false };
+  const grouped = group.items.filter((it) => it.kind !== 'subroutine').length > 1;
+  if (grouped) return { intent: 'hypertrophy', restSeconds: null, restAssumed: false };
 
-  // Long effective rest is strength work, whatever filled it.
-  if (gap.seconds >= restBoundarySeconds) return { intent: 'strength', ...base };
-  // Very short effective rest inside a superset or circuit is density work.
-  if (grouped && gap.seconds <= DENSE_REST_SECONDS) return { intent: 'conditioning', ...base };
-  return { intent: 'hypertrophy', ...base };
+  const reps = item.sets[setIndex]?.actual.reps;
+  const lowReps = reps != null && reps < input.hypertrophyRepFloor;
+  const rest = loggedRestAfter(item, group, setIndex);
+  if (rest == null) return { intent: lowReps ? 'strength' : 'hypertrophy', restSeconds: null, restAssumed: true };
+  return {
+    intent: lowReps && rest >= input.restBoundarySeconds ? 'strength' : 'hypertrophy',
+    restSeconds: rest,
+    restAssumed: false,
+  };
 }
 
 /**
@@ -287,7 +245,7 @@ export function mixShares(mix: IntentMix): {
   shares: Record<LoadedIntent, number>;
   total: number;
   assumed: number;
-  /** 0..1 — how much of the verdict leans on UNLOGGED_REST_SECONDS. */
+  /** 0..1 — how much of the verdict was read on reps alone, with no rest logged. */
   assumedShare: number;
 } {
   const total = mix.strength + mix.hypertrophy + mix.conditioning;

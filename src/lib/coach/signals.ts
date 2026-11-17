@@ -27,7 +27,7 @@ import {
   type ModalityKey,
   type RegionKey,
 } from '@/app.config';
-import { summarizeBodyLoad } from '@/lib/bodyLoad';
+import { isLoadedSet, summarizeBodyLoad } from '@/lib/bodyLoad';
 import { holidayContext, type HolidayContext, type HolidayRange } from '@/lib/holidays';
 import { bestE1rmByMovement } from '@/lib/prs';
 import { isVariant } from '@/lib/notations';
@@ -673,6 +673,26 @@ export function measureTraining(
                 }
               }
             }
+            // What this loaded set was FOR (coach/intent.ts): every loaded set
+            // in a working or conditioning block, whether or not the movement
+            // has a best to measure it against. Counted per set because rest
+            // may be varied per set.
+            if (
+              (isResistance || isConditioning) &&
+              isLoadedSet(set, classifyMovement(item.movement, { overrides }).profile)
+            ) {
+              countIntent(
+                intentMix,
+                classifyIntent({
+                  item,
+                  group,
+                  setIndex: ki,
+                  sectionKey: section.key,
+                  restBoundarySeconds: opts.heavyRestSeconds[0],
+                  hypertrophyRepFloor: opts.hypertrophyReps[0],
+                }),
+              );
+            }
             if (isResistance) {
               if (!sawResistance) {
                 sawResistance = true;
@@ -747,21 +767,6 @@ export function measureTraining(
                     heavyRestCount += 1;
                     if (rest < opts.heavyRestSeconds[0]) heavyRestBelow += 1;
                   }
-                  // What this loaded set was FOR. Counted per set rather than
-                  // per item because rest is tagged on the item, applies to
-                  // each of its sets, and may be varied per set — the same shape as the `/side` and
-                  // `(p)` notations, which are written item-level and priced
-                  // set-level.
-                  countIntent(
-                    intentMix,
-                    classifyIntent({
-                      item,
-                      group,
-                      setIndex: ki,
-                      restBoundarySeconds: opts.heavyRestSeconds[0],
-                      overrides,
-                    }),
-                  );
                 }
               }
             }
@@ -1051,9 +1056,9 @@ export function measureGoals(
   // between them by the athlete's own goal weights, which made the two rows an
   // echo of the ranking: their actual/intent ratio was identical by
   // construction. Now resistance minutes are split by what the loaded work was
-  // FOR (`loadedIntent`: rest and superset structure, coach/intent.ts) — set
-  // shares, applied to time. Loaded conditioning (short rest against a partner
-  // that shares muscles) serves endurance, not either lifting goal.
+  // FOR (`loadedIntent`, coach/intent.ts: block, superset, rest and reps) —
+  // set shares, applied to time. Loaded work in a conditioning block serves
+  // endurance, not either lifting goal.
   //
   // Each POOL of minutes goes to the goals that claim it, split by goal weight
   // when more than one does, so sum(actual) stays 1. A pool whose own goal is

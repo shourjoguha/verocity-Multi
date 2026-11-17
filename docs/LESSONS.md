@@ -1889,45 +1889,28 @@ The new field **must never be totalled** — a squat legitimately counts twice.
 -> `src/lib/bodyLoad.ts` (`meaningfulRegionShare`, `isLoadedSet`),
 `src/lib/coach/signals.ts`, `src/lib/coach/rules/training.ts`
 
-### Reps cannot tell strength from hypertrophy from loaded conditioning
-`[measured over 56 days of one real log]`
-Asked to infer what loaded work was FOR, the obvious discriminator is the rep
-count. On real data it does nothing. Across four prescribed-rest bands the mean
-reps moved **11.7 to 10.2** while the mean top load moved **35 to 58.5 kg** and
-the superset share collapsed **50% to 0%**. Reps alone would have called every
-one of those sets hypertrophy.
-**Rest and superset structure do the separating**, and prescribed rest is the
-right field to read even though the app has never recorded rest *taken* —
-`SetActual` has no rest member at all. Intent is what the work was *for*, and
-the plan is where intent is written down.
-**The corpus corrects the obvious version of the rule.** "Superset means it is
-not strength work" is wrong: `TRAINING.strengthRest`'s own caveat has Galpin
-"explicitly allow the rest to be filled by supersetting an unrelated muscle
-group". So a superset only argues against strength when the partner fatigues
-the **same** muscles — which the region profiles already know, via
-`regionOverlap`. **A rule that ignores a claim's caveat is a rule the claim does
-not support.** (The hard 0.3 "same muscles" cutoff this first shipped with is
-gone — see "A push/pull superset reads as loaded conditioning" below.)
-No new threshold was invented: 120s arrives from both directions, as
-`strengthRest`'s floor and `hypertrophyRest`'s ceiling.
-**An untouched rest picker resolves to `UNLOGGED_REST_SECONDS` (30s), not to a
-refusal.** The first version returned `unspecified` and left most of a real log
-unclassified; the athlete's own account is that not opening the picker reliably
-means a short rest, and the data agrees — their unlogged loaded items sit with
-the under-60s band on load and on superset share. That is a stated fact about
-how the control gets used, which is what separates it from the RPE prefill:
-`rpeWasRated` still refuses, because nothing comparable backs a missing rating.
-Every verdict carries `restAssumed` and the mix counts assumed sets, so a
-surface can say how much of its answer is inference — on that log, 46%.
-**DO NOT REACH FOR `TIMERS.defaultRestSeconds` FOR THIS.** It is 120 and is only
-the default a brand-new movement's tag opens on, not a claim about what was
-rested. (It used to seed an on-screen countdown; that was removed 2026-10 —
-see "Rest is a tag" below.) A sensitivity
-run over the live log: assuming 30s, 60s or 90s gives an identical split
-(12% strength / 86% hypertrophy), while 120s flips it to 58% strength. The
-assumption is robust anywhere below the boundary and catastrophic exactly at the
-value a careless reach would have picked.
--> `src/lib/coach/intent.ts`, `src/lib/coach/signals.ts` (`loadedIntent`)
+### Strength reads as almost none of the lifting time
+`[2026-11-17]`
+The goals chart's Strength and Hypertrophy rows used to split resistance
+minutes by the athlete's own goal weights, so both rows always showed the same
+actual/intent ratio and measured nothing. `measureGoals` now splits them by
+`loadedIntent`, and the owner restated what intent means, in this order:
+a loaded set in a **conditioning** block is conditioning (an EMOM, AMRAP or
+HIIT circuit has no rest tag by design — absence is the prescription); a
+**superset** is hypertrophy; a **single** movement is strength only when rested
+at least `strengthRest`'s floor (120s) **and** under `hypertrophyReps`' floor
+(8); a single with no rest logged is read on reps alone, flagged `restAssumed`.
+A superset's **group** rest is taken once at the end of the round
+(`loggedRestAfter`), not after every movement in it.
+On the July–August fixture that leaves Strength at ~6–8% of time against a 32%
+ranking. That is the data, not the rule misfiring: of 27 main-block single
+sets only 9 met both halves; six low-rep sets were tagged under 120s and 13
+carried no rest at all. **If Strength reads low, check whether the heavy
+singles were tagged 120s+ before touching the classifier.**
+This reverses two earlier decisions, both now in Superseded: that reps say
+nothing, and that an untouched picker means 30s of rest.
+-> `src/lib/coach/intent.ts` (`classifyIntent`, `loggedRestAfter`),
+`src/lib/coach/signals.ts` (`loadedIntent`, `measureGoals`), `DEFINITION_CHANGES`
 
 ### A push/pull superset reads as loaded conditioning
 `[2026-11-01]`
@@ -1949,6 +1932,9 @@ the stored meaning was flipped to "after" **without shifting values** — the
 visible label never said "before", so existing entries were most likely made in
 the "after" sense. If a log predates 2026-11-01 and its per-set rests look one
 set off, this is why.
+**Since 2026-11-17 `restGap` no longer classifies intent** — a superset is
+hypertrophy outright — and only feeds the heavy-rest rule. Its group rest now
+sits after the last movement of the round, not after each one.
 -> `src/lib/coach/intent.ts` (`restGap`), `src/lib/coach/signals.ts`, `DEFINITION_CHANGES`
 
 ### A lift reads as stalled or dropping when the athlete made it harder
@@ -2071,6 +2057,55 @@ out of the body map, so it is neither unmapped nor spends session minutes.
 Kept so the search path survives, **demoted so it stops reading as advice.**
 Every line below was once a live entry with a confident prescription. A grep hit
 here means "this was tried and is no longer how the code works."
+
+- **Reps cannot tell strength from hypertrophy; an untouched rest picker means
+  30s.** `[measured over 56 days of one real log]` Superseded 2026-11-17 by
+  "Strength reads as almost none of the lifting time". Classification was
+  rest-and-superset-relatedness only, and missing rest resolved to a 30s
+  `UNLOGGED_REST_SECONDS`. The owner's account changed: rest tagging was added
+  after the first logs, so its absence on old work is not a short rest, and
+  strength needs low reps as well as long rest. The original entry, kept for its
+  measurements:
+
+  > `[measured over 56 days of one real log]`
+  > Asked to infer what loaded work was FOR, the obvious discriminator is the rep
+  > count. On real data it does nothing. Across four prescribed-rest bands the mean
+  > reps moved **11.7 to 10.2** while the mean top load moved **35 to 58.5 kg** and
+  > the superset share collapsed **50% to 0%**. Reps alone would have called every
+  > one of those sets hypertrophy.
+  > **Rest and superset structure do the separating**, and prescribed rest is the
+  > right field to read even though the app has never recorded rest *taken* —
+  > `SetActual` has no rest member at all. Intent is what the work was *for*, and
+  > the plan is where intent is written down.
+  > **The corpus corrects the obvious version of the rule.** "Superset means it is
+  > not strength work" is wrong: `TRAINING.strengthRest`'s own caveat has Galpin
+  > "explicitly allow the rest to be filled by supersetting an unrelated muscle
+  > group". So a superset only argues against strength when the partner fatigues
+  > the **same** muscles — which the region profiles already know, via
+  > `regionOverlap`. **A rule that ignores a claim's caveat is a rule the claim does
+  > not support.** (The hard 0.3 "same muscles" cutoff this first shipped with is
+  > gone — see "A push/pull superset reads as loaded conditioning" below.)
+  > No new threshold was invented: 120s arrives from both directions, as
+  > `strengthRest`'s floor and `hypertrophyRest`'s ceiling.
+  > **An untouched rest picker resolves to `UNLOGGED_REST_SECONDS` (30s), not to a
+  > refusal.** The first version returned `unspecified` and left most of a real log
+  > unclassified; the athlete's own account is that not opening the picker reliably
+  > means a short rest, and the data agrees — their unlogged loaded items sit with
+  > the under-60s band on load and on superset share. That is a stated fact about
+  > how the control gets used, which is what separates it from the RPE prefill:
+  > `rpeWasRated` still refuses, because nothing comparable backs a missing rating.
+  > Every verdict carries `restAssumed` and the mix counts assumed sets, so a
+  > surface can say how much of its answer is inference — on that log, 46%.
+  > **DO NOT REACH FOR `TIMERS.defaultRestSeconds` FOR THIS.** It is 120 and is only
+  > the default a brand-new movement's tag opens on, not a claim about what was
+  > rested. (It used to seed an on-screen countdown; that was removed 2026-10 —
+  > see "Rest is a tag" below.) A sensitivity
+  > run over the live log: assuming 30s, 60s or 90s gives an identical split
+  > (12% strength / 86% hypertrophy), while 120s flips it to 58% strength. The
+  > assumption is robust anywhere below the boundary and catastrophic exactly at the
+  > value a careless reach would have picked.
+  > -> `src/lib/coach/intent.ts`, `src/lib/coach/signals.ts` (`loadedIntent`)
+  >
 
 The sheet flicker took five merged PRs. These were the wrong turns:
 

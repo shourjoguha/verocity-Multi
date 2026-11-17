@@ -485,6 +485,17 @@ export function goalsHeadline(r: Review): string | null {
   return `${widest.label} gets ${pct(widest.actual)} of your time on ${pct(widest.intent)} of your goal weight`;
 }
 
+/** How the chart divided lifting time between strength and hypertrophy. */
+export function goalSplitNote(r: Review): string {
+  if (!r.goalSplit.byIntent) {
+    return 'Too few loaded sets to read strength vs hypertrophy, so lifting time is split by your goal weights.';
+  }
+  const rule = `Strength is a single lift rested ${Math.round(T.strengthRest.value[0] / 60)} min or more for under ${T.hypertrophyReps.value[0]} reps; supersets are hypertrophy; loaded work in a conditioning block counts as endurance.`;
+  return r.goalSplit.assumedShare > 0
+    ? `${rule} ${pct(r.goalSplit.assumedShare)} of sets had no rest logged and were read on reps alone.`
+    : rule;
+}
+
 export function volumeHeadline(r: Review): string {
   const under = r.regionSets.filter((g) => g.perWeek < r.setFloor).map((g) => g.label);
   if (under.length === 0) return `Every muscle group clears ${r.setFloor} hard sets a week`;

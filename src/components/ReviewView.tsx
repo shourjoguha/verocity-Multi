@@ -7,6 +7,7 @@ import { normalizeMovementName, type OverrideMap } from '@/lib/movementTaxonomy'
 import {
   buildReview,
   effortHeadline,
+  goalSplitNote,
   type Review,
   type ReviewPeriod,
   type StapleSet,
@@ -390,15 +391,7 @@ function GoalsChart({ review: r }: { review: Review }) {
         );
       })}
       {liftingPair ? (
-        <p className="mt-2 text-xs text-muted">
-          {r.goalSplit.byIntent
-            ? `Strength vs hypertrophy is read from rest between loaded sets.${
-                r.goalSplit.assumedShare > 0
-                  ? ` ${pct(r.goalSplit.assumedShare)} of sets had no rest logged and were read as short.`
-                  : ''
-              }`
-            : 'Too few loaded sets to read strength vs hypertrophy, so lifting time is split by your goal weights.'}
-        </p>
+        <p className="mt-2 text-xs text-muted">{goalSplitNote(r)}</p>
       ) : null}
     </div>
   );

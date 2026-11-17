@@ -404,19 +404,19 @@ UI audit have both run.
   time spent). A session with nothing outside prep — a yoga class logged as one
   cooldown block — counts in full; real data has two. A new metric that walks
   `log.data.sections` directly is the bug this rule exists to stop.
-- **What loaded work was FOR is a rest-and-structure question, not a rep one.**
-  Reps barely move across the range; prescribed rest and superset relatedness
-  separate strength from hypertrophy from loaded conditioning
-  (`src/lib/coach/intent.ts`). The 120s boundary is `strengthRest`'s floor and
-  `hypertrophyRest`'s ceiling — the same number from both claims, not a new
-  threshold. A superset only argues against strength when the partner trains the
-  **same** muscles, because `strengthRest`'s caveat explicitly allows rest to be
-  filled by an unrelated one. An untouched rest picker resolves to
-  `UNLOGGED_REST_SECONDS` (30s) and the verdict carries `restAssumed`, so the
-  surface can report how much of its answer is inference. **Never use
-  `TIMERS.defaultRestSeconds` for this** — it is 120, it belongs to the
-  countdown rather than to what was rested, and it would classify most of a real
-  log as strength work.
+- **What loaded work was FOR is read from block, structure, rest and reps — in
+  that order** (`src/lib/coach/intent.ts`, the owner's rules of 2026-11-17).
+  A loaded set in a conditioning block is conditioning, with no rest asked — an
+  EMOM, AMRAP or HIIT circuit is untagged by design. A superset is hypertrophy.
+  A single movement is strength only when rested at least 120s **and** under 8
+  reps; both numbers come from the pack (`strengthRest`'s floor, which is
+  `hypertrophyRest`'s ceiling, and `hypertrophyReps`' floor), not new
+  thresholds. A single with no rest logged is read on reps alone and the verdict
+  carries `restAssumed`, so the surface can report how much is inference. A
+  superset's group rest is taken once, at the end of the round. **Never use
+  `TIMERS.defaultRestSeconds` for this** — it is 120, it belongs to a new
+  movement's tag rather than to what was rested, and it would classify most of
+  a real log as strength work.
 - **Whether a finding may re-speak is a trajectory question, not a clock one.**
   `coach_observations` records one drift reading per rule per check-in day
   whether or not the rule spoke, and `src/lib/coach/recurrence.ts` scores
