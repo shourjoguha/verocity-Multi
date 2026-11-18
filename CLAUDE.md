@@ -202,6 +202,9 @@ UI audit have both run.
   or an existing route. **A collapsed default with no expansion is a removed
   feature** — no audit can tell the two apart, so check by hand that each
   folded-away thing still opens.
+  **Explainer text is a "!", never standing prose**: how a chart is measured
+  goes in `ui/InfoPopover` beside its label (LESSONS "A chart or card grows a
+  paragraph of muted explainer text").
 - **Backdrop & depth.** The full-viewport backdrop is `BackgroundLayer.astro`
   mounted once in `Base.astro`. Six presets — `off`, `grain`, `dots`,
   `hairlines`, `topography`, `aurora` — listed in `lib/background.ts`, which is

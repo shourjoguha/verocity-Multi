@@ -321,7 +321,10 @@ function HoursBar({ review: r }: { review: Review }) {
   const parts = LENSES.map((l) => ({ ...l, hours: r.hoursByLens[l.key] })).filter((l) => l.hours > 0);
   return (
     <div className="mb-4">
-      <p className="mb-1.5 text-xs text-muted">By session — each one counted whole under what it mostly was.</p>
+      <p className="mb-1.5 flex items-center gap-2 text-xs text-muted">
+        Sessions by focus tag
+        <InfoPopover label="How sessions are counted">Each session counts whole under what it mostly was.</InfoPopover>
+      </p>
       <div className="flex h-3 w-full overflow-hidden rounded-chip bg-fg/[0.05]" aria-hidden>
         {parts.map((p) => (
           <span
@@ -356,7 +359,10 @@ function GoalsChart({ review: r }: { review: Review }) {
   const x = (v: number) => `${(v / max) * 100}%`;
   return (
     <div className="rounded-card border border-outline bg-surface p-3">
-      <p className="mb-2 text-xs text-muted">By movement — time inside each session split by the work in it.</p>
+      <p className="mb-2 flex items-center gap-2 text-xs text-muted">
+        By movement — time inside each session split by the work in it.
+        <InfoPopover label="How time is split by goal">{goalSplitNote(r)}</InfoPopover>
+      </p>
       <div className="mb-2 flex flex-wrap gap-x-4 text-[0.65rem] text-muted">
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-full border-2 border-muted bg-surface" /> Goal weight
@@ -392,7 +398,6 @@ function GoalsChart({ review: r }: { review: Review }) {
           </div>
         );
       })}
-      <p className="mt-2 text-xs text-muted">{goalSplitNote(r)}</p>
     </div>
   );
 }
