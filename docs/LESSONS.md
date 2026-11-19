@@ -724,6 +724,17 @@ nothing", check for `.hill-btn`, `.lift` or `.lift-fixed` on the same element
 before suspecting the build.
 → `src/styles/global.css` (`.hill-btn`), `src/components/ui/primitives.tsx` (`FilterChip`)
 
+### A chart or card grows a paragraph of muted explainer text under it
+`[confirmed in the wild]` — the owner's decision, 2026-11-18, after Review's
+"Where the time went" shipped two always-visible method notes.
+Each incremental change added "how this is measured" prose beneath the chart it
+touched, until the explanation outweighed the data. **Explanatory text goes in
+`ui/InfoPopover` (the "!") beside the label or header — never as standing text.**
+The visible label is a short name (`Sessions by focus tag`), not a sentence.
+Applies to every new chart, card and element; if you are writing "X is counted
+as…" in a `<p className="text-muted">`, it belongs in the popover.
+→ `src/components/ui/InfoPopover.tsx`, `src/components/ReviewView.tsx` (`HoursBar`, `GoalsChart`)
+
 ## Build & deploy
 
 ### A build step works locally and silently does nothing on Vercel
